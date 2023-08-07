@@ -1,8 +1,6 @@
 # Assembly AI API
 
 Tagging a release on this repository will update the:
-
-  - [Java SDK](https://github.com/fern-assemblyai/assemblyai-java)
   - [TypeScript SDK](https://github.com/fern-assemblyai/assemblyai-node)
 
 ## What is in this repository?
