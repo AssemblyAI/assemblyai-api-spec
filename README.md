@@ -2,6 +2,8 @@
 
 Tagging a release on this repository will update the:
   - [TypeScript SDK](https://github.com/fern-assemblyai/assemblyai-node)
+  - [Java SDK](https://github.com/fern-assemblyai/assemblyai-java)
+  - [Go SDK](https://github.com/fern-assemblyai/assemblyai-go)
 
 ## What is in this repository?
 
