@@ -1,14 +1,15 @@
 import { AssemblyAIClient, AssemblyAI } from "@assemblyai-fern/api";
+import { CreateTranscriptParameters } from "@assemblyai-fern/api/api";
 
 const aai = new AssemblyAIClient({
   apiKey: process.env.ASSEMBLYAI_API_KEY || '',
 });
 
 const audioUrl = 'https://storage.googleapis.com/aai-docs-samples/espn.m4a';
-const createTranscriptParams = {
+const createTranscriptParams: CreateTranscriptParameters = {
   audioUrl,
   boostParam: AssemblyAI.TranscriptBoostParam.High,
-  wordBoost: ['knee', 'hip'],
+  wordBoost: ['Chicago', 'draft'],
   disfluencies: true,
   dualChannel: true,
   formatText: false,
@@ -40,192 +41,221 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
 })()
   .then(async (transcript) => {
     // TODO: wait for Fern plain/text to be supported
-    // await exportAsSubtitles(transcript);
-    console.log(transcript);
-    await getParagraphs(transcript);
-    await getSentences(transcript);
+    await exportAsSubtitles(transcript);
+    // await getParagraphs(transcript);
+    // await getSentences(transcript);
     await deleteTranscript(transcript);
   });
 
-(async function runLemurModels() {
-  let transcript = await aai.transcript.create(createTranscriptParams);
-  transcript = await waitForTranscriptToComplete(transcript);
-  await lemurQuestionAnswer(transcript);
-  await lemurActionPoints(transcript);
-  await lemurCustomTask(transcript);
-  await deleteTranscript(transcript);
-})();
+// (async function createStandardTranscript() {
+//   let transcript = await aai.transcript.create(createTranscriptParams);
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   return transcript;
+// })()
+//   .then(async (transcript) => {
+//     await searchTranscript(transcript);
+//     await deleteTranscript(transcript);
+//   });
 
-(async function createTranscriptWithBadUrl() {
-  let transcript = await aai.transcript.create({
-    audioUrl: 'https://storage.googleapis.com/aai-docs-samples/oops.m4a'
+// (async function runLemurModels() {
+//   let transcript = await aai.transcript.create(createTranscriptParams);
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   await lemurSummary(transcript);
+//   await lemurQuestionAnswer(transcript);
+//   await lemurActionPoints(transcript);
+//   await lemurCustomTask(transcript);
+//   await deleteTranscript(transcript);
+// })();
+
+// (async function createTranscriptWithBadUrl() {
+//   let transcript = await aai.transcript.create({
+//     audioUrl: 'https://storage.googleapis.com/aai-docs-samples/oops.m4a'
+//   });
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(async (transcript) => {
+//   try {
+//     await getParagraphs(transcript);
+//   } catch (error) {
+//     console.log("Error expected:", error);
+//     await deleteTranscript(transcript);
+//   }
+// });
+
+// (async function createTranscriptWithNullUrl() {
+//   try {
+//     await aai.transcript.create({
+//       audioUrl: null as unknown as string
+//     });
+//   } catch (error) {
+//     console.log("Error expected:", error);
+//   }
+// })();
+
+// (async function createTranscriptWithWordBoost() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     boostParam: AssemblyAI.TranscriptBoostParam.High,
+//     wordBoost: ['knee', 'hip'],
+//   });
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithSummarization() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     summarization: true,
+//     summaryModel: AssemblyAI.SummaryModel.Conversational,
+//     summaryType: AssemblyAI.SummaryType.BulletsVerbose,
+//     punctuate: true,
+//     formatText: true
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithContentSafety() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     contentSafety: true,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithCustomSpelling() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     customSpelling: [
+//       { from: ['quarterback', 'QB'], to: 'nickelback' },
+//       { from: ['bear'], to: 'cub' },
+//     ]
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithEntityDetection() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     entityDetection: true,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithFilterProfanity() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     filterProfanity: true,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithTopicDetection() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     iabCategories: true
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithLanguageDetection() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     languageCode: undefined,
+//     languageDetection: true
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithPiiRedaction() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     formatText: true,
+//     redactPii: true,
+//     redactPiiAudio: true,
+//     redactPiiAudioQuality: 'wav',
+//     redactPiiPolicies: [
+//       AssemblyAI.PiiPolicies.Injury,
+//       AssemblyAI.PiiPolicies.MedicalCondition,
+//       AssemblyAI.PiiPolicies.MedicalProcess
+//     ],
+//     redactPiiSub: AssemblyAI.SubstitutionPolicy.Hash,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithSentimentAnalysis() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     punctuate: true,
+//     sentimentAnalysis: true,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithSpeakerLabels() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     dualChannel: false,
+//     punctuate: true,
+//     speakerLabels: true,
+//     speakersExpected: 2,
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function createTranscriptWithWebhook() {
+//   let transcript = await aai.transcript.create({
+//     ...createTranscriptParams,
+//     webhookAuthHeaderName: 'x-foo',
+//     webhookAuthHeaderValue: 'bar',
+//     webhookUrl: 'https://www.assemblyai.com/404'
+//   })
+//   transcript = await waitForTranscriptToComplete(transcript);
+//   console.log(transcript);
+//   return transcript;
+// })().then(deleteTranscript);
+
+// (async function listTranscripts() {
+// let list = await aai.transcript.list();
+// console.log(list);
+// while (!!list.pageDetails?.nextUrl) {
+//   const params = new URL(list.pageDetails.nextUrl).searchParams
+//   list = await aai.transcript.list({
+//     afterId: params.get('after_id') || undefined,
+//     limit: parseInt(params.get('limit') || 'NaN') || undefined,
+//   });
+//   console.log(list);
+// }
+// })();
+
+async function searchTranscript(transcript: AssemblyAI.Transcript) {
+  const result = await aai.transcript.search(transcript.id || '', {
+    words: ['draft', 'football']
   });
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(async (transcript) => {
-  try {
-    await getParagraphs(transcript);
-  } catch (error) {
-    console.log("Error expected:", error);
-    await deleteTranscript(transcript);
-  }
-});
-
-(async function createTranscriptWithNullUrl() {
-  try {
-    await aai.transcript.create({
-      audioUrl: null as unknown as string
-    });
-  } catch (error) {
-    console.log("Error expected:", error);
-  }
-})();
-
-(async function createTranscriptWithWordBoost() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    boostParam: AssemblyAI.TranscriptBoostParam.High,
-    wordBoost: ['knee', 'hip'],
-  });
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-
-(async function createTranscriptWithSummarization() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    summarization: true,
-    summaryModel: AssemblyAI.SummaryModel.Conversational,
-    summaryType: AssemblyAI.SummaryType.BulletsVerbose,
-    punctuate: true,
-    formatText: true
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithContentSafety() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    contentSafety: true,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithCustomSpelling() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    customSpelling: [
-      { from: ['knee', 'hip'], to: 'tea' },
-      { from: ['sport'], to: 'leisure' },
-    ]
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithEntityDetection() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    entityDetection: true,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithFilterProfanity() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    filterProfanity: true,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithTopicDetection() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    iabCategories: true
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithLanguageDetection() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    languageCode: undefined,
-    languageDetection: true
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithPiiRedaction() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    formatText: true,
-    redactPii: true,
-    redactPiiAudio: true,
-    redactPiiAudioQuality: 'wav',
-    redactPiiPolicies: [
-      AssemblyAI.PiiPolicies.Injury,
-      AssemblyAI.PiiPolicies.MedicalCondition,
-      AssemblyAI.PiiPolicies.MedicalProcess
-    ],
-    redactPiiSub: AssemblyAI.SubstitutionPolicy.Hash,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithSentimentAnalysis() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    punctuate: true,
-    sentimentAnalysis: true,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithSpeakerLabels() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    dualChannel: false,
-    punctuate: true,
-    speakerLabels: true,
-    speakersExpected: 2,
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
-
-(async function createTranscriptWithWebhook() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    webhookAuthHeaderName: 'x-foo',
-    webhookAuthHeaderValue: 'bar',
-    webhookUrl: 'https://www.assemblyai.com/404'
-  })
-  transcript = await waitForTranscriptToComplete(transcript);
-  console.log(transcript);
-  return transcript;
-})().then(deleteTranscript);
+  console.log(result);
+}
 
 async function exportAsSubtitles(transcript: AssemblyAI.Transcript) {
   const srt = await aai.transcript.exportAsSrt(transcript.id || '')
@@ -303,16 +333,3 @@ async function lemurCustomTask(transcript: AssemblyAI.Transcript) {
   })
   console.log(response.response);
 };
-
-(async function listTranscripts() {
-  let list = await aai.transcript.list();
-  console.log(list);
-  while (!!list.pageDetails?.nextUrl) {
-    const params = new URL(list.pageDetails.nextUrl).searchParams
-    list = await aai.transcript.list({
-      afterId: params.get('after_id') || undefined,
-      limit: parseInt(params.get('limit') || 'NaN') || undefined,
-    });
-    console.log(list);
-  }
-})();
