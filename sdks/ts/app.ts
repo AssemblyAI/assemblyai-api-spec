@@ -1,14 +1,15 @@
 import { AssemblyAIClient, AssemblyAI } from "@assemblyai-fern/api";
+import { CreateTranscriptParameters } from "@assemblyai-fern/api/api";
 
 const aai = new AssemblyAIClient({
   apiKey: process.env.ASSEMBLYAI_API_KEY || '',
 });
 
 const audioUrl = 'https://storage.googleapis.com/aai-docs-samples/espn.m4a';
-const createTranscriptParams = {
+const createTranscriptParams: CreateTranscriptParameters = {
   audioUrl,
   boostParam: AssemblyAI.TranscriptBoostParam.High,
-  wordBoost: ['knee', 'hip'],
+  wordBoost: ['Chicago', 'draft'],
   disfluencies: true,
   dualChannel: true,
   formatText: false,
@@ -29,27 +30,24 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
 }
 
 (async function createStandardTranscript() {
-  let transcript = await aai.transcript.create({
-    ...createTranscriptParams,
-    audioStartFrom: 60,
-    audioEndAt: 380
-  });
+  let transcript = await aai.transcript.create(createTranscriptParams);
   transcript = await waitForTranscriptToComplete(transcript);
   console.log(transcript);
   return transcript;
 })()
   .then(async (transcript) => {
-    // TODO: wait for Fern plain/text to be supported
-    // await exportAsSubtitles(transcript);
-    console.log(transcript);
+    // TODO(fern): Support plain text
+    //await exportAsSubtitles(transcript);
     await getParagraphs(transcript);
     await getSentences(transcript);
+    await searchTranscript(transcript);
     await deleteTranscript(transcript);
   });
 
 (async function runLemurModels() {
   let transcript = await aai.transcript.create(createTranscriptParams);
   transcript = await waitForTranscriptToComplete(transcript);
+  await lemurSummary(transcript);
   await lemurQuestionAnswer(transcript);
   await lemurActionPoints(transcript);
   await lemurCustomTask(transcript);
@@ -93,7 +91,6 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   return transcript;
 })().then(deleteTranscript);
 
-
 (async function createTranscriptWithSummarization() {
   let transcript = await aai.transcript.create({
     ...createTranscriptParams,
@@ -122,8 +119,8 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   let transcript = await aai.transcript.create({
     ...createTranscriptParams,
     customSpelling: [
-      { from: ['knee', 'hip'], to: 'tea' },
-      { from: ['sport'], to: 'leisure' },
+      { from: ['quarterback', 'QB'], to: 'nickelback' },
+      { from: ['bear'], to: 'cub' },
     ]
   })
   transcript = await waitForTranscriptToComplete(transcript);
@@ -227,6 +224,26 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   return transcript;
 })().then(deleteTranscript);
 
+(async function listTranscripts() {
+let list = await aai.transcript.list();
+console.log(list);
+while (!!list.pageDetails?.nextUrl) {
+  const params = new URL(list.pageDetails.nextUrl).searchParams
+  list = await aai.transcript.list({
+    afterId: params.get('after_id') || undefined,
+    limit: parseInt(params.get('limit') || 'NaN') || undefined,
+  });
+  console.log(list);
+}
+})();
+
+async function searchTranscript(transcript: AssemblyAI.Transcript) {
+  const result = await aai.transcript.search(transcript.id || '', {
+    words: ['draft', 'football']
+  });
+  console.log(result);
+}
+
 async function exportAsSubtitles(transcript: AssemblyAI.Transcript) {
   const srt = await aai.transcript.exportAsSrt(transcript.id || '')
   const vtt = await aai.transcript.exportAsVtt(transcript.id || '')
@@ -303,16 +320,3 @@ async function lemurCustomTask(transcript: AssemblyAI.Transcript) {
   })
   console.log(response.response);
 };
-
-(async function listTranscripts() {
-  let list = await aai.transcript.list();
-  console.log(list);
-  while (!!list.pageDetails?.nextUrl) {
-    const params = new URL(list.pageDetails.nextUrl).searchParams
-    list = await aai.transcript.list({
-      afterId: params.get('after_id') || undefined,
-      limit: parseInt(params.get('limit') || 'NaN') || undefined,
-    });
-    console.log(list);
-  }
-})();
