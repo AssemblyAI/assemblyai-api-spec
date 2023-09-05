@@ -1,61 +1,98 @@
 openapi: 3.0.0
 info:
   title: AssemblyAI API
-  description: AssemblyAI's official API
-  version: 2.0.0
+  description: AssemblyAI API
+  version: 3.0.0
   contact:
     name: API Support
     email: support@assemblyai.com
     url: https://www.assemblyai.com/docs/
 
 servers:
-  - url: https://api.assemblyai.com/v2
-    description: AssemblyAI Production API
+  - url: https://api.assemblyai.com/
+    description: AssemblyAI API
 
 tags:
   - name: transcript
     description: Transcript related operations
     externalDocs:
-      url: https://www.assemblyai.com/docs/walkthroughs#submitting-files-for-transcription
+      url: https://www.assemblyai.com/docs/Guides/transcribing_an_audio_file
+  - name: LeMUR
+    description: LeMUR related operations
+    externalDocs:
+      url: https://www.assemblyai.com/docs/Guides/processing_audio_with_llms_using_lemur
 
 security:
-  - APIKey: []
+  - ApiKey: []
+
+responses:
+  "500":
+    type: object
+    properties:
+      error:
+        description: Error message
+        type: string
 
 paths:
-  /transcript:
+  /v2/upload:
     post:
       tags:
         - transcript
-      summary: Submitting files for transcript
-      operationId: transcribeUrl
-      x-fern-sdk-group-name: transcript
-      x-fern-sdk-method-name: create
-      description: The AssemblyAI API can transcribe audio/video files that are accessible via a URL. For example, audio files in an S3 bucket, on your server, via the Twilio API, etc.
+        - file
+      summary: Upload an audio or video file which can be transcribed.
+      operationId: uploadFile
+      x-fern-sdk-group-name: files
+      x-fern-sdk-method-name: upload
+      description: Upload your audio or video file directly to the AssemblyAI API if it isn't accessible via a URL already.
       requestBody:
-        description: Optional description in *Markdown*
         content:
-          application/json:
+          application/octet-stream:
             schema:
-              $ref: "#/components/schemas/TranscriptRequest"
+              type: string
+              format: binary
       responses:
-        "201":
-          description: Accepted file for transcription
+        "200":
+          description: File uploaded successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptResponse"
+                $ref: "#/components/schemas/UploadResponseBody"
+
+  /v2/transcript:
+    post:
+      tags:
+        - transcript
+      summary: Create a transcript from an audio file
+      operationId: createTranscript
+      x-fern-sdk-group-name: transcript
+      x-fern-sdk-method-name: create
+      description: Create a transcript from an audio or video file that is accessible via a URL.
+      requestBody:
+        description: Parameters to create a transcript.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTranscriptParameters"
+      responses:
+        "201":
+          description: Transcript created and queued for processing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
     get:
       tags:
         - transcript
-      summary: Listing Historical Transcripts
+      summary: List transcripts
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: list
       operationId: listTranscripts
-      description: With the list endpoint, you can retrieve a list of all the transcripts you have created. This list can also be filtered by the transcript status.
+      description: Retrieve a list of transcripts you have created.
       parameters:
         - name: limit
           in: query
-          description: Max results to return in a single response
+          description: Maximum amount of transcripts to retrieve
           schema:
             type: integer
             format: int64
@@ -70,26 +107,26 @@ paths:
 
         - name: created_on
           in: query
-          description: Only return transcripts created on this date
+          description: Only get transcripts created on this date
           schema:
             type: string
             format: date
 
         - name: before_id
           in: query
-          description: Return transcripts that were created before this id
+          description: Get transcripts that were created before this transcript ID
           schema:
             type: string
 
         - name: after_id
           in: query
-          description: Return transcripts that were created after this id
+          description: Get transcripts that were created after this transcript ID
           schema:
             type: string
 
         - name: throttled_only
           in: query
-          description: Only return throttled transcripts, overrides status filter
+          description: Only get throttled transcripts, overrides the status filter
           schema:
             type: boolean
 
@@ -99,104 +136,82 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranscriptListResponse'
+                $ref: '#/components/schemas/TranscriptList'
 
-  /upload:
-    post:
-      tags:
-        - transcript
-      summary: Upload a file for transcription directly
-      operationId: transcribeFile
-      x-fern-sdk-group-name: files
-      x-fern-sdk-method-name: upload
-      description: If your audio files aren't accessible via a URL already (like in an S3 bucket, static file server, or via an API like Twilio), you can upload your files directly to the AssemblyAI API.
-      requestBody:
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-      responses:
-        "200":
-          description: Accepted file for transcription
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UploadResponse"
-
-  /transcript/{transcriptId}:
+  /v2/transcript/{transcriptId}:
     get:
       tags:
         - transcript
-      summary: Get the transcription result
+      summary: Get the transcript
       operationId: getTranscript
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: get
-      description: After you submit an audio file for processing, the "status" key will go from "queued" to "processing" to "completed". You can make a GET request, as shown on the right, to check for updates on the status of your transcription.
+      description: Get the transcript resource. The transcript is ready when the "status" is "completed".
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
       responses:
         "200":
-          description: Accepted file for transcription
+          description: The transcript resource
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptResponse"
+                $ref: "#/components/schemas/Transcript"
     delete:
       tags:
         - transcript
-      summary: Delete the transcription
+      summary: Delete the transcript
       operationId: deleteTranscript
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: delete
-      description: After you submit an audio file for processing, the "status" key will go from "queued" to "processing" to "completed". You can make a GET request, as shown on the right, to check for updates on the status of your transcription.
+      description: Delete the transcript
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
       responses:
         "200":
-          description: Accepted file for transcription
+          description: Accepted file for transcript
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptResponse"
-  /transcript/{transcriptId}/vtt:
+                $ref: "#/components/schemas/Transcript"
+
+  /v2/transcript/{transcriptId}/vtt:
     get:
       tags:
         - transcript
-      summary: Export VTT Caption Files
+      summary: Export transcript as a VTT Caption Files
       operationId: exportTranscriptAsVTT
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: exportAsVTT
-      description: You can export your complete transcripts in VTT format, to be plugged into a video player for subtitles and closed captions.
+      description: Export your transcript in VTT format, to be plugged into a video player for subtitles and closed captions.
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
         - name: chars_per_caption
           in: query
-          description: To control the maximum number of characters per caption
+          description: The maximum number of characters per caption
           schema:
             type: integer
-            format: int64
 
       responses:
         "200":
           description: The exported VTT as text
           content:
-            application/json:
+            # TODO(fern): update to text/plain once supported
+            application/json::
               schema:
                 type: string
                 example: |
@@ -211,7 +226,7 @@ paths:
                   00:20.020 --> 00:25.040
                   size of the lower 48 States has shrunk by 40% but this understates
 
-  /transcript/{transcriptId}/srt:
+  /v2/transcript/{transcriptId}/srt:
     get:
       tags:
         - transcript
@@ -219,26 +234,26 @@ paths:
       operationId: exportTranscriptAsSRT
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: exportAsSRT
-      description: You can export your complete transcripts in SRT format, to be plugged into a video player for subtitles and closed captions.
+      description: Export your transcript in SRT format, to be plugged into a video player for subtitles and closed captions.
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
         - name: chars_per_caption
           in: query
-          description: To control the maximum number of characters per caption
+          description: The maximum number of characters per caption
           schema:
             type: integer
-            format: int64
 
       responses:
         "200":
           description: The exported SRT as text
           content:
-            application/json:
+            # TODO(fern): update to text/plain once supported
+            application/json::
               schema:
                 type: string
                 example: |
@@ -254,19 +269,19 @@ paths:
                   00:00:19,880 --> 00:00:23,120
                   the size of the lower 48 States has shrunk by 40%
 
-  /transcript/{transcriptId}/sentences:
+  /v2/transcript/{transcriptId}/sentences:
     get:
       tags:
         - transcript
-      summary: Exporting Sentences
-      operationId: exportTranscriptSentences
+      summary: Get the transcript split by sentences
+      operationId: getTranscriptSentences
       x-fern-sdk-group-name: transcript
-      x-fern-sdk-method-name: exportSentences
-      description: You can use either of the following endpoints to retrieve a completed transcript automatically broken down into sentences. Using this endpoint, the API will attempt to semantically segment your transcript into sentences to create more reader-friendly transcripts.
+      x-fern-sdk-method-name: getSentences
+      description: Get the transcript split by sentences. The API will attempt to semantically segment the transcript into sentences to create more reader-friendly transcripts.
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
@@ -276,21 +291,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptSentenceResponse"
+                $ref: "#/components/schemas/TranscriptSentenceResource"
 
-  /transcript/{transcriptId}/paragraphs:
+  /v2/transcript/{transcriptId}/paragraphs:
     get:
       tags:
         - transcript
-      summary: Exporting Paragraphs
-      operationId: exportTranscriptParagraphs
+      summary: Get the transcript split by paragraphs
+      operationId: getTranscriptParagraphs
       x-fern-sdk-group-name: transcript
-      x-fern-sdk-method-name: exportParagraphs
-      description: You can use either of the following endpoints to retrieve a completed transcript automatically broken down into paragraphs. Using this endpoint, the API will attempt to semantically segment your transcript into sentences to create more reader-friendly transcripts.
+      x-fern-sdk-method-name: getParagraphs
+      description: Get the transcript split by paragraphs. The API will attempt to semantically segment your transcript into paragraphs to create more reader-friendly transcripts.
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
@@ -300,62 +315,243 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptParagraphResponse"
+                $ref: "#/components/schemas/TranscriptParagraphResource"
 
-  /transcript/{transcriptId}/word-search:
+  /v2/transcript/{transcriptId}/word-search:
     get:
       tags:
         - transcript
-      summary: Searches the given transcription for words, numbers, or phrases
+      summary: Search the given transcript for words, numbers, or phrases
       operationId: searchTranscript
       x-fern-sdk-group-name: transcript
       x-fern-sdk-method-name: search
-      description: Once a transcript has been completed, you can search through the transcript for a specific set of keywords. You can search for individual words, numbers, or phrases containing up to five words or numbers.
+      description: Search through the transcript for a specific set of keywords. You can search for individual words, numbers, or phrases containing up to five words or numbers.
       parameters:
         - name: transcriptId
           in: path
-          description: ID of the transcription
+          description: ID of the transcript
           required: true
           schema:
             type: string
         - name: words
           in: query
-          description: To control the maximum number of characters per caption
+          description: Keywords to search for
+          required: true
           schema:
+            required: true
             type: array
             items:
               type: string
 
       responses:
         "200":
-          description: Exported paragraphs
+          description: Search results
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscriptSearchResponse"
+                $ref: "#/components/schemas/TranscriptSearchResults"
+
+  /lemur/v3/generate/summary:
+    post:
+      tags:
+        - LeMUR
+      summary: Generate a custom summary from one or more transcripts.
+      operationId: lemurSummary
+      x-fern-sdk-group-name: lemur
+      x-fern-sdk-method-name: summary
+      description: Custom Summary allows you to distill a piece of audio into a few impactful sentences. You can give the model context to obtain more targeted results while outputting the results in a variety of formats described in human language.
+      requestBody:
+        description: Parameters to generate the summary.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LemurSummaryParameters"
+
+      responses:
+        "200":
+          description: LeMUR summary result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LemurSummaryResult"
+
+  /lemur/v3/generate/question-answer:
+    post:
+      tags:
+        - LeMUR
+      summary: Create answers to one or more questions about one or more transcripts.
+      operationId: lemurQuestionAnswer
+      x-fern-sdk-group-name: lemur
+      x-fern-sdk-method-name: questionAnswer
+      description: Question & Answer allows you to ask free-form questions about a single transcript or a group of transcripts. The questions can be any whose answers you find useful, such as judging whether a caller is likely to become a customer or whether all items on a meeting's agenda were covered.
+      requestBody:
+        description: Parameters to ask questions about the transcripts.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LemurQuestionAnswerParameters"
+
+      responses:
+        "200":
+          description: LeMUR question & answer results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LemurQuestionAnswerResults"
+  
+  /lemur/v3/generate/action-items:
+    post:
+      tags:
+        - LeMUR
+      summary: Extract action items from one or more meeting transcripts.
+      operationId: lemurActionItems
+      x-fern-sdk-group-name: lemur
+      x-fern-sdk-method-name: actionItems
+      description: Use LeMUR to generate a list of Action Items from a transcript
+      requestBody:
+        description: Parameters to generate action items from transcripts.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LemurActionItemsParameters"
+
+      responses:
+        "200":
+          description: LeMUR action items result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LemurActionItemsResult"
+  
+  /lemur/v3/generate/task: 
+    post:
+      tags:
+        - LeMUR
+      summary: Ask LeMUR to use one or more transcripts with a Custom Task to handle your specialized task.
+      operationId: lemurTask
+      x-fern-sdk-group-name: lemur
+      x-fern-sdk-method-name: task
+      description: Use LeMUR to ask anything with Custom Task
+      requestBody:
+        description: Parameters to run the custom task.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LemurTaskParameters"
+
+      responses:
+        "200":
+          description: LeMUR task result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LemurTaskResult"
 
 components:
   schemas:
-    TranscriptSearchResponse:
+    LemurSummaryResult:
       type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          description: The ID of the LeMUR request
+          type: string
+        response:
+          description: The response generated by LeMUR.
+          type: string
+      required:
+        - request_id
+        - response
+
+    LemurQuestionAnswerResults:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          description: The ID of the LeMUR request
+          type: string
+        response:
+          description: The answers generated by LeMUR and their questions.
+          type: array
+          items:
+            description: An answer generated by LeMUR and its question.
+            $ref: "#/components/schemas/LemurQuestionAnswer"
+      required:
+        - request_id
+        - response
+    
+    LemurQuestionAnswer:
+      type: object
+      additionalProperties: false
+      properties:
+        question:
+          description: The question for LeMUR to answer.
+          type: string
+        answer:
+          description: The answer generated by LeMUR.
+          type: string
+      required:
+        - question
+        - answer
+
+    LemurActionItemsResult:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          description: The ID of the LeMUR request
+          type: string
+        response:
+          description: The response generated by LeMUR.
+          type: string
+      required:
+        - request_id
+        - response
+
+    LemurTaskResult:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          description: The ID of the LeMUR request
+          type: string
+        response:
+          description: The response generated by LeMUR.
+          type: string
+      required:
+        - request_id
+        - response
+
+    TranscriptSearchResults:
+      type: object
+      additionalProperties: false
       properties:
         id:
-          description: The id of the transcript
+          description: The ID of the transcript
           type: string
         total_count:
-          description: Equals the total of all matched instances.
+          description: The total count of all matched instances. For e.g., word 1 matched 2 times, and word 2 matched 3 times, `total_count` will equal 5.
           type: integer
         matches:
-          description: For e.g., word 1 matched 2 times, and word2 matched 3 times, `total_count` will equal 5
+          description: The matches of the search
           type: array
           items:
             $ref: "#/components/schemas/TranscriptSearchMatch"
+      required:
+        - id
+        - total_count
+        - matches
 
     TranscriptSearchMatch:
       type: object
+      additionalProperties: false
       properties:
         text:
-          description: The word itself
+          description: The matched word
           type: string
         count:
           description: The total amount of times the word is in the transcript
@@ -364,64 +560,205 @@ components:
           description: An array of timestamps
           type: array
           items:
-            $ref: "#/components/schemas/TranscriptTimestamp"
+            $ref: "#/components/schemas/TranscriptSearchTimestamp"
         indexes:
           description: An array of all index locations for that word within the `words` array of the completed transcript
           type: array
           items:
             type: integer
+      required:
+        - text
+        - count
+        - timestamps
+        - indexes
 
-    TranscriptTimestamp:
-      description: An array of timestamps structured as [`start_time`, `end_time``]
+    TranscriptSearchTimestamp:
+      description: An array of timestamps structured as [`start_time`, `end_time`] in milliseconds
       type: array
       items:
         type: integer
 
-    TranscriptRequest:
+    Timestamp:
+      description: Timestamp containing a start and end property in milliseconds.
       type: object
+      additionalProperties: false
+      properties:
+        start:
+          description: The start time in milliseconds
+          type: integer
+        end:
+          description: The end time in milliseconds
+          type: integer
+
+    CreateTranscriptParameters:
+      description: The parameters for creating a transcript
+      type: object
+      additionalProperties: false
       properties:
         audio_url:
+          description: The URL of the audio or video file to transcribe.
           type: string
+
         language_code:
+          description: |
+            The language of your audio file. Possible values are found in [Supported Languages](https://www.assemblyai.com/docs/Concepts/supported_languages).
+            The default value is 'en_us'.
           $ref: "#/components/schemas/TranscriptLanguageCode"
-        speaker_labels:
+
+        punctuate:
+          description: Enable Automatic Punctuation, can be true or false.
           type: boolean
+
+        format_text:
+          description: Enable Text Formatting, can be true or false.
+          type: boolean
+
+        dual_channel:
+          description: Enable [Dual Channel](https://assemblyai.com/docs/Models/speech_recognition#dual-channel-transcription) transcription, can be true or false.
+          type: boolean
+
+        webhook_url:
+          description: The URL to which we send webhooks upon trancription completion, if provided in the transcription request.
+          type: string
+
+        webhook_auth_header_name:
+          description: The header name which should be sent back with webhook calls, if provided in the transcription request.
+          type: [string, 'null']
+          default: null
+
+        webhook_auth_header_value:
+          description: Defaults to null. Optionally allows a user to specify a header name and value to send back with a webhook call for added security.
+          type: [string, 'null']
+          default: null
+
+        audio_start_from:
+          description: The point in time, in milliseconds, to begin transcription from in your media file
+          type: integer
+
+        audio_end_at:
+          description: The point in time, in milliseconds, to stop transcribing in your media file
+          type: integer
+        
         word_boost:
+          description: The list of custom vocabulary to boost transcription probability for, if provided in the transcription request.
           type: array
           items:
             type: string
+        
         boost_param:
+          description: The word boost parameter value, if provided in the transcription request.
           $ref: "#/components/schemas/TranscriptBoostParam"
 
+        filter_profanity:
+          description: Filter profanity from the transcribed text, can be true or false.
+          type: boolean
+
+        redact_pii:
+          description: Redact PII from the transcribed text using the Redact PII model, can be true or false
+          type: boolean
+
+        redact_pii_audio:
+          description: Generate a copy of the original media file with spoken PII "beeped" out, can be true or false. See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more details.
+          type: boolean
+
+        redact_pii_audio_quality:
+          description: Controls the filetype of the audio created by redact_pii_audio. Currently supports mp3 (default) and wav. See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more details.
+          type: string
+          default: mp3
+
+        redact_pii_policies:
+          description: The list of PII Redaction policies to enable. See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more details.
+          type: array
+          items:
+            $ref: "#/components/schemas/PiiPolicies"
+
+        redact_pii_sub:
+          description: The replacement logic for detected PII, can be "entity_type" or "hash". See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more details.
+          $ref: "#/components/schemas/SubstitutionPolicy"
+
+        speaker_labels:
+          description: Enable [Speaker diarization](https://www.assemblyai.com/docs/Models/speaker_diarization), can be true or false
+          type: boolean
+
+        speakers_expected:
+          description: Tells the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/Models/speaker_diarization) for more details.
+          type: [integer, 'null']
+          default: null
+
+        content_safety:
+          description: Enable [Content Moderation](https://www.assemblyai.com/docs/Models/content_moderation), can be true or false
+          type: boolean
+
+        iab_categories:
+          description: Enable [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification), can be true or false
+          type: boolean
+        
+        language_detection:
+          description: Whether [Automatic language detection](https://www.assemblyai.com/docs/Models/speech_recognition#automatic-language-detection) was enabled in the transcription request, either true or false.
+          type: boolean
+
         custom_spelling:
+          description: Customize how words are spelled and formatted using to and from values
           type: array
           items:
             $ref: "#/components/schemas/TranscriptCustomSpelling"
 
-        dual_channel:
-          type: boolean
-
         disfluencies:
+          description: Transcribe Filler Words, like "umm", in your media file; can be true or false.
           type: boolean
 
-        language_detection:
+        sentiment_analysis:
+          description: Enable [Sentiment Analysis](https://www.assemblyai.com/docs/Models/sentiment_analysis), can be true or false
           type: boolean
 
-        punctuate:
+        auto_chapters:
+          description: Enable [Auto Chapters](https://www.assemblyai.com/docs/Models/auto_chapters), can be true or false
           type: boolean
 
-        format_text:
+        entity_detection:
+          description: Enable [Entity Detection](https://www.assemblyai.com/docs/Models/entity_detection), can be true or false
           type: boolean
 
-        filter_profanity:
+        speech_threshold:
+          description: |
+            Reject audio files that contain less than this fraction of speech.
+            Valid values are in the range [0, 1] inclusive.
+          type: [number, 'null']
+          format: float
+          minimum: 0
+          maximum: 1
+          default: null
+
+        summarization: 
+          description: Enable [Summarization](https://www.assemblyai.com/docs/Models/summarization), can be true or false
           type: boolean
 
-        webhook_url:
-          type: string
-        webhook_auth_header_name:
-          type: string
-        webhook_auth_header_value:
-          type: string
+        summary_model: 
+          description: The model to summarize the transcript
+          default: informative
+          $ref: '#/components/schemas/SummaryModel'
+
+        summary_type: 
+          description: The type of summary
+          default: bullets
+          $ref: '#/components/schemas/SummaryType'
+
+    SummaryModel:
+      type: string
+      enum:
+        - informative
+        - conversational
+        - catchy
+
+    SummaryType:
+      type: string
+      enum:
+        - bullets
+        - bullets_verbose
+        - gist
+        - headline
+        - paragraph
+
 
     TranscriptBoostParam:
       type: string
@@ -431,21 +768,34 @@ components:
         - high
 
     TranscriptCustomSpelling:
+      description: Object containing words or phrases to replace, and the word or phrase to replace with
       type: object
+      additionalProperties: false
       properties:
         from:
+          description: Words or phrases to replace
           type: array
           items:
+            description: Word or phrase to replace
             type: string
         to:
+          description: Word or phrase to replace with
           type: string
+      required:
+        - from
+        - to
+    
     TranscriptUtterance:
       type: object
+      additionalProperties: false
       properties:
         channel:
           type: string
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         start:
           type: integer
         end:
@@ -457,17 +807,67 @@ components:
           items:
             $ref: "#/components/schemas/TranscriptWord"
 
-    TranscriptLanguageCode:
+    SubstitutionPolicy:
+      type: [string, 'null']
+      enum:
+        - entity_type
+        - hash
+
+    PiiPolicies:
       type: string
       enum:
-        - es
+        - medical_process
+        - medical_condition
+        - blood_type
+        - drug
+        - injury
+        - number_sequence
+        - email_address
+        - date_of_birth
+        - phone_number
+        - us_social_security_number
+        - credit_card_number
+        - credit_card_expiration
+        - credit_card_cvv
+        - date
+        - nationality
+        - event
+        - language
+        - location
+        - money_amount
+        - person_name
+        - person_age
+        - organization
+        - political_affiliation
+        - occupation
+        - religion
+        - drivers_license
+        - banking_information
+
+    TranscriptLanguageCode:
+      type: string
+      default: en_us
+      enum:
         - en
-        - nl
-        - ja
-        - hi
-        - de
-        - pt
+        - en_au
+        - en_uk
+        - en_us
+        - es
         - fr
+        - de
+        - it
+        - pt 
+        - nl
+        - hi
+        - ja
+        - zh
+        - fi
+        - ko
+        - pl
+        - ru
+        - tr
+        - uk
+        - vi
 
     TranscriptStatus:
       type: string
@@ -475,53 +875,497 @@ components:
         - queued
         - processing
         - completed
-    TranscriptResponse:
+        - error
+      # TODO(fern): Add support for "enums" with description
+      #   https://github.com/OAI/OpenAPI-Specification/issues/348
+      # oneOf:
+      #   - const: queued
+      #     description: The audio file is in the queue to be processed by the API.
+      #   - const: processing
+      #     description: The audio file is being processed by the API.
+      #   - const: completed
+      #     description: The transcription job has been completed successfully.
+      #   - const: error
+      #     description: An error occurred while processing the audio file.
+
+    Transcript:
+      description: A transcript object
       type: object
+      additionalProperties: false
       properties:
         id:
+          description: The unique identifier of your transcription
           type: string
-        status:
-          $ref: "#/components/schemas/TranscriptStatus"
-        acoustic_model:
-          type: string
-        audio_duration:
-          type: number
-        audio_url:
-          type: string
-        confidence:
-          type: number
-        dual_channel:
-          type: boolean
-        format_text:
-          type: boolean
+          required: true
+
         language_model:
+          description: The language model that was used for the transcription
           type: string
-        language_detection:
-          type: boolean
-        punctuate:
-          type: boolean
+
+        acoustic_model:
+          description: The acoustic model that was used for the transcription
+          type: string
+
+        status:
+          description: The status of your transcription. Possible values are queued, processing, completed, or error.
+          $ref: "#/components/schemas/TranscriptStatus"
+
+        language_code:
+          description: |
+            The language of your audio file.
+            Possible values are found in [Supported Languages](https://www.assemblyai.com/docs/Concepts/supported_languages).
+            The default value is 'en_us'.
+          $ref: "#/components/schemas/TranscriptLanguageCode"
+
+        audio_url:
+          description: The URL of the media that was transcribed
+          type: string
+
         text:
+          description: The textual transcript of your media file
           type: string
-        utterances:
-          type: array
-          items:
-            $ref: "#/components/schemas/TranscriptUtterance"
-        webhook_status_code:
-          type: number
-        webhook_url:
-          type: string
+
         words:
-          type: array
+          description: |
+            An array of temporally-sequential word objects, one for each word in the transcript.
+            See [Speech recognition](https://www.assemblyai.com/docs/Models/speech_recognition) for more information.
+          type: [array, 'null']
           items:
             $ref: "#/components/schemas/TranscriptWord"
-      required: 
-        - id
+
+        utterances:
+          description: |
+            When dual_channel or speaker_labels is enabled, a list of turn-by-turn utterance objects.
+            See [Speaker diarization](https://www.assemblyai.com/docs/Models/speaker_diarization) for more information.
+          type: [array, 'null']
+          items:
+            $ref: "#/components/schemas/TranscriptUtterance"
+
+        confidence:
+          description: The confidence score for the transcript, between 0.0 (low confidence) and 1.0 (high confidence)
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+
+        audio_duration:
+          description: The duration of this transcript object's media file, in seconds
+          type: number
+          format: float
+
+        punctuate:
+          description: Whether Automatic Punctuation was enabled in the transcription request, either true or false.
+          type: boolean
+
+        format_text:
+          description: Whether Text Formatting was enabled in the transcription request, either true or false
+          type: boolean
+
+        dual_channel:
+          description: Whether [Dual channel transcription](https://www.assemblyai.com/docs/Models/speech_recognition#dual-channel-transcription) was enabled in the transcription request, either true or false
+          type: [boolean, 'null']
+
+        webhook_url:
+          description: The URL to which we send webhooks upon trancription completion, if provided in the transcription request
+          type: [string, 'null']
+
+        webhook_status_code:
+          description: The status code we received from your server when delivering your webhook, if a webhook URL was provided in the transcription request
+          type: [integer, 'null']
+
+        webhook_auth:
+          description: Whether webhook authentication details were provided in the transcription request
+          type: boolean
+
+        webhook_auth_header_name:
+          description: The header name which should be sent back with webhook calls, if provided in the transcription request
+          type: [string, 'null']
+
+        speed_boost:
+          description: Whether speed boost was enabled in the transcription request
+          type: boolean
+
+        auto_highlights:
+          description: Whether Key Phrases was enabled in the transcription request, either true or false
+          type: boolean
+
+        auto_highlights_result:
+          description: |
+            An array of results for the Key Phrases model, if it was enabled during the transcription request.
+            See [Key phrases](https://www.assemblyai.com/docs/Models/key_phrases) for more information.
+          $ref: "#/components/schemas/AutoHighlightsResult"
+
+        audio_start_from:
+          description: The point in time, in milliseconds, in the file at which the transcription was started, if provided in the transcription request
+          type: [integer, 'null']
+
+        audio_end_at:
+          description: The point in time, in milliseconds, in the file at which the transcription was terminated, if provided in the transcription request
+          type: [integer, 'null']
+
+        word_boost:
+          description: The list of custom vocabulary to boost transcription probability for, if provided in the transcription request
+          type: [array, 'null']
+          items:
+            type: string
+
+        boost_param:
+          description: The word boost parameter value, if provided in the transcription request
+          type: [string, 'null']
+
+        filter_profanity:
+          description: Whether [Profanity Filtering](https://www.assemblyai.com/docs/Models/speech_recognition#profanity-filtering) was enabled in the transcription request, either true or false
+          type: boolean
+
+        redact_pii:
+          description: Whether [PII Redaction](https://www.assemblyai.com/docs/Models/pii_redaction) was enabled in the transcription request, either true or false
+          type: boolean
+
+        redact_pii_audio:
+          description: | 
+            Whether a redacted version of the audio file was generated (enabled or disabled in the transcription request),
+            either true or false. See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more information.
+          type: boolean
+
+        redact_pii_audio_quality:
+          description: |
+            The audio quality of the PII-redacted audio file, if enabled in the transcription request.
+            See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more information.
+          type: [string, 'null']
+
+        redact_pii_policies:
+          description: |
+            The list of PII Redaction policies that were enabled, if PII Redaction is enabled.
+            See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more information.
+          type: [array, 'null']
+          items:
+            $ref: "#/components/schemas/PiiPolicies"
+
+        redact_pii_sub:
+          description: The replacement logic for detected PII, can be "entity_type" or "hash". See [PII redaction](https://www.assemblyai.com/docs/Models/pii_redaction) for more details.
+          $ref: "#/components/schemas/SubstitutionPolicy"
+
+        speaker_labels:
+          description: Enable [Speaker diarization](https://www.assemblyai.com/docs/Models/speaker_diarization), can be true or false
+          type: boolean
+
+        speakers_expected:
+          description: Defaults to null. Tells the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/Models/speaker_diarization) for more details.
+          type: [integer, 'null']
+
+        content_safety:
+          description: Enable [Content Moderation](https://www.assemblyai.com/docs/Models/content_moderation), can be true or false
+          type: boolean
+
+        content_safety_labels:
+          description: |
+            An array of results for the Content Moderation model, if it was enabled during the transcription request.
+            See [Content moderation](https://www.assemblyai.com/docs/Models/content_moderation) for more information.
+          type: object
+          properties:
+            status:
+              description: Will be either success, or unavailable in the rare case that the Content Safety Labels model failed.
+              $ref: "#/components/schemas/AudioIntellegenceModelStatus"
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/ContentSafetyLabelResult"
+                    
+        iab_categories:
+          description: Enable [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification), can be true or false
+          type: boolean
+
+        iab_categories_result:
+          description: |
+            An array of results for the Topic Detection model, if it was enabled during the transcription request.
+            See [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification) for more information.
+          type: [object, 'null']
+          properties:
+            status: 
+              description: Will be either success, or unavailable in the rare case that the Content Moderation model failed.
+              $ref: "#/components/schemas/AudioIntellegenceModelStatus"
+            results:
+              description: An array of results for the Topic Detection model.
+              type: array
+              items:
+                $ref: "#/components/schemas/TopicDetectionResult"
+            summary:
+              description: The overall relevance of topic to the entire audio file
+              type: object
+              additionalProperties:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+
+        language_detection:
+          description: Whether [Automatic language detection](https://www.assemblyai.com/docs/Models/speech_recognition#automatic-language-detection) was enabled in the transcription request, either true or false
+          type: boolean
+
+        custom_spelling:
+          description: Customize how words are spelled and formatted using to and from values
+          type: [array, 'null']
+          items:
+            $ref: "#/components/schemas/TranscriptCustomSpelling"
+        
+        auto_chapters:
+          description: Enable [Auto Chapters](https://www.assemblyai.com/docs/Models/auto_chapters), can be true or false
+          type: boolean
+
+        summarization:
+          description: Whether [Summarization](https://www.assemblyai.com/docs/Models/summarization) was enabled in the transcription request, either true or false
+          type: boolean
+
+        summary_type:
+          description: The type of summary generated, if [Summarization](https://www.assemblyai.com/docs/Models/summarization) was enabled in the transcription request
+          type: [string, 'null']
+
+        summary_model:
+          description: |
+            The Summarization model used to generate the summary,
+            if [Summarization](https://www.assemblyai.com/docs/Models/summarization) was enabled in the transcription request
+          type: [string, 'null']
+
+        summary: 
+          description: The generated summary of the media file, if [Summarization](https://www.assemblyai.com/docs/Models/summarization) was enabled in the transcription request
+          type: [string, 'null']
+
+        custom_topics:
+          description: Whether custom topics was enabled in the transcription request, either true or false
+          type: boolean
+
+        topics:
+          description: The list of custom topics provided if custom topics was enabled in the transcription request
+          type: [array, 'null']
+          items: 
+            type: string
+        
+        disfluencies:
+          description: Transcribe Filler Words, like "umm", in your media file; can be true or false
+          type: boolean
+
+        sentiment_analysis:
+          description: Enable [Sentiment Analysis](https://www.assemblyai.com/docs/Models/sentiment_analysis), can be true or false
+          type: boolean
+
+        sentiment_analysis_results:
+          description: |
+            An array of results for the Sentiment Analysis model, if it was enabled during the transcription request.
+            See [Sentiment analysis](https://www.assemblyai.com/docs/Models/sentiment_analysis) for more information.
+          type: [array, 'null']
+          items: 
+            $ref: "#/components/schemas/SentimentAnalysisResult"
+
+        entity_detection:
+          description: Enable [Entity Detection](https://www.assemblyai.com/docs/Models/entity_detection), can be true or false
+          type: boolean
+
+        entities:
+          description: |
+            An array of results for the Entity Detection model, if it was enabled during the transcription request.
+            See [Entity detection](https://www.assemblyai.com/docs/Models/entity_detection) for more information.
+          type: [array, 'null']
+          items:
+            $ref: "#/components/schemas/Entity"
+
+        speech_threshold:
+          description: |
+            Defaults to null. Reject audio files that contain less than this fraction of speech.
+            Valid values are in the range [0, 1] inclusive.
+          type: number
+          minimum: 0
+          maximum: 1
+          format: float
+
+        throttled: 
+          description: True while a request is throttled and false when a request is no longer throttled
+          type: [boolean, 'null']
+
+        error:
+          description: Error message of why the transcript failed
+          type: string
+
+    Entity:
+      description: A detected entity
+      type: object
+      additionalProperties: false
+      properties:
+        entity_type:
+          description: The type of entity for the detected entity
+          type: string
+        text:
+          description: The text for the detected entity
+          type: string
+        start:
+          description: The starting time, in milliseconds, at which the detected entity appears in the audio file
+          type: integer
+        end:
+          description: The ending time, in milliseconds, for the detected entity in the audio file
+          type: integer
+
+    SentimentAnalysisResult:
+      description: The result of the sentiment analysis model.
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          description: The transcript of the sentence
+          type: string
+        start:
+          description: The starting time, in milliseconds, of the sentence
+          type: integer
+        end:
+          description: The ending time, in milliseconds, of the sentence
+          type: integer
+        sentiment:
+          description: The detected sentiment for the sentence, one of POSITIVE, NEUTRAL, NEGATIVE
+          type: string
+          enum: ["POSITIVE", "NEUTRAL", "NEGATIVE"]
+        confidence:
+          description: The confidence score for the detected sentiment of the sentence, from 0 to 1
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        speaker:
+          description: The speaker of the sentence if Speaker Diarization is enabled, else null
+          type: [string, 'null']
+
+    TopicDetectionResult:
+      description: THe result of the topic detection model.
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          description: The text in the transcript in which a detected topic occurs
+          type: string
+        labels:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              relevance:
+                description: How relevant the detected topic is of a detected topic
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+              label:
+                description: The IAB taxonomical label for the label of the detected topic, where > denotes supertopic/subtopic relationship
+                type: string
+        timestamp:
+          $ref: "#/components/schemas/Timestamp"
+
+    ContentSafetyLabel:
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          description: The label of the sensitive topic
+          type: string
+        confidence:
+          description: The confidence score for the topic being discussed, from 0 to 1
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        severity:
+          description: How severely the topic is discussed in the section, from 0 to 1
+          type: number	
+          format: double
+          minimum: 0
+          maximum: 1
+
+    ContentSafetyLabelResult:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          description: The transcript of the section flagged by the Content Moderation model
+          type: string	
+        labels:
+          description: An array of objects, one per sensitive topic that was detected in the section
+          type: array
+          items: 
+            $ref: "#/components/schemas/ContentSafetyLabel"
+        sentences_idx_start:
+          description: The sentence index at which the section begins
+          type: integer	
+        sentences_idx_end:
+          description: The sentence index at which the section ends
+          type: integer
+        timestamp:
+          description: Timestamp information for the section
+          $ref: "#/components/schemas/Timestamp"
+        summary:
+          description: A summary of the Content Moderation confidence results for the entire audio file
+          type: object
+          additionalProperties:
+            description: A confidence score for the presence of the sensitive topic "topic" across the entire audio file
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        severity_score_summary:
+          description: A summary of the Content Moderation severity results for the entire audio file
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              low:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+              medium:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+              high:
+                type: number
+                format: double
+                minimum: 0
+                maximum: 1
+
+    AutoHighlightsResult:
+      type: [object, 'null']
+      properties:
+        results:
+          description: A temporally-sequential array of Key Phrases
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              count:
+                description: The total number of times the key phrase appears in the audio file
+                type: integer
+              rank:
+                description: The total relevancy to the overall audio file of this key phrase - a greater number means more relevant
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+              text:
+                description: The text itself of the key phrase
+                type: string
+              timestamps:
+                description: The timestamp of the of the key phrase
+                type: array
+                items:
+                  $ref: "#/components/schemas/Timestamp"
 
     TranscriptWord:
       type: object
+      additionalProperties: false
       properties:
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         start:
           type: integer
         end:
@@ -533,6 +1377,7 @@ components:
 
     TranscriptSentence:
       type: object
+      additionalProperties: false
       properties:
         text:
           type: string
@@ -542,18 +1387,25 @@ components:
           type: integer
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         words:
           type: array
           items:
             $ref: "#/components/schemas/TranscriptWord"
 
-    TranscriptSentenceResponse:
+    TranscriptSentenceResource:
       type: object
+      additionalProperties: false
       properties:
         id:
           type: string
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         audio_duration:
           type: number
         sentences:
@@ -563,6 +1415,7 @@ components:
 
     TranscriptParagraph:
       type: object
+      additionalProperties: false
       properties:
         text:
           type: string
@@ -572,18 +1425,25 @@ components:
           type: integer
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         words:
           type: array
           items:
             $ref: "#/components/schemas/TranscriptWord"
 
-    TranscriptParagraphResponse:
+    TranscriptParagraphResource:
       type: object
+      additionalProperties: false
       properties:
         id:
           type: string
         confidence:
           type: number
+          format: double
+          minimum: 0
+          maximum: 1
         audio_duration:
           type: number
         paragraphs:
@@ -593,6 +1453,7 @@ components:
 
     PageDetails:
       type: object
+      additionalProperties: false
       properties:
         limit:
           type: integer
@@ -607,6 +1468,7 @@ components:
 
     TranscriptListItem:
       type: object
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -616,25 +1478,29 @@ components:
           $ref: '#/components/schemas/TranscriptStatus'
         created:
           type: string
-          format: date
+          format: date-time
         completed:
           type: string
           format: date-time
         audio_url:
           type: string
 
-    TranscriptListResponse:
+    TranscriptList:
       type: object
+      additionalProperties: false
       properties:
         page_details:
+          required: true
           $ref: '#/components/schemas/PageDetails'
         transcripts:
+          required: true
           type: array
           items:
             $ref: '#/components/schemas/TranscriptListItem'
     
-    UploadResponse: 
+    UploadResponseBody: 
       type: object
+      additionalProperties: false
       properties:
         upload_url:
           description: A URL that points to your audio file, accessible only by AssemblyAI's servers
@@ -642,17 +1508,206 @@ components:
       required: 
         - upload_url
 
+    LemurSummaryParameters:
+      type: object
+      additionalProperties: false
+      properties:
+        transcript_ids:
+          description: A list of completed transcripts with text. Up to 100 files max, or 100 hours max. Whichever is lower.
+          type: array
+          items:
+            type: string
+        
+        context:
+          description: Context to provide the model. This can be a string or a free-form JSON value.
+          oneOf: 
+          - schema: string
+          - schema: {}
+
+        answer_format:
+          description: |
+            How you want the summary to be returned. This can be any text. Examples: "TLDR", "bullet points"
+          type: string
+
+        final_model:
+          description: |
+            The model that is used for the final prompt after compression is performed (options: "basic" and "default").
+          $ref: "#/components/schemas/LemurModels"
+
+        max_output_size: 
+          description: Max output size in tokens. Up to 4000 allowed.
+          type: integer
+      
+      required: 
+        - transcript_ids
+
+    LemurQuestionAnswerParameters:
+      type: object
+      additionalProperties: false
+      properties:
+        transcript_ids:
+          description: A list of completed transcripts with text. Up to 100 files max, or 100 hours max. Whichever is lower.
+          type: array
+          items:
+            type: string
+        questions:
+          description: A list of questions to ask.
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              question:
+                description: The question you wish to ask. For more complex questions use default model.
+                type: string
+              context: 
+                description: Any context about the transcripts you wish to provide. This can be a string, or free-form JSON.
+                oneOf: 
+                - schema: string
+                - schema: {}
+              answer_format:
+                description: |
+                  How you want the answer to be returned. This can be any text. Can't be used with answer_options. Examples: "short sentence", "bullet points"
+                type: string
+              answer_options:
+                description: |
+                  What discrete options to return. Useful for precise responses. Can't be used with answer_format. Example: ["Yes", "No"]
+                type: array
+                items:
+                  type: string
+            required: 
+              - question
+
+        context:
+          description: Context to provide the model. This can be a string or a free-form JSON value.
+          oneOf: 
+          - schema: string
+          - schema: {}
+
+        answer_format:
+          description: |
+            How you want the summary to be returned. This can be any text. Examples: "TLDR", "bullet points"
+          type: string
+
+        final_model:
+          description: |
+            The model that is used for the final prompt after compression is performed (options: "basic" and "default").
+          $ref: "#/components/schemas/LemurModels"
+
+        max_output_size: 
+          description: Max output size in tokens. Up to 4000 allowed.
+          type: number
+          maximum: 4000
+      required: 
+        - transcript_ids
+        - questions
+
+    LemurActionItemsParameters:
+      type: object
+      additionalProperties: false
+      properties:
+        transcript_ids:
+          description: A list of completed transcripts with text. Up to 100 files max, or 100 hours max. Whichever is lower.
+          type: array
+          items:
+            type: string
+        context:
+          description: Context to provide the model. This can be a string or a free-form JSON value.
+          oneOf: 
+          - schema: string
+          - schema: {}
+        final_model:
+          description: |
+            The model that is used for the final prompt after compression is performed (options: "basic" and "default").
+          $ref: "#/components/schemas/LemurModels"
+        max_output_size: 
+          description: Max output size in tokens. Up to 4000 allowed.
+          type: integer
+          maximum: 4000
+      
+      required: 
+        - transcript_ids
+
+    LemurTaskParameters:
+      type: object
+      additionalProperties: false
+      properties:
+        transcript_ids:
+          description: A list of completed transcripts with text. Up to 100 files max, or 100 hours max. Whichever is lower.
+          type: array
+          items:
+            type: string
+        prompt:
+          description: Your text to prompt the model to produce a desired output, including any context you want to pass into the model.
+          type: string
+        context:
+          description: Context to provide the model. This can be a string or a free-form JSON value.
+          oneOf: 
+          - schema: string
+          - schema: {}
+        final_model:
+          description: |
+            The model that is used for the final prompt after compression is performed (options: "basic" and "default").
+          $ref: "#/components/schemas/LemurModels"
+        max_output_size: 
+          description: Max output size in tokens. Up to 4000 allowed.
+          type: integer
+          maximum: 4000
+      
+      required: 
+        - transcript_ids
+        - prompt
+
+    LemurModels:
+        type: string
+        enum:
+          - default
+          - basic
+
+    AudioIntellegenceModelStatus:
+      type: string
+      enum:
+        - success
+        - unavailable
+
   requestBodies:
-    TranscriptRequest:
-      description: Transcript request
+    CreateTranscriptParameters:
+      description: Parameters to create a transcript resource
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/TranscriptRequest"
+            $ref: "#/components/schemas/CreateTranscriptParameters"
 
+    LemurSummaryParameters:
+      description: Parameters to generate a summary using LeMUR
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LemurSummaryParameters"
+
+    LemurQuestionAnswerParameters:
+      description: Parameters to ask questions about transcripts using LeMUR
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LemurQuestionAnswerParameters"
+            
+    LemurActionItemsParameters:
+      description: Parameters to extract action items from transcripts using LeMUR
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LemurActionItemsParameters"
+
+    LemurTaskParameters:
+      description: Parameters to run a LeMUR custom task
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LemurTaskParameters"
 
   securitySchemes:
-    APIKey:
+    ApiKey:
       type: apiKey
       in: header
       name: Authorization
