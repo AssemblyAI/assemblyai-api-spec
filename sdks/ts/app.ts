@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { AssemblyAIClient, AssemblyAI } from "@assemblyai-fern/api";
 import { CreateTranscriptParameters } from "@assemblyai-fern/api/api";
 
@@ -185,6 +186,10 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   })
   transcript = await waitForTranscriptToComplete(transcript);
   console.log(transcript);
+
+  const redactedAudio = await aai.transcript.getRedactedAudio(transcript.id || '');
+  console.log(redactedAudio);
+
   return transcript;
 })().then(deleteTranscript);
 
@@ -225,16 +230,16 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
 })().then(deleteTranscript);
 
 (async function listTranscripts() {
-let list = await aai.transcript.list();
-console.log(list);
-while (!!list.pageDetails?.nextUrl) {
-  const params = new URL(list.pageDetails.nextUrl).searchParams
-  list = await aai.transcript.list({
-    afterId: params.get('after_id') || undefined,
-    limit: parseInt(params.get('limit') || 'NaN') || undefined,
-  });
+  let list = await aai.transcript.list();
   console.log(list);
-}
+  while (!!list.pageDetails?.nextUrl) {
+    const params = new URL(list.pageDetails.nextUrl).searchParams
+    list = await aai.transcript.list({
+      afterId: params.get('after_id') || undefined,
+      limit: parseInt(params.get('limit') || 'NaN') || undefined,
+    });
+    console.log(list);
+  }
 })();
 
 async function searchTranscript(transcript: AssemblyAI.Transcript) {
