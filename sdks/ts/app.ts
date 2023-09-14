@@ -41,8 +41,8 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
     //await exportAsSubtitles(transcript);
     await getParagraphs(transcript);
     await getSentences(transcript);
-    //await searchTranscript(transcript);
-    //await deleteTranscript(transcript);
+    await searchTranscript(transcript);
+    await deleteTranscript(transcript);
   });
 
 (async function runLemurModels() {
