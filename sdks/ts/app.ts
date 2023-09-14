@@ -253,6 +253,13 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   }
 })();
 
+(async function createRealtimeToken() {
+  let response = await aai.realtime.createToken({
+    expiresIn: 60
+  });
+  console.log(response);
+})();
+
 async function searchTranscript(transcript: AssemblyAI.Transcript) {
   const result = await aai.transcript.search(transcript.id, {
     words: ['draft', 'football']
