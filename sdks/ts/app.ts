@@ -106,6 +106,17 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   return transcript;
 })().then(deleteTranscript);
 
+(async function createTranscriptWithAutoChapters() {
+  let transcript = await aai.transcript.create({
+    ...createTranscriptParams,
+    autoChapters: true,
+    punctuate: true,
+  })
+  transcript = await waitForTranscriptToComplete(transcript);
+  console.log(transcript);
+  return transcript;
+})().then(deleteTranscript);
+
 (async function createTranscriptWithContentSafety() {
   let transcript = await aai.transcript.create({
     ...createTranscriptParams,
