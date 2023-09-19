@@ -1,15 +1,14 @@
 # Assembly AI API
 
 Tagging a release on this repository will update the:
-  - [TypeScript SDK](https://github.com/fern-assemblyai/assemblyai-node)
-  - [Java SDK](https://github.com/fern-assemblyai/assemblyai-java)
-  - [Go SDK](https://github.com/fern-assemblyai/assemblyai-go)
+  - [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
 
 ## What is in this repository?
 
 This repository contains
 
 - Assembly AI's OpenAPI spec which lives in the [openapi](./fern/api/openapi/) folder
+- Assembly AI's AsyncAPI spec which lives in the [openapi](./fern/api/asyncapi/) folder
 - Generators (see [generators.yml](./fern/api/generators.yml))
 
 To make sure that the OpenAPI is valid, you can use the Fern CLI.
