@@ -51,7 +51,7 @@ async function waitForTranscriptToComplete(transcript: Transcript) {
     //await exportAsSubtitles(transcript);
     await getParagraphs(transcript);
     await getSentences(transcript);
-    await searchTranscript(transcript);
+    await wordSearch(transcript);
     await deleteTranscript(transcript);
   });
 
@@ -270,8 +270,8 @@ async function waitForTranscriptToComplete(transcript: Transcript) {
   console.log(response);
 })();
 
-async function searchTranscript(transcript: Transcript) {
-  const result = await aai.transcript.search(transcript.id, {
+async function wordSearch(transcript: Transcript) {
+  const result = await aai.transcript.wordSearch(transcript.id, {
     words: ['draft', 'football']
   });
   console.log(result);
