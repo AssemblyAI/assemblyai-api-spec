@@ -336,7 +336,6 @@ paths:
           description: Keywords to search for
           required: true
           schema:
-            required: true
             type: array
             items:
               type: string
@@ -545,15 +544,16 @@ components:
     RedactedAudioResult:
       type: object
       additionalProperties: false
+      required:
+        - status
+        - redacted_audio_url
       properties:
         status:
           description: The status of the redacted audio
           $ref: "#/components/schemas/RedactedAudioStatus"
-          required: true
         redacted_audio_url:
           description: The URL of the redacted audio file
           type: string
-          required: true
     
     RedactedAudioStatus:
       description: The status of the redacted audio
@@ -638,17 +638,18 @@ components:
         id:
           description: The ID of the transcript
           type: string
-          required: true
         total_count:
           description: The total count of all matched instances. For e.g., word 1 matched 2 times, and word 2 matched 3 times, `total_count` will equal 5.
           type: integer
-          required: true
         matches:
           description: The matches of the search
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptSearchMatch"
+      required: 
+        - id
+        - total_count
+        - matches            
 
     TranscriptSearchMatch:
       type: object
@@ -657,23 +658,24 @@ components:
         text:
           description: The matched word
           type: string
-          required: true
         count:
           description: The total amount of times the word is in the transcript
           type: integer
-          required: true
         timestamps:
           description: An array of timestamps
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptSearchTimestamp"
         indexes:
           description: An array of all index locations for that word within the `words` array of the completed transcript
-          required: true
           type: array
           items:
             type: integer
+      required: 
+        - text
+        - count
+        - timestamps
+        - indexes            
 
     TranscriptSearchTimestamp:
       description: An array of timestamps structured as [`start_time`, `end_time`] in milliseconds
@@ -688,23 +690,21 @@ components:
       properties:
         start:
           description: The start time in milliseconds
-          required: true
           type: integer
         end:
           description: The end time in milliseconds
-          required: true
           type: integer
+      required: 
+        - start  
+        - end
 
-    CreateTranscriptParameters:
+    # This type is used by the Transcriber
+    CreateTranscriptOptionalParameters: 
       description: The parameters for creating a transcript
       type: object
       additionalProperties: false
       required: [audio_url]
       properties:
-        audio_url:
-          description: The URL of the audio or video file to transcribe.
-          type: string
-          required: true
 
         language_code:
           description: |
@@ -864,6 +864,20 @@ components:
           items: 
             type: string
 
+
+    CreateTranscriptParameters:
+      description: The parameters for creating a transcript
+      type: object
+      additionalProperties: false
+      allOf: 
+        - $ref: "#/components/schemas/CreateTranscriptOptionalParameters"
+        - type: object 
+          required: [audio_url]
+          properties:
+            audio_url:
+              description: The URL of the audio or video file to transcribe.
+              type: string
+
     SummaryModel:
       type: string
       description: The model to summarize the transcript
@@ -899,15 +913,14 @@ components:
       properties:
         from:
           description: Words or phrases to replace
-          required: true
           type: array
           items:
             description: Word or phrase to replace
             type: string
         to:
           description: Word or phrase to replace with
-          required: true
           type: string
+      required: [ from, to ]
     
     TranscriptUtterance:
       type: object
@@ -915,27 +928,28 @@ components:
       properties:
         channel:
           type: string
-          required: true
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         start:
           type: integer
-          required: true
         end:
           type: integer
-          required: true
         text:
           type: string
-          required: true
         words:
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptWord"
+      required:
+        - channel
+        - confidence
+        - start
+        - end
+        - text
+        - words
 
     SubstitutionPolicy:
       type: [string, 'null']
@@ -1011,6 +1025,15 @@ components:
         - processing
         - completed
         - error
+      x-fern-enum: 
+        queued: 
+          description: The audio file is in the queue to be processed by the API.
+        processing: 
+          description: The audio file is being processed by the API.
+        completed: 
+          description: The transcription job has been completed successfully.
+        error: 
+          description: An error occurred while processing the audio file.
       # TODO(fern): Add support for "enums" with description
       #   https://github.com/OAI/OpenAPI-Specification/issues/348
       # oneOf:
@@ -1127,7 +1150,7 @@ components:
           description: |
             An array of results for the Key Phrases model, if it was enabled during the transcription request.
             See [Key phrases](https://www.assemblyai.com/docs/Models/key_phrases) for more information.
-          $ref: "#/components/schemas/AutoHighlightsResult"
+          $ref: "#/components/schemas/AutoHighlightsResponse"
 
         audio_start_from:
           description: The point in time, in milliseconds, in the file at which the transcription was started, if provided in the transcription request
@@ -1196,13 +1219,14 @@ components:
             An array of results for the Content Moderation model, if it was enabled during the transcription request.
             See [Content moderation](https://www.assemblyai.com/docs/Models/content_moderation) for more information.
           type: [object, 'null']
+          required: 
+            - status
+            - results
           properties:
             status:
-              required: true
               description: Will be either success, or unavailable in the rare case that the Content Safety Labels model failed.
               $ref: "#/components/schemas/AudioIntelligenceModelStatus"
             results:
-              required: true
               type: array
               items:
                 $ref: "#/components/schemas/ContentSafetyLabelResult"
@@ -1216,20 +1240,21 @@ components:
             An array of results for the Topic Detection model, if it was enabled during the transcription request.
             See [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification) for more information.
           type: [object, 'null']
+          required: 
+            - status
+            - results
+            - summary
           properties:
             status: 
               description: Will be either success, or unavailable in the rare case that the Content Moderation model failed.
               $ref: "#/components/schemas/AudioIntelligenceModelStatus"
-              required: true
             results:
               description: An array of results for the Topic Detection model.
-              required: true
               type: array
               items:
                 $ref: "#/components/schemas/TopicDetectionResult"
             summary:
               description: The overall relevance of topic to the entire audio file
-              required: true
               type: object
               additionalProperties:
                 type: number
@@ -1344,97 +1369,109 @@ components:
       description: Chapter of the audio file
       type: object
       additionalProperties: false
+      required: 
+        - gist
+        - headline
+        - summary
+        - start
+        - end
       properties:
         gist:
           description: An ultra-short summary (just a few words) of the content spoken in the chapter
           type: string
-          required: true
         headline:
           description: A single sentence summary of the content spoken during the chapter
           type: string
-          required: true
         summary:
           description: A one paragraph summary of the content spoken during the chapter
-          type: string
-          required: true
+          $ref: "#/components/schemas/TranscriptParagraphResource"
         start:
           description: The starting time, in milliseconds, for the chapter
           type: integer
-          required: true
         end:
           description: The starting time, in milliseconds, for the chapter
           type: integer
-          required: true
 
     Entity:
       description: A detected entity
       type: object
       additionalProperties: false
+      required: 
+        - entity_type
+        - text
+        - start
+        - end
       properties:
         entity_type:
           description: The type of entity for the detected entity
           type: string
-          required: true
         text:
           description: The text for the detected entity
           type: string
-          required: true
         start:
           description: The starting time, in milliseconds, at which the detected entity appears in the audio file
           type: integer
-          required: true
         end:
           description: The ending time, in milliseconds, for the detected entity in the audio file
           type: integer
-          required: true
 
     SentimentAnalysisResult:
       description: The result of the sentiment analysis model.
       type: object
       additionalProperties: false
+      required: 
+        - text
+        - start
+        - end
+        - sentiment
+        - confidence
       properties:
         text:
           description: The transcript of the sentence
           type: string
-          required: true
         start:
           description: The starting time, in milliseconds, of the sentence
           type: integer
-          required: true
         end:
           description: The ending time, in milliseconds, of the sentence
           type: integer
-          required: true
         sentiment:
           description: The detected sentiment for the sentence, one of POSITIVE, NEUTRAL, NEGATIVE
-          type: string
-          enum: ["POSITIVE", "NEUTRAL", "NEGATIVE"]
-          required: true
+          $ref: "#/components/schemas/Sentiment"
         confidence:
           description: The confidence score for the detected sentiment of the sentence, from 0 to 1
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         speaker:
           description: The speaker of the sentence if Speaker Diarization is enabled, else null
           type: [string, 'null']
+    
+    Sentiment: 
+      enum: 
+        - POSITIVE
+        - NEUTRAL
+        - NEGATIVE
 
     TopicDetectionResult:
       description: THe result of the topic detection model.
       type: object
       additionalProperties: false
+      required:   
+        - text
       properties:
         text:
           description: The text in the transcript in which a detected topic occurs
           type: string
-          required: true
         labels:
           type: array
           items:
             type: object
             additionalProperties: false
+            required:
+              - relevance
+              - label
             properties:
               relevance:
                 description: How relevant the detected topic is of a detected topic
@@ -1442,66 +1479,67 @@ components:
                 format: double
                 minimum: 0
                 maximum: 1
-                required: true
               label:
                 description: The IAB taxonomical label for the label of the detected topic, where > denotes supertopic/subtopic relationship
                 type: string
-                required: true
         timestamp:
           $ref: "#/components/schemas/Timestamp"
 
     ContentSafetyLabel:
       type: object
       additionalProperties: false
+      required: 
+        - label
+        - confidence
+        - severity
       properties:
         label:
           description: The label of the sensitive topic
           type: string
-          required: true
         confidence:
           description: The confidence score for the topic being discussed, from 0 to 1
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         severity:
           description: How severely the topic is discussed in the section, from 0 to 1
           type: number	
           format: double
           minimum: 0
           maximum: 1
-          required: true
 
     ContentSafetyLabelResult:
       type: object
       additionalProperties: false
+      required: 
+        - text
+        - labels
+        - sentences_idx_start
+        - sentences_idx_end
+        - timestamp
+        - summary
+        - severity_score_summary
       properties:
         text:
           description: The transcript of the section flagged by the Content Moderation model
           type: string
-          required: true
         labels:
           description: An array of objects, one per sensitive topic that was detected in the section
-          required: true
           type: array
           items: 
             $ref: "#/components/schemas/ContentSafetyLabel"
         sentences_idx_start:
           description: The sentence index at which the section begins
-          required: true
           type: integer	
         sentences_idx_end:
           description: The sentence index at which the section ends
-          required: true
           type: integer
         timestamp:
           description: Timestamp information for the section
-          required: true
           $ref: "#/components/schemas/Timestamp"
         summary:
           description: A summary of the Content Moderation confidence results for the entire audio file
-          required: true
           type: object
           additionalProperties:
             description: A confidence score for the presence of the sensitive topic "topic" across the entire audio file
@@ -1511,109 +1549,119 @@ components:
             maximum: 1
         severity_score_summary:
           description: A summary of the Content Moderation severity results for the entire audio file
-          required: true
           type: object
           additionalProperties:
-            type: object
-            properties:
-              low:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-                required: true
-              medium:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-                required: true
-              high:
-                type: number
-                format: double
-                minimum: 0
-                maximum: 1
-                required: true
+            $ref: "#/components/schemas/SeverityScoreSummary"
+    
+    SeverityScoreSummary: 
+      type: object
+      required: 
+        - low
+        - medium
+        - high
+      properties:
+        low:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        medium:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        high:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
 
-    AutoHighlightsResult:
+    AutoHighlightsResponse:
       description: |
         An array of results for the Key Phrases model, if it was enabled during the transcription request.
         See [Key phrases](https://www.assemblyai.com/docs/Models/key_phrases) for more information.
       type: [object, 'null']
+      required: 
+        - results
       properties:
         results:
           description: A temporally-sequential array of Key Phrases
-          required: true
           type: array
           items:
-            type: object
-            additionalProperties: false
-            properties:
-              count:
-                description: The total number of times the key phrase appears in the audio file
-                type: integer
-                required: true
-              rank:
-                description: The total relevancy to the overall audio file of this key phrase - a greater number means more relevant
-                type: number
-                format: float
-                minimum: 0
-                maximum: 1
-                required: true
-              text:
-                description: The text itself of the key phrase
-                type: string
-                required: true
-              timestamps:
-                description: The timestamp of the of the key phrase
-                required: true
-                type: array
-                items:
-                  $ref: "#/components/schemas/Timestamp"
+            $ref: "#/components/schemas/AutoHighlightResult"
+    
+    AutoHighlightResult:
+      type: object
+      additionalProperties: false
+      required: 
+        - count
+        - rank
+        - text
+        - timestamps
+      properties:
+        count:
+          description: The total number of times the key phrase appears in the audio file
+          type: integer
+        rank:
+          description: The total relevancy to the overall audio file of this key phrase - a greater number means more relevant
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        text:
+          description: The text itself of the key phrase
+          type: string
+        timestamps:
+          description: The timestamp of the of the key phrase
+          type: array
+          items:
+            $ref: "#/components/schemas/Timestamp"
 
     TranscriptWord:
       type: object
       additionalProperties: false
+      required: 
+        - confidence
+        - start
+        - end
+        - text
       properties:
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         start:
           type: integer
-          required: true
         end:
           type: integer
-          required: true
         text:
           type: string
-          required: true
         speaker:
           type: [string, 'null']
 
     TranscriptSentence:
       type: object
       additionalProperties: false
+      required: 
+        - text
+        - start
+        - end
+        - confidence
+        - words
       properties:
         text:
           type: string
-          required: true
         start:
           type: integer
-          required: true
         end:
           type: integer
-          required: true
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         words:
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptWord"
@@ -1621,21 +1669,22 @@ components:
     TranscriptSentenceResource:
       type: object
       additionalProperties: false
+      required: 
+        - id
+        - confidence
+        - audio_duration
+        - sentences
       properties:
         id:
           type: string
-          required: true
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         audio_duration:
           type: number
-          required: true
         sentences:
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptSentence"
@@ -1643,46 +1692,48 @@ components:
     TranscriptParagraph:
       type: object
       additionalProperties: false
+      required: 
+        - text
+        - start
+        - end
+        - confidence
+        - words
       properties:
         text:
-          required: true
           type: string
         start:
-          required: true
           type: integer
         end:
-          required: true
           type: integer
         confidence:
-          required: true
           type: number
           format: double
           minimum: 0
           maximum: 1
         words:
           type: array
-          required: true
           items:
             $ref: "#/components/schemas/TranscriptWord"
 
     TranscriptParagraphResource:
       type: object
       additionalProperties: false
+      required: 
+        - id
+        - confidence
+        - audio_duration
+        - paragraphs
       properties:
         id:
           type: string
-          required: true
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-          required: true
         audio_duration:
           type: number
-          required: true
         paragraphs:
-          required: true
           type: array
           items:
             $ref: "#/components/schemas/TranscriptParagraph"
@@ -1690,57 +1741,60 @@ components:
     PageDetails:
       type: object
       additionalProperties: false
+      required: 
+        - liimt
+        - result_count
+        - current_url
+        - prev_url
       properties:
         limit:
           type: integer
-          required: true
         result_count:
           type: integer
-          required: true
         current_url:
           type: string
-          required: true
         prev_url:
           type: string
-          required: true
         next_url:
           type: [string, 'null']
 
     TranscriptListItem:
       type: object
       additionalProperties: false
+      required: 
+        - id
+        - resource_url
+        - status
+        - created
+        - audio_url   
       properties:
         id:
           type: string
-          required: true
         resource_url:
           type: string
-          required: true
         status:
           $ref: '#/components/schemas/TranscriptStatus'
-          required: true
         created:
           type: string
           pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
           x-fern-type: datetime
-          required: true
         completed:
           type: [string, 'null']
           pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
           x-fern-type: datetime
         audio_url:
           type: string
-          required: true
 
     TranscriptList:
       type: object
       additionalProperties: false
+      required: 
+        - page_details
+        - transcripts     
       properties:
         page_details:
-          required: true
           $ref: '#/components/schemas/PageDetails'
         transcripts:
-          required: true
           type: array
           items:
             $ref: '#/components/schemas/TranscriptListItem'
@@ -1748,11 +1802,12 @@ components:
     UploadResponseBody: 
       type: object
       additionalProperties: false
+      required: 
+        - upload_url       
       properties:
         upload_url:
           description: A URL that points to your audio file, accessible only by AssemblyAI's servers
           type: string
-          required: true
 
     CreateRealtimeTokenParameters:
       type: object
@@ -1767,15 +1822,18 @@ components:
     RealtimeTokenResponseBody: 
       type: object
       additionalProperties: false
+      required: 
+        - token
       properties:
         token:
           description: The temporary authentication token for realtime transcription
           type: string
-          required: true
 
     LemurBaseParameters:
       type: object
       additionalProperties: false
+      required: 
+        - transcript_ids
       properties:
         transcript_ids:
           description: A list of completed transcripts with text. Up to 100 files max, or 100 hours max. Whichever is lower.
@@ -1825,29 +1883,32 @@ components:
               description: A list of questions to ask.
               type: array
               items:
-                type: object
-                additionalProperties: false
-                properties:
-                  question:
-                    description: The question you wish to ask. For more complex questions use default model.
-                    type: string
-                    required: true
-                  context: 
-                    description: Any context about the transcripts you wish to provide. This can be a string, or free-form JSON.
-                    oneOf: 
-                    - schema: string
-                    - schema: {}
-                  answer_format:
-                    description: |
-                      How you want the answer to be returned. This can be any text. Can't be used with answer_options. Examples: "short sentence", "bullet points"
-                    type: string
-                  answer_options:
-                    description: |
-                      What discrete options to return. Useful for precise responses. Can't be used with answer_format. Example: ["Yes", "No"]
-                    type: array
-                    items:
-                      type: string
+                $ref: "#/components/schemas/LemurQuestion"
           required: [questions]
+
+    LemurQuestion: 
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question:
+          description: The question you wish to ask. For more complex questions use default model.
+          type: string
+        context: 
+          description: Any context about the transcripts you wish to provide. This can be a string, or free-form JSON.
+          oneOf: 
+          - schema: string
+          - schema: {}
+        answer_format:
+          description: |
+            How you want the answer to be returned. This can be any text. Can't be used with answer_options. Examples: "short sentence", "bullet points"
+          type: string
+        answer_options:
+          description: |
+            What discrete options to return. Useful for precise responses. Can't be used with answer_format. Example: ["Yes", "No"]
+          type: array
+          items:
+            type: string
 
     LemurActionItemsParameters:
       allOf:
