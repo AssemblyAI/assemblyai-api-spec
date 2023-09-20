@@ -1,6 +1,16 @@
 import 'dotenv/config';
 import { AssemblyAIClient, AssemblyAI } from "@assemblyai-fern/api";
-import { CreateTranscriptParameters } from "@assemblyai-fern/api/api";
+import { 
+  CreateTranscriptParameters, 
+  LemurBaseResult, 
+  LemurModels, 
+  PiiPolicies, 
+  SubstitutionPolicy, 
+  SummaryModel, 
+  SummaryType, 
+  Transcript, 
+  TranscriptBoostParam 
+} from "@assemblyai-fern/api/api";
 
 const aai = new AssemblyAIClient({
   apiKey: process.env.ASSEMBLYAI_API_KEY || '',
@@ -19,7 +29,7 @@ const createTranscriptParams: CreateTranscriptParameters = {
   speechThreshold: 0.5,
 };
 
-async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
+async function waitForTranscriptToComplete(transcript: Transcript) {
   while (true) {
     transcript = await aai.transcript.get(transcript.id);
     if (transcript.status === AssemblyAI.TranscriptStatus.Completed ||
@@ -48,10 +58,10 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
 (async function runLemurModels() {
   let transcript = await aai.transcript.create(createTranscriptParams);
   transcript = await waitForTranscriptToComplete(transcript);
-  await lemurSummary(transcript);
-  await lemurQuestionAnswer(transcript);
-  await lemurActionPoints(transcript);
-  await lemurCustomTask(transcript);
+  await lemurSummary(transcript).then(deleteLemurRequest);
+  await lemurQuestionAnswer(transcript).then(deleteLemurRequest);
+  await lemurActionPoints(transcript).then(deleteLemurRequest);
+  await lemurCustomTask(transcript).then(deleteLemurRequest);
   await deleteTranscript(transcript);
 })();
 
@@ -84,7 +94,7 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
 (async function createTranscriptWithWordBoost() {
   let transcript = await aai.transcript.create({
     ...createTranscriptParams,
-    boostParam: AssemblyAI.TranscriptBoostParam.High,
+    boostParam: TranscriptBoostParam.High,
     wordBoost: ['knee', 'hip'],
   });
   transcript = await waitForTranscriptToComplete(transcript);
@@ -96,8 +106,8 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   let transcript = await aai.transcript.create({
     ...createTranscriptParams,
     summarization: true,
-    summaryModel: AssemblyAI.SummaryModel.Conversational,
-    summaryType: AssemblyAI.SummaryType.BulletsVerbose,
+    summaryModel: SummaryModel.Conversational,
+    summaryType: SummaryType.BulletsVerbose,
     punctuate: true,
     formatText: true
   })
@@ -189,11 +199,11 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
     redactPiiAudio: true,
     redactPiiAudioQuality: 'wav',
     redactPiiPolicies: [
-      AssemblyAI.PiiPolicies.Injury,
-      AssemblyAI.PiiPolicies.MedicalCondition,
-      AssemblyAI.PiiPolicies.MedicalProcess
+      PiiPolicies.Injury,
+      PiiPolicies.MedicalCondition,
+      PiiPolicies.MedicalProcess
     ],
-    redactPiiSub: AssemblyAI.SubstitutionPolicy.Hash,
+    redactPiiSub: SubstitutionPolicy.Hash,
   })
   transcript = await waitForTranscriptToComplete(transcript);
   console.log(transcript);
@@ -260,48 +270,49 @@ async function waitForTranscriptToComplete(transcript: AssemblyAI.Transcript) {
   console.log(response);
 })();
 
-async function searchTranscript(transcript: AssemblyAI.Transcript) {
+async function searchTranscript(transcript: Transcript) {
   const result = await aai.transcript.search(transcript.id, {
     words: ['draft', 'football']
   });
   console.log(result);
 }
 
-async function exportAsSubtitles(transcript: AssemblyAI.Transcript) {
+async function exportAsSubtitles(transcript: Transcript) {
   const srt = await aai.transcript.exportAsSrt(transcript.id)
   const vtt = await aai.transcript.exportAsVtt(transcript.id)
   console.log('SRT subtitles', srt);
   console.log('VTT subtitles', vtt);
 }
 
-async function getParagraphs(transcript: AssemblyAI.Transcript) {
+async function getParagraphs(transcript: Transcript) {
   const paragraphs = await aai.transcript.getParagraphs(transcript.id)
   console.dir(paragraphs, { depth: null });
 }
 
-async function getSentences(transcript: AssemblyAI.Transcript) {
+async function getSentences(transcript: Transcript) {
   const sentences = await aai.transcript.getSentences(transcript.id)
   console.dir(sentences, { depth: null });
 }
 
-async function deleteTranscript(transcript: AssemblyAI.Transcript) {
+async function deleteTranscript(transcript: Transcript) {
   await aai.transcript.delete(transcript.id);
 };
 
 const lemurContext = 'This is a podcast on the ESPN channel talking about NFL draft picks.';
 
-async function lemurSummary(transcript: AssemblyAI.Transcript) {
+async function lemurSummary(transcript: Transcript) {
   const response = await aai.lemur.summary({
     transcriptIds: [transcript.id],
     context: lemurContext,
-    finalModel: AssemblyAI.LemurModels.Basic,
+    finalModel: LemurModels.Basic,
     maxOutputSize: 3000,
     answerFormat: 'bullet points'
   })
   console.log(response.response);
+  return response;
 };
 
-async function lemurQuestionAnswer(transcript: AssemblyAI.Transcript) {
+async function lemurQuestionAnswer(transcript: Transcript) {
   const response = await aai.lemur.questionAnswer({
     transcriptIds: [transcript.id],
     questions: [
@@ -317,29 +328,37 @@ async function lemurQuestionAnswer(transcript: AssemblyAI.Transcript) {
       }
     ],
     context: lemurContext,
-    finalModel: AssemblyAI.LemurModels.Basic,
+    finalModel: LemurModels.Basic,
     maxOutputSize: 3000
   })
   console.log(response.response);
+  return response;
 };
 
-async function lemurActionPoints(transcript: AssemblyAI.Transcript) {
+async function lemurActionPoints(transcript: Transcript) {
   const response = await aai.lemur.actionItems({
     transcriptIds: [transcript.id],
     context: lemurContext,
-    finalModel: AssemblyAI.LemurModels.Basic,
+    finalModel: LemurModels.Basic,
     maxOutputSize: 3000
   })
   console.log(response.response);
+  return response;
 };
 
-async function lemurCustomTask(transcript: AssemblyAI.Transcript) {
+async function lemurCustomTask(transcript: Transcript) {
   const response = await aai.lemur.task({
     transcriptIds: [transcript.id],
     prompt: 'List all the teams and their players that are mentioned.',
     context: lemurContext,
-    finalModel: AssemblyAI.LemurModels.Basic,
+    finalModel: LemurModels.Basic,
     maxOutputSize: 3000
   })
   console.log(response.response);
+  return response;
+};
+
+async function deleteLemurRequest(lemurResponse: LemurBaseResult) {
+  const response = await aai.lemur.deleteRequestData(lemurResponse.requestId);
+  console.log(response);
 };
