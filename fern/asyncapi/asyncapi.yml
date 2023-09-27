@@ -109,6 +109,13 @@ components:
       - $ref: '#/components/schemas/PartialTranscript'
       - $ref: '#/components/schemas/FinalTranscript'
       - $ref: '#/components/schemas/SessionTerminated'
+      discriminator:
+        propertyName: messageType
+        mapping:
+          SessionBegins: '#/components/schemas/SessionBegins'
+          PartialTranscript: '#/components/schemas/PartialTranscript'
+          FinalTranscript: '#/components/schemas/FinalTranscript'
+          SessionTerminated: '#/components/schemas/SessionTerminated'
     MessageTypes:
       type: string
       enum: [SessionBegins, PartialTranscript, FinalTranscript, SessionTerminated]
@@ -119,6 +126,11 @@ components:
       oneOf:
       - $ref: '#/components/schemas/PartialTranscript'
       - $ref: '#/components/schemas/FinalTranscript'
+      discriminator:
+        propertyName: messageType
+        mapping:
+          PartialTranscript: '#/components/schemas/PartialTranscript'
+          FinalTranscript: '#/components/schemas/FinalTranscript'
     SessionBegins:
       allOf:
         - $ref: '#/components/schemas/RealtimeBaseMessage'
@@ -153,12 +165,11 @@ components:
               type: string
               const: SessionTerminated
           additionalProperties: false
-    PartialTranscript:
+    RealtimeBaseTranscript:
       allOf:
         - $ref: '#/components/schemas/RealtimeBaseMessage'
         - type: object
           required:
-            - message_type
             - audio_start
             - audio_end
             - confidence
@@ -166,10 +177,6 @@ components:
             - words
             - created
           properties:
-            message_type:
-              description: Describes the type of message.
-              type: string
-              const: PartialTranscript
             audio_start:
               description: Start time of audio sample relative to session start, in milliseconds.
               type: integer
@@ -196,9 +203,21 @@ components:
               pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
               x-fern-type: datetime
           additionalProperties: false
+    PartialTranscript:
+      allOf:
+        - $ref: '#/components/schemas/RealtimeBaseTranscript'
+        - type: object
+          required:
+            - message_type
+          properties:
+            message_type:
+              description: Describes the type of message.
+              type: string
+              const: PartialTranscript
+          additionalProperties: false
     FinalTranscript:
         allOf:
-          - $ref: '#/components/schemas/PartialTranscript'
+          - $ref: '#/components/schemas/RealtimeBaseTranscript'
           - type: object
             required:
               - message_type
