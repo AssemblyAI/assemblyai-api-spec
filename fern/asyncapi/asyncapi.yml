@@ -109,6 +109,13 @@ components:
       - $ref: '#/components/schemas/PartialTranscript'
       - $ref: '#/components/schemas/FinalTranscript'
       - $ref: '#/components/schemas/SessionTerminated'
+      discriminator:
+        propertyName: messageType
+        mapping:
+          SessionBegins: '#/components/schemas/SessionBegins'
+          PartialTranscript: '#/components/schemas/PartialTranscript'
+          FinalTranscript: '#/components/schemas/FinalTranscript'
+          SessionTerminated: '#/components/schemas/SessionTerminated'
     MessageTypes:
       type: string
       enum: [SessionBegins, PartialTranscript, FinalTranscript, SessionTerminated]
@@ -119,6 +126,11 @@ components:
       oneOf:
       - $ref: '#/components/schemas/PartialTranscript'
       - $ref: '#/components/schemas/FinalTranscript'
+      discriminator:
+        propertyName: messageType
+        mapping:
+          PartialTranscript: '#/components/schemas/PartialTranscript'
+          FinalTranscript: '#/components/schemas/FinalTranscript'
     SessionBegins:
       allOf:
         - $ref: '#/components/schemas/RealtimeBaseMessage'
@@ -153,52 +165,57 @@ components:
               type: string
               const: SessionTerminated
           additionalProperties: false
+    RealtimeBaseTranscript:
+      type: object
+      required:
+        - audio_start
+        - audio_end
+        - confidence
+        - text
+        - words
+        - created
+      properties:
+        audio_start:
+          description: Start time of audio sample relative to session start, in milliseconds.
+          type: integer
+        audio_end:
+          description: End time of audio sample relative to session start, in milliseconds.
+          type: integer
+        confidence:
+          description: The confidence score of the entire transcription, between 0 and 1.
+          type: number
+          minimum: 0
+          maximum: 1
+          format: double
+        text:
+          description: The partial transcript for your audio.
+          type: string
+        words:
+          description: An array of objects, with the information for each word in the transcription text. Includes the start/end time (in milliseconds) of the word, the confidence score of the word, and the text (i.e. the word itself).
+          type: array
+          items:
+            $ref: '#/components/schemas/Word'
+        created:
+          description: The timestamp for the partial transcript.
+          type: string
+          pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
+          x-fern-type: datetime
+      additionalProperties: false
     PartialTranscript:
       allOf:
-        - $ref: '#/components/schemas/RealtimeBaseMessage'
+        - $ref: '#/components/schemas/RealtimeBaseTranscript'
         - type: object
           required:
             - message_type
-            - audio_start
-            - audio_end
-            - confidence
-            - text
-            - words
-            - created
           properties:
             message_type:
               description: Describes the type of message.
               type: string
               const: PartialTranscript
-            audio_start:
-              description: Start time of audio sample relative to session start, in milliseconds.
-              type: integer
-            audio_end:
-              description: End time of audio sample relative to session start, in milliseconds.
-              type: integer
-            confidence:
-              description: The confidence score of the entire transcription, between 0 and 1.
-              type: number
-              minimum: 0
-              maximum: 1
-              format: double
-            text:
-              description: The partial transcript for your audio.
-              type: string
-            words:
-              description: An array of objects, with the information for each word in the transcription text. Includes the start/end time (in milliseconds) of the word, the confidence score of the word, and the text (i.e. the word itself).
-              type: array
-              items:
-                $ref: '#/components/schemas/Word'
-            created:
-              description: The timestamp for the partial transcript.
-              type: string
-              pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
-              x-fern-type: datetime
           additionalProperties: false
     FinalTranscript:
         allOf:
-          - $ref: '#/components/schemas/PartialTranscript'
+          - $ref: '#/components/schemas/RealtimeBaseTranscript'
           - type: object
             required:
               - message_type
