@@ -1,15 +1,15 @@
 import 'dotenv/config';
 import { AssemblyAIClient, AssemblyAI } from "@assemblyai-fern/api";
-import { 
-  CreateTranscriptParameters, 
-  LemurBaseResult, 
-  LemurModels, 
-  PiiPolicies, 
-  SubstitutionPolicy, 
-  SummaryModel, 
-  SummaryType, 
-  Transcript, 
-  TranscriptBoostParam 
+import {
+  CreateTranscriptParameters,
+  LemurBaseResult,
+  LemurModels,
+  PiiPolicies,
+  SubstitutionPolicy,
+  SummaryModel,
+  SummaryType,
+  Transcript,
+  TranscriptBoostParam
 } from "@assemblyai-fern/api/api";
 
 const aai = new AssemblyAIClient({
@@ -359,6 +359,6 @@ async function lemurCustomTask(transcript: Transcript) {
 };
 
 async function deleteLemurRequest(lemurResponse: LemurBaseResult) {
-  const response = await aai.lemur.deleteRequestData(lemurResponse.requestId);
+  const response = await aai.lemur.purgeRequestData(lemurResponse.requestId);
   console.log(response);
 };
