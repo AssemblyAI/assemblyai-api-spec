@@ -5,6 +5,8 @@ id: http://assemblyai.com/real-time
 info:
   title: AssemblyAI real-time API
   description: AssemblyAI real-time API
+  license:
+    name: MIT License
   version: 1.0.0
   contact:
     name: API Support
@@ -55,14 +57,19 @@ channels:
       operationId: sendMessage
       message:
         oneOf:
-          - $ref: '#/components/messages/SendAudio'
-          - $ref: '#/components/messages/TerminateSession'
+          - $ref: "#/components/messages/SendAudio"
+          - $ref: "#/components/messages/TerminateSession"
 
     subscribe:
       description: Receive messages from the WebSocket
       operationId: receiveMessage
       message:
-        $ref: '#/components/schemas/RealtimeMessage'
+        oneOf:
+          - $ref: "#/components/messages/SessionBegins"
+          - $ref: "#/components/messages/PartialTranscript"
+          - $ref: "#/components/messages/FinalTranscript"
+          - $ref: "#/components/messages/SessionTerminated"
+          - $ref: "#/components/messages/RealtimeError"
 
 components:
   messages:
@@ -70,29 +77,38 @@ components:
       messageId: sendAudio
       summary: Send audio
       payload:
-        $ref: '#/components/schemas/AudioData'
+        $ref: "#/components/schemas/AudioData"
     TerminateSession:
       messageId: terminateSession
       summary: Terminate session
       payload:
-        $ref: '#/components/schemas/TerminateSession'
+        $ref: "#/components/schemas/TerminateSession"
     SessionBegins:
       messageId: SessionBegins
       summary: Session start
       payload:
-        $ref: '#/components/schemas/SessionBegins'
+        $ref: "#/components/schemas/SessionBegins"
+    SessionTerminated:
+      messageId: SessionTerminated
+      summary: Session terminated
+      payload:
+        $ref: "#/components/schemas/SessionTerminated"
+    RealtimeError:
+      messageId: RealtimeError
+      summary: Error message
+      payload:
+        $ref: "#/components/schemas/RealtimeError"
     PartialTranscript:
       messageId: partialTranscript
       summary: As you send audio data to the API, the API immediately starts responding with Partial Results.
       payload:
-        $ref: '#/components/schemas/PartialTranscript'
+        $ref: "#/components/schemas/PartialTranscript"
     FinalTranscript:
       messageId: finalTranscript
       summary: Transcript text at the end of an utterance with punctuation and casing.
       description: After you've received your partial results, our model continues to analyze incoming audio and, when it detects the end of an "utterance" (usually a pause in speech), it'll finalize the results sent to you so far with higher accuracy, as well as add punctuation and casing to the transcription text.
       payload:
-        $ref: '#/components/schemas/FinalTranscript'
-
+        $ref: "#/components/schemas/FinalTranscript"
 
   schemas:
     RealtimeBaseMessage:
@@ -102,37 +118,36 @@ components:
       properties:
         message_type:
           description: Describes the type of the message.
-          $ref: '#/components/schemas/MessageTypes'
+          $ref: "#/components/schemas/MessageType"
     RealtimeMessage:
       oneOf:
-      - $ref: '#/components/schemas/SessionBegins'
-      - $ref: '#/components/schemas/PartialTranscript'
-      - $ref: '#/components/schemas/FinalTranscript'
-      - $ref: '#/components/schemas/SessionTerminated'
-      discriminator:
-        propertyName: message_type
-        mapping:
-          SessionBegins: '#/components/schemas/SessionBegins'
-          PartialTranscript: '#/components/schemas/PartialTranscript'
-          FinalTranscript: '#/components/schemas/FinalTranscript'
-          SessionTerminated: '#/components/schemas/SessionTerminated'
-    MessageTypes:
+        - $ref: "#/components/schemas/SessionBegins"
+        - $ref: "#/components/schemas/PartialTranscript"
+        - $ref: "#/components/schemas/FinalTranscript"
+        - $ref: "#/components/schemas/SessionTerminated"
+        - $ref: "#/components/schemas/RealtimeError"
+    RealtimeError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+    MessageType:
       type: string
-      enum: [SessionBegins, PartialTranscript, FinalTranscript, SessionTerminated]
+      enum:
+        [SessionBegins, PartialTranscript, FinalTranscript, SessionTerminated]
     RealtimeTranscriptType:
       type: string
       enum: [PartialTranscript, FinalTranscript]
     RealtimeTranscript:
       oneOf:
-      - $ref: '#/components/schemas/PartialTranscript'
-      - $ref: '#/components/schemas/FinalTranscript'
-      discriminator:
-        propertyName: message_type
-        mapping:
-          PartialTranscript: '#/components/schemas/PartialTranscript'
-          FinalTranscript: '#/components/schemas/FinalTranscript'
+        - $ref: "#/components/schemas/PartialTranscript"
+        - $ref: "#/components/schemas/FinalTranscript"
+      discriminator: "message_type"
     SessionBegins:
       allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
         - type: object
           required:
             - message_type
@@ -154,6 +169,7 @@ components:
           additionalProperties: false
     SessionTerminated:
       allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
         - type: object
           required:
             - message_type
@@ -192,7 +208,7 @@ components:
           description: An array of objects, with the information for each word in the transcription text. Includes the start/end time (in milliseconds) of the word, the confidence score of the word, and the text (i.e. the word itself).
           type: array
           items:
-            $ref: '#/components/schemas/Word'
+            $ref: "#/components/schemas/Word"
         created:
           description: The timestamp for the partial transcript.
           type: string
@@ -201,7 +217,7 @@ components:
       additionalProperties: false
     PartialTranscript:
       allOf:
-        - $ref: '#/components/schemas/RealtimeBaseTranscript'
+        - $ref: "#/components/schemas/RealtimeBaseTranscript"
         - type: object
           required:
             - message_type
@@ -212,25 +228,25 @@ components:
               const: PartialTranscript
           additionalProperties: false
     FinalTranscript:
-        allOf:
-          - $ref: '#/components/schemas/RealtimeBaseTranscript'
-          - type: object
-            required:
-              - message_type
-              - punctuated
-              - text_formatted
-            properties:
-              message_type:
-                description: Describes the type of message.
-                type: string
-                const: FinalTranscript
-              punctuated:
-                description: Whether the text has been punctuated and cased.
-                type: boolean
-              text_formatted:
-                description: Whether the text has been formatted (e.g. Dollar -> $)
-                type: boolean
-            additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/RealtimeBaseTranscript"
+        - type: object
+          required:
+            - message_type
+            - punctuated
+            - text_formatted
+          properties:
+            message_type:
+              description: Describes the type of message.
+              type: string
+              const: FinalTranscript
+            punctuated:
+              description: Whether the text has been punctuated and cased.
+              type: boolean
+            text_formatted:
+              description: Whether the text has been formatted (e.g. Dollar -> $)
+              type: boolean
+          additionalProperties: false
     Word:
       type: object
       required:
@@ -266,7 +282,7 @@ components:
       additionalProperties: false
     TerminateSession:
       allOf:
-        - $ref: '#/components/schemas/RealtimeBaseMessage'
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
         - type: object
           required:
             - terminate_session
