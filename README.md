@@ -1,4 +1,4 @@
-# Assembly AI API
+# AssemblyAI API
 
 Tagging a release on this repository will update the:
   - [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
@@ -7,20 +7,19 @@ Tagging a release on this repository will update the:
 
 This repository contains
 
-- Assembly AI's OpenAPI spec which lives in the [openapi](./fern/api/openapi/) folder
-- Assembly AI's AsyncAPI spec which lives in the [openapi](./fern/api/asyncapi/) folder
+- AssemblyAI's OpenAPI spec which lives in the [openapi](./fern/api/openapi/) folder
+- AssemblyAI's AsyncAPI spec which lives in the [asyncapi](./fern/api/asyncapi/) folder
 - Generators (see [generators.yml](./fern/api/generators.yml))
 
-To make sure that the OpenAPI is valid, you can use the Fern CLI.
+To make sure that the specs are valid, you can use the `lint` script.
 
 ```bash
-npm install -g fern-api
-fern check
+npm run-script lint
 ```
 
 ## What are generators?
 
-Generators read in your API Definition and output artifacts (e.g. TypeScript SDK) and are tracked in [generators.yml](./fern/api/generators.yml).
+Generators read in your API Definition and output artifacts (e.g. Java SDK) and are tracked in [generators.yml](./fern/api/generators.yml).
 
 To trigger the generators run:
 
