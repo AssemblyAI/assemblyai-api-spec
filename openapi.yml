@@ -1021,23 +1021,29 @@ components:
       type: object
       additionalProperties: false
       properties:
-        channel:
-          type: string
         confidence:
+          description: The confidence score for the transcript of this utterance
           type: number
           format: double
           minimum: 0
           maximum: 1
         start:
+          description: The starting time, in milliseconds, of the utterance in the audio file
           type: integer
         end:
+          description: The ending time, in milliseconds, of the utterance in the audio file
           type: integer
         text:
+          description: The text for this utterance
           type: string
         words:
+          description: The words in the utterance.
           type: array
           items:
             $ref: "#/components/schemas/TranscriptWord"
+        speaker:
+          description: The speaker of this utterance, where each speaker is assigned a sequential capital letter - e.g. "A" for Speaker A, "B" for Speaker B, etc.
+          type: string
       required:
         - channel
         - confidence
@@ -1045,6 +1051,7 @@ components:
         - end
         - text
         - words
+        - speaker
 
     SubstitutionPolicy:
       type: [string, "null"]
@@ -1305,18 +1312,7 @@ components:
           description: |
             An array of results for the Content Moderation model, if it was enabled during the transcription request.
             See [Content moderation](https://www.assemblyai.com/docs/Models/content_moderation) for more information.
-          type: [object, "null"]
-          required:
-            - status
-            - results
-          properties:
-            status:
-              description: Will be either success, or unavailable in the rare case that the Content Safety Labels model failed.
-              $ref: "#/components/schemas/AudioIntelligenceModelStatus"
-            results:
-              type: array
-              items:
-                $ref: "#/components/schemas/ContentSafetyLabelResult"
+          $ref: "#/components/schemas/ContentSafetyLabelsResult"
 
         iab_categories:
           description: Enable [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification), can be true or false
@@ -1324,7 +1320,7 @@ components:
 
         iab_categories_result:
           description: |
-            An array of results for the Topic Detection model, if it was enabled during the transcription request.
+            The result of the Topic Detection model, if it was enabled during the transcription request.
             See [Topic Detection](https://www.assemblyai.com/docs/Models/iab_classification) for more information.
           type: [object, "null"]
           required:
@@ -1451,6 +1447,36 @@ components:
         - auto_highlights
         - redact_pii
         - summarization
+
+    ContentSafetyLabelsResult:
+      type: [object, "null"]
+      required:
+        - status
+        - results
+        - summary
+        - severity_score_summary
+      properties:
+        status:
+          description: Will be either success, or unavailable in the rare case that the Content Moderation model failed.
+          $ref: "#/components/schemas/AudioIntelligenceModelStatus"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContentSafetyLabelResult"
+        summary:
+          description: A summary of the Content Moderation confidence results for the entire audio file
+          type: object
+          additionalProperties:
+            description: A confidence score for the presence of the sensitive topic "topic" across the entire audio file
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        severity_score_summary:
+          description: A summary of the Content Moderation severity results for the entire audio file
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SeverityScoreSummary"
 
     Chapter:
       description: Chapter of the audio file
@@ -1628,7 +1654,7 @@ components:
           minimum: 0
           maximum: 1
         speaker:
-          description: The speaker of the sentence if Speaker Diarization is enabled, else null
+          description: The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null
           type: [string, "null"]
 
     Sentiment:
@@ -1638,7 +1664,7 @@ components:
         - NEGATIVE
 
     TopicDetectionResult:
-      description: THe result of the topic detection model.
+      description: The result of the topic detection model.
       type: object
       additionalProperties: false
       required:
@@ -1701,8 +1727,6 @@ components:
         - sentences_idx_start
         - sentences_idx_end
         - timestamp
-        - summary
-        - severity_score_summary
       properties:
         text:
           description: The transcript of the section flagged by the Content Moderation model
@@ -1721,20 +1745,6 @@ components:
         timestamp:
           description: Timestamp information for the section
           $ref: "#/components/schemas/Timestamp"
-        summary:
-          description: A summary of the Content Moderation confidence results for the entire audio file
-          type: object
-          additionalProperties:
-            description: A confidence score for the presence of the sensitive topic "topic" across the entire audio file
-            type: number
-            format: double
-            minimum: 0
-            maximum: 1
-        severity_score_summary:
-          description: A summary of the Content Moderation severity results for the entire audio file
-          type: object
-          additionalProperties:
-            $ref: "#/components/schemas/SeverityScoreSummary"
 
     SeverityScoreSummary:
       type: object
