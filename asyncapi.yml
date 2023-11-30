@@ -26,7 +26,7 @@ tags:
   - name: realtime
     description: Real-time transcription
     externalDocs:
-      url: https://www.assemblyai.com/docs/Guides/real-time_streaming_transcription
+      url: https://www.assemblyai.com/docs/guides/real-time-streaming-transcription
 
 channels:
   /:
@@ -44,14 +44,19 @@ channels:
             sample_rate:
               description: The sample rate of the streamed audio
               type: integer
+              examples:
+                - 16000
             word_boost:
               description: |
                 Add up to 2500 characters of custom vocabulary.
                 The parameter value must be a JSON encoded array of strings.
               type: string
+              examples:
+                - '["foo","bar"]'
             token:
-              description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/Guides/real-time_streaming_transcription#creating-temporary-authentication-tokens)"
+              description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/guides/real-time-streaming-transcription#creating-temporary-authentication-tokens)"
               type: string
+              format: password
     publish:
       description: Send messages to the WebSocket
       operationId: sendMessage
@@ -133,6 +138,8 @@ components:
       properties:
         error:
           type: string
+      examples:
+        - { "error": "Client sent audio too fast" }
     MessageType:
       type: string
       enum:
@@ -161,12 +168,19 @@ components:
             session_id:
               description: Unique identifier for the established session
               type: string
+              format: uuid
             expires_at:
               description: Timestamp when this session will expire
               type: string
               pattern: '^(?:(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?))$'
               x-fern-type: datetime
           additionalProperties: false
+      examples:
+        - {
+            session_id: "f14499a6-c399-4c30-b1eb-0a33af64b1d9",
+            expires_at: "2023-11-04T16:51:38.316048",
+            message_type: "SessionBegins",
+          }
     SessionTerminated:
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseMessage"
@@ -179,6 +193,8 @@ components:
               type: string
               const: SessionTerminated
           additionalProperties: false
+      examples:
+        - { message_type: "SessionTerminated" }
     RealtimeBaseTranscript:
       type: object
       required:
@@ -229,6 +245,38 @@ components:
               type: string
               const: PartialTranscript
           additionalProperties: false
+          examples:
+            - {
+              message_type: "PartialTranscript",
+              created: "2023-11-03T17:14:13.854523",
+              audio_start: 5310,
+              audio_end: 7540,
+              confidence: 0.59751355353605,
+              text: "how can i show",
+              words:
+                [
+                  {
+                    start: 7140,
+                    end: 7175,
+                    confidence: 0.466229424909777,
+                    text: "how",
+                  },
+                  {
+                    start: 7220,
+                    end: 7255,
+                    confidence: 0.432059008767216,
+                    text: "can",
+                  },
+                  { start: 7300, end: 7335, confidence: 0.994432034661841, text: "i" },
+                  {
+                    start: 7380,
+                    end: 7415,
+                    confidence: 0.497333745805364,
+                    text: "show",
+                  },
+                ],
+            }
+
     FinalTranscript:
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseTranscript"
@@ -249,6 +297,71 @@ components:
               description: Whether the text is formatted, for example Dollar -> $
               type: boolean
           additionalProperties: false
+          examples:
+            - {
+                message_type: "FinalTranscript",
+                created: "2023-11-03T17:14:35.00332",
+                audio_start: 5310,
+                audio_end: 25580,
+                confidence: 0.853363490052184,
+                text: "How can I show these two slides? So that demonstrates that the guide Cap, which for most of the last 3 million years has been the size of the lower 48 States, has shrunk by 40%. But this understates the seriousness of this particular problem because it doesn't show the sickness of the ice, the Oregon of the beating heart of the global climate system. It expands in winter and contracts against summer. The next slide I show you will be a rapid fast forward of what happened over the last 25 years. The permanentized is marked in red, and as you see, it expands to the dark wood. That's an annual.",
+                words:
+                  [
+                    {
+                      start: 7140,
+                      end: 7175,
+                      confidence: 0.466229424909777,
+                      text: "How",
+                    },
+                    {
+                      start: 7220,
+                      end: 7255,
+                      confidence: 0.432059008767216,
+                      text: "can",
+                    },
+                    { start: 7300, end: 7335, confidence: 0.99, text: "I" },
+                    {
+                      start: 7380,
+                      end: 7415,
+                      confidence: 0.497333745805364,
+                      text: "show",
+                    },
+                    {
+                      start: 7660,
+                      end: 7695,
+                      confidence: 0.999622368415665,
+                      text: "these",
+                    },
+                    { start: 7700, end: 7735, confidence: 1, text: "two" },
+                    {
+                      start: 7780,
+                      end: 7895,
+                      confidence: 0.950111441145432,
+                      text: "slides?",
+                    },
+                    { start: 8060, end: 8095, confidence: 0.865500654768006, text: "So" },
+                    {
+                      start: 8100,
+                      end: 8135,
+                      confidence: 0.736370866587664,
+                      text: "that",
+                    },
+                    {
+                      start: 8220,
+                      end: 8535,
+                      confidence: 0.704626940209106,
+                      text: "demonstrates",
+                    },
+                    {
+                      start: 8580,
+                      end: 8615,
+                      confidence: 0.993622467290789,
+                      text: "that",
+                    },
+                  ],
+                punctuated: true,
+                text_formatted: true,
+              }
     Word:
       type: object
       required:
@@ -273,6 +386,16 @@ components:
           description: The word itself
           type: string
       additionalProperties: false
+      examples:
+        [
+          { start: 7140, end: 7175, confidence: 0.466229424909777, text: "how" },
+          { start: 7220, end: 7255, confidence: 0.432059008767216, text: "can" },
+          { start: 7300, end: 7335, confidence: 0.994432034661841, text: "i" },
+          { start: 7380, end: 7415, confidence: 0.497333745805364, text: "show" },
+          { start: 7140, end: 7175, confidence: 0.466229424909777, text: "How" },
+          { start: 7220, end: 7255, confidence: 0.432059008767216, text: "can" },
+          { start: 7300, end: 7335, confidence: 0.99, text: "I" },
+        ]
     AudioData:
       type: object
       required:
@@ -282,6 +405,8 @@ components:
           description: Base64 encoded raw audio data
           type: string
       additionalProperties: false
+      examples:
+        - { audio_data: "Je8w9JH1hfh1+7EAeQYJCC0JbQkxB70Apv0J/GT5APjA9jX1v/..." }
     TerminateSession:
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseMessage"
@@ -293,6 +418,8 @@ components:
               description: Set to true to end your real-time session forever
               type: boolean
           additionalProperties: false
+          examples:
+            - { "terminate_session": true }
   securitySchemes:
     ApiKey:
       description: Authenticate using your AssemblyAI API key
@@ -300,7 +427,7 @@ components:
       in: header
       name: Authorization
     Token:
-      description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/Guides/real-time_streaming_transcription#creating-temporary-authentication-tokens)"
+      description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/guides/real-time-streaming-transcription#creating-temporary-authentication-tokens)"
       type: httpApiKey
       in: query
       name: token
