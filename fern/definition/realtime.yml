@@ -1,0 +1,156 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    createTemporaryToken:
+      path: /v2/realtime/token
+      method: POST
+      auth: true
+      docs: Create a temporary authentication token for real-time transcription
+      display-name: Create a temporary authentication token for real-time transcription
+      request:
+        name: CreateRealtimeTemporaryTokenParams
+        body:
+          properties:
+            expires_in:
+              type: integer
+              docs: The amount of time until the token expires in seconds
+      response:
+        docs: Temporary authentication token generated
+        type: RealtimeTemporaryTokenResponse
+      errors:
+        - root.BadRequestError
+        - root.UnauthorizedError
+        - root.NotFoundError
+        - root.TooManyRequestsError
+        - root.InternalServerError
+        - root.ServiceUnavailableError
+      examples:
+        - request:
+            expires_in: 480
+          response:
+            body:
+              token: fe4145dd1e7a2e149488dcd2d553a8018a89833fc5084837d66fd1bcf5a105d4
+types:
+  RealtimeTemporaryTokenResponse:
+    properties:
+      token:
+        type: string
+        docs: The temporary authentication token for real-time transcription
+  RealtimeBaseMessage:
+    properties:
+      message_type:
+        type: MessageType
+        docs: Describes the type of the message
+  RealtimeMessage:
+    discriminated: false
+    union:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionTerminated
+      - RealtimeError
+  RealtimeError:
+    properties:
+      error: string
+  MessageType:
+    enum:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionTerminated
+  RealtimeTranscriptType:
+    enum:
+      - PartialTranscript
+      - FinalTranscript
+  RealtimeTranscript:
+    discriminated: false
+    union:
+      - PartialTranscript
+      - FinalTranscript
+  SessionBegins:
+    properties:
+      message_type: literal<"SessionBegins">
+      session_id:
+        type: string
+        docs: Unique identifier for the established session
+      expires_at:
+        type: datetime
+        docs: Timestamp when this session will expire
+  SessionTerminated:
+    properties:
+      message_type: literal<"SessionTerminated">
+  RealtimeBaseTranscript:
+    properties:
+      audio_start:
+        type: integer
+        docs: Start time of audio sample relative to session start, in milliseconds
+      audio_end:
+        type: integer
+        docs: End time of audio sample relative to session start, in milliseconds
+      confidence:
+        type: double
+        docs: The confidence score of the entire transcription, between 0 and 1
+      text:
+        type: string
+        docs: The partial transcript for your audio
+      words:
+        docs: >
+          An array of objects, with the information for each word in the
+          transcription text.
+
+          Includes the start and end time of the word in milliseconds, the
+          confidence score of the word, and the text, which is the word itself.
+        type: list<Word>
+      created:
+        type: datetime
+        docs: The timestamp for the partial transcript
+  PartialTranscript:
+    properties:
+      message_type: literal<"PartialTranscript">
+    extends:
+      - RealtimeBaseTranscript
+  FinalTranscript:
+    properties:
+      message_type: literal<"FinalTranscript">
+      punctuated:
+        type: boolean
+        docs: Whether the text is punctuated and cased
+      text_formatted:
+        type: boolean
+        docs: Whether the text is formatted, for example Dollar -> $
+    extends:
+      - RealtimeBaseTranscript
+  Word:
+    properties:
+      start:
+        type: integer
+        docs: Start time of the word in milliseconds
+      end:
+        type: integer
+        docs: End time of the word in milliseconds
+      confidence:
+        type: double
+        docs: Confidence score of the word
+      text:
+        type: string
+        docs: The word itself
+  AudioData:
+    type: string
+    docs: Binary audio data
+  TerminateSession:
+    properties:
+      terminate_session:
+        type: boolean
+        docs: Set to true to end your real-time session forever
+    extends:
+      - RealtimeBaseMessage
+  AudioEncoding:
+    enum:
+      - value: pcm_s16le
+        docs: PCM signed 16-bit little-endian
+      - value: pcm_mulaw
+        docs: PCM Mu-law
+    docs: The encoding of the audio data
