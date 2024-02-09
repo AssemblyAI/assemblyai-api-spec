@@ -20,3 +20,4 @@ We use Fern to generate some of the AssemblyAI SDKs.
 
 Tagging a release on this repository will update the:
   - [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
+  - [Ruby SDK](https://github.com/AssemblyAI/assemblyai-ruby-sdk)
