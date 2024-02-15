@@ -7,7 +7,7 @@ info:
   description: AssemblyAI real-time API
   license:
     name: MIT License
-  version: 1.0.0
+  version: 1.1.0
   contact:
     name: API Support
     email: support@assemblyai.com
@@ -67,6 +67,8 @@ channels:
         oneOf:
           - $ref: "#/components/messages/SendAudio"
           - $ref: "#/components/messages/TerminateSession"
+          - $ref: "#/components/messages/ForceEndUtterance"
+          - $ref: "#/components/messages/ConfigureEndUtteranceSilenceThreshold"
 
     subscribe:
       description: Receive messages from the WebSocket
@@ -86,6 +88,16 @@ components:
       summary: Send audio
       payload:
         $ref: "#/components/schemas/AudioData"
+    ForceEndUtterance:
+      messageId: forceEndUtterance
+      summary: Manually end an utterance
+      payload:
+        $ref: "#/components/schemas/ForceEndUtterance"
+    ConfigureEndUtteranceSilenceThreshold:
+      messageId: configureEndUtteranceSilenceThreshold
+      summary: Configure the threshold for how long to wait before ending an utterance. Default is 700ms.
+      payload:
+        $ref: "#/components/schemas/ConfigureEndUtteranceSilenceThreshold"
     TerminateSession:
       messageId: terminateSession
       summary: Terminate session
@@ -418,20 +430,44 @@ components:
       description: Binary audio data
       x-fern-sdk-group-name: realtime
       x-ts-type: ArrayBufferLike
+    ForceEndUtterance:
+      description: Manually end an utterance
+      x-fern-sdk-group-name: realtime
+      type: object
+      required:
+        - force_end_utterance
+      properties:
+        force_end_utterance:
+          description: A boolean value to communicate that you wish to force the end of the utterance
+          type: boolean
+      additionalProperties: false
+      examples:
+        - { "force_end_utterance": true }
+    ConfigureEndUtteranceSilenceThreshold:
+      description: Configure the threshold for how long to wait before ending an utterance. Default is 700ms.
+      x-fern-sdk-group-name: realtime
+      type: object
+      required:
+        - end_utterance_silence_threshold
+      properties:
+        end_utterance_silence_threshold:
+          description: The duration threshold in milliseconds
+          type: integer
+      additionalProperties: false
+      examples:
+        - { "end_utterance_silence_threshold": 300 }
     TerminateSession:
       x-fern-sdk-group-name: realtime
-      allOf:
-        - $ref: "#/components/schemas/RealtimeBaseMessage"
-        - type: object
-          required:
-            - terminate_session
-          properties:
-            terminate_session:
-              description: Set to true to end your real-time session forever
-              type: boolean
-          additionalProperties: false
-          examples:
-            - { "terminate_session": true }
+      type: object
+      required:
+        - terminate_session
+      properties:
+        terminate_session:
+          description: Set to true to end your real-time session forever
+          type: boolean
+      additionalProperties: false
+      examples:
+        - { "terminate_session": true }
     AudioEncoding:
       type: string
       x-fern-sdk-group-name: realtime
@@ -443,8 +479,18 @@ components:
       x-fern-enum:
         pcm_s16le:
           description: PCM signed 16-bit little-endian
+          casing:
+            camel: pcmS16le
+            snake: pcm_s16le
+            pascal: PcmS16le
+            screamingSnake: PCM_S16LE
         pcm_mulaw:
           description: PCM Mu-law
+          casing:
+            camel: pcmMulaw
+            snake: pcm_mulaw
+            pascal: PcmMulaw
+            screamingSnake: PCM_MULAW
       examples:
       - 'pcm_s16le'
       - 'pcm_mulaw'
