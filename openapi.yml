@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
   title: AssemblyAI API
   description: AssemblyAI API
-  version: 1.1.1
+  version: 1.1.2
   contact:
     name: API Support
     email: support@assemblyai.com
@@ -22,10 +22,10 @@ tags:
     description: LeMUR related operations
     externalDocs:
       url: https://www.assemblyai.com/docs/guides/processing-audio-with-llms-using-lemur
-  - name: realtime
-    description: Real-time transcription
+  - name: streaming
+    description: Streaming Speech-to-Text
     externalDocs:
-      url: https://www.assemblyai.com/docs/guides/real-time-streaming-transcription
+      url: https://www.assemblyai.com/docs/speech-to-text/streaming
 
 security:
   - ApiKey: []
@@ -141,7 +141,9 @@ paths:
       x-fern-sdk-method-name: list
       x-fern-request-name: ListTranscriptParams
       operationId: listTranscripts
-      description: Retrieve a list of transcripts you created
+      description: |
+        Retrieve a list of transcripts you created.
+        Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.
       parameters:
         - name: limit
           in: query
@@ -181,7 +183,8 @@ paths:
             $ref: "#/components/schemas/ListTranscriptParams/properties/throttled_only"
       responses:
         "200":
-          description: A list of transcripts
+          description: |
+            A list of transcripts. Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.
           content:
             application/json:
               schema:
@@ -522,9 +525,9 @@ paths:
   /v2/realtime/token:
     post:
       tags:
-        - realtime
-      summary: Create a temporary authentication token for real-time transcription
-      description: Create a temporary authentication token for real-time transcription
+        - streaming
+      summary: Create a temporary authentication token for Streaming Speech-to-Text
+      description: Create a temporary authentication token for Streaming Speech-to-Text
       operationId: createTemporaryToken
       x-fern-sdk-group-name: realtime
       x-fern-sdk-method-name: createTemporaryToken
@@ -847,6 +850,7 @@ components:
         redacted_audio_url:
           description: The URL of the redacted audio file
           type: string
+          format: url
       example:
         {
           redacted_audio_url: "https://s3.us-west-2.amazonaws.com/api.assembly.ai.usw2/redacted-audio/785efd9e-0e20-45e1-967b-3db17770ed9f.wav?AWSAccessKeyId=ASIAVASQFLPGLUP5JD7Y&Signature=z1r2MOA46esiiAmk%2FreBkL8rl6g%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLXdlc3QtMiJHMEUCIHxKoUJdd5P%2Fdy4WlfvRNppQtauTy7OuAb5azR2OIoYSAiEA8iPx4xAx0pbZztT4e7fGnzPS4phvNCnYKflIijUoxDsq%2BwMIMxAEGgwzNDQ4MzkyNDg4NDQiDJxsCgo0cDg789FV0CrYAwPK3CHbRHoNPFiQ%2FO6EdHZ4OSFRcS%2FDvDyHQRNnYNSwG4JB2mUMWEVw808JWTya%2But4wEcmPiUCVJMTvh70cxhILAxP84CBTuWGM%2Fszbj4tn1thjVsqovf9YZmP17OCFa77Bc9%2F9RwtRaABEqJ2eb6%2Bsir7w0MMzhe1z%2F%2B1PUKxicJAZasBv3Ova%2BTY2eNkPZHQ4Njie4X5sh05b%2BrKnz58E7GTQ1sHZQDYHZecwb5fP0B3LR0vuqNtK%2BdpMAxw5H7BinQ4rdccLmsLLMQeVn8jdRDZNEvsdmoeQL0y0qD%2BUcyGMJoAjMT4FnXhBhVxc3bgkVUbHlZMn48FNCYcmzM8UB9wGmSnr6iQoqEaFElfQVbvAzsW7lnlfLROZxMvGXyliobPYPSaYZlVYgHcIxeWuOAXRtEtmL2jbaX4ghCVgJBVO3BBzTgub2jB0KPU6lYZLLM4kf%2B8hKX8iyxSRc6ZVEefTcyruoDppjB028pA9q75hLH1CZwhfLoM%2F3z5f0aFCl05zQnaa10nbcKj0hERELf4FXqS8yWbSutlRcd7Rr9o8jN31QGUscpsuIvl%2FpyJcZmItX8nO%2FF0s1QjrIi11DLYD9YoOh7eVkN8eKKn5w4cHldVI2sw4NCPqgY6pQE%2BM9va2ad1%2BNrXeQ9t8K41lojTN0BFmM8ERD5fF77xcTlW8VdV%2FiJeLLHDvnYYWVKcga9hSROlmsqvMyn3Tmhz7KQbIepSAOKhcHM%2FyUaLfErvCtjXGwo8nsKForL7SKiGkaRCBmwfQtkSVP6m4tGT50YdGxakh54f8uyC55SbkElknRbpl5haiZ%2F82UddFBkdPcM3t0s7vwbEy%2BbilYyetOr6htc%3D&Expires=1698966551",
@@ -1028,6 +1032,7 @@ components:
         webhook_url:
           description: The URL to which AssemblyAI send webhooks upon trancription completion
           type: string
+          format: url
 
         webhook_auth_header_name:
           description: The header name which should be sent back with webhook calls
@@ -1177,7 +1182,7 @@ components:
           punctuate: true,
           format_text: true,
           dual_channel: true,
-          webhook_url: "https://your-webhook-url/path",
+          webhook_url: "https://your-webhook-url.tld/path",
           webhook_auth_header_name: "webhook-secret",
           webhook_auth_header_value: "webhook-secret-value",
           auto_highlights: true,
@@ -1215,14 +1220,15 @@ components:
       type: object
       additionalProperties: false
       allOf:
-        - $ref: "#/components/schemas/TranscriptOptionalParams"
         - type: object
           required: [audio_url]
           properties:
             audio_url:
               description: The URL of the audio or video file to transcribe.
               type: string
+              format: url
           additionalProperties: false
+        - $ref: "#/components/schemas/TranscriptOptionalParams"
       example:
         {
           speech_model: null,
@@ -1468,9 +1474,9 @@ components:
     SubstitutionPolicy:
       type: string
       x-fern-sdk-group-name: transcripts
-      description: The replacement logic for detected PII, can be "entity_type" or "hash". See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.
+      description: The replacement logic for detected PII, can be "entity_name" or "hash". See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.
       enum:
-        - entity_type
+        - entity_name
         - hash
 
     RedactPiiAudioQuality:
@@ -1531,12 +1537,16 @@ components:
       description: The speech model to use for the transcription.
       x-fern-sdk-group-name: transcripts
       enum:
+        - best
         - nano
         - conformer-2
       x-fern-enum:
+        best:
+          name: Best
+          description: The best model optimized for accuracy.
         nano:
           name: Nano
-          description: The Nano tier is a lightweight model that is optimized for speed and cost.
+          description: A lightweight, lower cost model for a wide range of languages.
         conformer-2:
           name: Conformer2
           description: Conformer-2 is a heavy-duty model optimized for accuracy.
@@ -1647,6 +1657,7 @@ components:
         audio_url:
           description: The URL of the media that was transcribed
           type: string
+          format: url
 
         text:
           description: The textual transcript of your media file
@@ -1695,6 +1706,7 @@ components:
         webhook_url:
           description: The URL to which we send webhooks upon trancription completion
           type: [string, "null"]
+          format: url
 
         webhook_status_code:
           description: The status code we received from your server when delivering your webhook, if a webhook URL was provided
@@ -2153,7 +2165,7 @@ components:
           punctuate: true,
           format_text: true,
           dual_channel: false,
-          webhook_url: "https://your-webhook-url/path",
+          webhook_url: "https://your-webhook-url.tld/path",
           webhook_status_code: 200,
           webhook_auth: true,
           webhook_auth_header_name: "webhook-secret",
@@ -3587,6 +3599,8 @@ components:
         }
 
     PageDetails:
+      summary: Details of the transcript page.
+      description: Details of the transcript page. Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.
       type: object
       x-fern-sdk-group-name: transcripts
       additionalProperties: false
@@ -3595,17 +3609,28 @@ components:
         - result_count
         - current_url
         - prev_url
+        - next_url
       properties:
         limit:
+          summary: The number of results this page is limited to
           type: integer
         result_count:
+          summary: The actual number of results in the page
           type: integer
         current_url:
+          summary: The URL used to retrieve the current page of transcripts
           type: string
+          format: url
         prev_url:
-          type: string
-        next_url:
+          summary: The URL to the previous page of transcripts
+          description: The URL to the next page of transcripts. The previous URL always points to a page with older transcripts.
           type: [string, "null"]
+          format: url
+        next_url:
+          summary: The URL to the next page of transcripts
+          description: The URL to the next page of transcripts. The next URL always points to a page with newer transcripts.
+          type: [string, "null"]
+          format: url
       example:
         {
           limit: 10,
@@ -3668,12 +3693,14 @@ components:
         - created
         - completed
         - audio_url
+        - error
       properties:
         id:
           type: string
           format: uuid
         resource_url:
           type: string
+          format: url
         status:
           $ref: "#/components/schemas/TranscriptStatus"
         created:
@@ -3688,6 +3715,10 @@ components:
           x-ts-type: Date | null
         audio_url:
           type: string
+          format: url
+        error:
+          description: Error message of why the transcript failed
+          type: [string, "null"]
       example:
         {
           id: "9ea68fd3-f953-42c1-9742-976c447fb463",
@@ -3696,9 +3727,12 @@ components:
           created: "2023-11-02T21:49:25.586965",
           completed: "2023-11-02T21:49:25.586965",
           audio_url: "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3",
+          error: null
         }
 
     TranscriptList:
+      summary: A list of transcripts
+      description: A list of transcripts. Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.
       type: object
       x-fern-sdk-group-name: transcripts
       additionalProperties: false
@@ -3716,30 +3750,41 @@ components:
         {
           page_details:
             {
-              limit: 2,
-              result_count: 2,
-              current_url: "https://api.assemblyai.com/v2/transcript?limit=2",
-              prev_url: "https://api.assemblyai.com/v2/transcript?limit=2&before_id=62npeahu2b-a8ea-4112-854c-69542c20d90c",
-              next_url: "https://api.assemblyai.com/v2/transcript?limit=2&after_id=62nfw3mlar-01ad-4631-92f6-629929496eed",
+              limit: 3,
+              result_count: 3,
+              current_url: "https://api.assemblyai.com/v2/transcript?limit=3",
+              prev_url: "https://api.assemblyai.com/v2/transcript?limit=3&before_id=28a73d01-98db-41dd-9e98-2533ba0af117",
+              next_url: "https://api.assemblyai.com/v2/transcript?limit=3&after_id=b33f4691-85b7-4f31-be12-a87cef1c1229",
             },
           transcripts:
             [
               {
-                id: "9ea68fd3-f953-42c1-9742-976c447fb463",
-                resource_url: "https://api.assemblyai.com/v2/transcript/9ea68fd3-f953-42c1-9742-976c447fb463",
-                status: "completed",
-                created: "2023-11-02T21:49:25.586965",
-                completed: "2023-11-02T21:49:25.586965",
-                audio_url: "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3",
+                id: 'b33f4691-85b7-4f31-be12-a87cef1c1229',
+                resource_url: 'https://api.assemblyai.com/v2/transcript/b33f4691-85b7-4f31-be12-a87cef1c1229',
+                status: 'completed',
+                created: '2024-03-11T21:29:59.936851',
+                completed: '2024-03-11T21:30:07.314223',
+                audio_url: 'http://deleted_by_user',
+                error: null
               },
               {
-                id: "d5a3d302-066e-43fb-b63b-8f57baf185db",
-                resource_url: "https://api.assemblyai.com/v2/transcript/d5a3d302-066e-43fb-b63b-8f57baf185db",
-                status: "completed",
-                created: "2023-11-02T21:49:25.586965",
-                completed: "2023-11-02T21:49:25.586965",
-                audio_url: "http://deleted_by_user",
+                id: 'ce522f10-d204-42e8-a838-6b95098145cc',
+                resource_url: 'https://api.assemblyai.com/v2/transcript/ce522f10-d204-42e8-a838-6b95098145cc',
+                status: 'error',
+                created: '2024-03-11T21:23:59.979420',
+                completed: null,
+                audio_url: 'https://storage.googleapis.com/client-docs-samples/nbc.mp3',
+                error: 'Download error, unable to download https://storage.googleapis.com/client-docs-samples/nbc.mp3. Please make sure the file exists and is accessible from the internet.'
               },
+              {
+                id: '28a73d01-98db-41dd-9e98-2533ba0af117',
+                resource_url: 'https://api.assemblyai.com/v2/transcript/28a73d01-98db-41dd-9e98-2533ba0af117',
+                status: 'completed',
+                created: '2024-03-11T21:12:57.372215',
+                completed: '2024-03-11T21:13:03.267020',
+                audio_url: 'https://storage.googleapis.com/aai-docs-samples/nbc.mp3',
+                error: null
+              }
             ],
         }
 
@@ -3753,6 +3798,7 @@ components:
         upload_url:
           description: A URL that points to your audio file, accessible only by AssemblyAI's servers
           type: string
+          format: url
       example:
         {
           upload_url: "https://cdn.assemblyai.com/upload/f756988d-47e2-4ca3-96ce-04bb168f8f2a",
@@ -3779,7 +3825,7 @@ components:
         - token
       properties:
         token:
-          description: The temporary authentication token for real-time transcription
+          description: The temporary authentication token for Streaming Speech-to-Text
           type: string
       example:
         {
@@ -3935,7 +3981,6 @@ components:
     LemurTaskResponse:
       x-fern-sdk-group-name: lemur
       allOf:
-        - $ref: "#/components/schemas/LemurBaseResponse"
         - type: object
           additionalProperties: false
           properties:
@@ -3943,6 +3988,7 @@ components:
               description: The response generated by LeMUR.
               type: string
           required: [response]
+        - $ref: "#/components/schemas/LemurBaseResponse"
       example:
         request_id: "5e1b27c2-691f-4414-8bc5-f14678442f9e"
         response: |
@@ -3968,6 +4014,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
         input_text:
           description: |
             Custom formatted transcript data. Maximum size is the context limit of the selected model, which defaults to 100000.
@@ -4002,7 +4049,7 @@ components:
           maximum: 1
       example:
         {
-          transcript_ids: ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
+          transcript_ids: ["85f9b381-e90c-46ed-beca-7d76245d375e","7c3acd18-df4d-4432-88f5-1e89f8827eea"],
           context: "This is an interview about wildfires.",
           final_model: "default",
           temperature: 0,
@@ -4012,7 +4059,6 @@ components:
     LemurTaskParams:
       x-fern-sdk-group-name: lemur
       allOf:
-        - $ref: "#/components/schemas/LemurBaseParams"
         - type: object
           additionalProperties: false
           properties:
@@ -4020,6 +4066,7 @@ components:
               description: Your text to prompt the model to produce a desired output, including any context you want to pass into the model.
               type: string
           required: [prompt]
+        - $ref: "#/components/schemas/LemurBaseParams"
       example:
         {
           transcript_ids: ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
@@ -4184,6 +4231,70 @@ components:
           const: error
       example:
         { error: "format_text must be a Boolean" }
+
+  examples:
+    DeleteTranscriptResponse:
+      value:
+        {
+          id: '47b95ba5-8889-44d8-bc80-5de38306e582',
+          language_model: 'assemblyai_default',
+          acoustic_model: 'assemblyai_default',
+          language_code: null,
+          status: 'completed',
+          audio_url: 'http://deleted_by_user',
+          text: 'Deleted by user.',
+          words: null,
+          utterances: null,
+          confidence: null,
+          audio_duration: 390,
+          punctuate: null,
+          format_text: null,
+          dual_channel: null,
+          webhook_url: 'http://deleted_by_user',
+          webhook_status_code: null,
+          webhook_auth: false,
+          webhook_auth_header_name: null,
+          speed_boost: null,
+          auto_highlights_result: null,
+          auto_highlights: false,
+          audio_start_from: null,
+          audio_end_at: null,
+          word_boost: null,
+          boost_param: null,
+          filter_profanity: null,
+          redact_pii: false,
+          redact_pii_audio: null,
+          redact_pii_audio_quality: null,
+          redact_pii_policies: null,
+          redact_pii_sub: null,
+          speaker_labels: null,
+          speaker_count: null,
+          error: null,
+          content_safety: null,
+          iab_categories: null,
+          content_safety_labels: null,
+          iab_categories_result: null,
+          language_detection: null,
+          custom_spelling: null,
+          cluster_id: null,
+          throttled: null,
+          auto_chapters: false,
+          summarization: false,
+          summary_type: null,
+          summary_model: null,
+          custom_topics: null,
+          topics: null,
+          speech_threshold: null,
+          speech_model: null,
+          chapters: null,
+          disfluencies: true,
+          entity_detection: false,
+          entities: null,
+          speakers_expected: null,
+          summary: null,
+          sentiment_analysis: false,
+          sentiment_analysis_results: null
+        }
 
   responses:
     BadRequest:
