@@ -57,9 +57,22 @@ channels:
               description: The encoding of the audio data
               $ref: "#/components/schemas/AudioEncoding"
             token:
-              description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)"
+              description: |
+                Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)
               type: string
               format: password
+              examples:
+                - eyJhbGciOiJIUzI1...
+            disable_partial_transcripts:
+              summary: Disable partial transcripts
+              description: Set to true to not receive partial transcripts. Defaults to false.
+              type: boolean
+              default: false
+            enable_extra_session_information:
+              summary: Enable extra session information
+              description: Set to true to receive the SessionInformation message before the session ends. Defaults to false.
+              type: boolean
+              default: false
     publish:
       description: Send messages to the WebSocket
       operationId: sendMessage
@@ -78,6 +91,7 @@ channels:
           - $ref: "#/components/messages/SessionBegins"
           - $ref: "#/components/messages/PartialTranscript"
           - $ref: "#/components/messages/FinalTranscript"
+          - $ref: "#/components/messages/SessionInformation"
           - $ref: "#/components/messages/SessionTerminated"
           - $ref: "#/components/messages/RealtimeError"
 
@@ -86,12 +100,15 @@ channels:
           sample_rate: 16000
           word_boost: '["foo","bar"]'
           encoding: pcm_s16le
+          token: eyJhbGciOiJIUzI1...
+          disable_partial_transcripts: true
+          enable_extra_session_information: true
         messages:
-          - type: publish
-            messageId: SendAudio
+          - messageId: SendAudio
+            type: publish
             value: UklGRtjIAABXQVZFZ
-          - type: subscribe
-            messageId: PartialTranscript
+          - messageId: PartialTranscript
+            type: subscribe
             value:
               audio_start: 0
               audio_end: 1500
@@ -103,8 +120,8 @@ channels:
                   confidence: 1.0
                   text: there
               created: "2023-05-24T08:09:10.161850"
-          - type: subscribe
-            messageId: FinalTranscript
+          - messageId: FinalTranscript
+            type: subscribe
             value:
               audio_start: 0
               audio_end: 1500
@@ -154,6 +171,14 @@ components:
       summary: Session start
       payload:
         $ref: "#/components/schemas/SessionBegins"
+    SessionInformation:
+      messageId: SessionInformation
+      summary: Information about the session
+      description: |
+        Information about the session that is concluding.
+        This message is sent at the end of the session, before the SessionTerminated message.
+      payload:
+        $ref: "#/components/schemas/SessionInformation"
     SessionTerminated:
       messageId: SessionTerminated
       summary: Session terminated
@@ -192,9 +217,11 @@ components:
         - $ref: "#/components/schemas/SessionBegins"
         - $ref: "#/components/schemas/PartialTranscript"
         - $ref: "#/components/schemas/FinalTranscript"
+        - $ref: "#/components/schemas/SessionInformation"
         - $ref: "#/components/schemas/SessionTerminated"
         - $ref: "#/components/schemas/RealtimeError"
     RealtimeError:
+      summary: Error message
       type: object
       x-fern-sdk-group-name: realtime
       additionalProperties: false
@@ -208,7 +235,7 @@ components:
       type: string
       x-fern-sdk-group-name: realtime
       enum:
-        [SessionBegins, PartialTranscript, FinalTranscript, SessionTerminated]
+        [SessionBegins, PartialTranscript, FinalTranscript, SessionInformation, SessionTerminated]
     RealtimeTranscriptType:
       type: string
       x-fern-sdk-group-name: realtime
@@ -220,6 +247,7 @@ components:
         - $ref: "#/components/schemas/FinalTranscript"
       discriminator: "message_type"
     SessionBegins:
+      summary: Session start
       x-fern-sdk-group-name: realtime
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseMessage"
@@ -250,7 +278,35 @@ components:
             expires_at: "2023-11-04T16:51:38.316048",
             message_type: "SessionBegins",
           }
+    SessionInformation:
+      summary: Information about the session
+      description: |
+        Information about the session that is concluding.
+        This message is sent at the end of the session, before the SessionTerminated message.
+      x-fern-sdk-group-name: realtime
+      allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
+        - type: object
+          required:
+            - message_type
+            - audio_duration_seconds
+          properties:
+            message_type:
+              description: Describes the type of the message
+              type: string
+              const: SessionInformation
+            audio_duration_seconds:
+              description: The total duration of the audio in seconds
+              type: number
+              format: float
+          additionalProperties: false
+      examples:
+        - {
+            message_type: "SessionInformation",
+            audio_duration_seconds: 232.192
+          }
     SessionTerminated:
+      summary: Session terminated
       x-fern-sdk-group-name: realtime
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseMessage"
@@ -306,6 +362,7 @@ components:
           x-ts-type: Date
       additionalProperties: false
     PartialTranscript:
+      summary: As you send audio data to the API, the API immediately starts responding with Partial Transcript results.
       x-fern-sdk-group-name: realtime
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseTranscript"
@@ -350,6 +407,7 @@ components:
             ],
         }
     FinalTranscript:
+      summary: Transcript text at the end of an utterance with punctuation and casing.
       x-fern-sdk-group-name: realtime
       allOf:
         - $ref: "#/components/schemas/RealtimeBaseTranscript"
@@ -505,6 +563,7 @@ components:
       examples:
         - { "end_utterance_silence_threshold": 300 }
     TerminateSession:
+      summary: Terminate session
       x-fern-sdk-group-name: realtime
       type: object
       required:
@@ -542,6 +601,7 @@ components:
       examples:
       - 'pcm_s16le'
       - 'pcm_mulaw'
+
   securitySchemes:
     ApiKey:
       description: Authenticate using your AssemblyAI API key

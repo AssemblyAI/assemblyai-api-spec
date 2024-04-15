@@ -83,7 +83,7 @@ paths:
             schema:
               $ref: "#/components/schemas/TranscriptParams"
       responses:
-        "201":
+        "200":
           description: Transcript created and queued for processing
           content:
             application/json:
@@ -262,10 +262,12 @@ paths:
       tags:
         - transcript
       summary: Delete the transcript
+      description: |
+        Delete the transcript.
+        Deleting does not delete the resource itself, but removes the data from the resource and marks it as deleted.
       operationId: deleteTranscript
       x-fern-sdk-group-name: transcripts
       x-fern-sdk-method-name: delete
-      description: Delete the transcript
       parameters:
         - name: transcript_id
           in: path
@@ -999,13 +1001,6 @@ components:
       type: object
       additionalProperties: false
       properties:
-        speech_model:
-          description: The speech model to use for the transcription. When `null`, the default model is used.
-          default: null
-          oneOf:
-            - $ref: "#/components/schemas/SpeechModel"
-            - type: "null"
-
         language_code:
           description: |
             The language of your audio file. Possible values are found in [Supported Languages](https://www.assemblyai.com/docs/concepts/supported-languages).
@@ -1028,6 +1023,13 @@ components:
         dual_channel:
           description: Enable [Dual Channel](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) transcription, can be true or false.
           type: boolean
+
+        speech_model:
+          description: The speech model to use for the transcription. When `null`, the default model is used.
+          default: null
+          oneOf:
+            - $ref: "#/components/schemas/SpeechModel"
+            - type: "null"
 
         webhook_url:
           description: The URL to which AssemblyAI send webhooks upon trancription completion
@@ -1549,7 +1551,9 @@ components:
           description: A lightweight, lower cost model for a wide range of languages.
         conformer-2:
           name: Conformer2
-          description: Conformer-2 is a heavy-duty model optimized for accuracy.
+          description: |
+            Deprecated: Conformer-2 is a heavy-duty model optimized for accuracy.
+            This option will stop working in the near future. Use best or nano instead.
 
     TranscriptLanguageCode:
       type: string
@@ -1623,13 +1627,6 @@ components:
           type: string
           format: uuid
 
-        speech_model:
-          description: The speech model used for the transcription. When `null`, the default model is used.
-          default: null
-          oneOf:
-            - $ref: "#/components/schemas/SpeechModel"
-            - type: "null"
-
         language_model:
           description: The language model that was used for the transcript
           type: string
@@ -1702,6 +1699,13 @@ components:
         dual_channel:
           description: Whether [Dual channel transcription](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) was enabled in the transcription request, either true or false
           type: [boolean, "null"]
+
+        speech_model:
+          description: The speech model used for the transcription. When `null`, the default model is used.
+          default: null
+          oneOf:
+            - $ref: "#/components/schemas/SpeechModel"
+            - type: "null"
 
         webhook_url:
           description: The URL to which we send webhooks upon trancription completion
@@ -3070,8 +3074,12 @@ components:
       x-fern-sdk-group-name: transcripts
       type: object
       required:
+        - status
         - results
       properties:
+        status:
+          description: The status of the Key Phrases model. Either success, or unavailable in the rare case that the model failed.
+          $ref: "#/components/schemas/AudioIntelligenceModelStatus"
         results:
           description: A temporally-sequential array of Key Phrases
           type: array
