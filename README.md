@@ -1,4 +1,5 @@
 # AssemblyAI API Spec
+
 ## What is in this repository?
 
 This repository contains
@@ -19,5 +20,6 @@ npm run-script lint
 We use Fern to generate some of the AssemblyAI SDKs.
 
 Tagging a release on this repository will update the:
-  - [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
-  - [Ruby SDK](https://github.com/AssemblyAI/assemblyai-ruby-sdk)
+
+- [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
+- [Ruby SDK](https://github.com/AssemblyAI/assemblyai-ruby-sdk)
