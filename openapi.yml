@@ -3,7 +3,8 @@ openapi: 3.1.0
 info:
   title: AssemblyAI API
   description: AssemblyAI API
-  version: 1.1.2
+  version: 1.2.0
+  termsOfService: https://www.assemblyai.com/legal/terms-of-service
   contact:
     name: API Support
     email: support@assemblyai.com
@@ -130,11 +131,13 @@ paths:
                   application/json:
                     schema:
                       $ref: "#/components/schemas/TranscriptReadyNotification"
-
               responses:
-                "200":
+                "2XX":
                   description: Successfully received the notification
-
+                "4XX":
+                  description: Invalid request
+                "5XX":
+                  description: Unexpected error
     get:
       tags:
         - transcript
@@ -606,6 +609,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LemurTaskResponse"
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum number of allowed requests in a 60 second window.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Number of remaining requests in the current time window.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit.
           links:
             PurgeLemurRequestDataById:
               $ref: "#/components/links/PurgeLemurRequestDataById"
@@ -650,6 +666,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LemurSummaryResponse"
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum number of allowed requests in a 60 second window.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Number of remaining requests in the current time window.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit.
           links:
             PurgeLemurRequestDataById:
               $ref: "#/components/links/PurgeLemurRequestDataById"
@@ -694,6 +723,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LemurQuestionAnswerResponse"
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum number of allowed requests in a 60 second window.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Number of remaining requests in the current time window.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit.
           links:
             PurgeLemurRequestDataById:
               $ref: "#/components/links/PurgeLemurRequestDataById"
@@ -737,6 +779,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LemurActionItemsResponse"
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum number of allowed requests in a 60 second window.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Number of remaining requests in the current time window.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit.
           links:
             PurgeLemurRequestDataById:
               $ref: "#/components/links/PurgeLemurRequestDataById"
@@ -756,6 +811,47 @@ paths:
           $ref: "#/components/responses/GatewayTimeout"
 
   /lemur/v3/{request_id}:
+    get:
+      tags:
+        - LeMUR
+      summary: Retrieve LeMUR response
+      description: |
+        Retrieve a LeMUR response that was previously generated.
+      operationId: getLemurResponse
+      x-fern-sdk-group-name: lemur
+      x-fern-sdk-method-name: getResponse
+      x-fern-request-name: GetLemurResponseParams
+      parameters:
+        - name: request_id
+          x-label: LeMUR request ID
+          in: path
+          description: |
+            The ID of the LeMUR request you previously made.
+            This would be found in the response of the original request.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: LeMUR response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LemurResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
     delete:
       tags:
         - LeMUR
@@ -5035,8 +5131,44 @@ components:
           description: The ID of the LeMUR request
           type: string
           format: uuid
-      required: [request_id]
-      example: { request_id: "5e1b27c2-691f-4414-8bc5-f14678442f9e" }
+        usage:
+          x-label: Usage
+          description: The usage numbers for the LeMUR request
+          $ref: "#/components/schemas/LemurUsage"
+      required: [request_id, usage]
+      example:
+        {
+          request_id: "5e1b27c2-691f-4414-8bc5-f14678442f9e",
+          "usage": { "input_tokens": 27, "output_tokens": 3 },
+        }
+
+    LemurTaskResponse:
+      x-label: LeMUR task response
+      x-fern-sdk-group-name: lemur
+      type: object
+      allOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            response:
+              x-label: Response
+              description: The response generated by LeMUR.
+              type: string
+          required: [response]
+        - $ref: "#/components/schemas/LemurBaseResponse"
+      example:
+        request_id: "5e1b27c2-691f-4414-8bc5-f14678442f9e"
+        response: |
+          Based on the transcript, the following locations were mentioned as being affected by wildfire smoke from Canada:
+
+          - Maine
+          - Maryland
+          - Minnesota
+          - Mid Atlantic region
+          - Northeast region
+          - New York City
+          - Baltimore
+        usage: { "input_tokens": 27, "output_tokens": 3 }
 
     LemurSummaryResponse:
       x-label: LeMUR summary response
@@ -5064,6 +5196,7 @@ components:
           - The conditions causing the poor air quality could get worse or shift to different areas in coming days depending on weather patterns. More wildfires may also contribute to higher concentrations.
 
           - Climate change is leading to longer and more severe fire seasons. Events of smoke traveling long distances and affecting air quality over wide areas will likely become more common in the future."
+        usage: { "input_tokens": 27, "output_tokens": 3 }
 
     LemurQuestionAnswerResponse:
       x-label: LeMUR question & answer response
@@ -5093,6 +5226,7 @@ components:
                 question: "Is global warming affecting wildfires?",
               },
             ],
+          usage: { "input_tokens": 27, "output_tokens": 3 },
         }
 
     LemurQuestionAnswer:
@@ -5149,33 +5283,17 @@ components:
           - Conduct research to better understand health impacts of wildfire smoke and mitigation strategies.
 
           - Develop strategies to prevent and manage wildfires to limit air quality impacts.
+        usage: { "input_tokens": 27, "output_tokens": 3 }
 
-    LemurTaskResponse:
-      x-label: LeMUR task response
+    LemurResponse:
+      x-label: LeMUR response
       x-fern-sdk-group-name: lemur
       type: object
-      allOf:
-        - type: object
-          additionalProperties: false
-          properties:
-            response:
-              x-label: Response
-              description: The response generated by LeMUR.
-              type: string
-          required: [response]
-        - $ref: "#/components/schemas/LemurBaseResponse"
-      example:
-        request_id: "5e1b27c2-691f-4414-8bc5-f14678442f9e"
-        response: |
-          Based on the transcript, the following locations were mentioned as being affected by wildfire smoke from Canada:
-
-          - Maine
-          - Maryland
-          - Minnesota
-          - Mid Atlantic region
-          - Northeast region
-          - New York City
-          - Baltimore
+      oneOf:
+        - $ref: "#/components/schemas/LemurTaskResponse"
+        - $ref: "#/components/schemas/LemurSummaryResponse"
+        - $ref: "#/components/schemas/LemurQuestionAnswerResponse"
+        - $ref: "#/components/schemas/LemurActionItemsResponse"
 
     LemurBaseParams:
       x-label: LeMUR base parameters
@@ -5435,6 +5553,25 @@ components:
         anthropic/claude-2-1:
           label: Claude 2.1 (on Anthropic)
 
+    LemurUsage:
+      x-label: Usage
+      description: The usage numbers for the LeMUR request
+      x-fern-sdk-group-name: lemur
+      type: object
+      additionalProperties: false
+      required:
+        - input_tokens
+        - output_tokens
+      properties:
+        input_tokens:
+          description: The number of input tokens used by the model
+          type: integer
+          minimum: 0
+        output_tokens:
+          description: The number of output tokens generated by the model
+          type: integer
+          minimum: 0
+
     Error:
       x-label: Error
       type: object
@@ -5544,6 +5681,11 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+      headers:
+        Retry-After:
+          description: The number of seconds to wait before retrying the request
+          schema:
+            type: integer
     InternalServerError:
       x-label: Internal server error
       description: An error occurred while processing the request
