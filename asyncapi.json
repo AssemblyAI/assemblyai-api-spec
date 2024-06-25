@@ -58,21 +58,40 @@
               "sample_rate": {
                 "description": "The sample rate of the streamed audio",
                 "type": "integer",
-                "examples": [16000]
+                "examples": [
+                  16000
+                ]
               },
               "word_boost": {
                 "description": "Add up to 2500 characters of custom vocabulary.\nThe parameter value must be a JSON encoded array of strings.\n",
                 "type": "string",
-                "examples": ["[\"foo\",\"bar\"]"]
+                "examples": [
+                  "[\"foo\",\"bar\"]"
+                ]
               },
               "encoding": {
                 "description": "The encoding of the audio data",
                 "$ref": "#/components/schemas/AudioEncoding"
               },
               "token": {
-                "description": "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)",
+                "description": "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)\n",
                 "type": "string",
-                "format": "password"
+                "format": "password",
+                "examples": [
+                  "eyJhbGciOiJIUzI1..."
+                ]
+              },
+              "disable_partial_transcripts": {
+                "summary": "Disable partial transcripts",
+                "description": "Set to true to not receive partial transcripts. Defaults to false.",
+                "type": "boolean",
+                "default": false
+              },
+              "enable_extra_session_information": {
+                "summary": "Enable extra session information",
+                "description": "Set to true to receive the SessionInformation message before the session ends. Defaults to false.",
+                "type": "boolean",
+                "default": false
               }
             }
           }
@@ -113,6 +132,9 @@
               "$ref": "#/components/messages/FinalTranscript"
             },
             {
+              "$ref": "#/components/messages/SessionInformation"
+            },
+            {
               "$ref": "#/components/messages/SessionTerminated"
             },
             {
@@ -126,17 +148,20 @@
           "query-parameters": {
             "sample_rate": 16000,
             "word_boost": "[\"foo\",\"bar\"]",
-            "encoding": "pcm_s16le"
+            "encoding": "pcm_s16le",
+            "token": "eyJhbGciOiJIUzI1...",
+            "disable_partial_transcripts": true,
+            "enable_extra_session_information": true
           },
           "messages": [
             {
-              "type": "publish",
               "messageId": "SendAudio",
+              "type": "publish",
               "value": "UklGRtjIAABXQVZFZ"
             },
             {
-              "type": "subscribe",
               "messageId": "PartialTranscript",
+              "type": "subscribe",
               "value": {
                 "audio_start": 0,
                 "audio_end": 1500,
@@ -154,8 +179,8 @@
               }
             },
             {
-              "type": "subscribe",
               "messageId": "FinalTranscript",
+              "type": "subscribe",
               "value": {
                 "audio_start": 0,
                 "audio_end": 1500,
@@ -230,6 +255,14 @@
           "$ref": "#/components/schemas/SessionBegins"
         }
       },
+      "SessionInformation": {
+        "messageId": "SessionInformation",
+        "summary": "Information about the session",
+        "description": "Information about the session that is concluding.\nThis message is sent at the end of the session, before the SessionTerminated message.\n",
+        "payload": {
+          "$ref": "#/components/schemas/SessionInformation"
+        }
+      },
       "SessionTerminated": {
         "messageId": "SessionTerminated",
         "summary": "Session terminated",
@@ -264,7 +297,9 @@
       "RealtimeBaseMessage": {
         "type": "object",
         "x-fern-sdk-group-name": "realtime",
-        "required": ["message_type"],
+        "required": [
+          "message_type"
+        ],
         "properties": {
           "message_type": {
             "description": "Describes the type of the message",
@@ -285,6 +320,9 @@
             "$ref": "#/components/schemas/FinalTranscript"
           },
           {
+            "$ref": "#/components/schemas/SessionInformation"
+          },
+          {
             "$ref": "#/components/schemas/SessionTerminated"
           },
           {
@@ -293,10 +331,13 @@
         ]
       },
       "RealtimeError": {
+        "summary": "Error message",
         "type": "object",
         "x-fern-sdk-group-name": "realtime",
         "additionalProperties": false,
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "string"
@@ -315,13 +356,17 @@
           "SessionBegins",
           "PartialTranscript",
           "FinalTranscript",
+          "SessionInformation",
           "SessionTerminated"
         ]
       },
       "RealtimeTranscriptType": {
         "type": "string",
         "x-fern-sdk-group-name": "realtime",
-        "enum": ["PartialTranscript", "FinalTranscript"]
+        "enum": [
+          "PartialTranscript",
+          "FinalTranscript"
+        ]
       },
       "RealtimeTranscript": {
         "x-fern-sdk-group-name": "realtime",
@@ -336,6 +381,7 @@
         "discriminator": "message_type"
       },
       "SessionBegins": {
+        "summary": "Session start",
         "x-fern-sdk-group-name": "realtime",
         "allOf": [
           {
@@ -343,7 +389,11 @@
           },
           {
             "type": "object",
-            "required": ["message_type", "session_id", "expires_at"],
+            "required": [
+              "message_type",
+              "session_id",
+              "expires_at"
+            ],
             "properties": {
               "message_type": {
                 "description": "Describes the type of the message",
@@ -374,7 +424,9 @@
           }
         ]
       },
-      "SessionTerminated": {
+      "SessionInformation": {
+        "summary": "Information about the session",
+        "description": "Information about the session that is concluding.\nThis message is sent at the end of the session, before the SessionTerminated message.\n",
         "x-fern-sdk-group-name": "realtime",
         "allOf": [
           {
@@ -382,7 +434,44 @@
           },
           {
             "type": "object",
-            "required": ["message_type"],
+            "required": [
+              "message_type",
+              "audio_duration_seconds"
+            ],
+            "properties": {
+              "message_type": {
+                "description": "Describes the type of the message",
+                "type": "string",
+                "const": "SessionInformation"
+              },
+              "audio_duration_seconds": {
+                "description": "The total duration of the audio in seconds",
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "examples": [
+          {
+            "message_type": "SessionInformation",
+            "audio_duration_seconds": 232.192
+          }
+        ]
+      },
+      "SessionTerminated": {
+        "summary": "Session terminated",
+        "x-fern-sdk-group-name": "realtime",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RealtimeBaseMessage"
+          },
+          {
+            "type": "object",
+            "required": [
+              "message_type"
+            ],
             "properties": {
               "message_type": {
                 "description": "Describes the type of the message",
@@ -448,6 +537,7 @@
         "additionalProperties": false
       },
       "PartialTranscript": {
+        "summary": "As you send audio data to the API, the API immediately starts responding with Partial Transcript results.",
         "x-fern-sdk-group-name": "realtime",
         "allOf": [
           {
@@ -455,7 +545,9 @@
           },
           {
             "type": "object",
-            "required": ["message_type"],
+            "required": [
+              "message_type"
+            ],
             "properties": {
               "message_type": {
                 "description": "Describes the type of message",
@@ -504,6 +596,7 @@
         ]
       },
       "FinalTranscript": {
+        "summary": "Transcript text at the end of an utterance with punctuation and casing.",
         "x-fern-sdk-group-name": "realtime",
         "allOf": [
           {
@@ -511,7 +604,11 @@
           },
           {
             "type": "object",
-            "required": ["message_type", "punctuated", "text_formatted"],
+            "required": [
+              "message_type",
+              "punctuated",
+              "text_formatted"
+            ],
             "properties": {
               "message_type": {
                 "description": "Describes the type of message",
@@ -614,7 +711,12 @@
       "Word": {
         "type": "object",
         "x-fern-sdk-group-name": "realtime",
-        "required": ["start", "end", "confidence", "text"],
+        "required": [
+          "start",
+          "end",
+          "confidence",
+          "text"
+        ],
         "properties": {
           "start": {
             "description": "Start time of the word in milliseconds",
@@ -693,7 +795,9 @@
         "description": "Manually end an utterance",
         "x-fern-sdk-group-name": "realtime",
         "type": "object",
-        "required": ["force_end_utterance"],
+        "required": [
+          "force_end_utterance"
+        ],
         "properties": {
           "force_end_utterance": {
             "description": "A boolean value to communicate that you wish to force the end of the utterance",
@@ -711,7 +815,9 @@
         "description": "Configure the threshold for how long to wait before ending an utterance. Default is 700ms.",
         "x-fern-sdk-group-name": "realtime",
         "type": "object",
-        "required": ["end_utterance_silence_threshold"],
+        "required": [
+          "end_utterance_silence_threshold"
+        ],
         "properties": {
           "end_utterance_silence_threshold": {
             "description": "The duration threshold in milliseconds",
@@ -728,9 +834,12 @@
         ]
       },
       "TerminateSession": {
+        "summary": "Terminate session",
         "x-fern-sdk-group-name": "realtime",
         "type": "object",
-        "required": ["terminate_session"],
+        "required": [
+          "terminate_session"
+        ],
         "properties": {
           "terminate_session": {
             "description": "Set to true to end your streaming session forever",
@@ -749,7 +858,10 @@
         "x-fern-sdk-group-name": "realtime",
         "description": "The encoding of the audio data",
         "default": "pcm_s16le",
-        "enum": ["pcm_s16le", "pcm_mulaw"],
+        "enum": [
+          "pcm_s16le",
+          "pcm_mulaw"
+        ],
         "x-fern-enum": {
           "pcm_s16le": {
             "description": "PCM signed 16-bit little-endian",
@@ -770,7 +882,10 @@
             }
           }
         },
-        "examples": ["pcm_s16le", "pcm_mulaw"]
+        "examples": [
+          "pcm_s16le",
+          "pcm_mulaw"
+        ]
       }
     },
     "securitySchemes": {

@@ -3,7 +3,8 @@
   "info": {
     "title": "AssemblyAI API",
     "description": "AssemblyAI API",
-    "version": "1.1.2",
+    "version": "1.2.0",
+    "termsOfService": "https://www.assemblyai.com/legal/terms-of-service",
     "contact": {
       "name": "API Support",
       "email": "support@assemblyai.com",
@@ -47,12 +48,14 @@
   "paths": {
     "/v2/upload": {
       "post": {
-        "tags": ["transcript"],
-        "summary": "Upload a media file which can be transcribed",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Upload a media file",
+        "description": "Upload a media file to AssemblyAI's servers.",
         "operationId": "uploadFile",
         "x-fern-sdk-group-name": "files",
         "x-fern-sdk-method-name": "upload",
-        "description": "Upload your media file directly to the AssemblyAI API if it isn't accessible via a URL already.",
         "requestBody": {
           "content": {
             "application/octet-stream": {}
@@ -60,7 +63,8 @@
         },
         "responses": {
           "200": {
-            "description": "File uploaded successfully",
+            "x-label": "Media file uploaded",
+            "description": "Media file uploaded successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -95,13 +99,15 @@
     },
     "/v2/transcript": {
       "post": {
-        "tags": ["transcript"],
-        "summary": "Create a transcript from an audio file",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Transcribe audio",
+        "description": "Create a transcript from a media file that is accessible via a URL.",
         "operationId": "createTranscript",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "submit",
         "x-fern-request-name": "TranscriptParams",
-        "description": "Create a transcript from an audio or video file that is accessible via a URL.",
         "requestBody": {
           "description": "Params to create a transcript",
           "required": true,
@@ -114,7 +120,8 @@
           }
         },
         "responses": {
-          "201": {
+          "200": {
+            "x-label": "Transcript created",
             "description": "Transcript created and queued for processing",
             "content": {
               "application/json": {
@@ -184,8 +191,14 @@
                   }
                 },
                 "responses": {
-                  "200": {
+                  "2XX": {
                     "description": "Successfully received the notification"
+                  },
+                  "4XX": {
+                    "description": "Invalid request"
+                  },
+                  "5XX": {
+                    "description": "Unexpected error"
                   }
                 }
               }
@@ -194,7 +207,9 @@
         }
       },
       "get": {
-        "tags": ["transcript"],
+        "tags": [
+          "transcript"
+        ],
         "summary": "List transcripts",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "list",
@@ -204,6 +219,7 @@
         "parameters": [
           {
             "name": "limit",
+            "x-label": "Limit",
             "in": "query",
             "description": "Maximum amount of transcripts to retrieve",
             "schema": {
@@ -212,6 +228,7 @@
           },
           {
             "name": "status",
+            "x-label": "Status",
             "in": "query",
             "description": "Filter by transcript status",
             "schema": {
@@ -220,6 +237,7 @@
           },
           {
             "name": "created_on",
+            "x-label": "Created on",
             "in": "query",
             "description": "Only get transcripts created on this date",
             "schema": {
@@ -228,6 +246,7 @@
           },
           {
             "name": "before_id",
+            "x-label": "Before ID",
             "in": "query",
             "description": "Get transcripts that were created before this transcript ID",
             "schema": {
@@ -236,6 +255,7 @@
           },
           {
             "name": "after_id",
+            "x-label": "After ID",
             "in": "query",
             "description": "Get transcripts that were created after this transcript ID",
             "schema": {
@@ -244,6 +264,7 @@
           },
           {
             "name": "throttled_only",
+            "x-label": "Throttled only",
             "in": "query",
             "description": "Only get throttled transcripts, overrides the status filter",
             "schema": {
@@ -288,8 +309,10 @@
     },
     "/v2/transcript/{transcript_id}": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Get the transcript",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Get transcript",
         "operationId": "getTranscript",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "get",
@@ -298,6 +321,7 @@
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -364,15 +388,18 @@
         }
       },
       "delete": {
-        "tags": ["transcript"],
-        "summary": "Delete the transcript",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Delete transcript",
+        "description": "Delete the transcript.\nDeleting does not delete the resource itself, but removes the data from the resource and marks it as deleted.\n",
         "operationId": "deleteTranscript",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "delete",
-        "description": "Delete the transcript",
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -418,16 +445,19 @@
     },
     "/v2/transcript/{transcript_id}/{subtitle_format}": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Export transcript as SRT or VTT captions",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Get subtitles for transcript",
+        "description": "Export your transcript in SRT or VTT format to use with a video player for subtitles and closed captions.",
         "operationId": "getSubtitles",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "getSubtitles",
         "x-fern-request-name": "GetSubtitlesParams",
-        "description": "Export your transcript in SRT or VTT format, to be plugged into a video player for subtitles and closed captions.",
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -437,6 +467,7 @@
           },
           {
             "name": "subtitle_format",
+            "x-label": "Subtitle format",
             "in": "path",
             "description": "The format of the captions",
             "required": true,
@@ -446,6 +477,7 @@
           },
           {
             "name": "chars_per_caption",
+            "x-label": "Number of characters per caption",
             "in": "query",
             "description": "The maximum number of characters per caption",
             "schema": {
@@ -491,8 +523,10 @@
     },
     "/v2/transcript/{transcript_id}/sentences": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Get the transcript split by sentences",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Get sentences in transcript",
         "operationId": "getTranscriptSentences",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "getSentences",
@@ -501,6 +535,7 @@
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -546,8 +581,10 @@
     },
     "/v2/transcript/{transcript_id}/paragraphs": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Get the transcript split by paragraphs",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Get paragraphs in transcript",
         "operationId": "getTranscriptParagraphs",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "getParagraphs",
@@ -556,6 +593,7 @@
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -601,16 +639,19 @@
     },
     "/v2/transcript/{transcript_id}/word-search": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Search the given transcript for words, numbers, or phrases",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Search words in transcript",
+        "description": "Search through the transcript for keywords. You can search for individual words, numbers, or phrases containing up to five words or numbers.",
         "operationId": "wordSearch",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-sdk-method-name": "wordSearch",
         "x-fern-request-name": "WordSearchParams",
-        "description": "Search through the transcript for a specific set of keywords. You can search for individual words, numbers, or phrases containing up to five words or numbers.",
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -620,6 +661,7 @@
           },
           {
             "name": "words",
+            "x-label": "Words",
             "in": "query",
             "description": "Keywords to search for",
             "required": true,
@@ -628,6 +670,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "x-label": "Word",
                 "type": "string"
               }
             }
@@ -670,8 +713,10 @@
     },
     "/v2/transcript/{transcript_id}/redacted-audio": {
       "get": {
-        "tags": ["transcript"],
-        "summary": "Retrieve the redacted audio object containing the status and URL to the redacted audio.",
+        "tags": [
+          "transcript"
+        ],
+        "summary": "Get redacted audio",
         "description": "Retrieve the redacted audio object containing the status and URL to the redacted audio.",
         "operationId": "getRedactedAudio",
         "x-fern-sdk-group-name": "transcripts",
@@ -680,6 +725,7 @@
         "parameters": [
           {
             "name": "transcript_id",
+            "x-label": "Transcript ID",
             "in": "path",
             "description": "ID of the transcript",
             "required": true,
@@ -725,8 +771,10 @@
     },
     "/v2/realtime/token": {
       "post": {
-        "tags": ["streaming"],
-        "summary": "Create a temporary authentication token for Streaming Speech-to-Text",
+        "tags": [
+          "streaming"
+        ],
+        "summary": "Create temporary authentication token for Streaming STT",
         "description": "Create a temporary authentication token for Streaming Speech-to-Text",
         "operationId": "createTemporaryToken",
         "x-fern-sdk-group-name": "realtime",
@@ -780,13 +828,15 @@
     },
     "/lemur/v3/generate/task": {
       "post": {
-        "tags": ["LeMUR"],
-        "summary": "Run a LLM task with your own prompt",
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Run a task using LeMUR",
+        "description": "Use the LeMUR task endpoint to input your own LLM prompt.",
         "operationId": "lemurTask",
         "x-fern-sdk-group-name": "lemur",
         "x-fern-sdk-method-name": "task",
         "x-fern-request-name": "LemurTaskParams",
-        "description": "Use the LeMUR task endpoint to input your own LLM prompt.",
         "requestBody": {
           "description": "Params to run the task",
           "required": true,
@@ -806,6 +856,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/LemurTaskResponse"
                 }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Maximum number of allowed requests in a 60 second window."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of remaining requests in the current time window."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit."
               }
             },
             "links": {
@@ -840,13 +910,15 @@
     },
     "/lemur/v3/generate/summary": {
       "post": {
-        "tags": ["LeMUR"],
-        "summary": "Generate a custom summary from one or more transcripts",
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Summarize a transcript using LeMUR",
+        "description": "Custom Summary allows you to distill a piece of audio into a few impactful sentences.\nYou can give the model context to obtain more targeted results while outputting the results in a variety of formats described in human language.\n",
         "operationId": "lemurSummary",
         "x-fern-sdk-group-name": "lemur",
         "x-fern-sdk-method-name": "summary",
         "x-fern-request-name": "LemurSummaryParams",
-        "description": "Custom Summary allows you to distill a piece of audio into a few impactful sentences. You can give the model context to obtain more targeted results while outputting the results in a variety of formats described in human language.",
         "requestBody": {
           "description": "Params to generate the summary",
           "required": true,
@@ -866,6 +938,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/LemurSummaryResponse"
                 }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Maximum number of allowed requests in a 60 second window."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of remaining requests in the current time window."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit."
               }
             },
             "links": {
@@ -900,13 +992,15 @@
     },
     "/lemur/v3/generate/question-answer": {
       "post": {
-        "tags": ["LeMUR"],
-        "summary": "Create answers to one or more questions about one or more transcripts",
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Ask questions using LeMUR",
+        "description": "Question & Answer allows you to ask free-form questions about a single transcript or a group of transcripts.\nThe questions can be any whose answers you find useful, such as judging whether a caller is likely to become a customer or whether all items on a meeting's agenda were covered.\n",
         "operationId": "lemurQuestionAnswer",
         "x-fern-sdk-group-name": "lemur",
         "x-fern-sdk-method-name": "questionAnswer",
         "x-fern-request-name": "LemurQuestionAnswerParams",
-        "description": "Question & Answer allows you to ask free-form questions about a single transcript or a group of transcripts. The questions can be any whose answers you find useful, such as judging whether a caller is likely to become a customer or whether all items on a meeting's agenda were covered.",
         "requestBody": {
           "description": "Params to ask questions about the transcripts",
           "required": true,
@@ -926,6 +1020,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/LemurQuestionAnswerResponse"
                 }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Maximum number of allowed requests in a 60 second window."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of remaining requests in the current time window."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit."
               }
             },
             "links": {
@@ -960,9 +1074,12 @@
     },
     "/lemur/v3/generate/action-items": {
       "post": {
-        "tags": ["LeMUR"],
-        "summary": "Extract action items from one or more meeting transcripts",
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Extract action items",
         "operationId": "lemurActionItems",
+        "x-label": "Extract action items using LeMUR",
         "x-fern-sdk-group-name": "lemur",
         "x-fern-sdk-method-name": "actionItems",
         "x-fern-request-name": "LemurActionItemsParams",
@@ -986,6 +1103,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/LemurActionItemsResponse"
                 }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Maximum number of allowed requests in a 60 second window."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of remaining requests in the current time window."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Number of seconds until the remaining requests resets to the value of X-RateLimit-Limit."
               }
             },
             "links": {
@@ -1019,17 +1156,76 @@
       }
     },
     "/lemur/v3/{request_id}": {
+      "get": {
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Retrieve LeMUR response",
+        "description": "Retrieve a LeMUR response that was previously generated.\n",
+        "operationId": "getLemurResponse",
+        "x-fern-sdk-group-name": "lemur",
+        "x-fern-sdk-method-name": "getResponse",
+        "x-fern-request-name": "GetLemurResponseParams",
+        "parameters": [
+          {
+            "name": "request_id",
+            "x-label": "LeMUR request ID",
+            "in": "path",
+            "description": "The ID of the LeMUR request you previously made.\nThis would be found in the response of the original request.\n",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LeMUR response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LemurResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      },
       "delete": {
-        "tags": ["LeMUR"],
-        "summary": "Delete the data for a previously submitted LeMUR request",
+        "tags": [
+          "LeMUR"
+        ],
+        "summary": "Purge LeMUR request data",
+        "description": "Delete the data for a previously submitted LeMUR request.\nThe LLM response data, as well as any context provided in the original request will be removed.\n",
         "operationId": "purgeLemurRequestData",
         "x-fern-sdk-group-name": "lemur",
         "x-fern-sdk-method-name": "purgeRequestData",
         "x-fern-request-name": "PurgeLemurRequestDataParams",
-        "description": "Delete the data for a previously submitted LeMUR request.\nThe LLM response data, as well as any context provided in the original request will be removed.\n",
         "parameters": [
           {
             "name": "request_id",
+            "x-label": "LeMUR request ID",
             "in": "path",
             "description": "The ID of the LeMUR request whose data you want to delete. This would be found in the response of the original request.",
             "required": true,
@@ -1136,21 +1332,27 @@
     "schemas": {
       "TranscriptReadyNotification": {
         "description": "The notification when the transcript status is completed or error.",
+        "x-label": "Transcript ready notification",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "transcript_id": {
+            "x-label": "Transcript ID",
             "description": "The ID of the transcript",
             "type": "string",
             "format": "uuid"
           },
           "status": {
+            "x-label": "Transcript status",
             "description": "The status of the transcript. Either completed or error.",
             "$ref": "#/components/schemas/TranscriptReadyStatus"
           }
         },
-        "required": ["transcript_id", "status"],
+        "required": [
+          "transcript_id",
+          "status"
+        ],
         "example": {
           "transcript_id": "9ea68fd3-f953-42c1-9742-976c447fb463",
           "status": "completed"
@@ -1159,14 +1361,20 @@
       "RedactedAudioResponse": {
         "type": "object",
         "additionalProperties": false,
+        "x-label": "Redacted audio response",
         "x-fern-sdk-group-name": "transcripts",
-        "required": ["status", "redacted_audio_url"],
+        "required": [
+          "status",
+          "redacted_audio_url"
+        ],
         "properties": {
           "status": {
+            "x-label": "Status",
             "description": "The status of the redacted audio",
             "$ref": "#/components/schemas/RedactedAudioStatus"
           },
           "redacted_audio_url": {
+            "x-label": "Redacted audio URL",
             "description": "The URL of the redacted audio file",
             "type": "string",
             "format": "url"
@@ -1178,40 +1386,69 @@
         }
       },
       "RedactedAudioStatus": {
+        "x-label": "Redacted audio status",
         "description": "The status of the redacted audio",
         "x-fern-sdk-group-name": "transcripts",
         "type": "string",
-        "enum": ["redacted_audio_ready"]
+        "enum": [
+          "redacted_audio_ready"
+        ],
+        "x-aai-enum": {
+          "redacted_audio_ready": {
+            "label": "Redacted audio is ready"
+          }
+        }
       },
       "SubtitleFormat": {
+        "x-label": "Subtitle format",
         "description": "Format of the subtitles",
         "x-fern-sdk-group-name": "transcripts",
         "type": "string",
-        "enum": ["srt", "vtt"]
+        "enum": [
+          "srt",
+          "vtt"
+        ],
+        "x-aai-enum": {
+          "srt": {
+            "label": "SRT"
+          },
+          "vtt": {
+            "label": "VTT"
+          }
+        }
       },
       "WordSearchResponse": {
+        "x-label": "Word search response",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
         "properties": {
           "id": {
+            "x-label": "Transcript ID",
             "description": "The ID of the transcript",
             "type": "string",
             "format": "uuid"
           },
           "total_count": {
+            "x-label": "Total count of matches",
             "description": "The total count of all matched instances. For e.g., word 1 matched 2 times, and word 2 matched 3 times, `total_count` will equal 5.",
             "type": "integer"
           },
           "matches": {
+            "x-label": "Matches",
             "description": "The matches of the search",
             "type": "array",
             "items": {
+              "x-label": "Match",
               "$ref": "#/components/schemas/WordSearchMatch"
             }
           }
         },
-        "required": ["id", "total_count", "matches"],
+        "required": [
+          "id",
+          "total_count",
+          "matches"
+        ],
         "example": {
           "id": "d5a3d302-066e-43fb-b63b-8f57baf185db",
           "total_count": 10,
@@ -1220,121 +1457,202 @@
               "text": "smoke",
               "count": 6,
               "timestamps": [
-                [250, 650],
-                [49168, 49398],
-                [55284, 55594],
-                [168888, 169118],
-                [215108, 215386],
-                [225944, 226170]
+                [
+                  250,
+                  650
+                ],
+                [
+                  49168,
+                  49398
+                ],
+                [
+                  55284,
+                  55594
+                ],
+                [
+                  168888,
+                  169118
+                ],
+                [
+                  215108,
+                  215386
+                ],
+                [
+                  225944,
+                  226170
+                ]
               ],
-              "indexes": [0, 136, 156, 486, 652, 698]
+              "indexes": [
+                0,
+                136,
+                156,
+                486,
+                652,
+                698
+              ]
             },
             {
               "text": "wildfires",
               "count": 4,
               "timestamps": [
-                [1668, 2346],
-                [33852, 34546],
-                [50118, 51110],
-                [231356, 232354]
+                [
+                  1668,
+                  2346
+                ],
+                [
+                  33852,
+                  34546
+                ],
+                [
+                  50118,
+                  51110
+                ],
+                [
+                  231356,
+                  232354
+                ]
               ],
-              "indexes": [4, 90, 140, 716]
+              "indexes": [
+                4,
+                90,
+                140,
+                716
+              ]
             }
           ]
         }
       },
       "WordSearchMatch": {
         "type": "object",
+        "x-label": "Word search match",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
         "properties": {
           "text": {
+            "x-label": "Text",
             "description": "The matched word",
             "type": "string"
           },
           "count": {
+            "x-label": "Count",
             "description": "The total amount of times the word is in the transcript",
             "type": "integer"
           },
           "timestamps": {
+            "x-label": "Timestamps",
             "description": "An array of timestamps",
             "type": "array",
             "items": {
+              "x-label": "Timestamp",
               "$ref": "#/components/schemas/WordSearchTimestamp"
             }
           },
           "indexes": {
+            "x-label": "Indexes",
             "description": "An array of all index locations for that word within the `words` array of the completed transcript",
             "type": "array",
             "items": {
+              "x-label": "Index",
               "type": "integer"
             }
           }
         },
-        "required": ["text", "count", "timestamps", "indexes"],
+        "required": [
+          "text",
+          "count",
+          "timestamps",
+          "indexes"
+        ],
         "example": {
           "text": "smoke",
           "count": 6,
           "timestamps": [
-            [250, 650],
-            [49168, 49398],
-            [55284, 55594],
-            [168888, 169118],
-            [215108, 215386],
-            [225944, 226170]
+            [
+              250,
+              650
+            ],
+            [
+              49168,
+              49398
+            ],
+            [
+              55284,
+              55594
+            ],
+            [
+              168888,
+              169118
+            ],
+            [
+              215108,
+              215386
+            ],
+            [
+              225944,
+              226170
+            ]
           ],
-          "indexes": [0, 136, 156, 486, 652, 698]
+          "indexes": [
+            0,
+            136,
+            156,
+            486,
+            652,
+            698
+          ]
         }
       },
       "WordSearchTimestamp": {
+        "x-label": "Word search timestamp",
         "description": "An array of timestamps structured as [`start_time`, `end_time`] in milliseconds",
         "x-fern-sdk-group-name": "transcripts",
         "type": "array",
         "items": {
+          "x-label": "Timestamp",
+          "description": "Timestamp in milliseconds",
           "type": "integer"
         },
-        "example": [250, 650]
+        "example": [
+          250,
+          650
+        ]
       },
       "Timestamp": {
+        "x-label": "Timestamp",
         "description": "Timestamp containing a start and end property in milliseconds",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "start": {
+            "x-label": "Start",
             "description": "The start time in milliseconds",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "description": "The end time in milliseconds",
             "type": "integer"
           }
         },
-        "required": ["start", "end"],
+        "required": [
+          "start",
+          "end"
+        ],
         "example": {
           "start": 3978,
           "end": 5114
         }
       },
       "TranscriptOptionalParams": {
+        "x-label": "Optional transcript parameters",
         "description": "The parameters for creating a transcript",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "speech_model": {
-            "description": "The speech model to use for the transcription. When `null`, the default model is used.",
-            "default": null,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/SpeechModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "language_code": {
+            "x-label": "Language code",
             "description": "The language of your audio file. Possible values are found in [Supported Languages](https://www.assemblyai.com/docs/concepts/supported-languages).\nThe default value is 'en_us'.\n",
             "oneOf": [
               {
@@ -1351,83 +1669,122 @@
                 "type": "null"
               }
             ],
-            "x-ts-type": "LiteralUnion<TranscriptLanguageCode, string> | null"
+            "x-ts-type": "LiteralUnion<TranscriptLanguageCode, string> | null",
+            "x-go-type": "TranscriptLanguageCode"
           },
           "punctuate": {
+            "x-label": "Punctuate",
             "description": "Enable Automatic Punctuation, can be true or false",
             "type": "boolean"
           },
           "format_text": {
+            "x-label": "Format text",
             "description": "Enable Text Formatting, can be true or false",
             "type": "boolean"
           },
           "dual_channel": {
+            "x-label": "Dual channel",
             "description": "Enable [Dual Channel](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) transcription, can be true or false.",
             "type": "boolean"
           },
+          "speech_model": {
+            "x-label": "Speech model",
+            "description": "The speech model to use for the transcription. When `null`, the default model is used.",
+            "default": null,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SpeechModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "webhook_url": {
-            "description": "The URL to which AssemblyAI send webhooks upon trancription completion",
+            "x-label": "Webhook URL",
+            "description": "The URL to which AssemblyAI send webhooks upon transcription completion",
             "type": "string",
             "format": "url"
           },
           "webhook_auth_header_name": {
+            "x-label": "Webhook auth header name",
             "description": "The header name which should be sent back with webhook calls",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "webhook_auth_header_value": {
+            "x-label": "Webhook auth header value",
             "description": "Specify a header name and value to send back with a webhook call for added security",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "auto_highlights": {
-            "description": "Whether Key Phrases is enabled, either true or false",
+            "x-label": "Key phrases",
+            "description": "Enable Key Phrases, either true or false",
             "type": "boolean"
           },
           "audio_start_from": {
+            "x-label": "Audio start from",
             "description": "The point in time, in milliseconds, to begin transcribing in your media file",
             "type": "integer"
           },
           "audio_end_at": {
+            "x-label": "Audio end at",
             "description": "The point in time, in milliseconds, to stop transcribing in your media file",
             "type": "integer"
           },
           "word_boost": {
+            "x-label": "Word boost",
             "description": "The list of custom vocabulary to boost transcription probability for",
             "type": "array",
             "items": {
+              "x-label": "Word to boost",
               "type": "string"
             }
           },
           "boost_param": {
+            "x-label": "Boost param",
             "description": "The word boost parameter value",
             "$ref": "#/components/schemas/TranscriptBoostParam"
           },
           "filter_profanity": {
+            "x-label": "Filter profanity",
             "description": "Filter profanity from the transcribed text, can be true or false",
             "type": "boolean"
           },
           "redact_pii": {
+            "x-label": "Redact PII",
             "description": "Redact PII from the transcribed text using the Redact PII model, can be true or false",
             "type": "boolean"
           },
           "redact_pii_audio": {
+            "x-label": "Redact PII audio",
             "description": "Generate a copy of the original media file with spoken PII \"beeped\" out, can be true or false. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
             "type": "boolean"
           },
           "redact_pii_audio_quality": {
+            "x-label": "Redact PII audio quality",
             "description": "Controls the filetype of the audio created by redact_pii_audio. Currently supports mp3 (default) and wav. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
             "default": "mp3",
             "$ref": "#/components/schemas/RedactPiiAudioQuality"
           },
           "redact_pii_policies": {
+            "x-label": "Redact PII policies",
             "description": "The list of PII Redaction policies to enable. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
             "type": "array",
             "items": {
+              "x-label": "PII policy",
               "$ref": "#/components/schemas/PiiPolicy"
             }
           },
           "redact_pii_sub": {
+            "x-label": "Redact PII substitution",
             "description": "The replacement logic for detected PII, can be \"entity_type\" or \"hash\". See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
             "oneOf": [
               {
@@ -1439,83 +1796,108 @@
             ]
           },
           "speaker_labels": {
+            "x-label": "Speaker labels",
             "description": "Enable [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization), can be true or false",
             "type": "boolean"
           },
           "speakers_expected": {
+            "x-label": "Speakers expected",
             "description": "Tells the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.",
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "default": null
           },
           "content_safety": {
+            "x-label": "Content Moderation",
             "description": "Enable [Content Moderation](https://www.assemblyai.com/docs/models/content-moderation), can be true or false",
             "type": "boolean"
           },
           "content_safety_confidence": {
-            "description": "The confidence threshold for content moderation. Values must be between 25 and 100.",
+            "x-label": "Content Moderation confidence",
+            "description": "The confidence threshold for the Content Moderation model. Values must be between 25 and 100.",
             "type": "integer"
           },
           "iab_categories": {
+            "x-label": "Topic Detection",
             "description": "Enable [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection), can be true or false",
             "type": "boolean"
           },
           "language_detection": {
-            "description": "Whether [Automatic language detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection) was enabled in the transcription request, either true or false.",
+            "x-label": "Language detection",
+            "description": "Enable [Automatic language detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection), either true or false.",
             "type": "boolean"
           },
           "custom_spelling": {
+            "x-label": "Custom spellings",
             "description": "Customize how words are spelled and formatted using to and from values",
             "type": "array",
             "items": {
+              "x-label": "Custom spelling",
               "$ref": "#/components/schemas/TranscriptCustomSpelling"
             }
           },
           "disfluencies": {
+            "x-label": "Disfluencies",
             "description": "Transcribe Filler Words, like \"umm\", in your media file; can be true or false",
             "type": "boolean"
           },
           "sentiment_analysis": {
+            "x-label": "Sentiment Analysis",
             "description": "Enable [Sentiment Analysis](https://www.assemblyai.com/docs/models/sentiment-analysis), can be true or false",
             "type": "boolean"
           },
           "auto_chapters": {
+            "x-label": "Auto chapters",
             "description": "Enable [Auto Chapters](https://www.assemblyai.com/docs/models/auto-chapters), can be true or false",
             "type": "boolean"
           },
           "entity_detection": {
+            "x-label": "Entity Detection",
             "description": "Enable [Entity Detection](https://www.assemblyai.com/docs/models/entity-detection), can be true or false",
             "type": "boolean"
           },
           "speech_threshold": {
+            "x-label": "Speech threshold",
             "description": "Reject audio files that contain less than this fraction of speech.\nValid values are in the range [0, 1] inclusive.\n",
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float",
             "minimum": 0,
             "maximum": 1,
             "default": null
           },
           "summarization": {
+            "x-label": "Enable Summarization",
             "description": "Enable [Summarization](https://www.assemblyai.com/docs/models/summarization), can be true or false",
             "type": "boolean"
           },
           "summary_model": {
+            "x-label": "Summary model",
             "description": "The model to summarize the transcript",
             "default": "informative",
             "$ref": "#/components/schemas/SummaryModel"
           },
           "summary_type": {
+            "x-label": "Summary type",
             "description": "The type of summary",
             "default": "bullets",
             "$ref": "#/components/schemas/SummaryType"
           },
           "custom_topics": {
-            "description": "Whether custom topics is enabled, either true or false",
+            "x-label": "Enable custom topics",
+            "description": "Enable custom topics, either true or false",
             "type": "boolean"
           },
           "topics": {
-            "description": "The list of custom topics provided, if custom topics is enabled",
+            "x-label": "Custom topics",
+            "description": "The list of custom topics",
             "type": "array",
             "items": {
+              "x-label": "Topic",
               "type": "string"
             }
           }
@@ -1532,7 +1914,11 @@
           "auto_highlights": true,
           "audio_start_from": 10,
           "audio_end_at": 280,
-          "word_boost": ["aws", "azure", "google cloud"],
+          "word_boost": [
+            "aws",
+            "azure",
+            "google cloud"
+          ],
           "boost_param": "high",
           "filter_profanity": true,
           "redact_pii": true,
@@ -1562,6 +1948,7 @@
         }
       },
       "TranscriptParams": {
+        "x-label": "Transcript parameters",
         "description": "The parameters for creating a transcript",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
@@ -1569,9 +1956,12 @@
         "allOf": [
           {
             "type": "object",
-            "required": ["audio_url"],
+            "required": [
+              "audio_url"
+            ],
             "properties": {
               "audio_url": {
+                "x-label": "Audio URL",
                 "description": "The URL of the audio or video file to transcribe.",
                 "type": "string",
                 "format": "url"
@@ -1596,7 +1986,11 @@
           "auto_highlights": true,
           "audio_start_from": 10,
           "audio_end_at": 280,
-          "word_boost": ["aws", "azure", "google cloud"],
+          "word_boost": [
+            "aws",
+            "azure",
+            "google cloud"
+          ],
           "boost_param": "high",
           "filter_profanity": true,
           "redact_pii": true,
@@ -1627,55 +2021,122 @@
       },
       "SummaryModel": {
         "type": "string",
+        "x-label": "Summary model",
         "description": "The model to summarize the transcript",
         "x-fern-sdk-group-name": "transcripts",
         "default": "informative",
-        "enum": ["informative", "conversational", "catchy"]
+        "enum": [
+          "informative",
+          "conversational",
+          "catchy"
+        ],
+        "x-aai-enum": {
+          "informative": {
+            "label": "Informative"
+          },
+          "conversational": {
+            "label": "Conversational"
+          },
+          "catchy": {
+            "label": "Catchy"
+          }
+        }
       },
       "SummaryType": {
         "type": "string",
+        "x-label": "Summary type",
         "description": "The type of summary",
         "x-fern-sdk-group-name": "transcripts",
         "default": "bullets",
-        "enum": ["bullets", "bullets_verbose", "gist", "headline", "paragraph"]
+        "enum": [
+          "bullets",
+          "bullets_verbose",
+          "gist",
+          "headline",
+          "paragraph"
+        ],
+        "x-aai-enum": {
+          "bullets": {
+            "label": "Bullets"
+          },
+          "bullets_verbose": {
+            "label": "Bullets verbose"
+          },
+          "gist": {
+            "label": "Gist"
+          },
+          "headline": {
+            "label": "Headline"
+          },
+          "paragraph": {
+            "label": "Paragraph"
+          }
+        }
       },
       "TranscriptBoostParam": {
         "type": "string",
+        "x-label": "Boost parameter",
         "description": "The word boost parameter value",
         "x-fern-sdk-group-name": "transcripts",
-        "enum": ["low", "default", "high"]
+        "enum": [
+          "low",
+          "default",
+          "high"
+        ],
+        "x-aai-enum": {
+          "low": {
+            "label": "Low"
+          },
+          "default": {
+            "label": "Default"
+          },
+          "high": {
+            "label": "High"
+          }
+        }
       },
       "TranscriptCustomSpelling": {
+        "x-label": "Custom spelling",
         "description": "Object containing words or phrases to replace, and the word or phrase to replace with",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "from": {
+            "x-label": "From",
             "description": "Words or phrases to replace",
             "type": "array",
             "items": {
+              "x-label": "Word or phrase",
               "description": "Word or phrase to replace",
               "type": "string"
             }
           },
           "to": {
+            "x-label": "To",
             "description": "Word or phrase to replace with",
             "type": "string"
           }
         },
-        "required": ["from", "to"],
+        "required": [
+          "from",
+          "to"
+        ],
         "example": {
-          "from": ["dicarlo"],
+          "from": [
+            "dicarlo"
+          ],
           "to": "Decarlo"
         }
       },
       "TranscriptUtterance": {
         "type": "object",
+        "x-label": "Utterance",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
         "properties": {
           "confidence": {
+            "x-label": "Confidence",
             "description": "The confidence score for the transcript of this utterance",
             "type": "number",
             "format": "double",
@@ -1683,30 +2144,43 @@
             "maximum": 1
           },
           "start": {
+            "x-label": "Start",
             "description": "The starting time, in milliseconds, of the utterance in the audio file",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "description": "The ending time, in milliseconds, of the utterance in the audio file",
             "type": "integer"
           },
           "text": {
+            "x-label": "Text",
             "description": "The text for this utterance",
             "type": "string"
           },
           "words": {
+            "x-label": "Words",
             "description": "The words in the utterance.",
             "type": "array",
             "items": {
+              "x-label": "Word",
               "$ref": "#/components/schemas/TranscriptWord"
             }
           },
           "speaker": {
+            "x-label": "Speaker",
             "description": "The speaker of this utterance, where each speaker is assigned a sequential capital letter - e.g. \"A\" for Speaker A, \"B\" for Speaker B, etc.",
             "type": "string"
           }
         },
-        "required": ["confidence", "start", "end", "text", "words", "speaker"],
+        "required": [
+          "confidence",
+          "start",
+          "end",
+          "text",
+          "words",
+          "speaker"
+        ],
         "example": {
           "confidence": 0.9359033333333334,
           "end": 26950,
@@ -1823,17 +2297,33 @@
         }
       },
       "SubstitutionPolicy": {
+        "x-label": "Redact PII substitution",
         "type": "string",
         "x-fern-sdk-group-name": "transcripts",
         "description": "The replacement logic for detected PII, can be \"entity_name\" or \"hash\". See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
-        "enum": ["entity_name", "hash"]
+        "enum": [
+          "entity_name",
+          "hash"
+        ],
+        "x-aai-enum": {
+          "entity_name": {
+            "label": "Entity name"
+          },
+          "hash": {
+            "label": "Hash"
+          }
+        }
       },
       "RedactPiiAudioQuality": {
+        "x-label": "Redact PII audio quality",
         "type": "string",
         "description": "Controls the filetype of the audio created by redact_pii_audio. Currently supports mp3 (default) and wav. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
         "x-fern-sdk-group-name": "transcripts",
         "default": "mp3",
-        "enum": ["mp3", "wav"],
+        "enum": [
+          "mp3",
+          "wav"
+        ],
         "x-fern-enum": {
           "mp3": {
             "description": "MP3 audio format is lower quality and lower size than WAV.",
@@ -1848,46 +2338,346 @@
             "description": "WAV audio format is the highest quality (no compression) and larger size than MP3."
           }
         },
+        "x-aai-enum": {
+          "mp3": {
+            "label": "MP3"
+          },
+          "wav": {
+            "label": "WAV"
+          }
+        },
         "example": "mp3"
       },
       "PiiPolicy": {
-        "type": "string",
+        "x-label": "PII policy",
+        "description": "The type of PII to redact",
         "x-fern-sdk-group-name": "transcripts",
+        "type": "string",
         "enum": [
-          "medical_process",
-          "medical_condition",
+          "account_number",
+          "banking_information",
           "blood_type",
-          "drug",
-          "injury",
-          "number_sequence",
-          "email_address",
-          "date_of_birth",
-          "phone_number",
-          "us_social_security_number",
-          "credit_card_number",
-          "credit_card_expiration",
           "credit_card_cvv",
+          "credit_card_expiration",
+          "credit_card_number",
           "date",
-          "nationality",
+          "date_interval",
+          "date_of_birth",
+          "drivers_license",
+          "drug",
+          "duration",
+          "email_address",
           "event",
+          "filename",
+          "gender_sexuality",
+          "healthcare_number",
+          "injury",
+          "ip_address",
           "language",
           "location",
+          "marital_status",
+          "medical_condition",
+          "medical_process",
           "money_amount",
-          "person_name",
-          "person_age",
-          "organization",
-          "political_affiliation",
+          "nationality",
+          "number_sequence",
           "occupation",
+          "organization",
+          "passport_number",
+          "password",
+          "person_age",
+          "person_name",
+          "phone_number",
+          "physical_attribute",
+          "political_affiliation",
           "religion",
-          "drivers_license",
-          "banking_information"
-        ]
+          "statistics",
+          "time",
+          "url",
+          "us_social_security_number",
+          "username",
+          "vehicle_id",
+          "zodiac_sign"
+        ],
+        "x-fern-enum": {
+          "account_number": {
+            "description": "Customer account or membership identification number (e.g., Policy No. 10042992, Member ID: HZ-5235-001)"
+          },
+          "banking_information": {
+            "description": "Banking information, including account and routing numbers"
+          },
+          "blood_type": {
+            "description": "Blood type (e.g., O-, AB positive)"
+          },
+          "credit_card_cvv": {
+            "description": "Credit card verification code (e.g., CVV: 080)"
+          },
+          "credit_card_expiration": {
+            "description": "Expiration date of a credit card"
+          },
+          "credit_card_number": {
+            "description": "Credit card number"
+          },
+          "date": {
+            "description": "Specific calendar date (e.g., December 18)"
+          },
+          "date_interval": {
+            "description": "Broader time periods, including date ranges, months, seasons, years, and decades (e.g., 2020-2021, 5-9 May, January 1984)"
+          },
+          "date_of_birth": {
+            "description": "Date of birth (e.g., Date of Birth: March 7,1961)"
+          },
+          "drivers_license": {
+            "description": "Driver's license number. (e.g., DL# 356933-540)"
+          },
+          "drug": {
+            "description": "Medications, vitamins, or supplements (e.g., Advil, Acetaminophen, Panadol)"
+          },
+          "duration": {
+            "description": "Periods of time, specified as a number and a unit of time (e.g., 8 months, 2 years)"
+          },
+          "email_address": {
+            "description": "Email address (e.g., support@assemblyai.com)"
+          },
+          "event": {
+            "description": "Name of an event or holiday (e.g., Olympics, Yom Kippur)"
+          },
+          "filename": {
+            "description": "Names of computer files, including the extension or filepath (e.g., Taxes/2012/brad-tax-returns.pdf)"
+          },
+          "gender_sexuality": {
+            "description": "Terms indicating gender identity or sexual orientation, including slang terms (e.g., female, bisexual, trans)"
+          },
+          "healthcare_number": {
+            "description": "Healthcare numbers and health plan beneficiary numbers (e.g., Policy No.: 5584-486-674-YM)"
+          },
+          "injury": {
+            "description": "Bodily injury (e.g., I broke my arm, I have a sprained wrist)"
+          },
+          "ip_address": {
+            "description": "Internet IP address, including IPv4 and IPv6 formats (e.g., 192.168.0.1)"
+          },
+          "language": {
+            "description": "Name of a natural language (e.g., Spanish, French)"
+          },
+          "location": {
+            "description": "Any Location reference including mailing address, postal code, city, state, province, country, or coordinates. (e.g., Lake Victoria, 145 Windsor St., 90210)"
+          },
+          "marital_status": {
+            "description": "Terms indicating marital status (e.g., Single, common-law, ex-wife, married)"
+          },
+          "medical_condition": {
+            "description": "Name of a medical condition, disease, syndrome, deficit, or disorder (e.g., chronic fatigue syndrome, arrhythmia, depression)"
+          },
+          "medical_process": {
+            "description": "Medical process, including treatments, procedures, and tests (e.g., heart surgery, CT scan)"
+          },
+          "money_amount": {
+            "description": "Name and/or amount of currency (e.g., 15 pesos, $94.50)"
+          },
+          "nationality": {
+            "description": "Terms indicating nationality, ethnicity, or race (e.g., American, Asian, Caucasian)"
+          },
+          "number_sequence": {
+            "description": "Numerical PII (including alphanumeric strings) that doesn't fall under other categories"
+          },
+          "occupation": {
+            "description": "Job title or profession (e.g., professor, actors, engineer, CPA)"
+          },
+          "organization": {
+            "description": "Name of an organization (e.g., CNN, McDonalds, University of Alaska, Northwest General Hospital)"
+          },
+          "passport_number": {
+            "description": "Passport numbers, issued by any country (e.g., PA4568332, NU3C6L86S12)"
+          },
+          "password": {
+            "description": "Account passwords, PINs, access keys, or verification answers (e.g., 27%alfalfa, temp1234, My mother's maiden name is Smith)"
+          },
+          "person_age": {
+            "description": "Number associated with an age (e.g., 27, 75)"
+          },
+          "person_name": {
+            "description": "Name of a person (e.g., Bob, Doug Jones, Dr. Kay Martinez, MD)"
+          },
+          "phone_number": {
+            "description": "Telephone or fax number"
+          },
+          "physical_attribute": {
+            "description": "Distinctive bodily attributes, including terms indicating race (e.g., I'm 190cm tall, He belongs to the Black students' association)"
+          },
+          "political_affiliation": {
+            "description": "Terms referring to a political party, movement, or ideology (e.g., Republican, Liberal)"
+          },
+          "religion": {
+            "description": "Terms indicating religious affiliation (e.g., Hindu, Catholic)"
+          },
+          "statistics": {
+            "description": "Medical statistics (e.g., 18%, 18 percent)"
+          },
+          "time": {
+            "description": "Expressions indicating clock times (e.g., 19:37:28, 10pm EST)"
+          },
+          "url": {
+            "description": "Internet addresses (e.g., https://www.assemblyai.com/)"
+          },
+          "us_social_security_number": {
+            "description": "Social Security Number or equivalent"
+          },
+          "username": {
+            "description": "Usernames, login names, or handles (e.g., @AssemblyAI)"
+          },
+          "vehicle_id": {
+            "description": "Vehicle identification numbers (VINs), vehicle serial numbers, and license plate numbers (e.g., 5FNRL38918B111818, BIF7547)"
+          },
+          "zodiac_sign": {
+            "description": "Names of Zodiac signs (e.g., Aries, Taurus)"
+          }
+        },
+        "x-aai-enum": {
+          "account_number": {
+            "label": "Account number"
+          },
+          "banking_information": {
+            "label": "Banking information"
+          },
+          "blood_type": {
+            "label": "Blood type"
+          },
+          "credit_card_cvv": {
+            "label": "Credit card CVV"
+          },
+          "credit_card_expiration": {
+            "label": "Credit card expiration"
+          },
+          "credit_card_number": {
+            "label": "Credit card number"
+          },
+          "date": {
+            "label": "Date"
+          },
+          "date_interval": {
+            "label": "Date interval"
+          },
+          "date_of_birth": {
+            "label": "Date of birth"
+          },
+          "drivers_license": {
+            "label": "Driver's license"
+          },
+          "drug": {
+            "label": "Drug"
+          },
+          "duration": {
+            "label": "Duration"
+          },
+          "email_address": {
+            "label": "Email address"
+          },
+          "event": {
+            "label": "Event"
+          },
+          "filename": {
+            "label": "Filename"
+          },
+          "gender_sexuality": {
+            "label": "Gender sexuality"
+          },
+          "healthcare_number": {
+            "label": "Healthcare number"
+          },
+          "injury": {
+            "label": "Injury"
+          },
+          "ip_address": {
+            "label": "IP address"
+          },
+          "language": {
+            "label": "Language"
+          },
+          "location": {
+            "label": "Location"
+          },
+          "marital_status": {
+            "label": "Marital status"
+          },
+          "medical_condition": {
+            "label": "Medical condition"
+          },
+          "medical_process": {
+            "label": "Medical process"
+          },
+          "money_amount": {
+            "label": "Money amount"
+          },
+          "nationality": {
+            "label": "Nationality"
+          },
+          "number_sequence": {
+            "label": "Number sequence"
+          },
+          "occupation": {
+            "label": "Occupation"
+          },
+          "organization": {
+            "label": "Organization"
+          },
+          "passport_number": {
+            "label": "Passport number"
+          },
+          "password": {
+            "label": "Password"
+          },
+          "person_age": {
+            "label": "Person age"
+          },
+          "person_name": {
+            "label": "Person name"
+          },
+          "phone_number": {
+            "label": "Phone number"
+          },
+          "physical_attribute": {
+            "label": "Physical attribute"
+          },
+          "political_affiliation": {
+            "label": "Political affiliation"
+          },
+          "religion": {
+            "label": "Religion"
+          },
+          "statistics": {
+            "label": "Statistics"
+          },
+          "time": {
+            "label": "Time"
+          },
+          "url": {
+            "label": "URL"
+          },
+          "us_social_security_number": {
+            "label": "US Social Security Number"
+          },
+          "username": {
+            "label": "Username"
+          },
+          "vehicle_id": {
+            "label": "Vehicle ID"
+          },
+          "zodiac_sign": {
+            "label": "Zodiac sign"
+          }
+        }
       },
       "SpeechModel": {
+        "x-label": "Speech model",
         "type": "string",
         "description": "The speech model to use for the transcription.",
         "x-fern-sdk-group-name": "transcripts",
-        "enum": ["best", "nano", "conformer-2"],
+        "enum": [
+          "best",
+          "nano",
+          "conformer-2"
+        ],
         "x-fern-enum": {
           "best": {
             "name": "Best",
@@ -1899,11 +2689,23 @@
           },
           "conformer-2": {
             "name": "Conformer2",
-            "description": "Conformer-2 is a heavy-duty model optimized for accuracy."
+            "description": "Deprecated: Conformer-2 is a heavy-duty model optimized for accuracy.\nThis option will stop working in the near future. Use best or nano instead.\n"
+          }
+        },
+        "x-aai-enum": {
+          "best": {
+            "label": "Best"
+          },
+          "nano": {
+            "label": "Nano"
+          },
+          "conformer-2": {
+            "label": "Conformer-2 (deprecated)"
           }
         }
       },
       "TranscriptLanguageCode": {
+        "x-label": "Language code",
         "type": "string",
         "description": "The language of your audio file. Possible values are found in [Supported Languages](https://www.assemblyai.com/docs/concepts/supported-languages).\nThe default value is 'en_us'.\n",
         "x-fern-sdk-group-name": "transcripts",
@@ -1919,23 +2721,419 @@
           "it",
           "pt",
           "nl",
-          "hi",
-          "ja",
+          "af",
+          "sq",
+          "am",
+          "ar",
+          "hy",
+          "as",
+          "az",
+          "ba",
+          "eu",
+          "be",
+          "bn",
+          "bs",
+          "br",
+          "bg",
+          "my",
+          "ca",
           "zh",
+          "hr",
+          "cs",
+          "da",
+          "et",
+          "fo",
           "fi",
+          "gl",
+          "ka",
+          "el",
+          "gu",
+          "ht",
+          "ha",
+          "haw",
+          "he",
+          "hi",
+          "hu",
+          "is",
+          "id",
+          "ja",
+          "jw",
+          "kn",
+          "kk",
+          "km",
           "ko",
+          "lo",
+          "la",
+          "lv",
+          "ln",
+          "lt",
+          "lb",
+          "mk",
+          "mg",
+          "ms",
+          "ml",
+          "mt",
+          "mi",
+          "mr",
+          "mn",
+          "ne",
+          "no",
+          "nn",
+          "oc",
+          "pa",
+          "ps",
+          "fa",
           "pl",
+          "ro",
           "ru",
+          "sa",
+          "sr",
+          "sn",
+          "sd",
+          "si",
+          "sk",
+          "sl",
+          "so",
+          "su",
+          "sw",
+          "sv",
+          "tl",
+          "tg",
+          "ta",
+          "tt",
+          "te",
+          "th",
+          "bo",
           "tr",
+          "tk",
           "uk",
-          "vi"
-        ]
+          "ur",
+          "uz",
+          "vi",
+          "cy",
+          "yi",
+          "yo"
+        ],
+        "x-aai-enum": {
+          "en": {
+            "label": "English (global)"
+          },
+          "en_au": {
+            "label": "English (Australian)"
+          },
+          "en_uk": {
+            "label": "English (British)"
+          },
+          "en_us": {
+            "label": "English (US)"
+          },
+          "es": {
+            "label": "Spanish"
+          },
+          "fr": {
+            "label": "French"
+          },
+          "de": {
+            "label": "German"
+          },
+          "it": {
+            "label": "Italian"
+          },
+          "pt": {
+            "label": "Portuguese"
+          },
+          "nl": {
+            "label": "Dutch"
+          },
+          "af": {
+            "label": "Afrikaans"
+          },
+          "sq": {
+            "label": "Albanian"
+          },
+          "am": {
+            "label": "Amharic"
+          },
+          "ar": {
+            "label": "Arabic"
+          },
+          "hy": {
+            "label": "Armenian"
+          },
+          "as": {
+            "label": "Assamese"
+          },
+          "az": {
+            "label": "Azerbaijani"
+          },
+          "ba": {
+            "label": "Bashkir"
+          },
+          "eu": {
+            "label": "Basque"
+          },
+          "be": {
+            "label": "Belarusian"
+          },
+          "bn": {
+            "label": "Bengali"
+          },
+          "bs": {
+            "label": "Bosnian"
+          },
+          "br": {
+            "label": "Breton"
+          },
+          "bg": {
+            "label": "Bulgarian"
+          },
+          "my": {
+            "label": "Burmese"
+          },
+          "ca": {
+            "label": "Catalan"
+          },
+          "zh": {
+            "label": "Chinese"
+          },
+          "hr": {
+            "label": "Croatian"
+          },
+          "cs": {
+            "label": "Czech"
+          },
+          "da": {
+            "label": "Danish"
+          },
+          "et": {
+            "label": "Estonian"
+          },
+          "fo": {
+            "label": "Faroese"
+          },
+          "fi": {
+            "label": "Finnish"
+          },
+          "gl": {
+            "label": "Galician"
+          },
+          "ka": {
+            "label": "Georgian"
+          },
+          "el": {
+            "label": "Greek"
+          },
+          "gu": {
+            "label": "Gujarati"
+          },
+          "ht": {
+            "label": "Haitian"
+          },
+          "ha": {
+            "label": "Hausa"
+          },
+          "haw": {
+            "label": "Hawaiian"
+          },
+          "he": {
+            "label": "Hebrew"
+          },
+          "hi": {
+            "label": "Hindi"
+          },
+          "hu": {
+            "label": "Hungarian"
+          },
+          "is": {
+            "label": "Icelandic"
+          },
+          "id": {
+            "label": "Indonesian"
+          },
+          "ja": {
+            "label": "Japanese"
+          },
+          "jw": {
+            "label": "Javanese"
+          },
+          "kn": {
+            "label": "Kannada"
+          },
+          "kk": {
+            "label": "Kazakh"
+          },
+          "km": {
+            "label": "Khmer"
+          },
+          "ko": {
+            "label": "Korean"
+          },
+          "lo": {
+            "label": "Lao"
+          },
+          "la": {
+            "label": "Latin"
+          },
+          "lv": {
+            "label": "Latvian"
+          },
+          "ln": {
+            "label": "Lingala"
+          },
+          "lt": {
+            "label": "Lithuanian"
+          },
+          "lb": {
+            "label": "Luxembourgish"
+          },
+          "mk": {
+            "label": "Macedonian"
+          },
+          "mg": {
+            "label": "Malagasy"
+          },
+          "ms": {
+            "label": "Malay"
+          },
+          "ml": {
+            "label": "Malayalam"
+          },
+          "mt": {
+            "label": "Maltese"
+          },
+          "mi": {
+            "label": "Maori"
+          },
+          "mr": {
+            "label": "Marathi"
+          },
+          "mn": {
+            "label": "Mongolian"
+          },
+          "ne": {
+            "label": "Nepali"
+          },
+          "no": {
+            "label": "Norwegian"
+          },
+          "nn": {
+            "label": "Norwegian Nynorsk"
+          },
+          "oc": {
+            "label": "Occitan"
+          },
+          "pa": {
+            "label": "Panjabi"
+          },
+          "ps": {
+            "label": "Pashto"
+          },
+          "fa": {
+            "label": "Persian"
+          },
+          "pl": {
+            "label": "Polish"
+          },
+          "ro": {
+            "label": "Romanian"
+          },
+          "ru": {
+            "label": "Russian"
+          },
+          "sa": {
+            "label": "Sanskrit"
+          },
+          "sr": {
+            "label": "Serbian"
+          },
+          "sn": {
+            "label": "Shona"
+          },
+          "sd": {
+            "label": "Sindhi"
+          },
+          "si": {
+            "label": "Sinhala"
+          },
+          "sk": {
+            "label": "Slovak"
+          },
+          "sl": {
+            "label": "Slovenian"
+          },
+          "so": {
+            "label": "Somali"
+          },
+          "su": {
+            "label": "Sundanese"
+          },
+          "sw": {
+            "label": "Swahili"
+          },
+          "sv": {
+            "label": "Swedish"
+          },
+          "tl": {
+            "label": "Tagalog"
+          },
+          "tg": {
+            "label": "Tajik"
+          },
+          "ta": {
+            "label": "Tamil"
+          },
+          "tt": {
+            "label": "Tatar"
+          },
+          "te": {
+            "label": "Telugu"
+          },
+          "th": {
+            "label": "Thai"
+          },
+          "bo": {
+            "label": "Tibetan"
+          },
+          "tr": {
+            "label": "Turkish"
+          },
+          "tk": {
+            "label": "Turkmen"
+          },
+          "uk": {
+            "label": "Ukrainian"
+          },
+          "ur": {
+            "label": "Urdu"
+          },
+          "uz": {
+            "label": "Uzbek"
+          },
+          "vi": {
+            "label": "Vietnamese"
+          },
+          "cy": {
+            "label": "Welsh"
+          },
+          "yi": {
+            "label": "Yiddish"
+          },
+          "yo": {
+            "label": "Yoruba"
+          }
+        }
       },
       "TranscriptStatus": {
+        "x-label": "Status",
         "type": "string",
         "description": "The status of your transcript. Possible values are queued, processing, completed, or error.",
         "x-fern-sdk-group-name": "transcripts",
-        "enum": ["queued", "processing", "completed", "error"],
+        "enum": [
+          "queued",
+          "processing",
+          "completed",
+          "error"
+        ],
         "x-fern-enum": {
           "queued": {
             "description": "The audio file is in the queue to be processed by the API."
@@ -1949,13 +3147,31 @@
           "error": {
             "description": "An error occurred while processing the audio file."
           }
+        },
+        "x-aai-enum": {
+          "queued": {
+            "label": "Queued"
+          },
+          "processing": {
+            "label": "Processing"
+          },
+          "completed": {
+            "label": "Completed"
+          },
+          "error": {
+            "label": "Error"
+          }
         }
       },
       "TranscriptReadyStatus": {
+        "x-label": "Status",
         "type": "string",
         "description": "The status of the transcript. Either completed or error.",
         "x-fern-sdk-group-name": "transcripts",
-        "enum": ["completed", "error"],
+        "enum": [
+          "completed",
+          "error"
+        ],
         "x-fern-enum": {
           "completed": {
             "description": "The transcript job has been completed successfully."
@@ -1963,20 +3179,144 @@
           "error": {
             "description": "An error occurred while processing the audio file."
           }
+        },
+        "x-aai-enum": {
+          "completed": {
+            "label": "Completed"
+          },
+          "error": {
+            "label": "Error"
+          }
         }
       },
       "Transcript": {
+        "x-label": "Transcript",
         "description": "A transcript object",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
         "properties": {
           "id": {
+            "x-label": "ID",
             "description": "The unique identifier of your transcript",
             "type": "string",
             "format": "uuid"
           },
+          "language_model": {
+            "x-label": "Language model",
+            "description": "The language model that was used for the transcript",
+            "type": "string",
+            "deprecated": true
+          },
+          "acoustic_model": {
+            "x-label": "Acoustic model",
+            "description": "The acoustic model that was used for the transcript",
+            "type": "string",
+            "deprecated": true
+          },
+          "status": {
+            "x-label": "Status",
+            "description": "The status of your transcript. Possible values are queued, processing, completed, or error.",
+            "$ref": "#/components/schemas/TranscriptStatus"
+          },
+          "language_code": {
+            "x-label": "Language code",
+            "description": "The language of your audio file.\nPossible values are found in [Supported Languages](https://www.assemblyai.com/docs/concepts/supported-languages).\nThe default value is 'en_us'.\n",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptLanguageCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "x-ts-type": "LiteralUnion<TranscriptLanguageCode, string>",
+            "x-go-type": "TranscriptLanguageCode"
+          },
+          "audio_url": {
+            "x-label": "Audio URL",
+            "description": "The URL of the media that was transcribed",
+            "type": "string",
+            "format": "url"
+          },
+          "text": {
+            "x-label": "Text",
+            "description": "The textual transcript of your media file",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "words": {
+            "x-label": "Words",
+            "description": "An array of temporally-sequential word objects, one for each word in the transcript.\nSee [Speech recognition](https://www.assemblyai.com/docs/models/speech-recognition) for more information.\n",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "x-label": "Word",
+              "$ref": "#/components/schemas/TranscriptWord"
+            }
+          },
+          "utterances": {
+            "x-label": "Utterances",
+            "description": "When dual_channel or speaker_labels is enabled, a list of turn-by-turn utterance objects.\nSee [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more information.\n",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "x-label": "Utterance",
+              "$ref": "#/components/schemas/TranscriptUtterance"
+            }
+          },
+          "confidence": {
+            "x-label": "Confidence",
+            "description": "The confidence score for the transcript, between 0.0 (low confidence) and 1.0 (high confidence)",
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "audio_duration": {
+            "x-label": "Audio duration",
+            "description": "The duration of this transcript object's media file, in seconds",
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "punctuate": {
+            "x-label": "Punctuate",
+            "description": "Whether Automatic Punctuation is enabled, either true or false",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "format_text": {
+            "x-label": "Format text",
+            "description": "Whether Text Formatting is enabled, either true or false",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "dual_channel": {
+            "x-label": "Dual channel",
+            "description": "Whether [Dual channel transcription](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) was enabled in the transcription request, either true or false",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "speech_model": {
+            "x-label": "Speech model",
             "description": "The speech model used for the transcription. When `null`, the default model is used.",
             "default": null,
             "oneOf": [
@@ -1988,107 +3328,53 @@
               }
             ]
           },
-          "language_model": {
-            "description": "The language model that was used for the transcript",
-            "type": "string",
-            "deprecated": true
-          },
-          "acoustic_model": {
-            "description": "The acoustic model that was used for the transcript",
-            "type": "string",
-            "deprecated": true
-          },
-          "status": {
-            "description": "The status of your transcript. Possible values are queued, processing, completed, or error.",
-            "$ref": "#/components/schemas/TranscriptStatus"
-          },
-          "language_code": {
-            "description": "The language of your audio file.\nPossible values are found in [Supported Languages](https://www.assemblyai.com/docs/concepts/supported-languages).\nThe default value is 'en_us'.\n",
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TranscriptLanguageCode"
-              },
-              {
-                "type": "string"
-              }
-            ],
-            "x-ts-type": "LiteralUnion<TranscriptLanguageCode, string>"
-          },
-          "audio_url": {
-            "description": "The URL of the media that was transcribed",
-            "type": "string",
-            "format": "url"
-          },
-          "text": {
-            "description": "The textual transcript of your media file",
-            "type": ["string", "null"]
-          },
-          "words": {
-            "description": "An array of temporally-sequential word objects, one for each word in the transcript.\nSee [Speech recognition](https://www.assemblyai.com/docs/models/speech-recognition) for more information.\n",
-            "type": ["array", "null"],
-            "items": {
-              "$ref": "#/components/schemas/TranscriptWord"
-            }
-          },
-          "utterances": {
-            "description": "When dual_channel or speaker_labels is enabled, a list of turn-by-turn utterance objects.\nSee [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more information.\n",
-            "type": ["array", "null"],
-            "items": {
-              "$ref": "#/components/schemas/TranscriptUtterance"
-            }
-          },
-          "confidence": {
-            "description": "The confidence score for the transcript, between 0.0 (low confidence) and 1.0 (high confidence)",
-            "type": ["number", "null"],
-            "format": "double",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "audio_duration": {
-            "description": "The duration of this transcript object's media file, in seconds",
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "punctuate": {
-            "description": "Whether Automatic Punctuation is enabled, either true or false",
-            "type": ["boolean", "null"]
-          },
-          "format_text": {
-            "description": "Whether Text Formatting is enabled, either true or false",
-            "type": ["boolean", "null"]
-          },
-          "dual_channel": {
-            "description": "Whether [Dual channel transcription](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) was enabled in the transcription request, either true or false",
-            "type": ["boolean", "null"]
-          },
           "webhook_url": {
-            "description": "The URL to which we send webhooks upon trancription completion",
-            "type": ["string", "null"],
+            "x-label": "Webhook URL",
+            "description": "The URL to which we send webhooks upon transcription completion",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "url"
           },
           "webhook_status_code": {
+            "x-label": "Webhook HTTP status code",
             "description": "The status code we received from your server when delivering your webhook, if a webhook URL was provided",
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "webhook_auth": {
+            "x-label": "Webhook auth enabled",
             "description": "Whether webhook authentication details were provided",
             "type": "boolean"
           },
           "webhook_auth_header_name": {
+            "x-label": "Webhook auth header name",
             "description": "The header name which should be sent back with webhook calls",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "speed_boost": {
+            "x-label": "Speed boost",
             "description": "Whether speed boost is enabled",
-            "type": ["boolean", "null"],
+            "type": [
+              "boolean",
+              "null"
+            ],
             "deprecated": true
           },
           "auto_highlights": {
+            "x-label": "Key Phrases",
             "description": "Whether Key Phrases is enabled, either true or false",
             "type": "boolean"
           },
           "auto_highlights_result": {
-            "description": "An array of results for the Key Phrases model, if it is enabled.\nSee [Key phrases](https://www.assemblyai.com/docs/models/key-phrases) for more information.\n",
+            "x-label": "Key Phrases result",
+            "description": "An array of results for the Key Phrases model, if it is enabled.\nSee [Key Phrases](https://www.assemblyai.com/docs/models/key-phrases) for more information.\n",
             "oneOf": [
               {
                 "$ref": "#/components/schemas/AutoHighlightsResult"
@@ -2099,37 +3385,61 @@
             ]
           },
           "audio_start_from": {
+            "x-label": "Audio start from",
             "description": "The point in time, in milliseconds, in the file at which the transcription was started",
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "audio_end_at": {
+            "x-label": "Audio end at",
             "description": "The point in time, in milliseconds, in the file at which the transcription was terminated",
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "word_boost": {
+            "x-label": "Word boost",
             "description": "The list of custom vocabulary to boost transcription probability for",
             "type": "array",
             "items": {
+              "x-label": "Boosted word",
               "type": "string"
             }
           },
           "boost_param": {
+            "x-label": "Boost",
             "description": "The word boost parameter value",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "filter_profanity": {
+            "x-label": "Filter profanity",
             "description": "Whether [Profanity Filtering](https://www.assemblyai.com/docs/models/speech-recognition#profanity-filtering) is enabled, either true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "redact_pii": {
+            "x-label": "Redact PII",
             "description": "Whether [PII Redaction](https://www.assemblyai.com/docs/models/pii-redaction) is enabled, either true or false",
             "type": "boolean"
           },
           "redact_pii_audio": {
+            "x-label": "Redact PII audio",
             "description": "Whether a redacted version of the audio file was generated,\neither true or false. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information.\n",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "redact_pii_audio_quality": {
+            "x-label": "Redact PII audio quality",
             "description": "The audio quality of the PII-redacted audio file, if redact_pii_audio is enabled.\nSee [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information.\n",
             "oneOf": [
               {
@@ -2141,29 +3451,48 @@
             ]
           },
           "redact_pii_policies": {
+            "x-label": "Redact PII policies",
             "description": "The list of PII Redaction policies that were enabled, if PII Redaction is enabled.\nSee [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information.\n",
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
+              "x-label": "PII policy",
               "$ref": "#/components/schemas/PiiPolicy"
             }
           },
           "redact_pii_sub": {
+            "x-label": "Redact PII substitution",
             "description": "The replacement logic for detected PII, can be \"entity_type\" or \"hash\". See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details.",
             "$ref": "#/components/schemas/SubstitutionPolicy"
           },
           "speaker_labels": {
+            "x-label": "Speaker labels",
             "description": "Whether [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "speakers_expected": {
+            "x-label": "Speakers expected",
             "description": "Tell the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.",
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "content_safety": {
+            "x-label": "Content Moderation",
             "description": "Whether [Content Moderation](https://www.assemblyai.com/docs/models/content-moderation) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "content_safety_labels": {
+            "x-label": "Content Moderation labels",
             "description": "An array of results for the Content Moderation model, if it is enabled.\nSee [Content moderation](https://www.assemblyai.com/docs/models/content-moderation) for more information.\n",
             "oneOf": [
               {
@@ -2175,10 +3504,15 @@
             ]
           },
           "iab_categories": {
+            "x-label": "Topic Detection",
             "description": "Whether [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "iab_categories_result": {
+            "x-label": "Topic Detection result",
             "description": "The result of the Topic Detection model, if it is enabled.\nSee [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection) for more information.\n",
             "oneOf": [
               {
@@ -2190,92 +3524,160 @@
             ]
           },
           "language_detection": {
+            "x-label": "Language detection",
             "description": "Whether [Automatic language detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection) is enabled, either true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "custom_spelling": {
+            "x-label": "Custom spellings",
             "description": "Customize how words are spelled and formatted using to and from values",
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
+              "x-label": "Custom spelling",
               "$ref": "#/components/schemas/TranscriptCustomSpelling"
             }
           },
           "auto_chapters": {
+            "x-label": "Auto Chapters enabled",
             "description": "Whether [Auto Chapters](https://www.assemblyai.com/docs/models/auto-chapters) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "chapters": {
+            "x-label": "Chapters",
             "description": "An array of temporally sequential chapters for the audio file",
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
+              "x-label": "Chapter",
               "$ref": "#/components/schemas/Chapter"
             }
           },
           "summarization": {
+            "x-label": "Summarization enabled",
             "description": "Whether [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled, either true or false",
             "type": "boolean"
           },
           "summary_type": {
+            "x-label": "Summary type",
             "description": "The type of summary generated, if [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "summary_model": {
+            "x-label": "Summary model",
             "description": "The Summarization model used to generate the summary,\nif [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled\n",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "summary": {
+            "x-label": "Summary",
             "description": "The generated summary of the media file, if [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "custom_topics": {
+            "x-label": "Custom topics enabled",
             "description": "Whether custom topics is enabled, either true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "topics": {
+            "x-label": "Topics",
             "description": "The list of custom topics provided if custom topics is enabled",
             "type": "array",
             "items": {
+              "x-label": "Topic",
               "type": "string"
             }
           },
           "disfluencies": {
+            "x-label": "Disfluencies",
             "description": "Transcribe Filler Words, like \"umm\", in your media file; can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "sentiment_analysis": {
+            "x-label": "Sentiment Analysis",
             "description": "Whether [Sentiment Analysis](https://www.assemblyai.com/docs/models/sentiment-analysis) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "sentiment_analysis_results": {
-            "description": "An array of results for the Sentiment Analysis model, if it is enabled.\nSee [Sentiment analysis](https://www.assemblyai.com/docs/models/sentiment-analysis) for more information.\n",
-            "type": ["array", "null"],
+            "x-label": "Sentiment Analysis results",
+            "description": "An array of results for the Sentiment Analysis model, if it is enabled.\nSee [Sentiment Analysis](https://www.assemblyai.com/docs/models/sentiment-analysis) for more information.\n",
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
+              "x-label": "Sentiment Analysis result",
               "$ref": "#/components/schemas/SentimentAnalysisResult"
             }
           },
           "entity_detection": {
+            "x-label": "Entity Detection",
             "description": "Whether [Entity Detection](https://www.assemblyai.com/docs/models/entity-detection) is enabled, can be true or false",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "entities": {
+            "x-label": "Entities",
             "description": "An array of results for the Entity Detection model, if it is enabled.\nSee [Entity detection](https://www.assemblyai.com/docs/models/entity-detection) for more information.\n",
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
+              "x-label": "Entity",
               "$ref": "#/components/schemas/Entity"
             }
           },
           "speech_threshold": {
+            "x-label": "Speech threshold",
             "description": "Defaults to null. Reject audio files that contain less than this fraction of speech.\nValid values are in the range [0, 1] inclusive.\n",
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
             "maximum": 1,
             "format": "float"
           },
           "throttled": {
+            "x-label": "Throttled",
             "description": "True while a request is throttled and false when a request is no longer throttled",
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "error": {
+            "x-label": "Error",
             "description": "Error message of why the transcript failed",
             "type": "string"
           }
@@ -2738,7 +4140,11 @@
           "auto_highlights": true,
           "audio_start_from": 10,
           "audio_end_at": 280,
-          "word_boost": ["aws", "azure", "google cloud"],
+          "word_boost": [
+            "aws",
+            "azure",
+            "google cloud"
+          ],
           "boost_param": "high",
           "filter_profanity": true,
           "redact_pii": true,
@@ -2974,23 +4380,32 @@
         }
       },
       "TopicDetectionModelResult": {
+        "x-label": "Topic Detection result",
         "description": "The result of the Topic Detection model, if it is enabled.\nSee [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection) for more information.\n",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
-        "required": ["status", "results", "summary"],
+        "required": [
+          "status",
+          "results",
+          "summary"
+        ],
         "properties": {
           "status": {
+            "x-label": "Status",
             "description": "The status of the Topic Detection model. Either success, or unavailable in the rare case that the model failed.",
             "$ref": "#/components/schemas/AudioIntelligenceModelStatus"
           },
           "results": {
+            "x-label": "Results",
             "description": "An array of results for the Topic Detection model",
             "type": "array",
             "items": {
+              "x-label": "Topic Detection result",
               "$ref": "#/components/schemas/TopicDetectionResult"
             }
           },
           "summary": {
+            "x-label": "Summary",
             "description": "The overall relevance of topic to the entire audio file",
             "type": "object",
             "additionalProperties": {
@@ -3079,22 +4494,32 @@
         }
       },
       "ContentSafetyLabelsResult": {
+        "x-label": "Content Moderation labels result",
         "description": "An array of results for the Content Moderation model, if it is enabled.\nSee [Content moderation](https://www.assemblyai.com/docs/models/content-moderation) for more information.\n",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
-        "required": ["status", "results", "summary", "severity_score_summary"],
+        "required": [
+          "status",
+          "results",
+          "summary",
+          "severity_score_summary"
+        ],
         "properties": {
           "status": {
+            "x-label": "Status",
             "description": "The status of the Content Moderation model. Either success, or unavailable in the rare case that the model failed.",
             "$ref": "#/components/schemas/AudioIntelligenceModelStatus"
           },
           "results": {
+            "x-label": "Results",
             "type": "array",
             "items": {
+              "x-label": "Content Moderation label result",
               "$ref": "#/components/schemas/ContentSafetyLabelResult"
             }
           },
           "summary": {
+            "x-label": "Summary",
             "description": "A summary of the Content Moderation confidence results for the entire audio file",
             "type": "object",
             "additionalProperties": {
@@ -3106,6 +4531,7 @@
             }
           },
           "severity_score_summary": {
+            "x-label": "Severity score summary",
             "description": "A summary of the Content Moderation severity results for the entire audio file",
             "type": "object",
             "additionalProperties": {
@@ -3152,29 +4578,41 @@
         }
       },
       "Chapter": {
+        "x-label": "Chapter",
         "description": "Chapter of the audio file",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
-        "required": ["gist", "headline", "summary", "start", "end"],
+        "required": [
+          "gist",
+          "headline",
+          "summary",
+          "start",
+          "end"
+        ],
         "properties": {
           "gist": {
+            "x-label": "Gist",
             "description": "An ultra-short summary (just a few words) of the content spoken in the chapter",
             "type": "string"
           },
           "headline": {
+            "x-label": "Headline",
             "description": "A single sentence summary of the content spoken during the chapter",
             "type": "string"
           },
           "summary": {
+            "x-label": "Summary",
             "description": "A one paragraph summary of the content spoken during the chapter",
             "type": "string"
           },
           "start": {
+            "x-label": "Start",
             "description": "The starting time, in milliseconds, for the chapter",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "description": "The starting time, in milliseconds, for the chapter",
             "type": "integer"
           }
@@ -3188,25 +4626,35 @@
         }
       },
       "Entity": {
+        "x-label": "Entity",
         "description": "A detected entity",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
-        "required": ["entity_type", "text", "start", "end"],
+        "required": [
+          "entity_type",
+          "text",
+          "start",
+          "end"
+        ],
         "properties": {
           "entity_type": {
+            "x-label": "Entity type",
             "description": "The type of entity for the detected entity",
             "$ref": "#/components/schemas/EntityType"
           },
           "text": {
+            "x-label": "Text",
             "description": "The text for the detected entity",
             "type": "string"
           },
           "start": {
+            "x-label": "Start",
             "description": "The starting time, in milliseconds, at which the detected entity appears in the audio file",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "description": "The ending time, in milliseconds, for the detected entity in the audio file",
             "type": "integer"
           }
@@ -3219,41 +4667,60 @@
         }
       },
       "EntityType": {
+        "x-label": "Entity type",
         "description": "The type of entity for the detected entity",
         "x-fern-sdk-group-name": "transcripts",
         "type": "string",
         "enum": [
+          "account_number",
           "banking_information",
           "blood_type",
           "credit_card_cvv",
           "credit_card_expiration",
           "credit_card_number",
           "date",
+          "date_interval",
           "date_of_birth",
           "drivers_license",
           "drug",
+          "duration",
           "email_address",
           "event",
+          "filename",
+          "gender_sexuality",
+          "healthcare_number",
           "injury",
+          "ip_address",
           "language",
           "location",
+          "marital_status",
           "medical_condition",
           "medical_process",
           "money_amount",
           "nationality",
+          "number_sequence",
           "occupation",
           "organization",
+          "passport_number",
           "password",
           "person_age",
           "person_name",
           "phone_number",
+          "physical_attribute",
           "political_affiliation",
           "religion",
+          "statistics",
           "time",
           "url",
-          "us_social_security_number"
+          "us_social_security_number",
+          "username",
+          "vehicle_id",
+          "zodiac_sign"
         ],
         "x-fern-enum": {
+          "account_number": {
+            "description": "Customer account or membership identification number (e.g., Policy No. 10042992, Member ID: HZ-5235-001)"
+          },
           "banking_information": {
             "description": "Banking information, including account and routing numbers"
           },
@@ -3261,7 +4728,7 @@
             "description": "Blood type (e.g., O-, AB positive)"
           },
           "credit_card_cvv": {
-            "description": "Credit card verification code (e.g., CVV: 080)\n"
+            "description": "Credit card verification code (e.g., CVV: 080)"
           },
           "credit_card_expiration": {
             "description": "Expiration date of a credit card"
@@ -3272,14 +4739,20 @@
           "date": {
             "description": "Specific calendar date (e.g., December 18)"
           },
+          "date_interval": {
+            "description": "Broader time periods, including date ranges, months, seasons, years, and decades (e.g., 2020-2021, 5-9 May, January 1984)"
+          },
           "date_of_birth": {
-            "description": "Date of Birth (e.g., Date of Birth: March 7, 1961)\n"
+            "description": "Date of birth (e.g., Date of Birth: March 7,1961)"
           },
           "drivers_license": {
-            "description": "Driver's license number (e.g., DL #356933-540)\n"
+            "description": "Driver's license number. (e.g., DL# 356933-540)"
           },
           "drug": {
             "description": "Medications, vitamins, or supplements (e.g., Advil, Acetaminophen, Panadol)"
+          },
+          "duration": {
+            "description": "Periods of time, specified as a number and a unit of time (e.g., 8 months, 2 years)"
           },
           "email_address": {
             "description": "Email address (e.g., support@assemblyai.com)"
@@ -3287,14 +4760,29 @@
           "event": {
             "description": "Name of an event or holiday (e.g., Olympics, Yom Kippur)"
           },
+          "filename": {
+            "description": "Names of computer files, including the extension or filepath (e.g., Taxes/2012/brad-tax-returns.pdf)"
+          },
+          "gender_sexuality": {
+            "description": "Terms indicating gender identity or sexual orientation, including slang terms (e.g., female, bisexual, trans)"
+          },
+          "healthcare_number": {
+            "description": "Healthcare numbers and health plan beneficiary numbers (e.g., Policy No.: 5584-486-674-YM)"
+          },
           "injury": {
             "description": "Bodily injury (e.g., I broke my arm, I have a sprained wrist)"
+          },
+          "ip_address": {
+            "description": "Internet IP address, including IPv4 and IPv6 formats (e.g., 192.168.0.1)"
           },
           "language": {
             "description": "Name of a natural language (e.g., Spanish, French)"
           },
           "location": {
-            "description": "Any location reference including mailing address, postal code, city, state, province, or country"
+            "description": "Any Location reference including mailing address, postal code, city, state, province, country, or coordinates. (e.g., Lake Victoria, 145 Windsor St., 90210)"
+          },
+          "marital_status": {
+            "description": "Terms indicating marital status (e.g., Single, common-law, ex-wife, married)"
           },
           "medical_condition": {
             "description": "Name of a medical condition, disease, syndrome, deficit, or disorder (e.g., chronic fatigue syndrome, arrhythmia, depression)"
@@ -3308,11 +4796,17 @@
           "nationality": {
             "description": "Terms indicating nationality, ethnicity, or race (e.g., American, Asian, Caucasian)"
           },
+          "number_sequence": {
+            "description": "Numerical PII (including alphanumeric strings) that doesn't fall under other categories"
+          },
           "occupation": {
             "description": "Job title or profession (e.g., professor, actors, engineer, CPA)"
           },
           "organization": {
-            "description": "Name of an organization (e.g., CNN, McDonalds, University of Alaska)"
+            "description": "Name of an organization (e.g., CNN, McDonalds, University of Alaska, Northwest General Hospital)"
+          },
+          "passport_number": {
+            "description": "Passport numbers, issued by any country (e.g., PA4568332, NU3C6L86S12)"
           },
           "password": {
             "description": "Account passwords, PINs, access keys, or verification answers (e.g., 27%alfalfa, temp1234, My mother's maiden name is Smith)"
@@ -3321,10 +4815,13 @@
             "description": "Number associated with an age (e.g., 27, 75)"
           },
           "person_name": {
-            "description": "Name of a person (e.g., Bob, Doug Jones)"
+            "description": "Name of a person (e.g., Bob, Doug Jones, Dr. Kay Martinez, MD)"
           },
           "phone_number": {
             "description": "Telephone or fax number"
+          },
+          "physical_attribute": {
+            "description": "Distinctive bodily attributes, including terms indicating race (e.g., I'm 190cm tall, He belongs to the Black students' association)"
           },
           "political_affiliation": {
             "description": "Terms referring to a political party, movement, or ideology (e.g., Republican, Liberal)"
@@ -3332,41 +4829,199 @@
           "religion": {
             "description": "Terms indicating religious affiliation (e.g., Hindu, Catholic)"
           },
+          "statistics": {
+            "description": "Medical statistics (e.g., 18%, 18 percent)"
+          },
           "time": {
             "description": "Expressions indicating clock times (e.g., 19:37:28, 10pm EST)"
           },
           "url": {
-            "description": "Internet addresses (e.g., www.assemblyai.com)"
+            "description": "Internet addresses (e.g., https://www.assemblyai.com/)"
           },
           "us_social_security_number": {
             "description": "Social Security Number or equivalent"
+          },
+          "username": {
+            "description": "Usernames, login names, or handles (e.g., @AssemblyAI)"
+          },
+          "vehicle_id": {
+            "description": "Vehicle identification numbers (VINs), vehicle serial numbers, and license plate numbers (e.g., 5FNRL38918B111818, BIF7547)"
+          },
+          "zodiac_sign": {
+            "description": "Names of Zodiac signs (e.g., Aries, Taurus)"
+          }
+        },
+        "x-aai-enum": {
+          "account_number": {
+            "label": "Account number"
+          },
+          "banking_information": {
+            "label": "Banking information"
+          },
+          "blood_type": {
+            "label": "Blood type"
+          },
+          "credit_card_cvv": {
+            "label": "Credit card CVV"
+          },
+          "credit_card_expiration": {
+            "label": "Credit card expiration"
+          },
+          "credit_card_number": {
+            "label": "Credit card number"
+          },
+          "date": {
+            "label": "Date"
+          },
+          "date_interval": {
+            "label": "Date interval"
+          },
+          "date_of_birth": {
+            "label": "Date of birth"
+          },
+          "drivers_license": {
+            "label": "Driver's license"
+          },
+          "drug": {
+            "label": "Drug"
+          },
+          "duration": {
+            "label": "Duration"
+          },
+          "email_address": {
+            "label": "Email address"
+          },
+          "event": {
+            "label": "Event"
+          },
+          "filename": {
+            "label": "Filename"
+          },
+          "gender_sexuality": {
+            "label": "Gender sexuality"
+          },
+          "healthcare_number": {
+            "label": "Healthcare number"
+          },
+          "injury": {
+            "label": "Injury"
+          },
+          "ip_address": {
+            "label": "IP address"
+          },
+          "language": {
+            "label": "Language"
+          },
+          "location": {
+            "label": "Location"
+          },
+          "marital_status": {
+            "label": "Marital status"
+          },
+          "medical_condition": {
+            "label": "Medical condition"
+          },
+          "medical_process": {
+            "label": "Medical process"
+          },
+          "money_amount": {
+            "label": "Money amount"
+          },
+          "nationality": {
+            "label": "Nationality"
+          },
+          "number_sequence": {
+            "label": "Number sequence"
+          },
+          "occupation": {
+            "label": "Occupation"
+          },
+          "organization": {
+            "label": "Organization"
+          },
+          "passport_number": {
+            "label": "Passport number"
+          },
+          "password": {
+            "label": "Password"
+          },
+          "person_age": {
+            "label": "Person age"
+          },
+          "person_name": {
+            "label": "Person name"
+          },
+          "phone_number": {
+            "label": "Phone number"
+          },
+          "physical_attribute": {
+            "label": "Physical attribute"
+          },
+          "political_affiliation": {
+            "label": "Political affiliation"
+          },
+          "religion": {
+            "label": "Religion"
+          },
+          "statistics": {
+            "label": "Statistics"
+          },
+          "time": {
+            "label": "Time"
+          },
+          "url": {
+            "label": "URL"
+          },
+          "us_social_security_number": {
+            "label": "US Social Security Number"
+          },
+          "username": {
+            "label": "Username"
+          },
+          "vehicle_id": {
+            "label": "Vehicle ID"
+          },
+          "zodiac_sign": {
+            "label": "Zodiac sign"
           }
         }
       },
       "SentimentAnalysisResult": {
-        "description": "The result of the sentiment analysis model",
+        "x-label": "Sentiment Analysis result",
+        "description": "The result of the Sentiment Analysis model",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
-        "required": ["text", "start", "end", "sentiment", "confidence"],
+        "required": [
+          "text",
+          "start",
+          "end",
+          "sentiment",
+          "confidence"
+        ],
         "properties": {
           "text": {
+            "x-label": "Text",
             "description": "The transcript of the sentence",
             "type": "string"
           },
           "start": {
+            "x-label": "Start",
             "description": "The starting time, in milliseconds, of the sentence",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "description": "The ending time, in milliseconds, of the sentence",
             "type": "integer"
           },
           "sentiment": {
+            "x-label": "Sentiment",
             "description": "The detected sentiment for the sentence, one of POSITIVE, NEUTRAL, NEGATIVE",
             "$ref": "#/components/schemas/Sentiment"
           },
           "confidence": {
+            "x-label": "Confidence",
             "description": "The confidence score for the detected sentiment of the sentence, from 0 to 1",
             "type": "number",
             "format": "double",
@@ -3374,8 +5029,12 @@
             "maximum": 1
           },
           "speaker": {
+            "x-label": "Speaker",
             "description": "The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "example": {
@@ -3388,28 +5047,54 @@
         }
       },
       "Sentiment": {
+        "x-label": "Sentiment",
         "x-fern-sdk-group-name": "transcripts",
-        "enum": ["POSITIVE", "NEUTRAL", "NEGATIVE"]
+        "enum": [
+          "POSITIVE",
+          "NEUTRAL",
+          "NEGATIVE"
+        ],
+        "x-aai-enum": {
+          "POSITIVE": {
+            "label": "Positive"
+          },
+          "NEUTRAL": {
+            "label": "Neutral"
+          },
+          "NEGATIVE": {
+            "label": "Negative"
+          }
+        }
       },
       "TopicDetectionResult": {
+        "x-label": "Topic detection result",
         "description": "The result of the topic detection model",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "properties": {
           "text": {
+            "x-label": "Text",
             "description": "The text in the transcript in which a detected topic occurs",
             "type": "string"
           },
           "labels": {
+            "x-label": "Labels",
             "type": "array",
             "items": {
+              "x-label": "Label",
               "type": "object",
               "additionalProperties": false,
-              "required": ["relevance", "label"],
+              "required": [
+                "relevance",
+                "label"
+              ],
               "properties": {
                 "relevance": {
+                  "x-label": "Relevance",
                   "description": "How relevant the detected topic is of a detected topic",
                   "type": "number",
                   "format": "double",
@@ -3417,6 +5102,7 @@
                   "maximum": 1
                 },
                 "label": {
+                  "x-label": "Label",
                   "description": "The IAB taxonomical label for the label of the detected topic, where > denotes supertopic/subtopic relationship",
                   "type": "string"
                 }
@@ -3424,6 +5110,7 @@
             }
           },
           "timestamp": {
+            "x-label": "Timestamp",
             "$ref": "#/components/schemas/Timestamp"
           }
         },
@@ -3478,16 +5165,23 @@
         }
       },
       "ContentSafetyLabel": {
+        "x-label": "Content Moderation label",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["label", "confidence", "severity"],
+        "required": [
+          "label",
+          "confidence",
+          "severity"
+        ],
         "properties": {
           "label": {
+            "x-label": "Label",
             "description": "The label of the sensitive topic",
             "type": "string"
           },
           "confidence": {
+            "x-label": "Confidence",
             "description": "The confidence score for the topic being discussed, from 0 to 1",
             "type": "number",
             "format": "double",
@@ -3495,6 +5189,7 @@
             "maximum": 1
           },
           "severity": {
+            "x-label": "Severity",
             "description": "How severely the topic is discussed in the section, from 0 to 1",
             "type": "number",
             "format": "double",
@@ -3509,6 +5204,7 @@
         }
       },
       "ContentSafetyLabelResult": {
+        "x-label": "Content Moderation label result",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
@@ -3521,25 +5217,31 @@
         ],
         "properties": {
           "text": {
+            "x-label": "Text",
             "description": "The transcript of the section flagged by the Content Moderation model",
             "type": "string"
           },
           "labels": {
+            "x-label": "Labels",
             "description": "An array of safety labels, one per sensitive topic that was detected in the section",
             "type": "array",
             "items": {
+              "x-label": "Label",
               "$ref": "#/components/schemas/ContentSafetyLabel"
             }
           },
           "sentences_idx_start": {
+            "x-label": "Sentence index start",
             "description": "The sentence index at which the section begins",
             "type": "integer"
           },
           "sentences_idx_end": {
+            "x-label": "Sentence index end",
             "description": "The sentence index at which the section ends",
             "type": "integer"
           },
           "timestamp": {
+            "x-label": "Timestamp",
             "description": "Timestamp information for the section",
             "$ref": "#/components/schemas/Timestamp"
           }
@@ -3562,23 +5264,31 @@
         }
       },
       "SeverityScoreSummary": {
+        "x-label": "Severity score summary",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
-        "required": ["low", "medium", "high"],
+        "required": [
+          "low",
+          "medium",
+          "high"
+        ],
         "properties": {
           "low": {
+            "x-label": "Low",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "medium": {
+            "x-label": "Medium",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "high": {
+            "x-label": "High",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -3592,15 +5302,26 @@
         }
       },
       "AutoHighlightsResult": {
+        "x-label": "Auto highlights result",
         "description": "An array of results for the Key Phrases model, if it is enabled.\nSee [Key phrases](https://www.assemblyai.com/docs/models/key-phrases) for more information.\n",
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
-        "required": ["results"],
+        "required": [
+          "status",
+          "results"
+        ],
         "properties": {
+          "status": {
+            "x-label": "Status",
+            "description": "The status of the Key Phrases model. Either success, or unavailable in the rare case that the model failed.",
+            "$ref": "#/components/schemas/AudioIntelligenceModelStatus"
+          },
           "results": {
+            "x-label": "Results",
             "description": "A temporally-sequential array of Key Phrases",
             "type": "array",
             "items": {
+              "x-label": "Auto highlight result",
               "$ref": "#/components/schemas/AutoHighlightResult"
             }
           }
@@ -3809,16 +5530,24 @@
         }
       },
       "AutoHighlightResult": {
+        "x-label": "Auto highlight result",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["count", "rank", "text", "timestamps"],
+        "required": [
+          "count",
+          "rank",
+          "text",
+          "timestamps"
+        ],
         "properties": {
           "count": {
+            "x-label": "Count",
             "description": "The total number of times the key phrase appears in the audio file",
             "type": "integer"
           },
           "rank": {
+            "x-label": "Rank",
             "description": "The total relevancy to the overall audio file of this key phrase - a greater number means more relevant",
             "type": "number",
             "format": "float",
@@ -3826,13 +5555,16 @@
             "maximum": 1
           },
           "text": {
+            "x-label": "Text",
             "description": "The text itself of the key phrase",
             "type": "string"
           },
           "timestamps": {
+            "x-label": "Timestamps",
             "description": "The timestamp of the of the key phrase",
             "type": "array",
             "items": {
+              "x-label": "Timestamp",
               "$ref": "#/components/schemas/Timestamp"
             }
           }
@@ -3850,29 +5582,43 @@
         }
       },
       "TranscriptWord": {
+        "x-label": "Word",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["confidence", "start", "end", "text"],
+        "required": [
+          "confidence",
+          "start",
+          "end",
+          "text"
+        ],
         "properties": {
           "confidence": {
+            "x-label": "Confidence",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "start": {
+            "x-label": "Start",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "type": "integer"
           },
           "text": {
+            "x-label": "Text",
             "type": "string"
           },
           "speaker": {
+            "x-label": "Speaker",
             "description": "The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "example": {
@@ -3884,35 +5630,52 @@
         }
       },
       "TranscriptSentence": {
+        "x-label": "Sentence",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["text", "start", "end", "confidence", "words"],
+        "required": [
+          "text",
+          "start",
+          "end",
+          "confidence",
+          "words"
+        ],
         "properties": {
           "text": {
+            "x-label": "Text",
             "type": "string"
           },
           "start": {
+            "x-label": "Start",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "type": "integer"
           },
           "confidence": {
+            "x-label": "Confidence",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "words": {
+            "x-label": "Words",
             "type": "array",
             "items": {
+              "x-label": "Word",
               "$ref": "#/components/schemas/TranscriptWord"
             }
           },
           "speaker": {
+            "x-label": "Speaker",
             "description": "The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "example": {
@@ -3954,27 +5717,38 @@
         }
       },
       "SentencesResponse": {
+        "x-label": "Sentences response",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["id", "confidence", "audio_duration", "sentences"],
+        "required": [
+          "id",
+          "confidence",
+          "audio_duration",
+          "sentences"
+        ],
         "properties": {
           "id": {
+            "x-label": "Transcript ID",
             "type": "string",
             "format": "uuid"
           },
           "confidence": {
+            "x-label": "Confidence",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "audio_duration": {
+            "x-label": "Audio duration",
             "type": "number"
           },
           "sentences": {
+            "x-label": "Sentences",
             "type": "array",
             "items": {
+              "x-label": "Sentence",
               "$ref": "#/components/schemas/TranscriptSentence"
             }
           }
@@ -4076,35 +5850,52 @@
         }
       },
       "TranscriptParagraph": {
+        "x-label": "Paragraph",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["text", "start", "end", "confidence", "words"],
+        "required": [
+          "text",
+          "start",
+          "end",
+          "confidence",
+          "words"
+        ],
         "properties": {
           "text": {
+            "x-label": "Text",
             "type": "string"
           },
           "start": {
+            "x-label": "Start",
             "type": "integer"
           },
           "end": {
+            "x-label": "End",
             "type": "integer"
           },
           "confidence": {
+            "x-label": "Confidence",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "words": {
+            "x-label": "Words",
             "type": "array",
             "items": {
+              "x-label": "Word",
               "$ref": "#/components/schemas/TranscriptWord"
             }
           },
           "speaker": {
+            "x-label": "Speaker",
             "description": "The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "example": {
@@ -4145,27 +5936,38 @@
         }
       },
       "ParagraphsResponse": {
+        "x-label": "Paragraphs response",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["id", "confidence", "audio_duration", "paragraphs"],
+        "required": [
+          "id",
+          "confidence",
+          "audio_duration",
+          "paragraphs"
+        ],
         "properties": {
           "id": {
+            "x-label": "Transcript ID",
             "type": "string",
             "format": "uuid"
           },
           "confidence": {
+            "x-label": "Confidence",
             "type": "number",
             "format": "double",
             "minimum": 0,
             "maximum": 1
           },
           "audio_duration": {
+            "x-label": "Audio duration",
             "type": "number"
           },
           "paragraphs": {
+            "x-label": "Paragraphs",
             "type": "array",
             "items": {
+              "x-label": "Paragraph",
               "$ref": "#/components/schemas/TranscriptParagraph"
             }
           }
@@ -4244,7 +6046,7 @@
         }
       },
       "PageDetails": {
-        "summary": "Details of the transcript page.",
+        "x-label": "Page details",
         "description": "Details of the transcript page. Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
@@ -4258,28 +6060,37 @@
         ],
         "properties": {
           "limit": {
-            "summary": "The number of results this page is limited to",
+            "x-label": "Limit",
+            "description": "The number of results this page is limited to",
             "type": "integer"
           },
           "result_count": {
-            "summary": "The actual number of results in the page",
+            "x-label": "Result count",
+            "description": "The actual number of results in the page",
             "type": "integer"
           },
           "current_url": {
-            "summary": "The URL used to retrieve the current page of transcripts",
+            "x-label": "Current URL",
+            "description": "The URL used to retrieve the current page of transcripts",
             "type": "string",
             "format": "url"
           },
           "prev_url": {
-            "summary": "The URL to the previous page of transcripts",
+            "x-label": "Previous URL",
             "description": "The URL to the next page of transcripts. The previous URL always points to a page with older transcripts.",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "url"
           },
           "next_url": {
-            "summary": "The URL to the next page of transcripts",
+            "x-label": "Next URL",
             "description": "The URL to the next page of transcripts. The next URL always points to a page with newer transcripts.",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "url"
           }
         },
@@ -4292,12 +6103,14 @@
         }
       },
       "ListTranscriptParams": {
+        "x-label": "List transcript parameters",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "x-fern-ignore": true,
         "additionalProperties": false,
         "properties": {
           "limit": {
+            "x-label": "Limit",
             "description": "Maximum amount of transcripts to retrieve",
             "type": "integer",
             "format": "int64",
@@ -4306,25 +6119,30 @@
             "default": 10
           },
           "status": {
+            "x-label": "Status",
             "description": "Filter by transcript status",
             "$ref": "#/components/schemas/TranscriptStatus"
           },
           "created_on": {
+            "x-label": "Created on",
             "description": "Only get transcripts created on this date",
             "type": "string",
             "format": "date"
           },
           "before_id": {
+            "x-label": "Before ID",
             "description": "Get transcripts that were created before this transcript ID",
             "type": "string",
             "format": "uuid"
           },
           "after_id": {
+            "x-label": "After ID",
             "description": "Get transcripts that were created after this transcript ID",
             "type": "string",
             "format": "uuid"
           },
           "throttled_only": {
+            "x-label": "Throttled only",
             "description": "Only get throttled transcripts, overrides the status filter",
             "type": "boolean"
           }
@@ -4339,6 +6157,7 @@
         }
       },
       "TranscriptListItem": {
+        "x-label": "Transcript list item",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
@@ -4353,35 +6172,48 @@
         ],
         "properties": {
           "id": {
+            "x-label": "ID",
             "type": "string",
             "format": "uuid"
           },
           "resource_url": {
+            "x-label": "Resource URL",
             "type": "string",
             "format": "url"
           },
           "status": {
+            "x-label": "Status",
             "$ref": "#/components/schemas/TranscriptStatus"
           },
           "created": {
+            "x-label": "Created",
             "type": "string",
             "pattern": "^(?:(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?))$",
             "x-fern-type": "datetime",
             "x-ts-type": "Date"
           },
           "completed": {
-            "type": ["string", "null"],
+            "x-label": "Completed",
+            "type": [
+              "string",
+              "null"
+            ],
             "pattern": "^(?:(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?))$",
             "x-fern-type": "datetime",
             "x-ts-type": "Date | null"
           },
           "audio_url": {
+            "x-label": "Audio URL",
             "type": "string",
             "format": "url"
           },
           "error": {
+            "x-label": "Error",
             "description": "Error message of why the transcript failed",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "example": {
@@ -4395,19 +6227,25 @@
         }
       },
       "TranscriptList": {
-        "summary": "A list of transcripts",
+        "x-label": "Transcript list",
         "description": "A list of transcripts. Transcripts are sorted from newest to oldest. The previous URL always points to a page with older transcripts.",
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["page_details", "transcripts"],
+        "required": [
+          "page_details",
+          "transcripts"
+        ],
         "properties": {
           "page_details": {
+            "x-label": "Page details",
             "$ref": "#/components/schemas/PageDetails"
           },
           "transcripts": {
+            "x-label": "Transcripts",
             "type": "array",
             "items": {
+              "x-label": "Transcript list item",
               "$ref": "#/components/schemas/TranscriptListItem"
             }
           }
@@ -4452,12 +6290,16 @@
         }
       },
       "UploadedFile": {
+        "x-label": "Uploaded file",
         "type": "object",
         "x-fern-sdk-group-name": "files",
         "additionalProperties": false,
-        "required": ["upload_url"],
+        "required": [
+          "upload_url"
+        ],
         "properties": {
           "upload_url": {
+            "x-label": "Uploaded file URL",
             "description": "A URL that points to your audio file, accessible only by AssemblyAI's servers",
             "type": "string",
             "format": "url"
@@ -4468,28 +6310,36 @@
         }
       },
       "CreateRealtimeTemporaryTokenParams": {
+        "x-label": "Create Streaming STT temporary token parameters",
         "type": "object",
         "x-fern-sdk-group-name": "realtime",
         "additionalProperties": false,
         "properties": {
           "expires_in": {
+            "x-label": "Expires in",
             "description": "The amount of time until the token expires in seconds",
             "type": "integer",
             "minimum": 60
           }
         },
-        "required": ["expires_in"],
+        "required": [
+          "expires_in"
+        ],
         "example": {
           "expires_in": 480
         }
       },
       "RealtimeTemporaryTokenResponse": {
+        "x-label": "Streaming STT temporary token response",
         "type": "object",
         "x-fern-sdk-group-name": "realtime",
         "additionalProperties": false,
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "properties": {
           "token": {
+            "x-label": "Temporary authentication token",
             "description": "The temporary authentication token for Streaming Speech-to-Text",
             "type": "string"
           }
@@ -4499,32 +6349,52 @@
         }
       },
       "AudioIntelligenceModelStatus": {
+        "x-label": "Audio intelligence model status",
         "x-fern-sdk-group-name": "transcripts",
         "type": "string",
         "description": "Either success, or unavailable in the rare case that the model failed",
-        "enum": ["success", "unavailable"]
+        "enum": [
+          "success",
+          "unavailable"
+        ],
+        "x-aai-enum": {
+          "success": {
+            "label": "Success"
+          },
+          "unavailable": {
+            "label": "Unavailable"
+          }
+        }
       },
       "PurgeLemurRequestDataResponse": {
+        "x-label": "Purge LeMUR request data response",
         "x-fern-sdk-group-name": "lemur",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "request_id": {
+            "x-label": "Purge request ID",
             "type": "string",
             "format": "uuid",
             "description": "The ID of the deletion request of the LeMUR request"
           },
           "request_id_to_purge": {
+            "x-label": "LeMUR request ID to purge",
             "type": "string",
             "format": "uuid",
             "description": "The ID of the LeMUR request to purge the data for"
           },
           "deleted": {
+            "x-label": "Deleted",
             "type": "boolean",
             "description": "Whether the request data was deleted"
           }
         },
-        "required": ["request_id", "request_id_to_purge", "deleted"],
+        "required": [
+          "request_id",
+          "request_id_to_purge",
+          "deleted"
+        ],
         "example": {
           "request_id": "914fe7e4-f10a-4364-8946-34614c2873f6",
           "request_id_to_purge": "b7eb03ec-1650-4181-949b-75d9de317de1",
@@ -4532,46 +6402,71 @@
         }
       },
       "LemurBaseResponse": {
+        "x-label": "LeMUR base response",
         "x-fern-sdk-group-name": "lemur",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "request_id": {
+            "x-label": "LeMUR request ID",
             "description": "The ID of the LeMUR request",
             "type": "string",
             "format": "uuid"
+          },
+          "usage": {
+            "x-label": "Usage",
+            "description": "The usage numbers for the LeMUR request",
+            "$ref": "#/components/schemas/LemurUsage"
           }
         },
-        "required": ["request_id"],
+        "required": [
+          "request_id",
+          "usage"
+        ],
         "example": {
-          "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e"
+          "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e",
+          "usage": {
+            "input_tokens": 27,
+            "output_tokens": 3
+          }
         }
       },
-      "LemurSummaryResponse": {
+      "LemurTaskResponse": {
+        "x-label": "LeMUR task response",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
-          {
-            "$ref": "#/components/schemas/LemurBaseResponse"
-          },
           {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "response": {
-                "description": "The response generated by LeMUR",
+                "x-label": "Response",
+                "description": "The response generated by LeMUR.",
                 "type": "string"
               }
             },
-            "required": ["response"]
+            "required": [
+              "response"
+            ]
+          },
+          {
+            "$ref": "#/components/schemas/LemurBaseResponse"
           }
         ],
         "example": {
           "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e",
-          "response": "- Wildfires in Canada are sending smoke and air pollution across parts of the US, triggering air quality alerts from Maine to Minnesota. Concentrations of particulate matter have exceeded safety levels.\n\n- Weather systems are channeling the smoke through Pennsylvania into the Mid-Atlantic and Northeast regions. New York City has canceled outdoor activities to keep children and vulnerable groups indoors.\n\n- Very small particulate matter can enter the lungs and impact respiratory, cardiovascular and neurological health. Young children, the elderly and those with preexisting conditions are most at risk.\n\n- The conditions causing the poor air quality could get worse or shift to different areas in coming days depending on weather patterns. More wildfires may also contribute to higher concentrations.\n\n- Climate change is leading to longer and more severe fire seasons. Events of smoke traveling long distances and affecting air quality over wide areas will likely become more common in the future.\"\n"
+          "response": "Based on the transcript, the following locations were mentioned as being affected by wildfire smoke from Canada:\n\n- Maine\n- Maryland\n- Minnesota\n- Mid Atlantic region\n- Northeast region\n- New York City\n- Baltimore\n",
+          "usage": {
+            "input_tokens": 27,
+            "output_tokens": 3
+          }
         }
       },
-      "LemurQuestionAnswerResponse": {
+      "LemurSummaryResponse": {
+        "x-label": "LeMUR summary response",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "$ref": "#/components/schemas/LemurBaseResponse"
@@ -4581,14 +6476,50 @@
             "additionalProperties": false,
             "properties": {
               "response": {
+                "x-label": "Response",
+                "description": "The response generated by LeMUR",
+                "type": "string"
+              }
+            },
+            "required": [
+              "response"
+            ]
+          }
+        ],
+        "example": {
+          "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e",
+          "response": "- Wildfires in Canada are sending smoke and air pollution across parts of the US, triggering air quality alerts from Maine to Minnesota. Concentrations of particulate matter have exceeded safety levels.\n\n- Weather systems are channeling the smoke through Pennsylvania into the Mid-Atlantic and Northeast regions. New York City has canceled outdoor activities to keep children and vulnerable groups indoors.\n\n- Very small particulate matter can enter the lungs and impact respiratory, cardiovascular and neurological health. Young children, the elderly and those with preexisting conditions are most at risk.\n\n- The conditions causing the poor air quality could get worse or shift to different areas in coming days depending on weather patterns. More wildfires may also contribute to higher concentrations.\n\n- Climate change is leading to longer and more severe fire seasons. Events of smoke traveling long distances and affecting air quality over wide areas will likely become more common in the future.\"\n",
+          "usage": {
+            "input_tokens": 27,
+            "output_tokens": 3
+          }
+        }
+      },
+      "LemurQuestionAnswerResponse": {
+        "x-label": "LeMUR question & answer response",
+        "x-fern-sdk-group-name": "lemur",
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LemurBaseResponse"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "response": {
+                "x-label": "Question & answers",
                 "description": "The answers generated by LeMUR and their questions",
                 "type": "array",
                 "items": {
+                  "x-label": "Question & answer",
                   "$ref": "#/components/schemas/LemurQuestionAnswer"
                 }
               }
             },
-            "required": ["response"]
+            "required": [
+              "response"
+            ]
           }
         ],
         "example": {
@@ -4602,32 +6533,44 @@
               "answer": "yes",
               "question": "Is global warming affecting wildfires?"
             }
-          ]
+          ],
+          "usage": {
+            "input_tokens": 27,
+            "output_tokens": 3
+          }
         }
       },
       "LemurQuestionAnswer": {
+        "x-label": "Question & answer",
         "x-fern-sdk-group-name": "lemur",
         "type": "object",
         "description": "An answer generated by LeMUR and its question",
         "additionalProperties": false,
         "properties": {
           "question": {
+            "x-label": "Question",
             "description": "The question for LeMUR to answer",
             "type": "string"
           },
           "answer": {
+            "x-label": "Answer",
             "description": "The answer generated by LeMUR",
             "type": "string"
           }
         },
-        "required": ["question", "answer"],
+        "required": [
+          "question",
+          "answer"
+        ],
         "example": {
           "answer": "CA, US",
           "question": "Where are there wildfires?"
         }
       },
       "LemurActionItemsResponse": {
+        "x-label": "LeMUR action items response",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "$ref": "#/components/schemas/LemurBaseResponse"
@@ -4637,59 +6580,67 @@
             "additionalProperties": false,
             "properties": {
               "response": {
+                "x-label": "Response",
                 "description": "The response generated by LeMUR",
                 "type": "string"
               }
             },
-            "required": ["response"]
+            "required": [
+              "response"
+            ]
           }
         ],
         "example": {
           "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e",
-          "response": "Here are some potential action items based on the transcript:\n\n- Monitor air quality levels in affected areas and issue warnings as needed.\n\n- Advise vulnerable populations like children, the elderly, and those with respiratory conditions to limit time outdoors.\n\n- Have schools cancel outdoor activities when air quality is poor.\n\n- Educate the public on health impacts of smoke inhalation and precautions to take.\n\n- Track progression of smoke plumes using weather and air quality monitoring systems.\n\n- Coordinate cross-regionally to manage smoke exposure as air masses shift.\n\n- Plan for likely increase in such events due to climate change. Expand monitoring and forecasting capabilities.\n\n- Conduct research to better understand health impacts of wildfire smoke and mitigation strategies.\n\n- Develop strategies to prevent and manage wildfires to limit air quality impacts.\n"
+          "response": "Here are some potential action items based on the transcript:\n\n- Monitor air quality levels in affected areas and issue warnings as needed.\n\n- Advise vulnerable populations like children, the elderly, and those with respiratory conditions to limit time outdoors.\n\n- Have schools cancel outdoor activities when air quality is poor.\n\n- Educate the public on health impacts of smoke inhalation and precautions to take.\n\n- Track progression of smoke plumes using weather and air quality monitoring systems.\n\n- Coordinate cross-regionally to manage smoke exposure as air masses shift.\n\n- Plan for likely increase in such events due to climate change. Expand monitoring and forecasting capabilities.\n\n- Conduct research to better understand health impacts of wildfire smoke and mitigation strategies.\n\n- Develop strategies to prevent and manage wildfires to limit air quality impacts.\n",
+          "usage": {
+            "input_tokens": 27,
+            "output_tokens": 3
+          }
         }
       },
-      "LemurTaskResponse": {
+      "LemurResponse": {
+        "x-label": "LeMUR response",
         "x-fern-sdk-group-name": "lemur",
-        "allOf": [
+        "type": "object",
+        "oneOf": [
           {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "response": {
-                "description": "The response generated by LeMUR.",
-                "type": "string"
-              }
-            },
-            "required": ["response"]
+            "$ref": "#/components/schemas/LemurTaskResponse"
           },
           {
-            "$ref": "#/components/schemas/LemurBaseResponse"
+            "$ref": "#/components/schemas/LemurSummaryResponse"
+          },
+          {
+            "$ref": "#/components/schemas/LemurQuestionAnswerResponse"
+          },
+          {
+            "$ref": "#/components/schemas/LemurActionItemsResponse"
           }
-        ],
-        "example": {
-          "request_id": "5e1b27c2-691f-4414-8bc5-f14678442f9e",
-          "response": "Based on the transcript, the following locations were mentioned as being affected by wildfire smoke from Canada:\n\n- Maine\n- Maryland\n- Minnesota\n- Mid Atlantic region\n- Northeast region\n- New York City\n- Baltimore\n"
-        }
+        ]
       },
       "LemurBaseParams": {
+        "x-label": "LeMUR base parameters",
         "x-fern-sdk-group-name": "lemur",
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "transcript_ids": {
+            "x-label": "Transcript IDs",
             "description": "A list of completed transcripts with text. Up to a maximum of 100 files or 100 hours, whichever is lower.\nUse either transcript_ids or input_text as input into LeMUR.\n",
             "type": "array",
             "items": {
+              "x-label": "Transcript ID",
               "type": "string",
               "format": "uuid"
             }
           },
           "input_text": {
+            "x-label": "Input text",
             "description": "Custom formatted transcript data. Maximum size is the context limit of the selected model, which defaults to 100000.\nUse either transcript_ids or input_text as input into LeMUR.\n",
             "type": "string"
           },
           "context": {
+            "x-label": "Context",
             "description": "Context to provide the model. This can be a string or a free-form JSON value.",
             "oneOf": [
               {
@@ -4702,6 +6653,7 @@
             ]
           },
           "final_model": {
+            "x-label": "Final model",
             "description": "The model that is used for the final prompt after compression is performed.\nDefaults to \"default\".\n",
             "default": "default",
             "anyOf": [
@@ -4712,13 +6664,16 @@
                 "type": "string"
               }
             ],
-            "x-ts-type": "LiteralUnion<LemurModel, string>"
+            "x-ts-type": "LiteralUnion<LemurModel, string>",
+            "x-go-type": "LeMURModel"
           },
           "max_output_size": {
+            "x-label": "Maximum output size",
             "description": "Max output size in tokens, up to 4000",
             "type": "integer"
           },
           "temperature": {
+            "x-label": "Temperature",
             "description": "The temperature to use for the model.\nHigher values result in answers that are more creative, lower values are more conservative.\nCan be any value between 0.0 and 1.0 inclusive.\n",
             "type": "number",
             "format": "float",
@@ -4738,25 +6693,32 @@
         }
       },
       "LemurTaskParams": {
+        "x-label": "LeMUR task parameters",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "prompt": {
+                "x-label": "Prompt",
                 "description": "Your text to prompt the model to produce a desired output, including any context you want to pass into the model.",
                 "type": "string"
               }
             },
-            "required": ["prompt"]
+            "required": [
+              "prompt"
+            ]
           },
           {
             "$ref": "#/components/schemas/LemurBaseParams"
           }
         ],
         "example": {
-          "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
+          "transcript_ids": [
+            "64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"
+          ],
           "prompt": "List all the locations affected by wildfires.",
           "context": "This is an interview about wildfires.",
           "final_model": "default",
@@ -4765,7 +6727,9 @@
         }
       },
       "LemurSummaryParams": {
+        "x-label": "LeMUR summary parameters",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "$ref": "#/components/schemas/LemurBaseParams"
@@ -4775,6 +6739,7 @@
             "additionalProperties": false,
             "properties": {
               "answer_format": {
+                "x-label": "Answer format",
                 "description": "How you want the summary to be returned. This can be any text. Examples: \"TLDR\", \"bullet points\"\n",
                 "type": "string"
               }
@@ -4782,7 +6747,9 @@
           }
         ],
         "example": {
-          "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
+          "transcript_ids": [
+            "47b95ba5-8889-44d8-bc80-5de38306e582"
+          ],
           "context": "This is an interview about wildfires.",
           "final_model": "default",
           "temperature": 0,
@@ -4790,7 +6757,9 @@
         }
       },
       "LemurQuestionAnswerParams": {
+        "x-label": "LeMUR question & answer parameters",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "$ref": "#/components/schemas/LemurBaseParams"
@@ -4800,28 +6769,40 @@
             "additionalProperties": false,
             "properties": {
               "questions": {
+                "x-label": "Questions",
                 "description": "A list of questions to ask",
                 "type": "array",
                 "items": {
+                  "x-label": "Question",
                   "$ref": "#/components/schemas/LemurQuestion"
                 }
               }
             },
-            "required": ["questions"]
+            "required": [
+              "questions"
+            ]
           }
         ],
         "example": {
-          "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
+          "transcript_ids": [
+            "64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"
+          ],
           "context": "This is an interview about wildfires.",
           "questions": [
             {
               "question": "Where are there wildfires?",
               "answer_format": "List of countries in ISO 3166-1 alpha-2 format",
-              "answer_options": ["US", "CA"]
+              "answer_options": [
+                "US",
+                "CA"
+              ]
             },
             {
               "question": "Is global warming affecting wildfires?",
-              "answer_options": ["yes", "no"]
+              "answer_options": [
+                "yes",
+                "no"
+              ]
             }
           ],
           "final_model": "default",
@@ -4830,16 +6811,21 @@
         }
       },
       "LemurQuestion": {
+        "x-label": "LeMUR question",
         "x-fern-sdk-group-name": "lemur",
         "type": "object",
         "additionalProperties": false,
-        "required": ["question"],
+        "required": [
+          "question"
+        ],
         "properties": {
           "question": {
+            "x-label": "Question",
             "description": "The question you wish to ask. For more complex questions use default model.",
             "type": "string"
           },
           "context": {
+            "x-label": "Context",
             "description": "Any context about the transcripts you wish to provide. This can be a string or any object.",
             "oneOf": [
               {
@@ -4852,13 +6838,16 @@
             ]
           },
           "answer_format": {
+            "x-label": "Answer format",
             "description": "How you want the answer to be returned. This can be any text. Can't be used with answer_options. Examples: \"short sentence\", \"bullet points\"\n",
             "type": "string"
           },
           "answer_options": {
+            "x-label": "Answer options",
             "description": "What discrete options to return. Useful for precise responses. Can't be used with answer_format. Example: [\"Yes\", \"No\"]\n",
             "type": "array",
             "items": {
+              "x-label": "Answer option",
               "type": "string"
             }
           }
@@ -4869,7 +6858,9 @@
         }
       },
       "LemurActionItemsParams": {
+        "x-label": "LeMUR action items parameters",
         "x-fern-sdk-group-name": "lemur",
+        "type": "object",
         "allOf": [
           {
             "$ref": "#/components/schemas/LemurBaseParams"
@@ -4879,6 +6870,7 @@
             "additionalProperties": false,
             "properties": {
               "answer_format": {
+                "x-label": "Answer format",
                 "description": "How you want the action items to be returned. This can be any text.\nDefaults to \"Bullet Points\".\n",
                 "type": "string",
                 "default": "Bullet Points"
@@ -4887,7 +6879,9 @@
           }
         ],
         "example": {
-          "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
+          "transcript_ids": [
+            "64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"
+          ],
           "context": "This is an interview about wildfires.",
           "answer_format": "Bullet Points",
           "final_model": "default",
@@ -4896,6 +6890,7 @@
         }
       },
       "LemurModel": {
+        "x-label": "LeMUR model",
         "x-fern-sdk-group-name": "lemur",
         "type": "string",
         "description": "The model that is used for the final prompt after compression is performed.\n",
@@ -4930,18 +6925,60 @@
               "screamingSnake": "ASSEMBLYAI_MISTRAL7B"
             }
           }
+        },
+        "x-aai-enum": {
+          "default": {
+            "label": "Default"
+          },
+          "basic": {
+            "label": "Basic"
+          },
+          "assemblyai/mistral-7b": {
+            "label": "Mistral 7B (hosted by AssemblyAI)"
+          },
+          "anthropic/claude-2-1": {
+            "label": "Claude 2.1 (on Anthropic)"
+          }
+        }
+      },
+      "LemurUsage": {
+        "x-label": "Usage",
+        "description": "The usage numbers for the LeMUR request",
+        "x-fern-sdk-group-name": "lemur",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "input_tokens",
+          "output_tokens"
+        ],
+        "properties": {
+          "input_tokens": {
+            "description": "The number of input tokens used by the model",
+            "type": "integer",
+            "minimum": 0
+          },
+          "output_tokens": {
+            "description": "The number of output tokens generated by the model",
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "Error": {
+        "x-label": "Error",
         "type": "object",
         "additionalProperties": false,
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
+            "x-label": "Error message",
             "description": "Error message",
             "type": "string"
           },
           "status": {
+            "x-label": "Status",
             "type": "string",
             "const": "error"
           }
@@ -5017,7 +7054,8 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "Bad Request",
+        "x-label": "Bad request",
+        "description": "Bad request",
         "content": {
           "application/json": {
             "schema": {
@@ -5027,6 +7065,7 @@
         }
       },
       "Unauthorized": {
+        "x-label": "Unauthorized",
         "description": "Unauthorized",
         "content": {
           "application/json": {
@@ -5037,6 +7076,7 @@
         }
       },
       "NotFound": {
+        "x-label": "Not found",
         "description": "Not found",
         "content": {
           "application/json": {
@@ -5047,16 +7087,26 @@
         }
       },
       "TooManyRequests": {
-        "description": "Too Many Requests",
+        "x-label": "Too many requests",
+        "description": "Too many requests",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
             }
           }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "The number of seconds to wait before retrying the request",
+            "schema": {
+              "type": "integer"
+            }
+          }
         }
       },
       "InternalServerError": {
+        "x-label": "Internal server error",
         "description": "An error occurred while processing the request",
         "content": {
           "application/json": {
@@ -5067,10 +7117,12 @@
         }
       },
       "ServiceUnavailable": {
-        "description": "Service Unavailable"
+        "x-label": "Service unavailable",
+        "description": "Service unavailable"
       },
       "GatewayTimeout": {
-        "description": "Gateway Timeout"
+        "x-label": "Gateway timeout",
+        "description": "Gateway timeout"
       }
     },
     "securitySchemes": {
