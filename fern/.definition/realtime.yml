@@ -37,6 +37,41 @@ service:
             body:
               token: fe4145dd1e7a2e149488dcd2d553a8018a89833fc5084837d66fd1bcf5a105d4
 types:
+  Realtime:
+    enum:
+      - value: pcm_s16le
+        docs: PCM signed 16-bit little-endian
+        casing:
+          camel: pcmS16le
+          screaming-snake: PCM_S16LE
+          snake: pcm_s16le
+          pascal: PcmS16le
+      - value: pcm_mulaw
+        docs: PCM Mu-law
+        casing:
+          camel: pcmMulaw
+          screaming-snake: PCM_MULAW
+          snake: pcm_mulaw
+          pascal: PcmMulaw
+    docs: The encoding of the audio data
+  receiveMessage:
+    discriminated: false
+    docs: Receive messages from the WebSocket
+    union:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionInformation
+      - SessionTerminated
+      - RealtimeError
+  sendMessage:
+    discriminated: false
+    docs: Send messages to the WebSocket
+    union:
+      - AudioData
+      - TerminateSession
+      - ForceEndUtterance
+      - ConfigureEndUtteranceSilenceThreshold
   RealtimeBaseMessage:
     properties:
       message_type:
@@ -217,3 +252,86 @@ types:
       token:
         type: string
         docs: The temporary authentication token for Streaming Speech-to-Text
+channel:
+  path: /v2/realtime/ws
+  auth: false
+  display-name: Streaming Speech-to-Text
+  query-parameters:
+    sample_rate:
+      type: optional<integer>
+      docs: The sample rate of the streamed audio
+    word_boost:
+      type: optional<string>
+      docs: |
+        Add up to 2500 characters of custom vocabulary.
+        The parameter value must be a JSON encoded array of strings.
+    encoding:
+      type: optional<Realtime>
+      docs: The encoding of the audio data
+    token:
+      type: optional<string>
+      docs: >
+        Authenticate using a [generated temporary
+        token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)
+    disable_partial_transcripts:
+      type: optional<boolean>
+      docs: Set to true to not receive partial transcripts. Defaults to false.
+    enable_extra_session_information:
+      type: optional<boolean>
+      docs: >-
+        Set to true to receive the SessionInformation message before the session
+        ends. Defaults to false.
+  headers:
+    Authentication:
+      type: optional<string>
+      name: authentication
+      docs: Authenticate using your AssemblyAI API key
+  messages:
+    subscribe:
+      origin: server
+      body:
+        type: receiveMessage
+        docs: Receive messages from the WebSocket
+    publish:
+      origin: client
+      body:
+        type: sendMessage
+        docs: Send messages to the WebSocket
+  examples:
+    - messages:
+        - type: publish
+          body: UklGRtjIAABXQVZFZ
+        - type: subscribe
+          body:
+            audio_start: 0
+            audio_end: 1500
+            confidence: 0.987190506414702
+            text: there is a house in new orleans
+            words:
+              - start: 0
+                end: 300
+                confidence: 1
+                text: there
+            created: "2023-05-24T05:09:10Z"
+            message_type: PartialTranscript
+        - type: subscribe
+          body:
+            audio_start: 0
+            audio_end: 1500
+            confidence: 0.987190506414702
+            text: there is a house in new orleans
+            words:
+              - start: 0
+                end: 300
+                confidence: 1
+                text: there
+            created: "2023-05-24T05:09:10Z"
+            message_type: FinalTranscript
+            punctuated: true
+            text_formatted: true
+        - type: publish
+          body:
+            terminate_session: true
+        - type: subscribe
+          body:
+            message_type: SessionTerminated
