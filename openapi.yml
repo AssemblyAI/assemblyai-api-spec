@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
   title: AssemblyAI API
   description: AssemblyAI API
-  version: 1.2.0
+  version: 1.3.0
   termsOfService: https://www.assemblyai.com/legal/terms-of-service
   contact:
     name: API Support
@@ -122,7 +122,7 @@ paths:
         "504":
           $ref: "#/components/responses/GatewayTimeout"
       callbacks:
-        transcriptWebhook:
+        transcriptReadyWebhook:
           "{$request.body#/webhook_url}":
             post:
               requestBody:
@@ -131,6 +131,22 @@ paths:
                   application/json:
                     schema:
                       $ref: "#/components/schemas/TranscriptReadyNotification"
+              responses:
+                "2XX":
+                  description: Successfully received the notification
+                "4XX":
+                  description: Invalid request
+                "5XX":
+                  description: Unexpected error
+        redactedAudioWebhook:
+          "{$request.body#/webhook_url}":
+            post:
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: "#/components/schemas/RedactedAudioNotification"
               responses:
                 "2XX":
                   description: Successfully received the notification
@@ -357,6 +373,11 @@ paths:
                   that the Arctic ice cap which for most of the last 3,000,000 years has been the
                   00:20.020 --> 00:25.040
                   size of the lower 48 States has shrunk by 40% but this understates
+              examples:
+                srt:
+                  $ref: "#/components/examples/SrtSubtitlesResponse"
+                vtt:
+                  $ref: "#/components/examples/VttSubtitlesResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -937,6 +958,16 @@ components:
       description: The LeMUR request ID can be used as the `request_id` parameter in `DELETE /lemur/v3/{request_id}`.
 
   schemas:
+    TranscriptWebhookNotification:
+      description: The notifications sent to the webhook URL.
+      x-label: Transcript webhook notification
+      x-fern-sdk-group-name: transcripts
+      type: object
+      additionalProperties: false
+      oneOf:
+        - $ref: "#/components/schemas/TranscriptReadyNotification"
+        - $ref: "#/components/schemas/RedactedAudioNotification"
+
     TranscriptReadyNotification:
       description: The notification when the transcript status is completed or error.
       x-label: Transcript ready notification
@@ -961,6 +992,15 @@ components:
           transcript_id: "9ea68fd3-f953-42c1-9742-976c447fb463",
           status: "completed",
         }
+
+    RedactedAudioNotification:
+      description: The notification when the redacted audio is ready.
+      x-label: Redacted audio notification
+      x-fern-sdk-group-name: transcripts
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/RedactedAudioResponse"
 
     RedactedAudioResponse:
       type: object
@@ -1198,19 +1238,21 @@ components:
 
         webhook_url:
           x-label: Webhook URL
-          description: The URL to which AssemblyAI send webhooks upon transcription completion
+            The URL to which we send webhook requests.
+            We sends two different types of webhook requests.
+            One request when a transcript is completed or failed, and one request when the redacted audio is ready if redact_pii_audio is enabled.
           type: string
           format: url
 
         webhook_auth_header_name:
           x-label: Webhook auth header name
-          description: The header name which should be sent back with webhook calls
+          description: The header name to be sent with the transcript completed or failed webhook requests
           type: [string, "null"]
           default: null
 
         webhook_auth_header_value:
           x-label: Webhook auth header value
-          description: Specify a header name and value to send back with a webhook call for added security
+          description: The header value to send back with the transcript completed or failed webhook requests for added security
           type: [string, "null"]
           default: null
 
@@ -2500,8 +2542,7 @@ components:
         audio_duration:
           x-label: Audio duration
           description: The duration of this transcript object's media file, in seconds
-          type: [number, "null"]
-          format: float
+          type: [integer, "null"]
 
         punctuate:
           x-label: Punctuate
@@ -2528,13 +2569,16 @@ components:
 
         webhook_url:
           x-label: Webhook URL
-          description: The URL to which we send webhooks upon transcription completion
+          description: |
+            The URL to which we send webhook requests.
+            We sends two different types of webhook requests.
+            One request when a transcript is completed or failed, and one request when the redacted audio is ready if redact_pii_audio is enabled.
           type: [string, "null"]
           format: url
 
         webhook_status_code:
           x-label: Webhook HTTP status code
-          description: The status code we received from your server when delivering your webhook, if a webhook URL was provided
+          description: The status code we received from your server when delivering the transcript completed or failed webhook request, if a webhook URL was provided
           type: [integer, "null"]
 
         webhook_auth:
@@ -2544,7 +2588,7 @@ components:
 
         webhook_auth_header_name:
           x-label: Webhook auth header name
-          description: The header name which should be sent back with webhook calls
+          description: The header name to be sent with the transcript completed or failed webhook requests
           type: [string, "null"]
 
         speed_boost:
@@ -4524,7 +4568,7 @@ components:
           maximum: 1
         audio_duration:
           x-label: Audio duration
-          type: number
+          type: integer
         sentences:
           x-label: Sentences
           type: array
@@ -4730,7 +4774,7 @@ components:
           maximum: 1
         audio_duration:
           x-label: Audio duration
-          type: number
+          type: integer
         paragraphs:
           x-label: Paragraphs
           type: array
@@ -5591,6 +5635,29 @@ components:
       example: { error: "format_text must be a Boolean" }
 
   examples:
+    VttSubtitlesResponse:
+      value: |
+        WEBVTT
+        00:12.340 --> 00:16.220
+        Last year I showed these two slides said that demonstrate
+        00:16.200 --> 00:20.040
+        that the Arctic ice cap which for most of the last 3,000,000 years has been the
+        00:20.020 --> 00:25.040
+        size of the lower 48 States has shrunk by 40% but this understates
+    SrtSubtitlesResponse:
+      value: |
+        1
+        00:00:13,160 --> 00:00:16,694
+        Last year I showed these two slides that demonstrate that the Arctic
+
+        2
+        00:00:16,734 --> 00:00:20,214
+        ice cap, which for most of the last 3 million years has been the size
+
+        3
+        00:00:20,254 --> 00:00:23,274
+        of the lower 48 states, has shrunk by 40%.
+
     DeleteTranscriptResponse:
       value:
         {
