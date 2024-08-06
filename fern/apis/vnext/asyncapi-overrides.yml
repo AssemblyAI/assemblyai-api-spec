@@ -1,0 +1,85 @@
+info:
+  version: 2.0.0
+
+channels:
+  /v2/realtime/ws:
+    x-fern-display-name: Streaming Speech-to-Text
+    publish:
+      message:
+        oneOf:
+          - $ref: "#/components/messages/SendAudio"
+          - $ref: "#/components/messages/TerminateSessionMessage"
+          - $ref: "#/components/messages/ForceEndUtterance"
+          - $ref: "#/components/messages/ConfigureEndUtteranceSilenceThreshold"
+
+    x-fern-examples:
+      - query-parameters:
+          sample_rate: 16000
+          word_boost: '["foo","bar"]'
+          encoding: pcm_s16le
+          token: eyJhbGciOiJIUzI1...
+          disable_partial_transcripts: true
+          enable_extra_session_information: true
+        messages:
+          - messageId: SendAudio
+            type: publish
+            value: UklGRtjIAABXQVZFZ
+          - messageId: PartialTranscript
+            type: subscribe
+            value:
+              audio_start: 0
+              audio_end: 1500
+              confidence: 0.987190506414702
+              text: there is a house in new orleans
+              words:
+                - start: 0
+                  end: 300
+                  confidence: 1.0
+                  text: there
+              created: "2023-05-24T08:09:10.161850"
+          - messageId: FinalTranscript
+            type: subscribe
+            value:
+              audio_start: 0
+              audio_end: 1500
+              confidence: 0.987190506414702
+              text: there is a house in new orleans
+              words:
+                - start: 0
+                  end: 300
+                  confidence: 1.0
+                  text: there
+              created: "2023-05-24T08:09:10.161850"
+              punctuated: true
+              text_formatted: true
+          - messageId: TerminateSession
+            type: publish
+            value:
+              terminate_session: true
+          - messageId: SessionTerminated
+            type: subscribe
+            value:
+              message_type: "SessionTerminated"
+
+components:
+  messages:
+    TerminateSessionMessage:
+      messageId: TerminateSessionMessage
+      summary: Terminate session message
+      payload:
+        $ref: "#/components/schemas/TerminateSessionMessage"
+
+  schemas:
+    TerminateSessionMessage:
+      summary: Terminate session message
+      x-fern-sdk-group-name: realtime
+      type: object
+      required:
+        - terminate_session
+      properties:
+        terminate_session:
+          description: Set to true to end your streaming session forever
+          type: boolean
+      additionalProperties: false
+      examples:
+        - { "terminate_session": true }
