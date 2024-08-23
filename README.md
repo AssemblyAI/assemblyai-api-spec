@@ -23,3 +23,4 @@ Tagging a release on this repository will update the:
 
 - [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
 - [Ruby SDK](https://github.com/AssemblyAI/assemblyai-ruby-sdk)
+- [C# .NET SDK](https://github.com/AssemblyAI/assemblyai-csharp-sdk)
