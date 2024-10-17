@@ -3,7 +3,7 @@
   "info": {
     "title": "AssemblyAI API",
     "description": "AssemblyAI API",
-    "version": "1.3.3",
+    "version": "1.3.4",
     "termsOfService": "https://www.assemblyai.com/legal/terms-of-service",
     "contact": {
       "name": "API Support",
@@ -1654,11 +1654,18 @@
             "type": "boolean",
             "default": false
           },
+          "multichannel": {
+            "x-label": "Multichannel",
+            "description": "Enable [Multichannel](https://www.assemblyai.com/docs/models/speech-recognition#multichannel-transcription) transcription, can be true or false.",
+            "type": "boolean",
+            "default": false
+          },
           "dual_channel": {
             "x-label": "Dual channel",
             "description": "Enable [Dual Channel](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) transcription, can be true or false.",
             "type": "boolean",
-            "default": false
+            "default": false,
+            "deprecated": true
           },
           "webhook_url": {
             "x-label": "Webhook URL",
@@ -1864,7 +1871,8 @@
           "language_confidence_threshold": 0.7,
           "punctuate": true,
           "format_text": true,
-          "dual_channel": true,
+          "multichannel": true,
+          "dual_channel": false,
           "webhook_url": "https://your-webhook-url.tld/path",
           "webhook_auth_header_name": "webhook-secret",
           "webhook_auth_header_value": "webhook-secret-value",
@@ -1931,7 +1939,8 @@
           "audio_url": "https://assembly.ai/wildfires.mp3",
           "punctuate": true,
           "format_text": true,
-          "dual_channel": true,
+          "multichannel": true,
+          "dual_channel": false,
           "webhook_url": "https://your-webhook-url/path",
           "webhook_auth_header_name": "webhook-secret",
           "webhook_auth_header_value": "webhook-secret-value",
@@ -2092,6 +2101,11 @@
               "x-label": "Word",
               "$ref": "#/components/schemas/TranscriptWord"
             }
+          },
+          "channel": {
+            "x-label": "Channel",
+            "description": "The channel of this utterance. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.",
+            "type": ["string", "null"]
           },
           "speaker": {
             "x-label": "Speaker",
@@ -3204,10 +3218,21 @@
             "description": "Transcribe Filler Words, like \"umm\", in your media file; can be true or false",
             "type": ["boolean", "null"]
           },
+          "multichannel": {
+            "x-label": "Multichannel",
+            "description": "Whether [Multichannel transcription](https://www.assemblyai.com/docs/models/speech-recognition#multichannel-transcription) was enabled in the transcription request, either true or false",
+            "type": ["boolean", "null"]
+          },
+          "audio_channels": {
+            "x-label": "Audio channels",
+            "description": "The number of audio channels in the audio file. This is only present when multichannel is enabled.",
+            "type": "integer"
+          },
           "dual_channel": {
             "x-label": "Dual channel",
             "description": "Whether [Dual channel transcription](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription) was enabled in the transcription request, either true or false",
-            "type": ["boolean", "null"]
+            "type": ["boolean", "null"],
+            "deprecated": true
           },
           "webhook_url": {
             "x-label": "Webhook URL",
@@ -3731,6 +3756,7 @@
           "audio_duration": 281,
           "punctuate": true,
           "format_text": true,
+          "multichannel": false,
           "dual_channel": false,
           "webhook_url": "https://your-webhook-url.tld/path",
           "webhook_status_code": 200,
@@ -4299,6 +4325,7 @@
           },
           "results": {
             "x-label": "Results",
+            "description": "An array of results for the Content Moderation model",
             "type": "array",
             "items": {
               "x-label": "Content Moderation label result",
@@ -4768,7 +4795,14 @@
         "x-fern-sdk-group-name": "transcripts",
         "type": "object",
         "additionalProperties": false,
-        "required": ["text", "start", "end", "sentiment", "confidence"],
+        "required": [
+          "text",
+          "start",
+          "end",
+          "sentiment",
+          "confidence",
+          "speaker"
+        ],
         "properties": {
           "text": {
             "x-label": "Text",
@@ -4797,6 +4831,11 @@
             "format": "double",
             "minimum": 0,
             "maximum": 1
+          },
+          "channel": {
+            "x-label": "Channel",
+            "description": "The channel of this utterance. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.",
+            "type": ["string", "null"]
           },
           "speaker": {
             "x-label": "Speaker",
@@ -4844,6 +4883,7 @@
           },
           "labels": {
             "x-label": "Labels",
+            "description": "An array of detected topics in the text",
             "type": "array",
             "items": {
               "x-label": "Label",
@@ -5328,10 +5368,11 @@
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["confidence", "start", "end", "text"],
+        "required": ["confidence", "start", "end", "text", "speaker"],
         "properties": {
           "confidence": {
             "x-label": "Confidence",
+            "description": "The confidence score for the transcript of this word",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -5339,19 +5380,27 @@
           },
           "start": {
             "x-label": "Start",
+            "description": "The starting time, in milliseconds, for the word",
             "type": "integer"
           },
           "end": {
             "x-label": "End",
+            "description": "The ending time, in milliseconds, for the word",
             "type": "integer"
           },
           "text": {
             "x-label": "Text",
+            "description": "The text of the word",
             "type": "string"
+          },
+          "channel": {
+            "x-label": "Channel",
+            "description": "The channel of the word. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.",
+            "type": ["string", "null"]
           },
           "speaker": {
             "x-label": "Speaker",
-            "description": "The speaker of the sentence if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
+            "description": "The speaker of the word if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
             "type": ["string", "null"]
           }
         },
@@ -5360,6 +5409,7 @@
           "start": 250,
           "end": 650,
           "confidence": 0.97465,
+          "channel": null,
           "speaker": null
         }
       },
@@ -5368,22 +5418,26 @@
         "type": "object",
         "x-fern-sdk-group-name": "transcripts",
         "additionalProperties": false,
-        "required": ["text", "start", "end", "confidence", "words"],
+        "required": ["text", "start", "end", "confidence", "words", "speaker"],
         "properties": {
           "text": {
             "x-label": "Text",
+            "description": "The transcript of the sentence",
             "type": "string"
           },
           "start": {
             "x-label": "Start",
+            "description": "The starting time, in milliseconds, for the sentence",
             "type": "integer"
           },
           "end": {
             "x-label": "End",
+            "description": "The ending time, in milliseconds, for the sentence",
             "type": "integer"
           },
           "confidence": {
             "x-label": "Confidence",
+            "description": "The confidence score for the transcript of this sentence",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -5391,11 +5445,17 @@
           },
           "words": {
             "x-label": "Words",
+            "description": "An array of words in the sentence",
             "type": "array",
             "items": {
               "x-label": "Word",
               "$ref": "#/components/schemas/TranscriptWord"
             }
+          },
+          "channel": {
+            "x-label": "Channel",
+            "description": "The channel of the sentence. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.",
+            "type": ["string", "null"]
           },
           "speaker": {
             "x-label": "Speaker",
@@ -5450,11 +5510,13 @@
         "properties": {
           "id": {
             "x-label": "Transcript ID",
+            "description": "The unique identifier for the transcript",
             "type": "string",
             "format": "uuid"
           },
           "confidence": {
             "x-label": "Confidence",
+            "description": "The confidence score for the transcript",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -5462,10 +5524,12 @@
           },
           "audio_duration": {
             "x-label": "Audio duration",
+            "description": "The duration of the audio file in seconds",
             "type": "number"
           },
           "sentences": {
             "x-label": "Sentences",
+            "description": "An array of sentences in the transcript",
             "type": "array",
             "items": {
               "x-label": "Sentence",
@@ -5578,18 +5642,22 @@
         "properties": {
           "text": {
             "x-label": "Text",
+            "description": "The transcript of the paragraph",
             "type": "string"
           },
           "start": {
             "x-label": "Start",
+            "description": "The starting time, in milliseconds, of the paragraph",
             "type": "integer"
           },
           "end": {
             "x-label": "End",
+            "description": "The ending time, in milliseconds, of the paragraph",
             "type": "integer"
           },
           "confidence": {
             "x-label": "Confidence",
+            "description": "The confidence score for the transcript of this paragraph",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -5597,6 +5665,7 @@
           },
           "words": {
             "x-label": "Words",
+            "description": "An array of words in the paragraph",
             "type": "array",
             "items": {
               "x-label": "Word",
@@ -5650,11 +5719,13 @@
         "properties": {
           "id": {
             "x-label": "Transcript ID",
+            "description": "The unique identifier of your transcript",
             "type": "string",
             "format": "uuid"
           },
           "confidence": {
             "x-label": "Confidence",
+            "description": "The confidence score for the transcript",
             "type": "number",
             "format": "double",
             "minimum": 0,
@@ -5662,10 +5733,12 @@
           },
           "audio_duration": {
             "x-label": "Audio duration",
+            "description": "The duration of the audio file in seconds",
             "type": "number"
           },
           "paragraphs": {
             "x-label": "Paragraphs",
+            "description": "An array of paragraphs in the transcript",
             "type": "array",
             "items": {
               "x-label": "Paragraph",
@@ -5808,7 +5881,6 @@
             "x-label": "Limit",
             "description": "Maximum amount of transcripts to retrieve",
             "type": "integer",
-            "format": "int64",
             "minimum": 1,
             "maximum": 200,
             "default": 10
@@ -5869,20 +5941,24 @@
         "properties": {
           "id": {
             "x-label": "ID",
+            "description": "The unique identifier for the transcript",
             "type": "string",
             "format": "uuid"
           },
           "resource_url": {
             "x-label": "Resource URL",
+            "description": "The URL to retrieve the transcript",
             "type": "string",
             "format": "url"
           },
           "status": {
             "x-label": "Status",
+            "description": "The status of the transcript",
             "$ref": "#/components/schemas/TranscriptStatus"
           },
           "created": {
             "x-label": "Created",
+            "description": "The date and time the transcript was created",
             "type": "string",
             "pattern": "^(?:(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?))$",
             "x-fern-type": "datetime",
@@ -5890,6 +5966,7 @@
           },
           "completed": {
             "x-label": "Completed",
+            "description": "The date and time the transcript was completed",
             "type": ["string", "null"],
             "pattern": "^(?:(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?))$",
             "x-fern-type": "optional<datetime>",
@@ -5897,6 +5974,7 @@
           },
           "audio_url": {
             "x-label": "Audio URL",
+            "description": "The URL to the audio file",
             "type": "string",
             "format": "url"
           },
@@ -5926,10 +6004,12 @@
         "properties": {
           "page_details": {
             "x-label": "Page details",
+            "description": "Details of the transcript page",
             "$ref": "#/components/schemas/PageDetails"
           },
           "transcripts": {
             "x-label": "Transcripts",
+            "description": "An array of transcripts",
             "type": "array",
             "items": {
               "x-label": "Transcript list item",
@@ -6337,7 +6417,7 @@
             "7c3acd18-df4d-4432-88f5-1e89f8827eea"
           ],
           "context": "This is an interview about wildfires.",
-          "final_model": "default",
+          "final_model": "anthropic/claude-3-5-sonnet",
           "temperature": 0,
           "max_output_size": 3000
         }
@@ -6367,7 +6447,7 @@
           "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
           "prompt": "List all the locations affected by wildfires.",
           "context": "This is an interview about wildfires.",
-          "final_model": "default",
+          "final_model": "anthropic/claude-3-5-sonnet",
           "temperature": 0,
           "max_output_size": 3000
         }
@@ -6395,7 +6475,7 @@
         "example": {
           "transcript_ids": ["47b95ba5-8889-44d8-bc80-5de38306e582"],
           "context": "This is an interview about wildfires.",
-          "final_model": "default",
+          "final_model": "anthropic/claude-3-5-sonnet",
           "temperature": 0,
           "max_output_size": 3000
         }
@@ -6439,7 +6519,7 @@
               "answer_options": ["yes", "no"]
             }
           ],
-          "final_model": "default",
+          "final_model": "anthropic/claude-3-5-sonnet",
           "temperature": 0,
           "max_output_size": 3000
         }
@@ -6514,7 +6594,7 @@
           "transcript_ids": ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
           "context": "This is an interview about wildfires.",
           "answer_format": "Bullet Points",
-          "final_model": "default",
+          "final_model": "anthropic/claude-3-5-sonnet",
           "temperature": 0,
           "max_output_size": 3000
         }
@@ -6674,7 +6754,7 @@
       "Error": {
         "x-label": "Error",
         "type": "object",
-        "additionalProperties": false,
+        "additionalProperties": true,
         "required": ["error"],
         "properties": {
           "error": {
@@ -6718,6 +6798,7 @@
           "audio_duration": 390,
           "punctuate": null,
           "format_text": null,
+          "multichannel": false,
           "dual_channel": null,
           "webhook_url": "http://deleted_by_user",
           "webhook_status_code": null,
@@ -6773,6 +6854,9 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "This is a sample error message"
             }
           }
         }
@@ -6784,6 +6868,9 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Authentication error, API token missing/invalid"
             }
           }
         }
@@ -6795,6 +6882,9 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Not found"
             }
           }
         }
@@ -6806,6 +6896,9 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Too Many Requests"
             }
           }
         },
@@ -6825,6 +6918,9 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Internal Server Error"
             }
           }
         }
