@@ -1,0 +1,365 @@
+---
+title: 'Transcribe streaming audio from a microphone in TypeScript'
+subtitle: 'Learn how to transcribe streaming audio in TypeScript.'
+sidebar_label: 'TypeScript'
+hide-nav-links: true
+description: 'Learn how to transcribe streaming audio in TypeScript.'
+---
+
+
+  
+
+
+
+
+
+## Overview
+
+By the end of this tutorial, you'll be able to transcribe audio from your microphone in TypeScript.
+
+<Note title="Supported languages">
+Streaming Speech-to-Text is only available for English. See [Supported languages](../01-getting-started/supported-languages.mdx).
+</Note>
+
+
+
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Node.js](https://nodejs.org/) installed. You can check to see if it is installed with `node -v`.
+- [TypeScript](https://www.typescriptlang.org/) installed. You can check to see if it is installed with `tsc -v`
+- An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with credit card set up.
+
+Here's the full sample code for what you'll build in this tutorial:
+
+```typescriptconst run = async () => {
+  const client = new AssemblyAI({
+    apiKey: '<YOUR_API_KEY>'
+  })
+
+  const SAMPLE_RATE = 16_000
+
+  const transcriber = client.realtime.transcriber({
+    sampleRate: SAMPLE_RATE
+  })
+
+  transcriber.on('open', ({ sessionId }) => {
+    console.log(`Session opened with ID: ${sessionId}`)
+  })
+
+  transcriber.on('error', (error: Error) => {
+    console.error('Error:', error)
+  })
+
+  transcriber.on('close', (code: number, reason: string) =>
+    console.log('Session closed:', code, reason)
+  )
+
+  transcriber.on('transcript', (transcript: RealtimeTranscript) => {
+    if (!transcript.text) {
+      return
+    }
+
+    if (transcript.message_type === 'PartialTranscript') {
+      console.log('Partial:', transcript.text)
+    } else {
+      console.log('Final:', transcript.text)
+    }
+  })
+
+  console.log('Connecting to real-time transcript service')
+  await transcriber.connect()
+
+  console.log('Starting recording')
+  const recording = new SoxRecording({
+    channels: 1,
+    sampleRate: SAMPLE_RATE,
+    audioType: 'wav' // Linear PCM
+  })
+
+  recording.stream().pipeTo(transcriber.stream())
+
+  // Stop recording and close connection using Ctrl-C.
+  process.on('SIGINT', async function () {
+    console.log()
+    console.log('Stopping recording')
+    recording.stop()
+
+    console.log('Closing real-time transcript connection')
+    await transcriber.close()
+
+    process.exit()
+  })
+}
+
+run()
+```
+
+
+
+
+## Step 1: Install the SDK
+
+
+Run `npm init` to create an NPM package, and then install the AssemblyAI package via NPM:
+
+```bash
+npm install assemblyai
+```
+
+
+
+
+## Step 2: Configure the API key
+
+In this step, you'll create an SDK client and configure it to use your API key.
+
+<Steps>
+<Step>
+
+Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
+
+</Step>
+<Step>
+
+Configure the SDK to use your API key. Create a file called `main.ts` and add the below code, replacing `YOUR_API_KEY` with your copied API key.
+
+```typescript
+
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+```
+
+</Step>
+</Steps>
+
+
+
+
+## Step 3: Create a streaming service
+
+<Steps>
+<Step>
+
+Create a new streaming service from the AssemblyAI client. If you don't set a sample rate, it defaults to 16 kHz.
+
+```typescript
+const SAMPLE_RATE = 16_000
+
+const transcriber = client.realtime.transcriber({
+  sampleRate: SAMPLE_RATE
+})
+```
+
+<Note title="Sample rate">
+
+The `sample_rate` is the number of audio samples per second, measured in hertz (Hz). Higher sample rates result in higher quality audio, which may lead to better transcripts, but also more data being sent over the network.
+
+We recommend the following sample rates:
+
+- Minimum quality: `8_000` (8 kHz)
+- Medium quality: `16_000` (16 kHz)
+- Maximum quality: `48_000` (48 kHz)
+
+</Note>
+
+</Step>
+<Step>
+
+Create functions to handle events from the real-time service.
+
+```typescript
+transcriber.on('open', ({ sessionId }) => {
+  console.log(`Session opened with ID: ${sessionId}`)
+})
+
+transcriber.on('error', (error: Error) => {
+  console.error('Error:', error)
+})
+
+transcriber.on('close', (code: number, reason: string) => {
+  console.log('Session closed:', code, reason)
+})
+```
+
+</Step>
+<Step>
+
+Create another function to handle transcripts. The real-time transcriber returns two types of transcripts: _partial_ and _final_.
+
+- _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
+- _Final transcripts_ are returned when the service detects a pause in speech.
+
+<Tip title="End of utterance controls">
+You can [configure the silence threshold](../02-speech-to-text/streaming.mdx#configure-the-threshold-for-automatic-utterance-detection) for automatic utterance detection and programmatically [force the end of an utterance](../02-speech-to-text/streaming.mdx#manually-end-current-utterance) to immediately get a _Final transcript_.
+</Tip>
+
+```typescript
+transcriber.on('transcript', (transcript: RealtimeTranscript) => {
+  if (!transcript.text) {
+    return
+  }
+
+  if (transcript.message_type === 'PartialTranscript') {
+    console.log('Partial:', transcript.text)
+  } else {
+    console.log('Final:', transcript.text)
+  }
+})
+```
+
+<Tip>
+
+You can also use the `on("transcript.partial")`, and `on("transcript.final")` callbacks to handle partial and final transcripts separately.
+
+</Tip>
+
+</Step>
+</Steps>
+
+
+
+
+## Step 4: Connect the streaming service
+
+Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) to stream audio to AssemblyAI. This requires first establishing a connection to the API.
+
+```typescript
+await transcriber.connect()
+```
+
+
+
+
+## Step 5: Record audio from microphone
+
+In this step, you'll use [SoX](http://sox.sourceforge.net/), a cross-platform audio library, to record audio from your microphone.
+
+<Steps>
+<Step>
+
+Install SoX on your machine.
+
+<Tabs groupId="os">
+
+<Tab value="macos" title="macOS" default>
+
+```bash
+brew install sox
+```
+
+</Tab>
+<Tab value="windows" title="Windows">
+
+[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
+
+</Tab>
+<Tab value="linux" title="Linux">
+
+```bash
+apt-get install sox libsox-fmt-all
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+Download the [sox.ts](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.ts) (or [sox.js](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.js)) script to the root of your project, and 
+
+```typescript
+
+```
+
+The `SoxRecording` class lets you interact with SoX more easily.
+
+</Step>
+<Step>
+
+In the `on("open")` callback, create a new microphone stream. The `sampleRate` needs to be the same value as the real-time service settings.
+
+```typescript
+const recording = new SoxRecording({
+  channels: 1,
+  sampleRate: SAMPLE_RATE,
+  audioType: 'wav'
+})
+```
+
+<Note title="Audio data format">
+
+The `SoxRecording` formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+
+- Single channel
+- 16-bit signed integer PCM or mu-law encoding
+
+By default, the Streaming STT service expects PCM16-encoded audio. If you want to use mu-law encoding, see [Specifying the encoding](../05-guides/real-time-streaming-transcription.mdx#specifying-the-encoding).
+
+</Note>
+
+</Step>
+<Step>
+
+Pipe the recording stream to the real-time stream to send the audio for transcription.
+
+```typescript
+recording.stream().pipeTo(transcriber.stream())
+```
+
+<Note title="Send audio buffers">
+
+If you don't use streams, you can also send buffers of audio data using `transcriber.sendAudio(buffer)`.
+
+</Note>
+
+</Step>
+</Steps>
+
+
+
+
+## Step 6: Disconnect the real-time service
+
+When you are done, disconnect the transcriber to close the connection.
+
+```typescript
+process.on('SIGINT', async function () {
+  console.log()
+  console.log('Stopping recording')
+  recording.stop()
+
+  console.log('Closing real-time transcript connection')
+  await transcriber.close()
+
+  process.exit()
+})
+```
+To run the program, use `tsc main.ts` to compile the JavaScript file, and then run `node main.js` to run it.
+
+
+
+
+
+## Next steps
+
+To learn more about Streaming Speech-to-Text, see the following resources:
+
+- [Streaming Speech-to-Text](../02-speech-to-text/streaming.mdx)
+- [Streaming STT WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
+
+
+
+
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Ask our support team in our [Discord server](https://discord.gg/aSMMpMadFh).
+
+
+

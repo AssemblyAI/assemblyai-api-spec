@@ -1,0 +1,902 @@
+---
+title: 'Generating subtitles for videos'
+hide-nav-links: true
+description: 'Export your transcript in SRT or VTT format'
+keywords:
+  - 'subtitles'
+  - 'sub-titles'
+  - 'closed captions'
+  - 'closed-captions'
+  - 'SRT'
+  - 'VTT'
+  - 'captions'
+  - 'export'
+  - 'GET'
+  - 'ffmpeg'
+  - 'mux'
+sidebar_class_name: 'display--none'
+---
+
+
+
+
+You can export your completed transcripts in SRT or VTT format, which can be used for subtitles and closed captions in videos. Once your transcript status shows as completed, you can make a request to the appropriate endpoint to export your transcript in SRT or VTT format.
+
+In this guide, we'll walk through the process of generating subtitles for videos using the AssemblyAI API.
+
+
+
+
+
+## SRT and VTT Subtitles Formats
+
+### How do SRT files work?
+
+SRT (SubRip Text) files are commonly used to store subtitles for videos. The format is plain text, and it contains the timing information for each subtitle along with the subtitle text itself.
+
+Here's a breakdown of how the format works:
+
+- Each subtitle entry consists of an index number, start time, end time, and text.
+- The index number is a sequential number starting from 1.
+- The start and end times are given in the format `hours:minutes:seconds,milliseconds` and are separated by `-->`.
+- The text that follows the timing information is the subtitle text itself, and it may span multiple lines.
+- Entries are separated by a blank line.
+
+### How do VTT formats work?
+
+WEBVTT (Web Video Text Tracks), which is a standard format for displaying timed text tracks (such as subtitles or captions) within HTML5 video.
+
+The syntax is similar to SRT but has some differences:
+
+- The file should begin with the header WEBVTT.
+- Timing is done with a period (`.`) separating seconds and milliseconds instead of a comma (`,`).
+- No blank lines are needed between entries.
+- No index numbers are required.
+- This format is supported by many modern browsers and can be used with the HTML5 `<track>` element to add subtitles to a `<video>` element.
+
+If you're planning to upload this file to YouTube, you should be able to use it just like an SRT file. YouTube supports various subtitle formats, including WEBVTT.
+
+
+
+
+
+## Get started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+The entire source code of this guide can be viewed [here](https://github.com/AssemblyAI-Community/docs-snippets/tree/main/subtitles).
+
+
+
+
+
+## Step-by-step instructions
+
+<Steps>
+<Step>
+
+<Tabs>
+  <Tab title="Python SDK">
+
+Install the SDK.
+
+  </Tab>
+  <Language fallback>
+
+Create a new file and 
+request.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+pip install -U assemblyai
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+
+
+
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+
+
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+require 'net/http'
+require 'json'
+require 'rest-client'
+require 'httparty'
+```
+
+  </Tab>
+
+<Tab value="csharp" title="C#">
+
+```csharp
+using System.Net.Http;
+using System.Threading;
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs>
+  <Language fallback>
+
+Set up the API endpoint and headers. The headers should include your API
+key.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+base_url = "https://api.assemblyai.com/v2"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+const baseUrl = 'https://api.assemblyai.com/v2'
+
+const headers = {
+  authorization: '<YOUR_API_KEY>'
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$base_url = "https://api.assemblyai.com/v2";
+
+$headers = array(
+  "authorization: <YOUR_API_KEY>"
+);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+base_url = "https://api.assemblyai.com/v2"
+
+headers = {
+    "authorization" => "<YOUR_API_KEY>"
+}
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+string apiKey = "<YOUR_API_KEY>";
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs>
+  <Tab title="Python SDK">
+
+Create a `Transcriber` object.
+
+  </Tab>
+  <Tab title="Python">
+
+Upload your local file to the AssemblyAI API.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+transcriber = aai.Transcriber()
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python wordHighlight="./my-audio.mp3"
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript wordHighlight="./my-audio.mp3"
+const path = './my-audio.mp3'
+const audioData = await fs.readFile(path)
+const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
+  headers
+})
+const uploadUrl = uploadResponse.data.upload_url
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php wordHighlight="/my_audio.mp3"
+$path = "/my_audio.mp3";
+
+$ch = curl_init();
+
+curl_setopt($ch, CURLOPT_URL, $base_url . "/upload");
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+$response = curl_exec($ch);
+$response_data = json_decode($response, true);
+$upload_url = $response_data["upload_url"];
+
+curl_close($ch);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby wordHighlight="/my_audio.mp3"
+path = "/my_audio.mp3"
+response = RestClient.post("#{base_url}/upload", File.read(path), headers)
+upload_url = JSON.parse(response.body)["upload_url"]
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+public async Task<string> UploadFileAsync(string apiKey, string path)
+{
+    using var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiKey);
+
+    using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
+    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+    HttpResponseMessage response;
+    try
+    {
+        response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
+    }
+    catch (Exception e)
+    {
+        Console.Error.WriteLine($"Error: {e.Message}");
+        return null;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        string responseBody = await response.Content.ReadAsStringAsync();
+        var json = JObject.Parse(responseBody);
+        return json["upload_url"].ToString();
+    }
+    else
+    {
+        Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
+        return null;
+    }
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs>
+<Tab title="Python SDK">
+
+Use the `Transcriber` object's `transcribe` method and pass in the audio file's
+path as a parameter. The `transcribe` method saves the results of the transcription to the `Transcriber` object's `transcript` attribute.
+
+</Tab>
+<Language fallback>
+
+Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter.
+
+</Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+ <Tab value="python-sdk" title="Python SDK" default>
+
+```python wordHighlight="./my-audio.mp3"
+transcript = transcriber.transcribe("./my-audio.mp3")
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+data = {
+    "audio_url": upload_url
+}
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+const data = {
+  audio_url: uploadUrl
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$data = array(
+    "audio_url" => upload_url
+);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+data = {
+    "audio_url" => upload_url
+}
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+var data = new Dictionary<string, string>(){
+    { "audio_url", upload_url }
+};
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs>
+  <Tab title="Python SDK">
+
+Alternatively, you can pass in the URL of a publicly accessible audio file on the internet.
+
+  </Tab>
+  <Language fallback>
+
+Make a `POST` request to the AssemblyAI API endpoint with the payload and
+headers.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+transcript = transcriber.transcribe("https://example.org/audio.mp3")
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+url = base_url + "/transcript"
+response = requests.post(url, json=data, headers=headers)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+const url = `${baseUrl}/transcript`
+const response = await axios.post(url, data, { headers: headers })
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$url = $base_url . "/transcript";
+$curl = curl_init($url);
+
+curl_setopt($curl, CURLOPT_POST, true);
+curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+uri = URI.parse("#{base_url}/transcript")
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+
+request = Net::HTTP::Post.new(uri.request_uri, headers)
+request.body = data.to_json
+
+response = http.request(request)
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+using (var client = new HttpClient())
+{
+    client.DefaultRequestHeaders.Add("authorization", apiKey);
+    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+    HttpResponseMessage response = await client.PostAsync("https://api.assemblyai.com/v2/transcript", content);
+    var responseContent = await response.Content.ReadAsStringAsync();
+    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+<Tabs>
+  <Tab title="Python SDK">
+
+Export SRT subtitles with the `export_subtitles_srt` method.
+
+  </Tab>
+  <Language fallback>
+
+After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+print(transcript.export_subtitles_srt())
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+transcript_id = response.json()['id']
+polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$transcript_id = $response['id'];
+$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $polling_response = curl_init($polling_endpoint);
+
+    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
+
+    $transcription_result = json_decode(curl_exec($polling_response), true);
+
+    if ($transcription_result['status'] === "completed") {
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3);
+    }
+}
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+transcript_id = response.parsed_response["id"]
+polling_endpoint = "https://api.assemblyai.com/v2/transcript/#{transcript_id}"
+
+while true
+    polling_response = HTTParty.get(polling_endpoint, headers: headers)
+    transcription_result = polling_response.parsed_response
+
+    if transcription_result["status"] == "completed"
+        break
+    elsif transcription_result["status"] == "error"
+        raise "Transcription failed: #{transcription_result["error"]}"
+    else
+        sleep(3)
+    end
+end
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+using (var client = new HttpClient())
+{
+    ...
+
+    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
+
+    string transcriptId = responseJson.id;
+    string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
+
+    while (true)
+    {
+        var pollingResponse = await client.GetAsync(pollingEndpoint);
+        var pollingResponseContent = await pollingResponse.Content.ReadAsStringAsync();
+        var pollingResponseJson = JsonConvert.DeserializeObject<dynamic>(pollingResponseContent);
+
+        if (pollingResponseJson.status == "completed")
+        {
+            return pollingResponseJson;
+        }
+        else if (pollingResponseJson.status == "error")
+        {
+            throw new Exception($"Transcription failed: {pollingResponseJson.error}");
+        }
+        else
+        {
+            Thread.Sleep(3000);
+        }
+    }
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs>
+  <Tab title="Python SDK">
+
+Export VTT subtitles with the `export_subtitles_vtt` method.
+
+  </Tab>
+  <Language fallback>
+
+Export your complete transcripts in SRT or VTT format, to be plugged into a
+video player for subtitles and closed captions.
+
+To get the subtitles, send a `GET` request to the `/v2/transcript/:id/:subtitle_format` endpoint. The format is either `srt` or `vtt`.
+
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+```python
+print(transcript.export_subtitles_vtt())
+```
+
+</Tab>
+
+  <Tab value="python" title="Python (requests)">
+
+```python
+def get_subtitle_file(transcript_id, file_format):
+    if file_format not in ["srt", "vtt"]:
+        raise ValueError("Invalid file format. Valid formats are 'srt' and 'vtt'.")
+
+    url = f"https://api.assemblyai.com/v2/transcript/{transcript_id}/{file_format}"
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.text
+    else:
+        raise RuntimeError(f"Failed to retrieve {file_format.upper()} file: {response.status_code} {response.reason}")
+
+
+subtitle_text = get_subtitle_file(transcript_id, "vtt")
+# subtitle_text = get_subtitle_file(transcript_id, "srt")
+print(subtitle_text)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+async function getSubtitleFile(
+  transcriptId: string,
+  fileFormat: 'srt'
+): Promise<string> {
+  if (!['srt', 'vtt'].includes(fileFormat)) {
+    throw new Error(
+      `Unsupported file format: ${fileFormat}. Please specify 'srt' or 'vtt'.`
+    )
+  }
+
+  const url = `https://api.assemblyai.com/v2/transcript/${transcriptId}/${fileFormat}`
+
+  try {
+    const response = await axios.get<string>(url, { headers })
+    return response.data
+  } catch (error: any) {
+    throw new Error(
+      `Failed to retrieve ${fileFormat.toUpperCase()} file: ${error.response
+        ?.status} ${error.response?.data?.error}`
+    )
+  }
+}
+
+const subtitles = await getSubtitleFile(
+  transcriptId,
+  'vtt' // or srt
+)
+await fs.writeFile('subtitles.vtt', subtitles)
+console.log(subtitles)
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+function getSubtitleFile(string $transcriptId, string $fileFormat): string {
+    if (!in_array($fileFormat, ['srt', 'vtt'])) {
+        throw new Exception("Unsupported file format: {$fileFormat}. Please specify 'srt' or 'vtt'.");
+    }
+
+    $url = "https://api.assemblyai.com/v2/transcript/{$transcriptId}/{$fileFormat}";
+
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => $headers,
+    ]);
+
+    $response = curl_exec($curl);
+    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+    if ($httpCode === 200) {
+        return $response;
+    } else {
+        throw new Exception("Failed to retrieve {$fileFormat} file: {$httpCode} " . curl_error($curl));
+    }
+}
+
+$subtitlesText = getSubtitleFile(transcriptId, "vtt"); // or "srt"
+echo $subtitlesText
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+require 'net/http'
+
+def get_transcript_file(transcript_id, file_format)
+  raise "Unsupported file format: #{file_format}. Please specify 'srt' or 'vtt'." unless ['srt', 'vtt'].include?(file_format)
+
+  url = URI.parse("https://api.assemblyai.com/v2/transcript/#{transcript_id}/#{file_format}")
+
+  http = Net::HTTP.new(url.host, url.port)
+  http.use_ssl = true
+
+  response = http.get(url.path, headers)
+  if response.code.to_i == 200
+    response.body
+  else
+    raise "Failed to retrieve #{file_format} file: #{response.code} #{response.message}"
+  end
+end
+
+subtitles_text = get_transcript_file(transcript_id, "vtt")  # or "srt"
+puts subtitles_text
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+public async Task<string> ExportSubtitlesAsync(string transcriptId, string format)
+{
+    // The URL of the AssemblyAI API endpoint for exporting subtitles
+    string url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/{format}";
+
+    // Create a new HttpClient to make the HTTP requests
+    using (var client = new HttpClient())
+    {
+        // Set the "authorization" header with your API key
+        client.DefaultRequestHeaders.Add("authorization", apiKey);
+
+        // Send a GET request to the API endpoint
+        HttpResponseMessage response = await client.GetAsync(url);
+
+        // Read the response content as a string
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        // Return the subtitles content as a string
+        return responseContent;
+    }
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+</Steps>
+
+
+
+
+
+## Advanced usage
+
+You can also customize the maximum number of characters per caption using the `chars_per_caption` URL parameter in your API requests to either the SRT or VTT endpoints. For example, adding `?chars_per_caption=32` to the SRT endpoint URL ensures that each caption has no more than 32 characters.
+
+<Button
+  variant="text"
+  color="yellow"
+  theme="dark"
+  endIcon="chevron"
+  link={{
+    href: '/speech-to-text/speech-recognition#export-srt-or-vtt-caption-files'
+  }}
+>
+  API/Model Reference
+</Button>
+
+
+
+
+## Conclusion
+
+The AssemblyAI produces subtitles as both `.srt` and `.vtt` files. These are standard subtitle formats, and can be used with videos both on and off the web. For example, after generating your subtitle file, you can add it to a [Mux video](https://www.assemblyai.com/blog/how-to-add-subtitles-to-your-mux-videos-with-python/) using their platform, or you can use [ffmpeg](https://amiaopensource.github.io/ffmprovisr/#embed_subtitles) to embed it in a local video file. Subtitle formats contain plain text, so you can 
+
+
+

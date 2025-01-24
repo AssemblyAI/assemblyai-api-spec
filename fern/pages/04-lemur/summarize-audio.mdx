@@ -1,0 +1,456 @@
+---
+title: 'Summarize your audio data'
+subtitle: "In this guide, you'll learn how to use LeMUR to summarize your audio data with key takeaways."
+description: 'Summarize your audio files with Large Language Models.'
+keywords:
+  - 'lemur'
+  - 'llm'
+  - 'large language model'
+  - 'claude'
+  - 'gpt'
+  - 'language model'
+  - 'generative'
+  - 'summary'
+  - 'custom summary'
+  - 'coach'
+  - 'ai coach'
+  - 'context'
+  - 'vector database'
+  - 'sonnet'
+---
+
+
+
+
+
+
+  
+<Tip>
+If you want a Quickstart, see [Apply LLMs to audio files](../01-getting-started/apply-llms-to-audio-files.mdx).
+</Tip>
+
+<Note title="Before you start">
+To use LeMUR, you need an <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with a credit card set up.
+</Note>
+
+
+
+
+
+## Basic summary example
+
+If you want to send a custom prompt to the LLM, you can use the [LeMUR Task](https://assemblyai.com/docs/api-reference/lemur/task) and apply the model to your transcribed audio files.
+
+<Tabs groupId="language">
+  <Tab value="python" title="Python" default>
+  
+  To summarize the content in your audio data, define a summarization prompt and call `transcript.lemur.task()`. The underlying `transcript` is automatically used as additional context for the model.
+
+```python {12-13,15-18}
+
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# Step 1: Transcribe an audio file.
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/sports_injuries.mp3"
+
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe(audio_file)
+
+# Step 2: Define a summarization prompt.
+prompt = "Provide a brief summary of the transcript."
+
+# Step 3: Apply LeMUR.
+result = transcript.lemur.task(
+    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
+
+  </Tab>
+  <Tab value="typescript" title="TypeScript">
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
+
+```ts {14-15,17-22}
+
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+
+const run = async () => {
+  // Step 1: Transcribe an audio file.
+  //const audioFile = './local_file.mp3'
+  const audioFile =
+    'https://assembly.ai/sports_injuries.mp3'
+  const transcript = await client.transcripts.transcribe({ audio: audioFile })
+
+  // Step 2: Define a summarization prompt.
+  const prompt = 'Provide a brief summary of the transcript.'
+
+  // Step 3: Apply LeMUR.
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcript.id],
+    prompt,
+    final_model: 'anthropic/claude-3-5-sonnet'
+  })
+
+  console.log(response)
+}
+
+run()
+```
+
+  </Tab>
+  <Tab value="golang" title="Go">
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.LeMUR.Task()`. Use the `TranscriptIDs` parameter to send one or more transcripts as additional context for the model.
+
+```go {19-20,22-28}
+package main
+
+
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    // Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+    audioURL := "https://assembly.ai/sports_injuries.mp3"
+    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+
+    // Step 2: Define a summarization prompt.
+    prompt := "Provide a brief summary of the transcript."
+
+    // Step 3: Apply LeMUR.
+    var params aai.LeMURTaskParams
+    params.Prompt = aai.String(prompt)
+    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+    params.FinalModel = "anthropic/claude-3-5-sonnet"
+
+    result, _ := client.LeMUR.Task(ctx, params)
+
+    fmt.Println(*result.Response)
+}
+```
+
+  </Tab>
+  <Tab value="java" title="Java">
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.lemur().task()`. Use the `transcriptIds` parameter to send one or more transcripts as additional context for the model.
+
+```java {17-18,20-25}
+public final class App {
+    public static void main(String[] args) {
+
+        AssemblyAI client = AssemblyAI.builder()
+                .apiKey("<YOUR_API_KEY>")
+                .build();
+
+        // Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+        String audioUrl = "https://assembly.ai/sports_injuries.mp3";
+        Transcript transcript = client.transcripts().transcribe(audioUrl);
+
+        // Step 2: Define a summarization prompt.
+        String prompt = "Provide a brief summary of the transcript.";
+
+        // Step 3: Apply LeMUR.
+        var params = LemurTaskParams.builder()
+                .prompt(prompt)
+                .transcriptIds(List.of(transcript.getId()))
+                .finalModel(LemurModel.ANTHROPIC_CLAUDE3_5_SONNET)
+                .build();
+
+        var response = client.lemur().task(params);
+
+        System.out.println(response.getResponse());
+    }
+}
+```
+
+  </Tab>
+  <Tab value="csharp" title="C#">
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.Lemur.TaskAsync()`. Use the `TranscriptIds` parameter to send one or more transcripts as additional context for the model.
+
+```csharp {13-14,16-23}
+using AssemblyAI;
+using AssemblyAI.Lemur;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/sports_injuries.mp3"
+});
+
+// Step 2: Define a summarization prompt.
+const string prompt = "Provide a brief summary of the transcript.";
+
+// Step 3: Apply LeMUR.
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet
+};
+
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+
+Console.WriteLine(response.Response);
+```
+
+  </Tab>
+  <Tab value="ruby" title="Ruby">
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
+
+```ruby {9-10,12-17}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/sports_injuries.mp3'
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+# Step 2: Define a summarization prompt.
+prompt = 'Provide a brief summary of the transcript.'
+
+# Step 3: Apply LeMUR.
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript.id],
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET
+)
+```
+
+  </Tab>
+</Tabs>
+
+#### Example output
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+
+
+
+
+## Summary with specialized endpoint
+
+
+You can add additional context to provide information that is not explicitly referenced in the audio data, as well as specify an answer format. For this, use the optional parameters `context` and `answer_format`.
+
+<Tabs groupId="language">
+  <Tab value="python" title="Python" default>
+  
+  The [LeMUR Summary function](https://www.assemblyai.com/docs/api-reference/lemur/summary) requires no prompt engineering and facilitates more deterministic and structured outputs. You can use it with `transcript.lemur.summarize()`.
+
+```python {8-12}
+
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_url = "https://assembly.ai/meeting.mp4"
+transcript = aai.Transcriber().transcribe(audio_url)
+
+result = transcript.lemur.summarize(
+    final_model=aai.LemurModel.claude3_5_sonnet,
+    context="A GitLab meeting to discuss logistics",
+    answer_format="TLDR"
+)
+
+print(result.response)
+```
+
+  </Tab>
+  <Tab value="typescript" title="TypeScript">
+  
+  The [LeMUR Summary function](https://www.assemblyai.com/docs/api-reference/lemur/summary) requires no prompt engineering and facilitates more deterministic and structured outputs. You can use it with `client.lemur.summary()`
+
+```ts {12-17}
+
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+
+const audioUrl = 'https://assembly.ai/meeting.mp4'
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe({ audio: audioUrl })
+
+  const { response } = await client.lemur.summary({
+    transcript_ids: [transcript.id],
+    final_model: 'anthropic/claude-3-5-sonnet',
+    context: 'A GitLab meeting to discuss logistics',
+    answer_format: 'TLDR'
+  })
+
+  console.log(response)
+}
+
+run()
+```
+
+  </Tab>
+  <Tab value="java" title="Java">
+  
+  The [LeMUR Summary function](https://www.assemblyai.com/docs/api-reference/lemur/summary) requires no prompt engineering and facilitates more deterministic and structured outputs. You can use it with `client.lemur().summary()`.
+
+```java {18-23}
+
+public final class App {
+    public static void main(String[] args) {
+
+        AssemblyAI client = AssemblyAI.builder()
+                .apiKey("<YOUR_API_KEY>")
+                .build();
+
+        String audioUrl = "https://assembly.ai/meeting.mp4";
+
+        Transcript transcript = client.transcripts().transcribe(audioUrl);
+
+        var response = client.lemur().summary(LemurSummaryParams.builder()
+                .transcriptIds(List.of(transcript.getId()))
+                .finalModel(LemurModel.ANTHROPIC_CLAUDE3_5_SONNET)
+                .context(LemurBaseParamsContext.of("A GitLab meeting to discuss logistic"))
+                .answerFormat("TLDR")
+                .build());
+
+        System.out.println(response.getResponse());
+    }
+}
+```
+
+  </Tab>
+  <Tab value="csharp" title="C#">
+  
+  The [LeMUR Summary function](https://www.assemblyai.com/docs/api-reference/lemur/summary) requires no prompt engineering and facilitates more deterministic and structured outputs. You can use it with `client.Lemur.SummaryAsync()`.
+
+```csharp {22-27}
+using AssemblyAI;
+using AssemblyAI.Lemur;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/meeting.mp4"
+});
+
+var response = await client.Lemur.SummaryAsync(new LemurSummaryParams
+{
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet,
+    Context = "A GitLab meeting to discuss logistic",
+    AnswerFormat = "TLDR"
+});
+
+Console.WriteLine(response.Response);
+```
+
+  </Tab>
+  <Tab value="ruby" title="Ruby">
+  
+  The [LeMUR Summary function](https://www.assemblyai.com/docs/api-reference/lemur/summary) requires no prompt engineering and facilitates more deterministic and structured outputs. You can use it with `client.lemur.summary()`
+
+```ruby {9-14}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+audio_url = 'https://assembly.ai/meeting.mp4'
+
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+response = client.lemur.summary(
+  transcript_ids: [transcript.id],
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET,
+  context: 'A GitLab meeting to discuss logistic',
+  answer_format: 'TLDR'
+)
+
+puts response.response
+```
+
+  </Tab>
+</Tabs>
+
+
+
+
+
+## Custom summary example (Advanced)
+
+In this example, we'll run a custom LeMUR task with an advanced prompt to create custom summaries:
+
+<Button
+  size="md"
+  theme="dark"
+  endIcon="chevron"
+  variant="filled"
+  link={{
+    href: 'https://github.com/AssemblyAI/cookbook/blob/master/lemur/task-endpoint-custom-summary.ipynb'
+  }}
+>
+  Cookbook: Custom summary with LeMUR Task
+</Button>
+
+
+
+
+
+## More summarization prompt examples
+
+Try any of these prompts to get started:
+
+| Use case | Example prompt |
+| --- | --- |
+| Summaries | <i>"Summarize key decisions and important points from the phone call transcript"</i> |
+| Summarize audio segments | <i>"Summarize the key events of each chapter"</i> |
+
+For more use cases and prompt examples, see [LeMUR examples](../04-lemur/examples.mdx).
+
+
+
+
+
+## API reference
+
+- [LeMUR Task endpoint](https://assemblyai.com/docs/api-reference/lemur/task)
+- [LeMUR Summary endpoint](https://www.assemblyai.com/docs/api-reference/lemur/summary)
+
+
+
+
+
+## Improve the results
+
+To improve the results, see the following resources:
+
+- Optimize your prompt with the [prompt engineering guide](../04-lemur/improving-your-prompt.mdx).
+- To alter the outcome, see [Change model and parameters](../04-lemur/customize-parameters.mdx).
+
+
+
+

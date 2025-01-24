@@ -1,0 +1,647 @@
+---
+title: 'Content Moderation'
+description: 'Detect sensitive content in your audio files'
+keywords:
+  - 'responsible'
+  - 'profanity'
+  - 'filter'
+  - 'danger'
+  - 'content safety'
+  - 'brand safety'
+  - 'moderation'
+  - 'content moderation'
+  - 'information'
+  - 'sensitive information'
+  - 'sensitive content'
+  - 'filter profanity'
+---
+
+
+  
+
+
+
+
+
+
+The Content Moderation model lets you detect inappropriate content in audio files to ensure that your content is safe for all audiences.
+
+The model pinpoints sensitive discussions in spoken data and their severity.
+
+
+
+
+
+## Quickstart
+
+
+<Tabs groupId="language">
+  <Tab value="python" title="Python" default>
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```python {8}
+
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(content_safety=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+# Get the parts of the transcript which were flagged as sensitive.
+for result in transcript.content_safety.results:
+    print(result.text)
+    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
+
+    # Get category, confidence, and severity.
+    for label in result.labels:
+      print(f"{label.label} - {label.confidence} - {label.severity}")  # content safety category
+    print()
+
+# Get the confidence of the most common labels in relation to the entire audio file.
+for label, confidence in transcript.content_safety.summary.items():
+    print(f"{confidence * 100}% confident that the audio contains {label}")
+
+print()
+
+# Get the overall severity of the most common labels in relation to the entire audio file.
+for label, severity_confidence in transcript.content_safety.severity_score_summary.items():
+    print(f"{severity_confidence.low * 100}% confident that the audio contains low-severity {label}")
+    print(f"{severity_confidence.medium * 100}% confident that the audio contains medium-severity {label}")
+    print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
+```
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xnr8yS3SeiiI-4gwuhP-uuAHrcK76LR9#scrollTo=o05Ha2TH1lYN)
+
+  </Tab>
+  <Tab value="typescript" title="TypeScript">
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```ts {13}
+
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+
+// const audioFile = './local_file.mp3'
+const audioFile =
+  'https://assembly.ai/wildfires.mp3'
+
+const params = {
+  audio: audioFile,
+  content_safety: true
+}
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params)
+  const contentSafetyLabels = transcript.content_safety_labels!
+
+  // Get the parts of the transcript which were flagged as sensitive
+  for (const result of contentSafetyLabels.results) {
+    console.log(result.text)
+    console.log(
+      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
+    )
+    // Get category, confidence, and severity
+    for (const label of result.labels) {
+      console.log(`${label.label} - ${label.confidence} - ${label.severity}`)
+    }
+    console.log()
+  }
+
+  // Get the confidence of the most common labels in relation to the entire audio file
+  for (const [label, confidence] of Object.entries(
+    contentSafetyLabels.summary
+  )) {
+    console.log(
+      `${confidence * 100}% confident that the audio contains ${label}`
+    )
+  }
+
+  console.log()
+
+  // Get the overall severity of the most common labels in relation to the entire audio file
+  for (const [label, severity_confidence] of Object.entries(
+    contentSafetyLabels.severity_score_summary
+  )) {
+    console.log(
+      `${
+        severity_confidence.low * 100
+      }% confident that the audio contains low-severity ${label}`
+    )
+    console.log(
+      `${
+        severity_confidence.medium * 100
+      }% confident that the audio contains medium-severity ${label}`
+    )
+    console.log(
+      `${
+        severity_confidence.high * 100
+      }% confident that the audio contains high-severity ${label}`
+    )
+  }
+}
+
+run()
+```
+
+  </Tab>
+  <Tab value="golang" title="Go">
+  
+  Enable Content Moderation by setting `ContentSafety` to `true` in the transcription parameters.
+
+
+```go {19}
+package main
+
+
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    client := aai.NewClient("YOUR_API_KEY")
+
+    // For local files see our Getting Started guides.
+    audioURL := "https://assembly.ai/wildfires.mp3"
+
+    ctx := context.Background()
+
+    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+        ContentSafety: aai.Bool(true),
+    })
+
+    // Get the parts of the transcript which were flagged as sensitive.
+    for _, result := range transcript.ContentSafetyLabels.Results {
+        fmt.Println(aai.ToString(result.Text))
+        fmt.Println("Timestamp:",
+            aai.ToInt64(result.Timestamp.Start), "-",
+            aai.ToInt64(result.Timestamp.End),
+        )
+
+        // Get category, confidence, and severity.
+        for _, label := range result.Labels {
+            fmt.Printf("%s - %v - %v\n",
+                aai.ToString(label.Label),
+                aai.ToFloat64(label.Confidence),
+                aai.ToFloat64(label.Severity),
+            )
+        }
+
+        fmt.Println()
+    }
+
+    // Get the confidence of the most common labels in relation to the entire audio file.
+    for label, confidence := range transcript.ContentSafetyLabels.Summary {
+        fmt.Printf("%v%% confidence that the audio contains %s\n", confidence*100, label)
+    }
+
+    fmt.Println()
+
+    for label, confidence := range transcript.ContentSafetyLabels.SeverityScoreSummary {
+        fmt.Printf("%v%% confidence that the audio contains low-severity %s\n", aai.ToFloat64(confidence.Low)*100, label)
+        fmt.Printf("%v%% confidence that the audio contains medium-severity %s\n", aai.ToFloat64(confidence.Medium)*100, label)
+        fmt.Printf("%v%% confidence that the audio contains high-severity %s\n", aai.ToFloat64(confidence.High)*100, label)
+    }
+}
+```
+
+  </Tab>
+  <Tab value="java" title="Java">
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```java {15}
+
+
+
+public final class App {
+    public static void main(String[] args) {
+
+        AssemblyAI client = AssemblyAI.builder()
+                .apiKey("<YOUR_API_KEY>")
+                .build();
+
+        // For local files see our Getting Started guides.
+        String audioUrl = "https://assembly.ai/wildfires.mp3";
+
+        var params = TranscriptOptionalParams.builder()
+                .contentSafety(true)
+                .build();
+
+        Transcript transcript = client.transcripts().transcribe(audioUrl, params);
+
+        var contentSafetyLabels = transcript.getContentSafetyLabels().get();
+
+        contentSafetyLabels.getResults().forEach(result -> {
+            System.out.println(result.getText());
+            System.out.println("Timestamp: " + result.getTimestamp().getStart() + " - " + result.getTimestamp().getEnd());
+
+            result.getLabels().forEach((label) ->
+                    System.out.println(label.getLabel() + " - " + label.getConfidence() + " - " + label.getSeverity())
+            );
+            System.out.println();
+        });
+
+        contentSafetyLabels.getSummary().forEach((label, confidence) ->
+                System.out.println(confidence * 100 + "% confident that the audio contains " + label)
+        );
+
+        System.out.println();
+
+        contentSafetyLabels.getSeverityScoreSummary().forEach((label, severityConfidence) -> {
+            System.out.println(severityConfidence.getLow() * 100 + "% confident that the audio contains low-severity " + label);
+            System.out.println(severityConfidence.getMedium() * 100 + "% confident that the audio contains medium-severity " + label);
+            System.out.println(severityConfidence.getHigh() * 100 + "% confident that the audio contains high-severity " + label);
+        });
+    }
+}
+```
+
+  </Tab>
+  <Tab value="csharp" title="C#">
+  
+  Enable Content Moderation by setting `ContentSafety` to `true` in the transcription parameters.
+
+
+```csharp {10}
+using AssemblyAI;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    // For local files see our Getting Started guides.
+    AudioUrl = "https://assembly.ai/wildfires.mp3",
+    ContentSafety = true
+});
+
+var safetyLabels = transcript.ContentSafetyLabels!;
+
+foreach (var result in safetyLabels.Results)
+{
+    Console.WriteLine(result.Text);
+    Console.WriteLine($"Timestamp: {result.Timestamp.Start} - {result.Timestamp.End}");
+
+    foreach (var label in result.Labels)
+    {
+        Console.WriteLine($"{label.Label} - {label.Confidence} - {label.Severity}");
+    }
+
+    Console.WriteLine();
+}
+
+foreach (var summary in safetyLabels.Summary)
+{
+    Console.WriteLine($"{summary.Value * 100}% confident that the audio contains {summary.Key}");
+}
+
+Console.WriteLine();
+
+foreach (var severitySummary in safetyLabels.SeverityScoreSummary)
+{
+    Console.WriteLine(
+        $"{severitySummary.Value.Low * 100}% confident that the audio contains low-severity {severitySummary.Key}");
+    Console.WriteLine(
+        $"{severitySummary.Value.Medium * 100}% confident that the audio contains medium-severity {severitySummary.Key}");
+    Console.WriteLine(
+        $"{severitySummary.Value.High * 100}% confident that the audio contains high-severity {severitySummary.Key}");
+}
+```
+
+  </Tab>
+  <Tab value="ruby" title="Ruby">
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  content_safety: true
+)
+
+transcript.content_safety_labels.results.each do |result|
+  puts result.text
+  printf("Timestamp: %<start>d-%<end>d\n", start: result.timestamp.start, end: result.timestamp.end_)
+
+  result.labels.each do |label|
+    printf(
+      "%<label>s - %<confidence>.16f - %<severity>.16f\n",
+      label: label.label,
+      confidence: label.confidence,
+      severity: label.severity
+    )
+  end
+  puts
+end
+
+transcript.content_safety_labels.summary.each_pair do |label, confidence|
+  printf(
+    "%<confidence>d%% confident that the audio contains %<label>s\n",
+    confidence: confidence * 100,
+    label: label
+  )
+end
+
+puts
+
+transcript.content_safety_labels.severity_score_summary.each_pair do |label, severity_confidence|
+  printf(
+    "%<confidence>d%% confident that the audio contains low-severity %<label>s\n",
+    confidence: severity_confidence.low * 100,
+    label: label
+  )
+  printf(
+    "%<confidence>d%% confident that the audio contains medium-severity %<label>s\n",
+    confidence: severity_confidence.medium * 100,
+    label: label
+  )
+  printf(
+    "%<confidence>d%% confident that the audio contains high-severity %<label>s\n",
+    confidence: severity_confidence.high * 100,
+    label: label
+  )
+end
+```
+
+  </Tab>
+</Tabs>
+
+### Example output
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+disasters - 0.8141 - 0.4014
+
+So what is it about the conditions right now that have caused this round of wildfires to...
+Timestamp: 29290 - 56190
+disasters - 0.9217 - 0.5665
+
+So what is it in this haze that makes it harmful? And I'm assuming it is...
+Timestamp: 56340 - 88034
+health_issues - 0.9358 - 0.8906
+
+...
+
+99.42% confident that the audio contains disasters
+92.70% confident that the audio contains health_issues
+
+57.43% confident that the audio contains low-severity disasters
+42.56% confident that the audio contains mid-severity disasters
+0.0% confident that the audio contains high-severity disasters
+23.57% confident that the audio contains low-severity health_issues
+30.22% confident that the audio contains mid-severity health_issues
+46.19% confident that the audio contains high-severity health_issues
+```
+
+
+
+
+
+## Adjust the confidence threshold
+
+The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
+
+
+<Tabs groupId="language">
+
+  <Tab value="python" title="Python" default>
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```python {4}
+# Setting the content safety confidence threshold to 60%.
+config = aai.TranscriptionConfig(
+  content_safety=True,
+  content_safety_confidence=60
+)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```ts {4}
+// Setting the content safety confidence threshold to 60%.
+const params = {
+  audio: audioUrl,
+  content_safety: true,
+  content_safety_confidence: 60
+}
+```
+
+  </Tab>
+  <Tab value="golang" title="Go">
+  
+  To adjust the confidence threshold for your transcription, include `ContentSafetyConfidence` in the transcription parameters.
+
+
+```go {4}
+// Setting the content safety confidence threshold to 60%.
+transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+    ContentSafety: aai.Bool(true),
+    ContentSafetyConfidence: aai.Int64(60),
+})
+```
+
+  </Tab>
+  <Tab value="java" title="Java">
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```java {4}
+// Setting the content safety confidence threshold to 60%.
+var params = TranscriptOptionalParams.builder()
+                .contentSafety(true)
+                .contentSafetyConfidence(60)
+                .build();
+```
+
+  </Tab>
+  <Tab value="csharp" title="C#">
+  
+  To adjust the confidence threshold for your transcription, include `ContentSafetyConfidence` in the transcription parameters.
+
+
+```csharp {6}
+// Setting the content safety confidence threshold to 60%.
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/wildfires.mp3",
+    ContentSafety = true,
+    ContentSafetyConfidence = 60
+});
+```
+
+  </Tab>
+  <Tab value="ruby" title="Ruby">
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```ruby {4}
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  content_safety: true,
+  content_safety_confidence: 60
+)
+```
+
+  </Tab>
+
+</Tabs>
+
+
+
+
+
+## API reference
+
+### Request
+
+```bash {6-7}
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "content_safety": true,
+  "content_safety_confidence": 50
+}'
+```
+
+| Key                         | Type    | Description                                                                         |
+| --------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| `content_safety`            | boolean | Enable Content Moderation.                                                          |
+| `content_safety_confidence` | integer | The confidence threshold for content moderation. Values must be between 25 and 100. |
+
+### Response
+
+<CodeBlock>
+  <JsonViewer
+    displayDataTypes={false}
+    quotesOnKeys={false}
+    displayObjectSize={false}
+    collapsed={2}
+    src={(({content_safety_labels}) => ({content_safety_labels}))(contentModeration)
+}
+/>
+
+</CodeBlock>
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `content_safety_labels` | object | An object containing all results of the Content Moderation model. |
+| `content_safety_labels.status` | string | Is either `success`, or `unavailable` in the rare case that the Content Moderation model failed. |
+| `content_safety_labels.results` | array | An array of objects, one for each section in the audio file that the Content Moderation file flagged. |
+| `content_safety_labels.results[i].text` | string | The transcript of the i-th section flagged by the Content Moderation model. |
+| `content_safety_labels.results[i].labels` | array | An array of objects, one per sensitive topic that was detected in the i-th section. |
+| `content_safety_labels.results[i].labels[j].label` | string | The label of the sensitive topic. |
+| `content_safety_labels.results[i].labels[j].confidence` | number | The confidence score for the j-th topic being discussed in the i-th section, from 0 to 1. |
+| `content_safety_labels.results[i].labels[j].severity` | number | How severely the j-th topic is discussed in the i-th section, from 0 to 1. |
+| `content_safety_labels.results[i].sentences_idx_start` | number | The sentence index at which the i-th section begins. |
+| `content_safety_labels.results[i].sentences_idx_end` | number | The sentence index at which the i-th section ends. |
+| `content_safety_labels.results[i].timestamp` | object | Timestamp information for the i-th section. |
+| `content_safety_labels.results[i].timestamp.start` | number | The time, in milliseconds, at which the i-th section begins. |
+| `content_safety_labels.results[i].timestamp.end` | number | The time, in milliseconds, at which the i-th section ends. |
+| `content_safety_labels.summary` | object | A summary of the Content Moderation confidence results for the entire audio file. |
+| `content_safety_labels.summary.topic` | number | A confidence score for the presence of the sensitive topic "topic" across the entire audio file. |
+| `content_safety_labels.severity_score_summary` | object | A summary of the Content Moderation severity results for the entire audio file. |
+| `content_safety_labels.severity_score_summary.topic.[low, medium, high]` | number | A distribution across the values "low", "medium", and "high" for the severity of the presence of "topic" in the audio file. | 
+
+
+The response also includes the request parameters used to generate the transcript.
+
+
+
+
+
+## Supported labels
+
+| Label | Description | Model output | Severity |
+| ----- | ----------- | ------------ | -------- |
+| Accidents | Any man-made incident that happens unexpectedly and results in damage, injury, or death. | `accidents` | Yes |
+| Alcohol | Content that discusses any alcoholic beverage or its consumption. | `alcohol` | Yes |
+| Company Financials | Content that discusses any sensitive company financial information. | `financials` | No |
+| Crime Violence | Content that discusses any type of criminal activity or extreme violence that is criminal in nature. | `crime_violence` | Yes |
+| Drugs | Content that discusses illegal drugs or their usage. | `drugs` | Yes |
+| Gambling | Includes gambling on casino-based games such as poker, slots, etc. as well as sports betting. | `gambling` | Yes |
+| Hate Speech | Content that's a direct attack against people or groups based on their sexual orientation, gender identity, race, religion, ethnicity, national origin, disability, etc. | `hate_speech` | Yes |
+| Health Issues | Content that discusses any medical or health-related problems. | `health_issues` | Yes |
+| Manga | Mangas are comics or graphic novels originating from Japan with some of the more popular series being "Pokemon", "Naruto", "Dragon Ball Z", "One Punch Man", and "Sailor Moon". | `manga` | No |
+| Marijuana | This category includes content that discusses marijuana or its usage. | `marijuana` | Yes |
+| Natural Disasters | Phenomena that happens infrequently and results in damage, injury, or death. Such as hurricanes, tornadoes, earthquakes, volcano eruptions, and firestorms. | `disasters` | Yes |
+| Negative News | News content with a negative sentiment which typically occur in the third person as an unbiased recapping of events. | `negative_news` | No |
+| NSFW (Adult Content) | Content considered "Not Safe for Work" and consists of content that a viewer would not want to be heard/seen in a public environment. | `nsfw` | No |
+| Pornography | Content that discusses any sexual content or material. | `pornography` | Yes |
+| Profanity | Any profanity or cursing. | `profanity` | Yes |
+| Sensitive Social Issues | This category includes content that may be considered insensitive, irresponsible, or harmful to certain groups based on their beliefs, political affiliation, sexual orientation, or gender identity. | `sensitive_social_issues` | No |
+| Terrorism | Includes terrorist acts as well as terrorist groups. Examples include bombings, mass shootings, and ISIS. Note that many texts corresponding to this topic may also be classified into the crime violence topic. | `terrorism` | Yes |
+| Tobacco | Text that discusses tobacco and tobacco usage, including e-cigarettes, nicotine, vaping, and general discussions about smoking. | `tobacco` | Yes |
+| Weapons | Text that discusses any type of weapon including guns, ammunition, shooting, knives, missiles, torpedoes, etc. | `weapons` | Yes |
+
+
+
+
+
+## Frequently asked questions
+
+<Accordion title="Why is the Content Moderation model not detecting sensitive content in my audio file?" theme="dark" iconColor="white" >
+  
+There could be a few reasons for this. First, make sure that the audio file contains speech, and not just background noise or music. Additionally, the model may not have been trained on the specific type of sensitive content you're looking for. If you believe the model should be able to detect the content but it's not, you can reach out to AssemblyAI's support team for assistance.
+
+  </Accordion>
+
+<Accordion title="Why is the Content Moderation model flagging content that isn't actually sensitive?" theme="dark" iconColor="white" >
+  
+The model may occasionally flag content as sensitive that isn't actually problematic. This can happen if the model isn't trained on the specific context or nuances of the language being used. In these cases, you can manually review the flagged content and determine if it's actually sensitive or not. If you believe the model is consistently flagging content incorrectly, you can contact AssemblyAI's support team to report the issue.
+
+  </Accordion>
+
+<Accordion title="How do I know which specific parts of the audio file contain sensitive content?" theme="dark" iconColor="white" >
+  
+The Content Moderation model provides segment-level results that pinpoint where in the audio the sensitive content was discussed, as well as the degree to which it was discussed. You can access this information in the results key of the API response. Each result in the list contains a text key that shows the sensitive content, and a labels key that shows the detected sensitive topics along with their confidence and severity scores.
+
+  </Accordion>
+
+<Accordion title="Can the Content Moderation model be used in real-time applications?" theme="dark" iconColor="white" >
+  
+The model is designed to process batches of segments in significantly less than 1 second, making it suitable for real-time applications. However, keep in mind that the actual processing time depends on the length of the audio file and the number of segments it's divided into. Additionally, the model may occasionally require additional time to process particularly complex or long segments.
+
+  </Accordion>
+
+<Accordion title="Why am I receiving an error message when using the Content Moderation model?" theme="dark" iconColor="white" >
+  
+If you receive an error message, it may be due to an issue with your request format or parameters. Double-check that your request includes the correct `audio_url` parameter. If you continue to experience issues, you can reach out to AssemblyAI's support team for assistance.
+
+  </Accordion>
+
+
+
+

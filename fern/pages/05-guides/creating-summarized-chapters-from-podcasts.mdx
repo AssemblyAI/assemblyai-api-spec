@@ -1,0 +1,797 @@
+---
+title: 'Creating summarized chapters from podcasts'
+hide-nav-links: true
+description: 'Automatically summarize your audio file into chapters'
+keywords:
+  - 'podcast'
+  - 'headline'
+  - 'summarize'
+  - 'summarization'
+  - 'chapters'
+  - 'auto chapters'
+  - 'summary'
+  - 'chapter'
+  - 'gist'
+  - 'podcasts'
+sidebar_class_name: 'display--none'
+---
+
+
+
+
+The [Auto Chapters](../03-audio-intelligence/auto-chapters.mdx) model summarizes audio data over time into chapters. Chapters makes it easy for users to navigate and find specific information.
+Each chapter contains the following:
+
+- Summary
+- One-line gist
+- Headline
+- Start and end timestamps
+
+In this step-by-step guide, you'll learn how to apply the model. You'll send the `auto_chapters` parameter in your request, and then use `chapters` property from the response.
+
+You can also learn the content on this page from [Automatic Chapter Detection With AssemblyAI](https://www.youtube.com/watch?v=GvfmDGin7Zs) on [AssemblyAI's YouTube channel](https://www.youtube.com/@AssemblyAI).
+
+
+
+
+
+## Get started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+The entire source code of this guide can be viewed [here](https://github.com/AssemblyAI-Community/docs-snippets/blob/main/chapters).
+
+Here's an audio example for this guide:
+
+```bash
+https://assembly.ai/wildfires.mp3
+```
+
+
+
+
+
+## Step-by-step instructions
+
+<Steps>
+<Step>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+Install the SDK.
+
+```python
+pip install -U assemblyai
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+Create a new file and import the necessary libraries for making an HTTP
+request.
+
+```python
+import requests
+import json
+import time
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+Create a new file and import the necessary libraries for making an HTTP
+request.
+
+```typescript
+import axios from 'axios'
+import fs from 'fs-extra'
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+  
+Create a new file and import the necessary libraries for making an HTTP
+request.
+
+```php
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+  
+Create a new file and import the necessary libraries for making an HTTP
+request.
+
+```ruby
+require 'net/http'
+require 'json'
+require 'rest-client'
+require 'httparty'
+```
+
+  </Tab>
+
+<Tab value="csharp" title="C#">
+
+Create a new file and import the necessary libraries for making an HTTP
+request.
+
+```csharp
+using System.Net.Http;
+using System.Threading;
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+Import the `assemblyai` package and set the API key.
+
+```python
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+  Set up the API endpoint and headers. The headers should include your API
+key.
+
+```python
+base_url = "https://api.assemblyai.com/v2"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+  Set up the API endpoint and headers. The headers should include your API
+key.
+
+```typescript
+const baseUrl = 'https://api.assemblyai.com/v2'
+
+const headers = {
+  authorization: '<YOUR_API_KEY>'
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+  
+  Set up the API endpoint and headers. The headers should include your API
+key.
+
+```php
+$base_url = "https://api.assemblyai.com/v2";
+
+$headers = array(
+  "authorization: <YOUR_API_KEY>",
+  "content-type: application/json"
+);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+  
+  Set up the API endpoint and headers. The headers should include your API
+key.
+
+```ruby
+base_url = "https://api.assemblyai.com/v2"
+
+headers = {
+    "authorization" => "<YOUR_API_KEY>",
+    "content-type" => "application/json"
+}
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+  
+  Set up the API endpoint and headers. The headers should include your API
+key.
+
+```csharp
+string apiKey = "<YOUR_API_KEY>";
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+Create a `TranscriptionConfig` with `auto_chapters` set to `True`.
+
+
+```python
+# highlight-next-line
+config = aai.TranscriptionConfig(auto_chapters=True)
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+  Upload your local file to the AssemblyAI API.
+
+```python wordHighlight="./my-audio.mp3"
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+  Upload your local file to the AssemblyAI API.
+
+```typescript wordHighlight="./my-audio.mp3"
+const path = './my-audio.mp3'
+const audioData = await fs.readFile(path)
+const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
+  headers
+})
+const uploadUrl = uploadResponse.data.upload_url
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+  
+  Upload your local file to the AssemblyAI API.
+
+```php wordHighlight="/my_audio.mp3"
+$path = "/my_audio.mp3";
+
+$ch = curl_init();
+
+curl_setopt($ch, CURLOPT_URL, $base_url . "/upload");
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+$response = curl_exec($ch);
+$response_data = json_decode($response, true);
+$upload_url = $response_data["upload_url"];
+
+curl_close($ch);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+  
+  Upload your local file to the AssemblyAI API.
+
+```ruby wordHighlight="/my_audio.mp3"
+path = "/my_audio.mp3"
+response = RestClient.post("#{base_url}/upload", File.read(path), headers)
+upload_url = JSON.parse(response.body)["upload_url"]
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+  
+  Upload your local file to the AssemblyAI API.
+
+```csharp
+public async Task<string> UploadFileAsync(string apiKey, string path)
+{
+    using var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiKey);
+
+    using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
+    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+    HttpResponseMessage response;
+    try
+    {
+        response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
+    }
+    catch (Exception e)
+    {
+        Console.Error.WriteLine($"Error: {e.Message}");
+        return null;
+    }
+
+    if (response.IsSuccessStatusCode)
+    {
+        string responseBody = await response.Content.ReadAsStringAsync();
+        var json = JObject.Parse(responseBody);
+        return json["upload_url"].ToString();
+    }
+    else
+    {
+        Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
+        return null;
+    }
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+Create a `Transcriber` object and pass in the configuration.
+
+```python
+transcriber = aai.Transcriber(config=config)
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter and the `auto_chapters` parameter set to
+`True`.
+
+```python
+data = {
+    "audio_url": upload_url,
+    "auto_chapters": True
+}
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter and the `auto_chapters` parameter set to
+`True`.
+
+```typescript
+const data = {
+  audio_url: uploadUrl,
+  auto_chapters: true
+
+  //  The AssemblyAI API can transcribe audio and video files that are accessible via a URL.
+  //  audio_url: 'https://assembly.ai/espn.m4a'
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+  
+  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter and the `auto_chapters` parameter set to
+`True`.
+
+```php
+$data = array(
+    "audio_url" => upload_url,
+    "auto_chapters" => True
+);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+  
+  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter and the `auto_chapters` parameter set to
+`True`.
+
+```ruby
+data = {
+    "audio_url" => upload_url
+    "auto_chapters" => true
+}
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+  
+  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
+containing the `audio_url` parameter and the `auto_chapters` parameter set to
+`True`.
+
+```csharp
+var data = new Dictionary<string, dynamic>(){
+    { "audio_url", upload_url },
+    { "auto_chapters", true }
+};
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+
+<Tab value="python-sdk" title="Python SDK" default>
+
+Pass the URL or file path to `Transcriber.transcribe()`. You can access the transcript from the returned `Transcript` object.
+
+```python
+FILE_URL = "https://assembly.ai/wildfires.mp3"
+
+transcript = transcriber.transcribe(FILE_URL)
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+  Make a `POST` request to the AssemblyAI API endpoint with the payload and
+headers.
+
+```python
+url = base_url + "/transcript"
+response = requests.post(url, json=data, headers=headers)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+
+```typescript
+const url = `${baseUrl}/transcript`
+const response = await axios.post(url, data, { headers: headers })
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+
+```php
+$url = $base_url . "/transcript";
+$curl = curl_init($url);
+
+curl_setopt($curl, CURLOPT_POST, true);
+curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+
+```ruby
+uri = URI.parse("#{base_url}/transcript")
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+
+request = Net::HTTP::Post.new(uri.request_uri, headers)
+request.body = data.to_json
+
+response = http.request(request)
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+
+```csharp
+using (var client = new HttpClient())
+{
+    client.DefaultRequestHeaders.Add("authorization", apiKey);
+    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+    HttpResponseMessage response = await client.PostAsync("https://api.assemblyai.com/v2/transcript", content);
+    var responseContent = await response.Content.ReadAsStringAsync();
+    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+
+  <Tab value="python-sdk" title="Python SDK" default>
+  
+  You can access the chapter results from the `chapters` attribute in the transcript.
+
+
+```python
+for chapter in transcript.chapters:
+  print("Chapter Start Time:", chapter.start)
+  print("Chapter End Time:", chapter.end)
+  print("Chapter Gist:", chapter.gist)
+  print("Chapter Headline:", chapter.headline)
+  print("Chapter Summary:", chapter.summary)
+
+```
+
+  </Tab>
+
+  <Tab value="python" title="Python (requests)">
+  
+  After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response, using the `chapters` key to access the results.
+
+```python
+transcript_id = response.json()['id']
+polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcription_result['status'] == 'completed':
+        # Print each auto chapter
+        for chapter in transcription_result['chapters']:
+            print("Chapter Start Time:", chapter['start'])
+            print("Chapter End Time:", chapter['end'])
+            print("Chapter Gist:", chapter['gist'])
+            print("Chapter Headline:", chapter['headline'])
+            print("Chapter Summary:", chapter['summary'], '\n')
+        break
+
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+    else:
+        time.sleep(3)
+```
+
+  </Tab>
+
+  <Tab value="typescript" title="TypeScript">
+  
+  After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response, using the `chapters` key to access the results.
+
+```typescript
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    // Print each auto chapter
+    transcriptionResult.chapters.forEach((chapter: any) => {
+      console.log('Chapter Start Time:', chapter.start)
+      console.log('Chapter End Time:', chapter.end)
+      console.log('Chapter Headline:', chapter.headline)
+      console.log('Chapter Gist:', chapter.gist)
+      console.log('Chapter Summary:', chapter.summary)
+    })
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+```
+
+  </Tab>
+
+  <Tab value="php" title="PHP">
+  
+  After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response, using the `chapters` key to access the results.
+
+```php
+$transcript_id = $response['id'];
+$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $polling_response = curl_init($polling_endpoint);
+
+    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
+
+    $transcription_result = json_decode(curl_exec($polling_response), true);
+
+    if ($transcription_result['status'] === "completed") {
+        // Print each auto chapter
+        foreach ($transcription_result['auto_chapters'] as $chapter) {
+            echo "Chapter Start Time: " . $chapter['start'] . "\n";
+            echo "Chapter End Time: " . $chapter['end'] . "\n";
+            echo "Chapter Headline: " . $chapter['headline'] . "\n";
+            echo "Chapter Gist: " . $chapter['gist'] . "\n";
+            echo "Chapter Summary: " . $chapter['summary'] . "\n";
+        }
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3);
+    }
+}
+```
+
+  </Tab>
+
+  <Tab value="ruby" title="Ruby">
+  
+  After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response, using the `chapters` key to access the results.
+
+```ruby
+transcript_id = response.parsed_response["id"]
+polling_endpoint = "https://api.assemblyai.com/v2/transcript/#{transcript_id}"
+
+while true
+    polling_response = HTTParty.get(polling_endpoint, headers: headers)
+    transcription_result = polling_response.parsed_response
+
+    if transcription_result["status"] == "completed"
+        # Print each auto chapter
+        transcription_result["auto_chapters"].each do |chapter|
+            puts "Chapter Start Time: #{chapter["start"]}"
+            puts "Chapter End Time: #{chapter["end"]}"
+            puts "Chapter Headline: #{chapter["headline"]}"
+            puts "Chapter Gist: #{chapter["gist"]}"
+            puts "Chapter Summary: #{chapter["summary"]}"
+        end
+        break
+    elsif transcription_result["status"] == "error"
+        raise "Transcription failed: #{transcription_result["error"]}"
+    else
+        sleep(3)
+    end
+end
+```
+
+  </Tab>
+
+  <Tab value="csharp" title="C#">
+  
+  After making the request, you'll receive an ID for the transcription. Use it
+to poll the API every few seconds to check the status of the transcript job.
+Once the status is `completed`, you can retrieve the transcript from the API
+response, using the `chapters` key to access the results.
+
+```csharp
+string transcriptId = response.Content.ReadAsAsync<dynamic>().Result.id;
+string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
+
+while (true) {
+    var pollingRequest = new HttpRequestMessage {
+        Method = HttpMethod.Get,
+        RequestUri = new Uri(pollingEndpoint),
+        Headers = {
+            { "authorization", "<YOUR_API_KEY>" }
+        }
+    };
+
+    var pollingResponse = httpClient.SendAsync(pollingRequest).Result;
+    var transcriptionResult = JObject.Parse(pollingResponse.Content.ReadAsStringAsync().Result);
+
+    if (transcriptionResult["status"].ToString() == "completed") {
+        // Print each auto chapter
+        foreach (var chapter in transcriptionResult["auto_chapters"]) {
+            Console.WriteLine($"Chapter Start Time: {chapter["start"]}");
+            Console.WriteLine($"Chapter End Time: {chapter["end"]}");
+            Console.WriteLine($"Chapter Headline: {chapter["headline"]}");
+            Console.WriteLine($"Chapter Gist: {chapter["gist"]}");
+            Console.WriteLine($"Chapter Summary: {chapter["summary"]}");
+        }
+        break;
+    } else if (transcriptionResult["status"].ToString() == "error") {
+        throw new Exception($"Transcription failed: {transcriptionResult["error"]}");
+    } else {
+        Thread.Sleep(3000);
+    }
+}
+```
+
+  </Tab>
+
+</Tabs>
+
+</Step>
+</Steps>
+
+
+
+
+
+## Understanding the response
+
+Your automatic chapters are located in the `chapters` key of the API response. Each entry contains a `summary` of the chapter, a one-line `gist` and a chapter `headline`, and `start` and `end` timestamps.
+
+<CodeBlock>
+  <JsonViewer
+    displayDataTypes={false}
+    quotesOnKeys={false}
+    displayObjectSize={false}
+    src={{
+      chapters: [
+        {
+          summary:
+            "Data science and machine learning may be an even easier entree into the developer world for a lot of people than the software engineering. For example, if you run a small mom and pop store, I think if you can analyze the data about your sales, your customers, there's real value there.",
+          gist: 'Learning to Code in a Machine Learning World',
+          headline:
+            "You think it's possible that machine learning becomes kind of similar to literacy",
+          start: 170,
+          end: 101674
+        },
+        {
+          summary:
+            'Why do you like using a marker and whiteboard, even on the biggest of stages? I think it depends on the concepts you want to explain. The slowness of a whiteboard is also its upside because it forces you to reduce everything to the basics.',
+          gist: 'Using a whiteboard in talks',
+          headline:
+            'Some of your talks involve the whiteboard. Why do you like using it on stage',
+          start: 101792,
+          end: 186246
+        }
+      ]
+    }}
+  />
+</CodeBlock>
+
+
+
+
+## Conclusion
+
+Creating text summaries using our [Auto Chapters](https://www.assemblyai.com/blog/introducing-assemblyai-auto-chapters-summarize-audio-and-video-files/) functionality works on all kinds of different input sources, not just podcasts. For example, you can use it to [summarize lecture videos](https://www.assemblyai.com/blog/python-project-lecture-summaries/) or other long-form content.
+
+If you need more fine-grained control than Auto Chapters offers, you can use AssemblyAI's [Summarization model](../03-audio-intelligence/summarization.mdx) to customize the complexity of your summary.
+
+
+
