@@ -139,13 +139,19 @@ func main() {
   </Tab>
   <Tab language="java" title="Java">
   
-  Enable PII Redaction by setting `redact_pii` to `true` in the transcription
+  Enable PII Redaction by setting `redactPii` to `true` in the transcription
 config.
 
-Use `redact_pii_policies` to specify the information you want to
+Use `redactPiiPolicies` to specify the information you want to
 redact. For the full list of policies, see [PII policies](#pii-policies).
 
-```java {15-17}public final class App {
+```java {15-17}
+
+import com.assemblyai.api.AssemblyAI;
+import com.assemblyai.api.resources.transcripts.types.*;
+import java.util.List;
+
+public final class App {
     public static void main(String[] args) {
         AssemblyAI client = AssemblyAI.builder()
                 .apiKey("<YOUR_API_KEY>")
@@ -254,43 +260,11 @@ getting hit in the US. Is because there's a couple of weather systems that ...
 
 In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out.
 
-<Tabs>
-
-<Tab language="python" title="Python">
-
-To create a redacted version of the audio file, use the `set_redact_pii()`
-method on the `TranscriptionConfig` with `redact_audio` to `True`.
+<Tabs groupId="language">
+  <Tab value="python" title="Python" default>
+    To create a redacted version of the audio file, use the `set_redact_pii()` method on the `TranscriptionConfig` with `redact_audio` to `True`.
 
 Use `get_redacted_audio_url()` on the transcript to get the URL to the redacted audio file.
-
-</Tab>
-<Tab language="typescript" title="TypeScript">
-
-To create a redacted version of the audio file, set `redact_pii_audio` to
-`true` in the transcription config. Use `redact_pii_audio_quality` to specify
-the quality of the redacted audio file.
-
-</Tab>
-<Tab language="golang" title="Go">
-
-To create a redacted version of the audio file, set `RedactPIIAudio` to
-`true` in the transcription config. Use `RedactPIIAudioQuality` to specify
-the quality of the redacted audio file.
-
-</Tab>
-<Tab language="csharp" title="C#">
-
-To create a redacted version of the audio file, set `RedactPiiAudio` to
-`true` in the transcription config. Use `RedactPiiAudioQuality` to specify
-the quality of the redacted audio file.
-
-</Tab>
-
-</Tabs>
-
-<Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-
 ```python {7,12}
 config = aai.TranscriptionConfig().set_redact_pii(
     policies=[
@@ -309,7 +283,11 @@ print(transcript.get_redacted_audio_url())
   </Tab>
   <Tab language="typescript" title="TypeScript">
 
-```ts {5-6,11}
+  To create a redacted version of the audio file, set `redact_pii_audio` to
+`true` in the transcription config. Use `redact_pii_audio_quality` to specify
+the quality of the redacted audio file.
+
+```ts {5-6}
 const params: TranscribeParams = {
   audio: audioUrl,
   redact_pii: true,
@@ -330,9 +308,23 @@ const run = async () => {
 
 run()
 ```
+You can also retrieve the redacted audio file itself using `redactedAudioFile()`.
+The following code writes the redacted audio file to a local file, using `writeFile()` from Node.js.
 
+```typescript
+import fs from "fs/promises";
+
+...
+
+const audioFile = await client.transcripts.redactedAudioFile(transcript.id);
+await fs.writeFile('./redacted-audio.wav', audioFile.body!, 'binary');
+```
   </Tab>
   <Tab language="golang" title="Go">
+
+  To create a redacted version of the audio file, set `RedactPIIAudio` to
+`true` in the transcription config. Use `RedactPIIAudioQuality` to specify
+the quality of the redacted audio file.
 
 ```go {5-6}
 transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
@@ -349,7 +341,10 @@ fmt.Printf("Status: %s, Redacted audio URL: %s", resp.Status, aai.ToString(resp.
 ```
 
   </Tab>
-  <Tab language="java" title="Java">
+  <Tab value="java" title="Java">
+  
+  To create a redacted version of the audio file, set `redactPiiAudio` to `true` in the transcription config. Use `redactPiiAudioQuality` to specify
+the quality of the redacted audio file.
 
 ```java {4-5}
 var params = TranscriptOptionalParams.builder()
@@ -368,6 +363,10 @@ System.out.println("Status: " + redactionResult.getStatus() + ", Redacted audio 
 
   </Tab>
   <Tab language="csharp" title="C#">
+
+To create a redacted version of the audio file, set `RedactPiiAudio` to
+`true` in the transcription config. Use `RedactPiiAudioQuality` to specify
+the quality of the redacted audio file.
 
 ```csharp {13-14}
 using AssemblyAI;
@@ -391,9 +390,20 @@ var redactionResult = await client.Transcripts.GetRedactedAudioAsync(transcript.
 Console.WriteLine($"Status: {redactionResult.Status}, " +
                   $"Redacted audio URL: {redactionResult.RedactedAudioUrl}");
 ```
+You can also retrieve the redacted audio file as a stream using the `GetRedactedAudioFileAsync` method.
+The following code stores the redacted audio file locally as `redacted-audio.wav`.
+
+```csharp
+await using var redactedAudioFileStream = await client.Transcripts.GetRedactedAudioFileAsync(transcript.Id);
+await using var fileStream = File.OpenWrite("./redacted_audio.wav");
+redactedAudioFileStream.CopyTo(fileStream);
+```
 
   </Tab>
   <Tab language="ruby" title="Ruby">
+
+  To create a redacted version of the audio file, set `redact_pii_audio` to `true` in the transcription config. Use `redact_pii_audio_quality` to specify
+the quality of the redacted audio file.
 
 ```ruby {9-11}
 transcript = client.transcripts.transcribe(
@@ -419,37 +429,6 @@ printf(
 
   </Tab>
 </Tabs>
-
-<Tabs>
-  <Tab language="typescript" title="TypeScript">
-
-You can also retrieve the redacted audio file itself using `redactedAudioFile()`.
-The following code writes the redacted audio file to a local file, using `writeFile()` from Node.js.
-
-```typescript
-
-
-...
-
-const audioFile = await client.transcripts.redactedAudioFile(transcript.id);
-await fs.writeFile('./redacted-audio.wav', audioFile.body!, 'binary');
-```
-
-  </Tab>
-  <Tab language="python" title="Python">
-
-You can also retrieve the redacted audio file as a stream using the `GetRedactedAudioFileAsync` method.
-The following code stores the redacted audio file locally as `redacted-audio.wav`.
-
-```csharp
-await using var redactedAudioFileStream = await client.Transcripts.GetRedactedAudioFileAsync(transcript.Id);
-await using var fileStream = File.OpenWrite("./redacted_audio.wav");
-redactedAudioFileStream.CopyTo(fileStream);
-```
-
-  </Tab>
-</Tabs>
-
 <Note title="Supported languages">
 
 You can only create redacted audio files for transcriptions in English and Spanish.
@@ -498,15 +477,7 @@ curl https://api.assemblyai.com/v2/transcript \
 
 ### Response
 
-<CodeBlock>
-  <JsonViewer
-    displayDataTypes={false}
-    quotesOnKeys={false}
-    displayObjectSize={false}
-    collapsed={2}
-    src={(({ text }) => ({ text }))(piiRedaction)}
-  />
-</CodeBlock>
+<EndpointResponseSnippet endpoint='GET /v2/transcript/{transcript_id}' />
 
 | Key    | Type   | Description                   |
 | ------ | ------ | ----------------------------- |
@@ -529,12 +500,12 @@ The response also includes the request parameters used to generate the transcrip
 | `credit_card_expiration` | Expiration date of a credit card | |
 | `credit_card_number` | Credit card number | |
 | `date` | Specific calendar date | December 18 |
-| `date_of_birth` | Date of birth | Date of Birth: March 7,1961 |
-| `drivers_license` | Driver's license number. | DL# 356933-540 |
+| `date_of_birth` | Date of birth | Date of Birth: March 7, 1961 |
+| `drivers_license` | Driver's license number | DL# 356933-540 |
 | `drug` | Medications, vitamins, or supplements | Advil, Acetaminophen, Panadol |
 | `email_address` | Email address | support@assemblyai.com |
 | `event` | Name of an event or holiday | Olympics, Yom Kippur |
-| `gender_sexuality` | Terms indicating gender identity or sexual orientation, including slang terms | female; bisexual; trans |
+| `gender_sexuality` | Terms indicating gender identity or sexual orientation, including slang terms | female, bisexual, trans |
 | `healthcare_number` | Healthcare numbers and health plan beneficiary numbers | Policy No.: 5584-486-674-YM |
 | `injury` | Bodily injury | I broke my arm, I have a sprained wrist |
 | `ip_address` | Internet IP address, including IPv4 and IPv6 formats | 192.168.0.1 |
@@ -547,7 +518,7 @@ The response also includes the request parameters used to generate the transcrip
 | `number_sequence` | Numerical PII (including alphanumeric strings) that doesn't fall under other categories | |
 | `occupation` | Job title or profession | professor, actors, engineer, CPA |
 | `organization` | Name of an organization | CNN, McDonalds, University of Alaska, Northwest General Hospital |
-| `passport_number` | Passport numbers, issued by any country | PA4568332; NU3C6L86S12 |
+| `passport_number` | Passport numbers, issued by any country | PA4568332, NU3C6L86S12 |
 | `password` | Account passwords, PINs, access keys, or verification answers | 27%alfalfa, temp1234, My mother's maiden name is Smith |
 | `person_age` | Number associated with an age | 27, 75 |
 | `person_name` | Name of a person | Bob, Doug Jones, Dr. Kay Martinez, MD |
@@ -557,7 +528,7 @@ The response also includes the request parameters used to generate the transcrip
 | `url` | Internet addresses | https://www.assemblyai.com/ |
 | `us_social_security_number` | Social Security Number or equivalent | |
 | `username` | Usernames, login names, or handles | @AssemblyAI |
-| `vehicle_id` | Vehicle identification numbers (VINs), vehicle serial numbers, and license plate numbers | 5FNRL38918B111818; BIF7547 |
+| `vehicle_id` | Vehicle identification numbers (VINs), vehicle serial numbers, and license plate numbers | 5FNRL38918B111818, BIF7547 |
 
 
 
@@ -570,7 +541,7 @@ The response also includes the request parameters used to generate the transcrip
   theme="dark"
   iconColor="white"
 >
-  Make sure that at least one <a href="#pii-policies">PII policy</a> has been
+  Make sure that at least one [PII policy](#pii-policies) has been
   specified in your request, using the `redact_pii_policies`{' '}
   parameter. If you're still experiencing issues, please reach out to our
   support team for assistance.
