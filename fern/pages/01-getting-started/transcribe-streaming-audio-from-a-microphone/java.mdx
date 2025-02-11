@@ -1,0 +1,321 @@
+---
+title: 'Transcribe streaming audio from a microphone in Java'
+subtitle: 'Learn how to transcribe streaming audio in Java.'
+hide-nav-links: true
+description: 'Learn how to transcribe streaming audio in Java.'
+---
+
+
+  
+
+
+
+
+
+## Overview
+
+By the end of this tutorial, you'll be able to transcribe audio from your microphone in Java.
+
+<Note title="Supported languages">
+Streaming Speech-to-Text is only available for English.
+</Note>
+
+
+
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- Java 8 or above.
+- An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with credit card set up.
+
+Here's the full sample code for what you'll build in this tutorial:
+
+```java
+import com.assemblyai.api.RealtimeTranscriber;
+
+import javax.sound.sampled.*;
+import java.io.IOException;
+
+import static java.lang.Thread.interrupted;
+
+public final class App {
+
+    public static void main(String... args) throws IOException {
+        Thread thread = new Thread(() -> {
+            try {
+                RealtimeTranscriber realtimeTranscriber = RealtimeTranscriber.builder()
+                        .apiKey("<YOUR_API_KEY>")
+                        .sampleRate(16_000)
+                        .onSessionBegins(sessionBegins -> System.out.println(
+                                "Session opened with ID: " + sessionBegins.getSessionId()))
+                        .onPartialTranscript(transcript -> {
+                            if (!transcript.getText().isEmpty())
+                                System.out.println("Partial: " + transcript.getText());
+                        })
+                        .onFinalTranscript(transcript -> System.out.println("Final: " + transcript.getText()))
+                        .onError(err -> System.out.println("Error: " + err.getMessage()))
+                        .build();
+
+                System.out.println("Connecting to real-time transcript service");
+                realtimeTranscriber.connect();
+
+                System.out.println("Starting recording");
+                AudioFormat format = new AudioFormat(16_000, 16, 1, true, false);
+                // `line` is your microphone
+                TargetDataLine line = AudioSystem.getTargetDataLine(format);
+                line.open(format);
+                byte[] data = new byte[line.getBufferSize()];
+                line.start();
+                while (!interrupted()) {
+                    // Read the next chunk of data from the TargetDataLine.
+                    line.read(data, 0, data.length);
+                    realtimeTranscriber.sendAudio(data);
+                }
+
+                System.out.println("Stopping recording");
+                line.close();
+
+                System.out.println("Closing real-time transcript connection");
+                realtimeTranscriber.close();
+            } catch (LineUnavailableException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        thread.start();
+
+        System.out.println("Press ENTER key to stop...");
+        System.in.read();
+        thread.interrupt();
+        System.exit(0);
+    }
+}
+```
+
+
+
+
+## Step 1: Install the SDK
+
+Include the latest version of [AssemblyAI's Java SDK](https://central.sonatype.com/artifact/com.assemblyai/assemblyai-java) in your project dependencies:
+
+<Tabs groupId="java-language">
+<Tab title="Maven">
+
+```xml
+<dependency>
+    <groupId>com.assemblyai</groupId>
+    <artifactId>assemblyai-java</artifactId>
+    <version>ASSEMBLYAI_SDK_VERSION</version>
+</dependency>
+```
+
+</Tab>
+<Tab title="Gradle">
+
+```groovy
+dependencies {
+    implementation 'com.assemblyai:assemblyai-java:ASSEMBLYAI_SDK_VERSION'
+}
+```
+
+</Tab>
+</Tabs>
+
+
+
+
+## Step 2: Create a real-time transcriber
+
+In this step, you'll create a real-time transcriber and configure it to use your API key.
+
+<Steps>
+<Step>
+
+Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
+
+</Step>
+<Step>
+
+Use the builder to create a new real-time transcriber with your API key, a sample rate of 16 kHz, and lambdas to log the different events.
+Replace `YOUR_API_KEY` with your copied API key.
+
+```java
+import com.assemblyai.api.RealtimeTranscriber;
+
+RealtimeTranscriber realtimeTranscriber = RealtimeTranscriber.builder()
+        .apiKey("<YOUR_API_KEY>")
+        .sampleRate(16_000)
+        .onSessionBegins(sessionBegins -> System.out.println(
+                "Session opened with ID: " + sessionBegins.getSessionId()))
+        .onPartialTranscript(transcript -> {
+            if (!transcript.getText().isEmpty())
+                System.out.println("Partial: " + transcript.getText());
+        })
+        .onFinalTranscript(transcript -> System.out.println("Final: " + transcript.getText()))
+        .onError(err -> System.out.println("Error: " + err.getMessage()))
+        .build();
+```
+
+The real-time transcriber returns two types of transcripts: _partial_ and _final_.
+
+- _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
+- _Final transcripts_ are returned when the service detects a pause in speech.
+
+<Tip title="End of utterance controls">
+You can [configure the silence threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection) for automatic utterance detection and programmatically [force the end of an utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to immediately get a _Final transcript_.
+</Tip>
+
+<Note title="Sample rate">
+
+The `sample_rate` is the number of audio samples per second, measured in hertz (Hz). Higher sample rates result in higher quality audio, which may lead to better transcripts, but also more data being sent over the network.
+
+We recommend the following sample rates:
+
+- Minimum quality: `8_000` (8 kHz)
+- Medium quality: `16_000` (16 kHz)
+- Maximum quality: `48_000` (48 kHz)
+
+If you don't set a sample rate on the real-time transcriber, it defaults to 16 kHz.
+</Note>
+
+</Step>
+</Steps>
+
+
+
+
+## Step 3: Connect the streaming service
+
+Connect to the streaming service so you can send audio to it.
+
+```java
+System.out.println("Connecting to real-time transcript service");
+realtimeTranscriber.connect();
+```
+
+
+
+
+## Step 4: Record audio from microphone
+
+In this step, you'll use Java's built-in APIs for recording audio.
+
+<Steps>
+<Step>
+
+Create the audio format that the real-time service expects, which is single channel, `pcm_s16le` (PCM signed 16-bit little-endian) encoded, with a sample rate of `16_000`.
+The sample rate needs to be the same value as you configured on the real-time transcriber.
+
+```java
+
+
+System.out.println("Starting recording");
+AudioFormat format = new AudioFormat(16_000.0f, 16, 1, true, false);
+```
+
+<Note title="Audio data format">
+
+By default, transcriptions expect PCM16-encoded audio. If you want to use mu-law encoding, see [Specifying the encoding](/docs/speech-to-text/streaming#specify-the-encoding).
+
+</Note>
+
+</Step>
+<Step>
+
+Get the microphone and open it.
+
+```java
+// `line` is your microphone
+TargetDataLine line = AudioSystem.getTargetDataLine(format);
+line.open(format);
+```
+
+</Step>
+<Step>
+
+Read the audio data into a byte array and send it to the real-time transcriber.
+
+```java
+
+
+byte[] data = new byte[line.getBufferSize()];
+line.start();
+while (!interrupted()) {
+    // Read the next chunk of data from the TargetDataLine.
+    line.read(data, 0, data.length);
+    realtimeTranscriber.sendAudio(data);
+}
+```
+
+<Note title="Interupting the recording">
+
+The `interrupted()` method returns `true` when the current thread is interrupted.
+In this example, you will use it to stop the transcriber and recording when the user presses the `ENTER` key.
+
+</Note>
+
+</Step>
+</Steps>
+
+
+
+
+## Step 5: Disconnect the real-time service
+
+When you are done, close the transcriber.
+
+```java
+System.out.println("Stopping recording");
+line.close();
+
+System.out.println("Closing real-time transcript connection");
+realtimeTranscriber.close();
+```
+
+
+
+
+## Step 6: Run the code in a thread
+
+To be able to listen for user input while the recording is happening, you need to run the code in a separate thread.
+When the user hits enter, interrupt the thread and exit the program.
+
+```java
+Thread thread = new Thread(() -> {
+    try {
+      // Your existing code here
+    } catch (LineUnavailableException e) {
+        throw new RuntimeException(e);
+    }
+});
+thread.start();
+
+System.out.println("Press ENTER key to stop...");
+System.in.read();
+thread.interrupt();
+System.exit(0);
+```
+
+
+
+
+
+## Next steps
+
+To learn more about Streaming Speech-to-Text, see the following resources:
+
+- [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
+- [WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
+
+
+
+
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
+
+
+

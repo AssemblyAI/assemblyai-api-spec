@@ -1,0 +1,683 @@
+---
+title: 'Streaming'
+hide-nav-links: true
+description: 'Transcribe live audio with Streaming Speech-to-Text'
+---
+
+
+
+
+
+  
+AssemblyAI's Streaming Speech-to-Text (STT) allows you to transcribe live audio streams with high accuracy and low latency. By streaming your audio data to our secure WebSocket API, you can receive transcripts back within a few hundred milliseconds.
+
+<Note title="Supported languages">
+Streaming Speech-to-Text is only available for English.
+</Note>
+
+
+
+
+  
+## Getting started
+
+Get started with any of our official SDKs:
+
+<Info title="Getting Started Guides">
+
+- [Python](/docs/getting-started/transcribe-streaming-audio-from-a-microphone/python)
+- [JavaScript / TypeScript](/docs/getting-started/transcribe-streaming-audio-from-a-microphone/typescript)
+- [Go](/docs/getting-started/transcribe-streaming-audio-from-a-microphone/go)
+- [Java](/docs/getting-started/transcribe-streaming-audio-from-a-microphone/java)
+- [C#](/docs/getting-started/transcribe-streaming-audio-from-a-microphone/csharp)
+
+</Info>
+
+If your programming language isn't supported yet, see the WebSocket API:
+
+- [Streaming API reference](https://assemblyai.com/docs/api-reference/streaming)
+- [Python guide on using Streaming Speech-to-Text](/docs/getting-started/transcribe-streaming-audio/python)
+
+
+
+
+
+## Audio requirements
+
+The audio format must conform to the following requirements:
+
+- PCM16 or Mu-law encoding (See [Specify the encoding](#specify-the-encoding))
+- A sample rate that matches the value of the supplied `sample_rate` parameter
+- Single-channel
+- 100 to 2000 milliseconds of audio per message
+
+<Tip>
+Audio segments with a duration between 100 ms and 450 ms produce the best results in transcription accuracy.
+</Tip>
+
+
+## Specify the encoding
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the `encoding` parameter to `aai.AudioEncoding.pcm_mulaw`:
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    encoding=aai.AudioEncoding.pcm_mulaw
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the `encoding` parameter to `'pcm_mulaw'`:
+
+```ts {3}
+const rt = client.realtime.transcriber({
+  ...,
+  encoding: 'pcm_mulaw'
+})
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the [`WithRealTimeEncoding`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#WithRealTimeEncoding) parameter to `aai.RealTimeEncodingPCMMulaw`:
+
+```go {4}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAPIKey(apiKey),
+    aai.WithHandler(handler),
+    aai.WithRealTimeEncoding(aai.RealTimeEncodingPCMMulaw),
+)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the `encoding` parameter to `AudioEncoding.PCM_MULAW`:
+
+```java {3}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .encoding(AudioEncoding.PCM_MULAW)
+  .build();
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the `Encoding` parameter to `AudioEncoding.PcmMulaw`:
+
+```csharp {4}
+await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
+{
+    ...
+    Encoding = AudioEncoding.PcmMulaw
+});
+```
+
+  </Tab>
+</Tabs>
+
+<Tabs>
+<Tab language="python" title="Python">
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `aai.AudioEncoding.pcm_s16le` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `aai.AudioEncoding.pcm_mulaw` | PCM Mu-law. |
+</Tab>
+<Tab language="typescript" title="TypeScript">
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `'pcm_s16le'` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `'pcm_mulaw'` | PCM Mu-law. |
+</Tab>
+<Tab language="golang" title="Go">
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `aai.RealTimeEncodingPCMS16le` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `aai.RealTimeEncodingPCMMulaw` | PCM Mu-law. |
+</Tab>
+<Tab language="java" title="Java">
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `AudioEncoding.PCM_S16LE` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `AudioEncoding.PCM_MULAW` | PCM Mu-law. |
+</Tab>
+<Tab language="csharp" title="C#">
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `AudioEncoding.PcmS16le` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `AudioEncoding.PcmMulaw` | PCM Mu-law. |
+</Tab>
+</Tabs>
+
+
+## Add custom vocabulary
+
+You can add up to 2500 characters of custom vocabulary to boost their transcription probability.
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+For this, create a list of strings and set the `word_boost` parameter:
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    word_boost=["aws", "azure", "google cloud"]
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+For this, create a list of strings and set the `wordBoost` parameter:
+
+```ts {3}
+const rt = client.realtime.transcriber({
+  ...,
+  wordBoost:['aws', 'azure', 'google cloud']
+})
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+For this, create a list of strings and specify the [`WithRealTimeWordBoost`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#WithRealTimeWordBoost) parameter:
+
+```go {4}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAPIKey(apiKey),
+    aai.WithHandler(handler),
+    aai.WithRealTimeWordBoost([]string{"aws", "azure", "google cloud"}),
+)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+For this, create a list of strings and call the `wordBoost()` method when building the real-time transcriber.
+
+```java {3}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .wordBoost(List.of("aws", "azure", "google cloud"))
+  .build();
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+For this, create an array of strings and set the `WordBoost` parameter:
+
+```csharp {4}
+await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
+{
+    ...,
+    WordBoost = ["aws", "azure", "google cloud"]
+});
+```
+
+  </Tab>
+</Tabs>
+
+<Note>
+If you're not using one of the SDKs, you must ensure that the `word_boost` parameter is a JSON array that is URL encoded.
+See this [code example](/docs/speech-to-text/streaming#add-custom-vocabulary).
+</Note>
+
+
+
+
+
+## Authenticate with a temporary token
+
+If you need to authenticate on the client, you can avoid exposing your API key by using temporary authentication tokens.
+You should generate this token on your server and pass it to the client.
+
+<Steps>
+<Step>
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+To generate a temporary token, call `aai.RealtimeTranscriber.create_temporary_token()`.
+
+Use the `expires_in` parameter to specify how long the token should be valid for, in seconds.
+
+```python
+token = aai.RealtimeTranscriber.create_temporary_token(
+    expires_in=60
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+To generate a temporary token, call `client.realtime.createTemporaryToken()`.
+
+Use the `expires_in` parameter to specify how long the token should be valid for, in seconds.
+
+```ts
+const token = await client.realtime.createTemporaryToken({ expires_in: 60 })
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+To generate a temporary token, call [`client.RealTime.CreateTemporaryToken()`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeService.CreateTemporaryToken).
+
+Use the second parameter to specify how long the token should be valid for, in seconds.
+
+```go
+client := aai.NewClient("YOUR_API_KEY")
+
+resp, _ := client.RealTime.CreateTemporaryToken(ctx, 60)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+Use the `CreateRealtimeTemporaryTokenParams.builder()` to configure parameters to generate the token.
+Configure the `expiresIn()` parameter parameter to specify how long the token should be valid for, in seconds.
+
+```java
+var tokenResponse = client.realtime().createTemporaryToken(CreateRealtimeTemporaryTokenParams.builder()
+  .expiresIn(60)
+  .build()
+);
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+To generate a temporary token, call `client.Realtime.CreateTemporaryTokenAsync()`.
+
+Use the `expires_in` parameter to specify how long the token should be valid for, in seconds.
+
+```csharp
+var tokenResponse = await client.Realtime.CreateTemporaryTokenAsync(expiresIn: 60);
+```
+
+  </Tab>
+</Tabs>
+
+<Note>
+The expiration time must be a value between 60 and 360000 seconds.
+</Note>
+
+</Step>
+<Step>
+
+The client should retrieve the token from the server and use the token to authenticate the transcriber.
+
+<Note>
+Each token has a one-time use restriction and can only be used for a single session.
+</Note>
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+  
+  To use it, specify the `token` parameter when initializing the streaming transcriber.
+
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    token=token
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+  
+  To use it, specify the `token` parameter when initializing the streaming transcriber.
+
+
+```ts {8}
+import { RealtimeTranscriber } from 'assemblyai';
+
+// TODO: implement getToken to retrieve token from server
+const token = await getToken();
+
+const rt = new RealtimeTranscriber({
+  ...,
+  token
+})
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+To use it, specify the [`WithRealTimeAuthToken`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#WithRealTimeAuthToken) parameter when creating the real-time client.
+
+```go {2}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAuthToken(resp.Token),
+    aai.WithHandler(handler),
+)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+  
+  To use it, specify the `token` parameter when initializing the streaming transcriber.
+
+
+```java {3}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .token(tokenResponse.getToken())
+  .build();
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+
+```csharp {3}
+
+To use it, specify the `token` parameter when initializing the streaming transcriber.
+
+await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
+{
+    Token = tokenResponse.Token,
+    ...
+});
+```
+
+  </Tab>
+</Tabs>
+
+</Step>
+</Steps>
+
+
+
+
+
+## Manually end current utterance
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+To manually end an utterance, call `force_end_utterance()`:
+
+```python
+transcriber.force_end_utterance()
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+To manually end an utterance, call `forceEndUtterance()`:
+
+```ts
+rt.forceEndUtterance()
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+To manually end an utterance, call [`ForceEndUtterance()`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient.ForceEndUtterance):
+
+```go
+client.ForceEndUtterance(ctx)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+To manually end an utterance, call `forceEndUtterance()`:
+
+```java
+realtimeTranscriber.forceEndUtterance()
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+To manually end an utterance, call `ForceEndUtteranceAsync()`:
+
+```csharp
+await transcriber.ForceEndUtteranceAsync();
+```
+
+  </Tab>
+</Tabs>
+
+Manually ending an utterance immediately produces a final transcript.
+
+
+
+
+
+## Configure the threshold for automatic utterance detection
+
+You can configure the threshold for how long to wait before ending an utterance.
+ 
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+To change the threshold, you can specify the `end_utterance_silence_threshold` parameter when initializing the streaming transcriber.
+
+After the session has started, you can change the threshold by calling `configure_end_utterance_silence_threshold()`.
+
+```python {3,6}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    end_utterance_silence_threshold=500
+)
+
+transcriber.configure_end_utterance_silence_threshold(300)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+To change the threshold, you can specify the `endUtteranceSilenceThreshold` parameter when initializing the streaming transcriber.
+
+After the session has started, you can change the threshold by calling `configureEndUtteranceSilenceThreshold()`.
+
+```ts {3,8}
+const rt = client.realtime.transcriber({
+  ...,
+  endUtteranceSilenceThreshold: 500
+})
+
+// after connecting
+
+rt.configureEndUtteranceSilenceThreshold(300)
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+To change the threshold, set [`SetEndUtteranceSilenceThreshold`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient.SetEndUtteranceSilenceThreshold) while the client is connected.
+
+```go
+client.SetEndUtteranceSilenceThreshold(ctx, 500)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+To change the threshold, you can call the `endUtteranceSilenceThreshold()` method when building the real-time transcriber.
+
+After the session has started, you can change the threshold by calling `configureEndUtteranceSilenceThreshold()`.
+
+```java {3,8}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .endUtteranceSilenceThreshold(500)
+  .build();
+
+// after connecting
+
+realtimeTranscriber.configureEndUtteranceSilenceThreshold(300)
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+To change the threshold, call `ConfigureEndUtteranceThresholdAsync()` while the transcriber is connected.
+
+```csharp
+await transcriber.ConfigureEndUtteranceThresholdAsync(500);
+```
+
+  </Tab>
+</Tabs>
+
+<Note>
+By default, Streaming Speech-to-Text ends an utterance after 700 milliseconds of silence. You can configure the duration threshold any number of times during a session after the session has started.
+The valid range is between 0 and 20000.
+</Note>
+
+
+
+
+
+## Disable partial transcripts
+
+If you're only using the final transcript, you can disable partial transcripts to reduce network traffic.
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+To disable partial transcripts, set the `disable_partial_transcripts` parameter to `True`.
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    disable_partial_transcripts=True
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+To disable partial transcripts, set the `disablePartialTranscripts` parameter to `true`.
+
+```ts {3}
+const rt = client.realtime.transcriber({
+  ...,
+  disablePartialTranscripts: true
+})
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+Partial transcripts are disabled by default. Enable them by defining the `OnPartialTranscript` callback.
+
+```go
+// Partial transcripts are disabled by default.
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+To disable partial transcripts, call the `disablePartialTranscripts()` builder method.
+
+```java {3}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .disablePartialTranscripts()
+  .build();
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+To disable partial transcripts, set the `DisablePartialTranscripts` parameter to `true`.
+
+```csharp {4}
+await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
+{
+    ...,
+    DisablePartialTranscripts = true
+});
+```
+
+  </Tab>
+</Tabs>
+
+
+
+
+
+## Enable extra session information
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+If you enable extra session information, the client receives a `RealtimeSessionInformation` message right before receiving the session termination message.
+
+To enable it, define a callback function to handle the event and cofigure the `on_extra_session_information` parameter.
+
+```python {2,8}
+# Define a callback to handle the session information message
+def on_extra_session_information(data: aai.RealtimeSessionInformation):
+    print(data.audio_duration_seconds)
+
+# Configure the RealtimeTranscriber
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    on_extra_session_information=on_extra_session_information,
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+The client receives a `SessionInformation` message right before receiving the session termination message.
+Handle the `session_information` event to receive the message.
+
+```ts {5}
+const rt = client.realtime.transcriber({
+  ...
+})
+
+rt.on('session_information', (info: SessionInformation) => console.log(info));
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+If you enable extra session information, the client receives a `SessionInformation` message right before receiving the session termination message.
+
+To enable it, register a `RealTimeTranscriber` with a `OnSessionInformation` callback.
+
+```go {2-4}
+transcriber := &aai.RealTimeTranscriber{
+    OnSessionInformation: func(event aai.SessionInformation) {
+        fmt.Println(event.AudioDurationSeconds)
+    }
+}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAPIKey("YOUR_API_KEY"),
+    aai.WithRealTimeTranscriber(transcriber),
+)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+The client receives a `SessionInformation` message right before receiving the session termination message.
+Configure the `onSessionInformation()` callback when you build the transcriber to receive the message.
+
+```java {3}
+var realtimeTranscriber = RealtimeTranscriber.builder()
+  ...
+  .onSessionInformation((info) -> System.out.println(info.getAudioDurationSeconds()))
+  .build()
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+The client receives a `SessionInformation` message right before receiving the session termination message.
+Subscribe to the `SessionInformationReceived` event to receive the message.
+
+```csharp {3}
+transcriber.SessionInformationReceived.Subscribe(info =>
+{
+    Console.WriteLine("Session information:\n- duration: {0}", info.AudioDurationSeconds);
+});
+```
+
+  </Tab>
+</Tabs>
+
+
+
+
+
+## Learn more
+
+To learn about using Streaming Speech-to-Text, see the following resources:
+
+- [Blog post: Automatically Transcribe Zoom Calls in Real Time](https://www.assemblyai.com/blog/how-to-automatically-transcribe-zoom-calls/)
+- [Blog post: Transcribe Twilio Phone Calls](https://www.assemblyai.com/blog/transcribe-twilio-phone-calls-in-real-time-with-assemblyai/)
+- [Blog post: Real Time Speech Recognition with Python and PyAudio](https://www.assemblyai.com/blog/real-time-speech-recognition-with-python/)
+- [GitHub: End-to-end examples](https://github.com/AssemblyAI-Community/docs-snippets/tree/main/real-time)
+- [GitHub: Cookbook examples](https://github.com/AssemblyAI/cookbook/tree/master/real-time)
+- [GitHub: Use Express.js for Streaming Speech-to-Text](https://github.com/AssemblyAI/realtime-transcription-browser-js-example)
+- [Streaming API reference](https://assemblyai.com/docs/api-reference/streaming)
+
+
+

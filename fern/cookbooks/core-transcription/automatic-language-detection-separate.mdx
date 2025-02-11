@@ -1,0 +1,127 @@
+---
+title: "automatic-language-detection-separate"
+---
+
+# Automatic Language Detection as separate step from Transcription
+
+In this guide, we'll show you how to perform automatic language detection separately from the transcription process. For the transcription, the file then gets then routed to either our [*Best* or *Nano*](https://www.assemblyai.com/docs/speech-to-text/speech-recognition#select-the-speech-model-with-best-and-nano) model class, depending on the supported language.
+
+This workflow is designed to be cost-effective, slicing the first 60 seconds of audio and running it through Nano ALD, which detects 99 languages, at a cost of $0.002 per transcript for this language detection workflow (not including the total transcription cost).
+
+## Get started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+## Step-by-step instructions
+
+Install the SDK:
+
+
+```python
+%pip install assemblyai
+```
+
+Import the `assemblyai` package and set your API key:
+
+
+```python
+import assemblyai as aai
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Create a set with all supported languages for *Best*. You can find them in our [documentation here](https://www.assemblyai.com/docs/concepts/supported-languages#supported-languages-for-best).
+
+
+```python
+supported_languages_for_best = {
+    "en",
+    "en_au",
+    "en_uk",
+    "en_us",
+    "es",
+    "fr",
+    "de",
+    "it",
+    "pt",
+    "nl",
+    "hi",
+    "ja",
+    "zh",
+    "fi",
+    "ko",
+    "pl",
+    "ru",
+    "tr",
+    "uk",
+    "vi",
+}
+```
+
+Define a `Transcriber`. Note that here we don't pass in a global `TranscriptionConfig`, but later apply different ones during the `transcribe()` call.
+
+
+```python
+transcriber = aai.Transcriber()
+```
+
+Define two helper functions:
+- `detect_language()` performs language detection on the [first 60 seconds](https://www.assemblyai.com/docs/api-reference/transcripts/submit#request.body.audio_end_at) of the audio using *Nano* and returns the language code.
+- `transcribe_file()` performs the transcription. For this, the identified language is applied and either *Best* or *Nano* is used depending on the supported language.
+
+
+```python
+def detect_language(audio_url):
+    config = aai.TranscriptionConfig(
+        audio_end_at=60000,  # first 60 seconds (in milliseconds)
+        language_detection=True,
+        speech_model=aai.SpeechModel.nano,
+    )
+    transcript = transcriber.transcribe(audio_url, config=config)
+    return transcript.json_response["language_code"]
+
+def transcribe_file(audio_url, language_code):
+    config = aai.TranscriptionConfig(
+        language_code=language_code,
+        speech_model=(
+            aai.SpeechModel.best
+            if language_code in supported_languages_for_best
+            else aai.SpeechModel.nano
+        ),
+    )
+    transcript = transcriber.transcribe(audio_url, config=config)
+    return transcript
+```
+
+Test the code with different audio files. For each file, we apply both helper functions sequentially to first identify the language and then transcribe the file.
+
+
+```python
+audio_urls = [
+    "https://storage.googleapis.com/aai-web-samples/public_benchmarking_portugese.mp3",
+    "https://storage.googleapis.com/aai-web-samples/public_benchmarking_spanish.mp3",
+    "https://storage.googleapis.com/aai-web-samples/slovenian_luka_doncic_interview.mp3",
+    "https://storage.googleapis.com/aai-web-samples/5_common_sports_injuries.mp3",
+]
+
+for audio_url in audio_urls:
+    language_code = detect_language(audio_url)
+    print("Identified language:", language_code)
+
+    transcript = transcribe_file(audio_url, language_code)
+    print("Transcript:", transcript.text[:100], "...")
+```
+
+<Output>
+
+```
+Identified language: pt
+Transcript: e aí Olá pessoal, sejam bem-vindos a mais um vídeo e hoje eu vou ensinar-vos como fazer esta espada  ...
+Identified language: es
+Transcript: Precisamente sobre este caso, el diario estadounidense New York Times reveló este sábado un conjunto ...
+Identified language: sl
+Transcript: Ni lepška, kaj videl tega otroka v mrekoj svojga okolja, da mu je uspil in to v takimi miri, da pač  ...
+Identified language: en
+Transcript: Runner's knee runner's knee is a condition characterized by pain behind or around the kneecap. It is ...
+
+```
+</Output>

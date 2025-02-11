@@ -1,0 +1,381 @@
+---
+title: 'Transcribe streaming audio from a microphone in Go'
+subtitle: 'Learn how to transcribe streaming audio in Go.'
+hide-nav-links: true
+description: 'Learn how to transcribe streaming audio in Go.'
+---
+
+
+
+
+## Overview
+
+By the end of this tutorial, you'll be able to transcribe audio from your microphone in Go.
+
+<Note title="Supported languages">
+Streaming Speech-to-Text is only available for English.
+</Note>
+
+
+
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Go](https://go.dev/) installed.
+- An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with a credit card set up.
+
+You can download the full sample code from [GitHub](https://github.com/AssemblyAI/assemblyai-go-sdk/tree/main/examples/realtime).
+
+
+
+
+
+## Step 1: Install dependencies
+
+<Steps>
+<Step>
+
+PortAudio is a cross-platform library for streaming audio. The Go SDK uses PortAudio to stream audio from your microphone.
+
+<Tabs groupId="os">
+
+<Tab  title="macOS">
+
+```bash
+brew install portaudio
+```
+
+</Tab>
+<Tab title="Windows">
+
+Refer to the [official documentation](https://files.portaudio.com/docs/v19-doxydocs/tutorial_start.html) for how to compile the library from source code.
+
+</Tab>
+<Tab title="Linux">
+
+```bash
+apt install portaudio19-dev
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+Install the AssemblyAI Go module using `go get`.
+
+```bash
+go get github.com/AssemblyAI/assemblyai-go-sdk
+```
+
+</Step>
+</Steps>
+
+
+
+
+## Step 2: Create a transcriber
+
+In this step, you'll define a transcriber to handle real-time events.
+
+<Steps>
+<Step>
+
+Create a new file called `main.go` that imports the AssemblyAI Go module.
+
+```go
+package main
+
+import (
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+```
+
+</Step>
+<Step>
+
+Create a type that implements [RealtimeHandler](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeHandler).
+
+```go
+func main() {
+    transcriber := &aai.RealTimeTranscriber{
+        OnSessionBegins: func(event assemblyai.SessionBegins) {
+            fmt.Println("session begins")
+        },
+        OnSessionTerminated: func(event assemblyai.SessionTerminated) {
+            fmt.Println("session terminated")
+        },
+        OnFinalTranscript: func(transcript assemblyai.FinalTranscript) {
+            fmt.Println(transcript.Text)
+        },
+        OnPartialTranscript: func(transcript assemblyai.PartialTranscript) {
+            fmt.Printf("%s\r", transcript.Text)
+        },
+        OnError: func(err error) {
+            fmt.Printf("Something bad happened: %v", err)
+        },
+    }
+}
+```
+
+</Step>
+<Step>
+
+Browse to <a href="https://www.assemblyai.com/app" target="_blank">Account</a>, and then click **Copy API key** under **Copy your API key**.
+
+</Step>
+<Step>
+
+Create a new [RealTimeClient](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient) using the function you created. Replace `YOUR_API_KEY` with your copied API key.
+
+```go {4}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAPIKey("<YOUR_API_KEY>"),
+    aai.WithRealTimeTranscriber(transcriber),
+)
+```
+
+<Note title="Sample rate">
+
+Sample rate is the number of audio samples per second, measured in hertz (Hz). Higher sample rates result in higher quality audio, which may lead to better transcripts, but also more data being sent over the network. By default, the SDK uses a sample rate of 16 kHz. You can set your own sample rate using the `WithSampleRate` option.
+
+```go {4}
+client := aai.NewRealTimeClientWithOptions(
+    aai.WithRealTimeAPIKey("<YOUR_API_KEY>")
+    aai.WithRealTimeTranscriber(transcriber),
+    aai.WithSampleRate(16_000),
+)
+```
+
+We recommend the following sample rates:
+
+- Minimum quality: `8_000` (8 kHz)
+- Medium quality: `16_000` (16 kHz)
+- Maximum quality: `48_000` (48 kHz)
+
+</Note>
+
+</Step>
+</Steps>
+
+
+
+
+## Step 3: Connect the transcriber
+
+To stream audio to AssemblyAI, you first need to establish a connection to the API using [`client.Connect()`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient.Connect).
+
+```go
+ctx := context.Background()
+
+if err := client.Connect(ctx); err != nil {
+    logger.Fatal(err)
+}
+```
+
+You've set up the transcriber to handle real-time events, and connected it to the API. Next, you'll create a recorder to record audio from your microphone.
+
+
+
+
+## Step 4: Record audio from microphone
+
+In this step, you'll configure your Go app to record audio from your microphone. You'll use the [gordonklaus/portaudio](https://github.com/gordonklaus/portaudio) module to make this easier.
+
+<Steps>
+<Step>
+
+
+Install the [portaudio](github.com/gordonklaus/portaudio) module for Go.
+
+```bash
+go get github.com/gordonklaus/portaudio
+```
+
+</Step>
+<Step>
+
+Create a new file called `recorder.go` with the following code:
+
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/binary"
+
+    "github.com/gordonklaus/portaudio"
+)
+
+type recorder struct {
+    stream *portaudio.Stream
+    buffer []int16
+}
+
+func newRecorder(sampleRate int, framesPerBuffer int) (*recorder, error) {
+    buffer := make([]int16, framesPerBuffer)
+
+    stream, err := portaudio.OpenDefaultStream(1, 0, float64(sampleRate), framesPerBuffer, buffer)
+    if err != nil {
+        return nil, err
+    }
+
+    return &recorder{
+        stream: stream,
+        buffer: buffer,
+    }, nil
+}
+
+func (r *recorder) Read() ([]byte, error) {
+    if err := r.stream.Read(); err != nil {
+        return nil, err
+    }
+
+    var buf bytes.Buffer
+
+    if err := binary.Write(&buf, binary.LittleEndian, r.buffer); err != nil {
+        return nil, err
+    }
+
+    return buf.Bytes(), nil
+}
+
+func (r *recorder) Start() error {
+    return r.stream.Start()
+}
+
+func (r *recorder) Stop() error {
+    return r.stream.Stop()
+}
+
+func (r *recorder) Close() error {
+    return r.stream.Close()
+}
+```
+
+</Step>
+<Step>
+
+In `main.go`, open a microphone stream. The `sampleRate` must be the same value as the one you passed to `RealTimeClient` (`16_000` by default).
+
+```go
+portaudio.Initialize()
+defer portaudio.Terminate()
+
+var (
+    // Must match the sample rate you used for the transcriber.
+    sampleRate = 16000
+
+    // Determines how many audio samples to send at once (3200 / 16000 = 200 ms).
+    framesPerBuffer = 3200
+)
+
+rec, err := newRecorder(sampleRate, framesPerBuffer)
+if err != nil {
+    log.Fatal(err)
+}
+
+if err := rec.Start(); err != nil {
+    log.Fatal(err)
+}
+```
+
+<Note title="Audio data format">
+
+The recorder formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+
+- Single channel
+- 16-bit signed integer PCM or mu-law encoding
+
+</Note>
+
+</Step>
+<Step>
+
+Read data from the microphone stream, and send it to AssemblyAI for transcription using [`client.Send()`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient.Send).
+
+```go {4-8,10-13}
+for {
+    select {
+    default:
+        // Read audio samples from the microphone.
+        b, err := rec.Read()
+        if err != nil {
+            logger.Fatal(err)
+        }
+
+        // Send partial audio samples.
+        if err := client.Send(ctx, b); err != nil {
+            logger.Fatal(err)
+        }
+    }
+}
+```
+
+</Step>
+</Steps>
+
+
+
+
+## Step 5: Disconnect the transcriber
+
+In this step, you'll clean up resources by stopping the recorder and disconnecting the transcriber.
+
+To disconnect the transcriber on `Ctrl+C`, use [`client.Disconnect()`](https://pkg.go.dev/github.com/AssemblyAI/assemblyai-go-sdk#RealTimeClient.Disconnect). `Disconnect()` accepts a boolean parameter that allows you to wait for any remaining transcriptions before closing the connection.
+
+```go {8-11,13-16}
+sigs := make(chan os.Signal, 1)
+
+signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+for {
+    select {
+    case <-sigs:
+        // Stop recording.
+        if err := rec.Stop(); err != nil {
+            log.Fatal(err)
+        }
+
+        // Disconnect the transcriber.
+        if err := client.Disconnect(ctx, true); err != nil {
+            log.Fatal(err)
+        }
+
+        os.Exit(0)
+    default:
+        // Read audio samples from the microphone.
+        b, err := rec.Read()
+        if err != nil {
+            logger.Fatal(err)
+        }
+
+        // Send partial audio samples.
+        if err := client.Send(ctx, b); err != nil {
+            logger.Fatal(err)
+        }
+    }
+    }
+}
+```
+
+
+
+
+Run your application to start transcribing. Your OS may require you to allow your app to access your microphone. If prompted, click **Allow**.
+
+You can also find the source code for this tutorial on [GitHub](http://github.com/AssemblyAI/assemblyai-go-sdk).
+
+
+
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
+
+
+

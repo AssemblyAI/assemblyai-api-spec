@@ -1,0 +1,125 @@
+---
+title: 'Semantic Kernel Integration for AssemblyAI'
+description: 'Transcribe audio in Semantic Kernel for C# .NET using the built-in integration with AssemblyAI.'
+hide-nav-links: true
+---
+
+
+
+
+
+
+
+Semantic Kernel is an SDK for multiple programming languages to develop applications with [Large Language Models (LLMs)](https://www.assemblyai.com/blog/introduction-large-language-models-generative-ai/#what-are-language-models).
+However, LLMs only operate on textual data and don't understand what is said in audio files.
+With the [AssemblyAI integration for Semantic Kernel](https://github.com/AssemblyAI/assemblyai-semantic-kernel), you can use AssemblyAI's transcription models using the `TranscribePlugin` to transcribe your audio and video files.
+
+
+
+
+## Quickstart
+
+Add the [AssemblyAI.SemanticKernel NuGet package](https://www.nuget.org/packages/AssemblyAI.SemanticKernel) to your project.
+
+<Tabs>
+  <Tab  title="dotnet CLI">
+
+```bash
+dotnet add package AssemblyAI.SemanticKernel
+```
+
+  </Tab>
+  <Tab title="Package Manager Console">
+
+```powershell
+Install-Package AssemblyAI.SemanticKernel
+```
+
+  </Tab>
+</Tabs>
+
+Next, register the `TranscriptPlugin` into your kernel:
+
+```csharp
+using AssemblyAI.SemanticKernel;
+using Microsoft.SemanticKernel;
+
+// Build your kernel
+var kernel = Kernel.CreateBuilder();
+
+// Get AssemblyAI API key from env variables, or much better, from .NET configuration
+string apiKey = Environment.GetEnvironmentVariable("ASSEMBLYAI_API_KEY")
+  ?? throw new Exception("ASSEMBLYAI_API_KEY env variable not configured.");
+
+kernel.ImportPluginFromObject(
+    new TranscriptPlugin(apiKey: apiKey)
+);
+```
+
+
+
+
+## Usage
+
+Get the `Transcribe` function from the transcript plugin and invoke it with the context variables.
+```csharp
+var result = await kernel.InvokeAsync(
+    nameof(TranscriptPlugin),
+    TranscriptPlugin.TranscribeFunctionName,
+    new KernelArguments
+    {
+        ["INPUT"] = "https://assembly.ai/espn.m4a"
+    }
+);
+Console.WriteLine(result.GetValue<string>());
+```
+
+You can get the transcript using `result.GetValue<string>()`.
+
+You can also upload local audio and video file. To do this:
+- Set the `TranscriptPlugin.AllowFileSystemAccess` property to `true`.
+- Configure the `INPUT` variable with a local file path.
+
+```csharp
+kernel.ImportPluginFromObject(
+    new TranscriptPlugin(apiKey: apiKey)
+    {
+        AllowFileSystemAccess = true
+    }
+);
+var result = await kernel.InvokeAsync(
+    nameof(TranscriptPlugin),
+    TranscriptPlugin.TranscribeFunctionName,
+    new KernelArguments
+    {
+        ["INPUT"] = "https://assembly.ai/espn.m4a"
+    }
+);
+Console.WriteLine(result.GetValue<string>());
+```
+
+You can also invoke the function from within a semantic function like this.
+
+```csharp
+string prompt = """
+                Here is a transcript:
+                {{TranscriptPlugin.Transcribe "https://assembly.ai/espn.m4a"}}
+                ---
+                Summarize the transcript.
+                """;
+var result = await kernel.InvokePromptAsync(prompt);
+Console.WriteLine(result.GetValue<string>());
+```
+
+
+
+
+## Additional resources
+
+You can learn more about using Semantic Kernel with AssemblyAI in these resources:
+
+- [Ask .NET Rocks! questions with Semantic Kernel, GPT, and Chroma DB](https://www.assemblyai.com/blog/ask-dotnetrocks-questions-semantic-kernel/)
+- [AssemblyAI integration for Semantic Kernel GitHub repository](https://github.com/AssemblyAI/assemblyai-semantic-kernel)
+
+
+

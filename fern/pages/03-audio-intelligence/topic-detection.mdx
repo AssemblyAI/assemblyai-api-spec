@@ -1,0 +1,419 @@
+---
+title: 'Topic Detection'
+description: 'Label topics that are mentioned in your audio file'
+---
+
+
+  
+
+
+
+
+
+
+The Topic Detection model lets you identify different topics in the transcript. The model uses the [IAB Content Taxonomy](https://airtable.com/shr7KNXOtvfhTTS4i/tblqVLDb7YSsCMXo4?backgroundColor=purple&viewControls=on), a standardized language for content description which consists of 698 comprehensive topics.
+
+
+
+
+
+## Quickstart
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription parameters.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(iab_categories=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+# Get the parts of the transcript that were tagged with topics
+for result in transcript.iab_categories.results:
+    print(result.text)
+    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
+    for label in result.labels:
+        print(f"{label.label} ({label.relevance})")
+
+# Get a summary of all topics in the transcript
+for topic, relevance in transcript.iab_categories.summary.items():
+    print(f"Audio is {relevance * 100}% relevant to {topic}")
+```
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xnr8yS3SeiiI-4gwuhP-uuAHrcK76LR9#scrollTo=0-DH_4bO1luR)
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription config.
+
+
+```ts {13}
+import { AssemblyAI } from 'assemblyai'
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+
+// const audioFile = './local_file.mp3'
+const audioFile =
+  'https://assembly.ai/wildfires.mp3'
+
+const params = {
+  audio: audioFile,
+  iab_categories: true
+}
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params)
+
+  // Get the parts of the transcript that were tagged with topics
+  for (const result of transcript.iab_categories_result!.results) {
+    console.log(result.text)
+    console.log(
+      `Timestamp: ${result.timestamp?.start} - ${result.timestamp?.end}`
+    )
+    for (const label of result.labels!) {
+      console.log(`${label.label} (${label.relevance})`)
+    }
+  }
+
+  // Get a summary of all topics in the transcript
+  for (const [topic, relevance] of Object.entries(
+    transcript.iab_categories_result!.summary
+  )) {
+    console.log(`Audio is ${relevance * 100} relevant to ${topic}`)
+  }
+}
+
+run()
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+  
+  Enable Topic Detection by setting `IABCategories` to `true` in the transcription parameters.
+
+
+```go {19}
+package main
+
+import (
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    client := aai.NewClient("YOUR_API_KEY")
+
+    // For local files see our Getting Started guides.
+    audioURL := "https://assembly.ai/wildfires.mp3"
+
+    ctx := context.Background()
+
+    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+        IABCategories: aai.Bool(true),
+    })
+
+    for _, result := range transcript.IABCategoriesResult.Results {
+        fmt.Println(aai.ToString(result.Text))
+        fmt.Println("Timestamp:",
+            aai.ToInt64(result.Timestamp.Start), "-",
+            aai.ToInt64(result.Timestamp.End),
+        )
+
+        for _, label := range result.Labels {
+            fmt.Printf("%s (%v)", aai.ToString(label.Label), aai.ToFloat64(label.Relevance))
+        }
+    }
+
+    for topic, relevance := range transcript.IABCategoriesResult.Summary {
+        fmt.Printf("Audio is %v%% relevant to %s\n", relevance*100, topic)
+    }
+}
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription config.
+
+
+```java {15}
+
+import com.assemblyai.api.AssemblyAI;
+import com.assemblyai.api.resources.transcripts.types.*;
+
+public final class Main {
+    public static void main(String... args) throws Exception {
+
+        var client = AssemblyAI.builder()
+                .apiKey("<YOUR_API_KEY>")
+                .build();
+
+        // For local files see our Getting Started guides.
+        String audioUrl = "https://assembly.ai/wildfires.mp3";
+
+        var params = TranscriptOptionalParams.builder()
+                .iabCategories(true)
+                .build();
+
+        Transcript transcript = client.transcripts().transcribe(audioUrl, params);
+
+        if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
+            throw new Exception(transcript.getError().get());
+        }
+
+        // Get the parts of the transcript that were tagged with topics
+        for (TopicDetectionResult result : transcript.getIabCategoriesResult().get().getResults()) {
+            System.out.println(result.getText());
+            System.out.printf("Timestamp: %d - %d\n", result.getTimestamp().get().getStart(), result.getTimestamp().get().getEnd());
+            for (TopicDetectionResultLabelsItem label : result.getLabels().get()) {
+                System.out.printf("%s (%.2f)\n", label.getLabel(), label.getRelevance());
+            }
+            System.out.println();
+        }
+
+        System.out.println();
+
+        // Get a summary of all topics in the transcript
+        for (var entry : transcript.getIabCategoriesResult().get().getSummary().entrySet()) {
+            System.out.printf("Audio is %.2f%% relevant to %s\n", entry.getValue() * 100, entry.getKey());
+        }
+    }
+}
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+  
+  Enable Topic Detection by setting `IabCategories` to `true` in the transcription config.
+
+
+```csharp {10}
+using AssemblyAI;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    // For local files see our Getting Started guides.
+    AudioUrl = "https://assembly.ai/wildfires.mp3",
+    IabCategories = true
+});
+
+// Get the parts of the transcript that were tagged with topics
+foreach (var result in transcript.IabCategoriesResult!.Results)
+{
+    Console.WriteLine(result.Text);
+    Console.WriteLine($"Timestamp: {result.Timestamp?.Start} - {result.Timestamp?.End}");
+
+    foreach (var label in result.Labels!)
+    {
+        Console.WriteLine($"{label.Label} ({label.Relevance})");
+    }
+}
+
+// Get a summary of all topics in the transcript
+foreach (var summary in transcript.IabCategoriesResult.Summary)
+{
+    Console.WriteLine($"Audio is {summary.Value * 100} relevant to {summary.Key}");
+}
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  iab_categories: true
+)
+
+# Get the parts of the transcript that were tagged with topics
+transcript.iab_categories_result.results.each do |result|
+  puts result.text
+  printf("Timestamp: %<start>d - %<end>d\n", start: result.timestamp.start, end: result.timestamp.end_)
+  result.labels.each do |label|
+    printf("%<label>s (%<relevance>f)\n", label: label.label, relevance: label.relevance)
+  end
+  puts
+end
+
+puts
+
+# Get a summary of all topics in the transcript
+transcript.iab_categories_result.summary.each_pair do |topic, relevance|
+  printf(
+    "Audio is %<relevance>d%% relevant to %<topic>s\n",
+    relevance: relevance * 100,
+    topic: topic
+  )
+end
+```
+
+  </Tab>
+</Tabs>
+
+### Example output
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+Home&Garden>IndoorEnvironmentalQuality (0.9881)
+NewsAndPolitics>Weather (0.5561)
+MedicalHealth>DiseasesAndConditions>LungAndRespiratoryHealth (0.0042)
+...
+Audio is 100.0% relevant to NewsAndPolitics>Weather
+Audio is 93.78% relevant to Home&Garden>IndoorEnvironmentalQuality
+...
+```
+
+
+
+
+
+## API reference
+
+### Request
+
+```bash {6}
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "iab_categories": true
+}'
+```
+
+| Key              | Type    | Description             |
+| ---------------- | ------- | ----------------------- |
+| `iab_categories` | boolean | Enable Topic Detection. |
+
+### Response
+
+<Markdown src="topic-detection-response.mdx" />
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `iab_categories_result` | object | The result of the Topic Detection model. |
+| `iab_categories_result.status` | string | Is either `success`, or `unavailable` in the rare case that the Content Moderation model failed. |
+| `iab_categories_result.results` | array | An array of the Topic Detection results. |
+| `iab_categories_result.results[i].text` | string | The text in the transcript in which the i-th instance of a detected topic occurs. |
+| `iab_categories_result.results[i].labels[j].relevance` | number | How relevant the j-th detected topic is in the i-th instance of a detected topic.|
+| `iab_categories_result.results[i].labels[j].label` | string | The IAB taxonomical label for the j-th label of the i-th instance of a detected topic, where `>` denotes supertopic/subtopic relationship. |
+| `iab_categories_result.results[i].timestamp.start` | number | The starting time in the audio file at which the i-th detected topic instance is discussed. |
+| `iab_categories_result.results[i].timestamp.end` | number | The ending time in the audio file at which the i-th detected topic instance is discussed. |
+| `iab_categories_result.summary` | object | Summary where each property is a detected topic. |
+| `iab_categories_result.summary.topic` | number | The overall relevance of <i>topic</i> to the entire audio file. |
+
+The response also includes the request parameters used to generate the transcript.
+
+
+
+
+
+## Frequently asked questions
+
+  <Accordion
+    title="How does the Topic Detection model handle misspelled or unrecognized words?"
+    theme="dark"
+    iconColor="white"
+  >
+          <p>
+        The Topic Detection model uses natural language processing and machine
+        learning to identify related words and phrases even if they are
+        misspelled or unrecognized. However, the accuracy of the detection may
+        depend on the severity of the misspelling or the obscurity of the word.
+      </p>
+      </Accordion>
+
+<Accordion
+  title="Can I use the Topic Detection model to identify entities that aren't part of the IAB Taxonomy?"
+  theme="dark"
+  iconColor="white"
+>
+      <p>
+      No, the Topic Detection model can only identify entities that are part of
+      the IAB Taxonomy. The model is optimized for contextual targeting use
+      cases, so using the predefined IAB categories ensures the most accurate
+      results.
+    </p>
+  </Accordion>
+
+<Accordion
+  title="Why am I not getting any topic predictions for my audio file?"
+  theme="dark"
+  iconColor="white"
+>
+      <p>
+      There could be several reasons why you aren't getting any topic
+      predictions for your audio file. One possible reason is that the audio
+      file doesn't contain enough relevant content for the model to analyze.
+      Additionally, the accuracy of the predictions may be affected by factors
+      such as background noise, low-quality audio, or a low confidence threshold
+      for topic detection. It's recommended to review and adjust the model's
+      configuration parameters and to provide high-quality, relevant audio files
+      for analysis.
+    </p>
+  </Accordion>
+
+<Accordion
+  title="Why am I getting inaccurate or irrelevant topic predictions for my audio file?"
+  theme="dark"
+  iconColor="white"
+>
+      <p>
+      There could be several reasons why you're getting inaccurate or irrelevant
+      topic predictions for your audio file. One possible reason is that the
+      audio file contains background noise or other non-relevant content that's
+      interfering with the model's analysis. Additionally, the accuracy of the
+      predictions may be affected by factors such as low-quality audio, a low
+      confidence threshold for topic detection, or insufficient training data.
+      It's recommended to review and adjust the model's configuration
+      parameters, to provide high-quality, relevant audio files for analysis,
+      and to consider adding additional training data to the model.
+    </p>
+  </Accordion>
+
+<Accordion
+  title="Is AssemblyAI associated with IAB?"
+  theme="dark"
+  iconColor="white"
+>
+      <p>
+      As of 2023, AssemblyAI is a partner with the Interactive Advertising
+      Bureau (IAB), a certification and community for advertising across the
+      internet. AssemblyAI built Topic Detection using the IAB Taxonomy, which
+      is a blueprint of the approximately 700 topics used to categorize ads.
+    </p>
+  </Accordion>
+
+
+
+
+

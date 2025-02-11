@@ -1,0 +1,69 @@
+---
+title: "retry-upload-error"
+---
+
+# How to Implement Retry Upload Error Logic
+
+In this guide, we'll show you how to set up automatic upload error retry logic in your transcription process.
+
+Upload errors could be a result of a transient issue with our servers or they could be related to an issue with the file itself. Most likely the issue would be that the file is empty. Because the cause can be unclear at first, we recommend adding some retry logic to handle the rare occasions in which our upload service is experiencing performance issues. If the upload failure persists, you'll want to check whether the file is empty. If you're unclear on why the file is failing, please reach out to our support team at support@assemblyai.com.
+
+This workflow is designed to automatically retry file uploads if an upload error is encountered.
+
+
+## Get started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+## Step-by-step instructions
+
+Install the SDK:
+
+
+```python
+%pip install assemblyai
+```
+
+Import the `assemblyai` package and assemblyai's `TranscriptError`. Additionally import the and `time` package and set your API key:
+
+
+```python
+import assemblyai as aai
+import time
+from assemblyai.types import TranscriptError
+
+# Set API key
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Create a function that retries upload failures. This example retries up to 3 times with a delay of 5 seconds each time.
+
+
+```python
+def transcribe_with_upload_retry(file_path, retries=3, delay=5):
+    transcriber = aai.Transcriber()
+
+    for attempt in range(retries):
+        try:
+            # Attempt to transcribe the file
+            config = aai.TranscriptionConfig(speaker_labels=True)
+            transcript = transcriber.transcribe(file_path, config)
+            return transcript
+        
+        except TranscriptError as e:
+            # Handle specific error if upload fails
+            print(f"Attempt {attempt + 1} failed. {e}")
+            
+            # Retry if a TranscriptError occurs, 
+            if attempt + 1 < retries:
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                raise e  # Raise the error after max retries
+
+    print("Max retries reached. Transcription failed.")
+    return None
+
+# Call the function
+transcribe_with_upload_retry("audio.mp3")
+```
