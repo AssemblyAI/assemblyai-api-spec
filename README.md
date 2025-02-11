@@ -30,8 +30,6 @@ Our documentation is hosted at https://www.assemblyai.com/docs and all of the co
 
 ## Running the docs
 
-The [Fern CLI](https://www.npmjs.com/package/fern-api) is what builds the documentation.
-
 Install Fern
 
 ```
