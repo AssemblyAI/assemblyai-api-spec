@@ -6,5 +6,5 @@ script.setAttribute("data-project-name", "AssemblyAI");
 script.setAttribute("data-project-color", "#2C4BD4");
 // TODO: fix this link
 script.setAttribute("data-project-logo", "https://devrel.sandbox.assemblyai.xyz/docs/img/logo-blue400x400.jpeg");
-script.setAttribute("data-modal-override-open-id-search", "fern-search-button");
+script.setAttribute("data-modal-override-open-id-search", "fern-header-searchbar");
 document.head.appendChild(script);
