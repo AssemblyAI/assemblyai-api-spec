@@ -28,7 +28,7 @@ We use Fern to generate some of the AssemblyAI SDKs.
 
 Our documentation is hosted at https://www.assemblyai.com/docs and all of the content lives inside the `fern/` folder.
 
-## Running the docs
+#### Running the docs
 
 Install Fern
 
