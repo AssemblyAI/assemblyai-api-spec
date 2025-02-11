@@ -17,7 +17,7 @@ function insertKapa() {
   script.setAttribute("data-modal-override-open-id-search", "fern-search-button");
   document.head.appendChild(script);
   
-  document.addEventListener('keydocan wn', (e) => {
+  document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
       e.preventDefault();
       document.getElementById('fern-search-button').click();
