@@ -15,6 +15,7 @@ function insertKapa() {
   // TODO: fix this link
   script.setAttribute("data-project-logo", "https://devrel.sandbox.assemblyai.xyz/docs/img/logo-blue400x400.jpeg");
   script.setAttribute("data-modal-override-open-id-search", "fern-search-button");
+  script.setAttribute("data-search-include-source-names", '["Pylon FAQ", "Documentation"]');
   document.head.appendChild(script);
   
   document.addEventListener('keydown', (e) => {
