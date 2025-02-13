@@ -12,8 +12,7 @@ function insertKapa() {
   script.setAttribute("data-website-id", "42353092-36d7-42bd-a213-6fd7af0de0cd");
   script.setAttribute("data-project-name", "AssemblyAI");
   script.setAttribute("data-project-color", "#2C4BD4");
-  // TODO: fix this link
-  script.setAttribute("data-project-logo", "https://devrel.sandbox.assemblyai.xyz/docs/img/logo-blue400x400.jpeg");
+  script.setAttribute("data-project-logo", "https://www.assemblyai.com/static/images/logo-blue400x400.jpeg");
   script.setAttribute("data-modal-override-open-id-search", "fern-search-button");
   script.setAttribute("data-search-include-source-names", '["Pylon FAQ", "Documentation"]');
   document.head.appendChild(script);
