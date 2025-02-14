@@ -87,4 +87,65 @@
   }
 })();
 
-rudderanalytics.page()
+// Function to track page views
+function trackPage() {
+  const pageProperties = {
+      url: window.location.href,
+      path: window.location.pathname,
+      search: window.location.search,
+      title: document.title,
+      referrer: document.referrer
+  };
+
+  // Send page view event to RudderStack
+  rudderanalytics.page({
+      properties: pageProperties
+  });
+}
+
+// Track initial page load
+trackPage();
+
+// Setup history change listener for SPA navigation
+let lastPathname = window.location.pathname;
+
+// Function to check if pathname has changed
+function hasPathnameChanged() {
+  const currentPathname = window.location.pathname;
+  const hasChanged = currentPathname !== lastPathname;
+  lastPathname = currentPathname;
+  return hasChanged;
+}
+
+// Setup listeners for different types of navigation
+// 1. History API changes (pushState/replaceState)
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function() {
+  originalPushState.apply(this, arguments);
+  if (hasPathnameChanged()) {
+      trackPage();
+  }
+};
+
+history.replaceState = function() {
+  originalReplaceState.apply(this, arguments);
+  if (hasPathnameChanged()) {
+      trackPage();
+  }
+};
+
+// 2. Listen for popstate events (browser back/forward)
+window.addEventListener('popstate', () => {
+  if (hasPathnameChanged()) {
+      trackPage();
+  }
+});
+
+// 3. Listen for hashchange events
+window.addEventListener('hashchange', () => {
+  if (hasPathnameChanged()) {
+      trackPage();
+  }
+});
