@@ -335,6 +335,58 @@ run()
 ```
 
   </Tab>
+  <Tab language="golang" title="Go">
+
+  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+
+
+```go {18-28,30-34}
+package main
+
+import (
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    audioURL := "https://assembly.ai/meeting.mp4"
+    transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+
+    questions := []aai.LemurQuestion{
+        {
+            Question: "What are the top level KPIs for engineering?",
+            Context:  aai.String("KPI stands for key performance indicator"),
+            AnswerFormat: aai.String("short sentence"),
+        },
+        {
+            Question: "How many days has it been since the data team has gotten updated metrics?",
+            AnswerOptions: &[]string{"1", "2", "3", "4", "5", "6", "7", "more than 7"},
+        },
+    }
+
+    var params aai.LemurQuestionParams
+    params.Questions = questions
+    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+    params.Context = aai.String("A GitLab meeting to discuss logistics")
+    params.FinalModel = aai.String("anthropic/claude-3-5-sonnet")
+
+    result, err := client.LeMUR.Question(ctx, params)
+
+
+    for _, response := range result.Response {
+        fmt.Printf("Question: %s\n", response.Question)
+        fmt.Printf("Answer: %s\n\n", response.Answer)
+    }
+}
+```
+
+  </Tab>
   <Tab language="java" title="Java">
 
   To use it, define a list of `LemurQuestion` objects. For each question, you can define additional `context` and specify either a `answerFormat` or a list of `answerOptions`. Additionally, you can define an overall `context`.
