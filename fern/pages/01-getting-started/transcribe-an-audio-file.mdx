@@ -21,244 +21,425 @@ By the end of this tutorial, you'll be able to:
 Here's the full sample code for what you'll build in this tutorial:
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
+  <Tab language="python" title="Python SDK" default>
 
-```python
-import assemblyai as aai
+      ```python
+      import assemblyai as aai
 
-aai.settings.api_key = "<YOUR_API_KEY>"
+      aai.settings.api_key = "<YOUR_API_KEY>"
 
-transcriber = aai.Transcriber()
+      transcriber = aai.Transcriber()
 
-# You can use a local filepath:
-# audio_file = "./example.mp3"
+      # You can use a local filepath:
+      # audio_file = "./example.mp3"
 
-# Or use a publicly-accessible URL:
-audio_file = (
-    "https://assembly.ai/sports_injuries.mp3"
-)
+      # Or use a publicly-accessible URL:
+      audio_file = (
+          "https://assembly.ai/sports_injuries.mp3"
+      )
 
-config = aai.TranscriptionConfig(speaker_labels=True)
+      config = aai.TranscriptionConfig(speaker_labels=True)
 
-transcript = transcriber.transcribe(audio_file, config)
+      transcript = transcriber.transcribe(audio_file, config)
 
-if transcript.status == aai.TranscriptStatus.error:
-    print(f"Transcription failed: {transcript.error}")
-    exit(1)
+      if transcript.status == aai.TranscriptStatus.error:
+          print(f"Transcription failed: {transcript.error}")
+          exit(1)
 
-print(transcript.text)
+      print(transcript.text)
 
-for utterance in transcript.utterances:
-	print(f"Speaker {utterance.speaker}: {utterance.text}")
-```
-
+      for utterance in transcript.utterances:
+        print(f"Speaker {utterance.speaker}: {utterance.text}")
+      ```
   </Tab>
-  <Tab language="typescript" title="TypeScript">
+  <Tab language="python" title="Python (requests)">
 
-```ts
-import { AssemblyAI } from 'assemblyai'
+  ```python
+  import requests
+  import time 
 
-const client = new AssemblyAI({
-  apiKey: '<YOUR_API_KEY>'
-})
+  base_url = "https://api.assemblyai.com"
 
-// You can use a local filepath:
-// const audioFile = "./example.mp3"
-
-// Or use a publicly-accessible URL:
-const audioFile = 'https://assembly.ai/sports_injuries.mp3'
-
-const params = {
-  audio: audioFile,
-  speaker_labels: true
-}
-
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params)
-
-  if (transcript.status === 'error') {
-    console.error(`Transcription failed: ${transcript.error}`)
-    process.exit(1)
+  headers = {
+    "authorization": "<YOUR_API_KEY>"
   }
 
-  console.log(transcript.text)
+  with open("./my-audio.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
 
-  for (let utterance of transcript.utterances!) {
-    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+upload_url = response.json()["upload_url"]
+
+
+  data = {
+    "audio_url": upload_url # You can also use a URL of an audio or video file on the web
   }
-}
 
-run()
-```
+  response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
+  transcript_id = response.json()["id"]
+  polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+  while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+      print(transcript["text"])
+      break
+
+    elif transcript["status"] == "error":
+      raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+    else:
+      time.sleep(3)
+      ```
   </Tab>
-  <Tab language="golang" title="Go">
 
-```go
-package main
+  <Tab language="typescript" title="TypeScript SDK">
 
-import (
-	"context"
-	"fmt"
-	"os"
+      ```ts
+      import { AssemblyAI } from 'assemblyai'
 
-	aai "github.com/AssemblyAI/assemblyai-go-sdk"
-)
+      const client = new AssemblyAI({
+        apiKey: '<YOUR_API_KEY>'
+      })
 
-func main() {
-	ctx := context.Background()
+      // You can use a local filepath:
+      // const audioFile = "./example.mp3"
 
-	client := aai.NewClient("<YOUR_API_KEY>")
+      // Or use a publicly-accessible URL:
+      const audioFile = 'https://assembly.ai/sports_injuries.mp3'
 
-	params := &aai.TranscriptOptionalParams{
-		SpeakerLabels: aai.Bool(true),
-	}
+      const params = {
+        audio: audioFile,
+        speaker_labels: true
+      }
 
-	// You can use a local file:
-	/*
-	f, err := os.Open("./example.mp3")
-	[error handling here]
-	transcript, err := client.Transcripts.TranscribeFromReader(ctx, f, params)
-	*/
+      const run = async () => {
+        const transcript = await client.transcripts.transcribe(params)
 
-	// Or use a publicly-accessible URL:
-	audioURL := "https://assembly.ai/sports_injuries.mp3"
+        if (transcript.status === 'error') {
+          console.error(`Transcription failed: ${transcript.error}`)
+          process.exit(1)
+        }
 
-	transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, params)
-	if err != nil {
-		fmt.Println("Something bad happened:", err)
-		os.Exit(1)
-	}
+        console.log(transcript.text)
 
-	fmt.Println(*transcript.Text)
+        for (let utterance of transcript.utterances!) {
+          console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+        }
+      }
 
-	for _, utterance := range transcript.Utterances {
-		fmt.Printf("Speaker %v: %v\n", *utterance.Speaker, *utterance.Text)
-	}
-}
-```
+      run()
+      ```
+  </Tab>
+  <Tab language="typescript" title="TypeScript (Axios)">
+  ```typescript
+  import axios from 'axios';
 
-</Tab>
-<Tab language="java" title="Java">
+  async function main() {
+    const base_url = "https://api.assemblyai.com";
 
-```java
-import com.assemblyai.api.AssemblyAI;
-import com.assemblyai.api.resources.transcripts.types.*;
+    const headers = {
+      authorization: "<YOUR_API_KEY>"
+    };
 
-public final class App {
-    public static void main(String[] args) {
-        AssemblyAI client = AssemblyAI.builder()
-                .apiKey("<YOUR_API_KEY>")
-                .build();
+    const path = './my-audio.mp3'
+    const audioData = await fs.readFile(path)
+    const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+    headers
+    })
+    const uploadUrl = uploadResponse.data.upload_url
 
-        var params = TranscriptOptionalParams.builder()
-                .speakerLabels(true)
-                .build();
+    const data = {
+      audio_url: uploadUrl // You can also use a URL of an audio or video file on the web
+    }
+
+    const response = await axios.post(base_url + "/v2/transcript", data, { headers });
+
+    const transcript_id = response.data.id;
+    const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
+
+    while (true) {
+      const transcript = (await axios.get(polling_endpoint, { headers })).data;
+
+      if (transcript.status === "completed") {
+        console.log(transcript.text)
+        break;
+      }
+      else if (transcript.status === "error") {
+        throw new Error(`Transcription failed: ${transcript.error}`);
+      }
+      else {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+    }
+  }
+  main();
+  ```
+  </Tab>
+  <Tab language="golang" title="Go SDK">
+
+      ```go
+      package main
+
+      import (
+        "context"
+        "fmt"
+        "os"
+
+        aai "github.com/AssemblyAI/assemblyai-go-sdk"
+      )
+
+      func main() {
+        ctx := context.Background()
+
+        client := aai.NewClient("<YOUR_API_KEY>")
+
+        params := &aai.TranscriptOptionalParams{
+          SpeakerLabels: aai.Bool(true),
+        }
 
         // You can use a local file:
         /*
-        Transcript transcript = aai.transcripts().transcribe(
-                new File("./example.mp3"), params);
+        f, err := os.Open("./example.mp3")
+        [error handling here]
+        transcript, err := client.Transcripts.TranscribeFromReader(ctx, f, params)
         */
 
         // Or use a publicly-accessible URL:
-        String audioUrl = "https://assembly.ai/sports_injuries.mp3";
-        Transcript transcript = client.transcripts().transcribe(audioUrl, params);
+        audioURL := "https://assembly.ai/sports_injuries.mp3"
 
-        if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
-          System.err.println(transcript.getError().get());
-          System.exit(1);
+        transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, params)
+        if err != nil {
+          fmt.Println("Something bad happened:", err)
+          os.Exit(1)
         }
 
-        System.out.println(transcript.getText().get());
+        fmt.Println(*transcript.Text)
 
-        transcript.getUtterances().get().forEach(utterance ->
-                System.out.println("Speaker " + utterance.getSpeaker() + ": " + utterance.getText())
-        );
-    }
-}
-```
+        for _, utterance := range transcript.Utterances {
+          fmt.Printf("Speaker %v: %v\n", *utterance.Speaker, *utterance.Text)
+        }
+      }
+      ```
+  </Tab>
+  <Tab language="java" title="Java SDK">
 
-</Tab>
-<Tab language="csharp" title="C#">
+      ```java
+      import com.assemblyai.api.AssemblyAI;
+      import com.assemblyai.api.resources.transcripts.types.*;
 
-```csharp
-using AssemblyAI;
-using AssemblyAI.Transcripts;
+      public final class App {
+          public static void main(String[] args) {
+              AssemblyAI client = AssemblyAI.builder()
+                      .apiKey("<YOUR_API_KEY>")
+                      .build();
 
-var client = new AssemblyAIClient("<YOUR_API_KEY>");
+              var params = TranscriptOptionalParams.builder()
+                      .speakerLabels(true)
+                      .build();
 
-// You can use a local file:
-/*
-var transcript = await client.Transcripts.TranscribeAsync(
-    new FileInfo("./example.mp3"),
-    new TranscriptOptionalParams
+              // You can use a local file:
+              /*
+              Transcript transcript = aai.transcripts().transcribe(
+                      new File("./example.mp3"), params);
+              */
+
+              // Or use a publicly-accessible URL:
+              String audioUrl = "https://assembly.ai/sports_injuries.mp3";
+              Transcript transcript = client.transcripts().transcribe(audioUrl, params);
+
+              if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
+                System.err.println(transcript.getError().get());
+                System.exit(1);
+              }
+
+              System.out.println(transcript.getText().get());
+
+              transcript.getUtterances().get().forEach(utterance ->
+                      System.out.println("Speaker " + utterance.getSpeaker() + ": " + utterance.getText())
+              );
+          }
+      }
+      ```
+
+  </Tab>
+  <Tab language="csharp" title="C# SDK">
+
+      ```csharp
+      using AssemblyAI;
+      using AssemblyAI.Transcripts;
+
+      var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+      // You can use a local file:
+      /*
+      var transcript = await client.Transcripts.TranscribeAsync(
+          new FileInfo("./example.mp3"),
+          new TranscriptOptionalParams
+          {
+              SpeakerLabels = true
+          }
+      );
+      */
+
+      // Or use a publicly-accessible URL:
+      const string audioUrl = "https://assembly.ai/sports_injuries.mp3";
+
+      var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+      {
+          AudioUrl = audioUrl,
+          SpeakerLabels = true
+      });
+
+      if (transcript.Status == TranscriptStatus.Error)
+      {
+          Console.WriteLine(transcript.Error);
+          Environment.Exit(1);
+      }
+
+      // Alternatively, you can use the EnsureStatusCompleted() method
+      // to throw an exception if the transcription status is not "completed".
+      // transcript.EnsureStatusCompleted();
+
+      Console.WriteLine(transcript.Text);
+
+      foreach (var utterance in transcript.Utterances!)
+      {
+          Console.WriteLine($"Speaker {utterance.Speaker}: {utterance.Text}");
+      }
+      ```
+
+  </Tab>
+  <Tab language="csharp" title="C# (HttpClient)">
+    ```csharp
+    using System;
+    using System.IO;
+    using System.Net.Http;
+    using System.Net.Http.Headers;
+    using System.Net.Http.Json;
+    using System.Text;
+    using System.Text.Json;
+    using System.Threading.Tasks;
+
+    public class Transcript
     {
-        SpeakerLabels = true
+      public string Id { get; set; }
+      public string Status { get; set; }
+      public string Text { get; set; }
+
+      [JsonPropertyName("language_code")]
+      public string LanguageCode { get; set; }
+
+      public string Error { get; set; }
     }
-);
-*/
 
-// Or use a publicly-accessible URL:
-const string audioUrl = "https://assembly.ai/sports_injuries.mp3";
+    public class LemurResponse
+    {
+      [JsonPropertyName("request_id")]
+      public string RequestId { get; set; }
 
-var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
-{
-    AudioUrl = audioUrl,
-    SpeakerLabels = true
-});
+      public string Response { get; set; }
 
-if (transcript.Status == TranscriptStatus.Error)
-{
-    Console.WriteLine(transcript.Error);
-    Environment.Exit(1);
-}
+      public Usage Usage { get; set; }
+    }
 
-// Alternatively, you can use the EnsureStatusCompleted() method
-// to throw an exception if the transcription status is not "completed".
-// transcript.EnsureStatusCompleted();
+    public class Usage
+    {
+      [JsonPropertyName("input_tokens")]
+      public int InputTokens { get; set; }
 
-Console.WriteLine(transcript.Text);
+      [JsonPropertyName("output_tokens")] 
+      public int OutputTokens { get; set; }
+    }
 
-foreach (var utterance in transcript.Utterances!)
-{
-    Console.WriteLine($"Speaker {utterance.Speaker}: {utterance.Text}");
-}
-```
+    private static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-</Tab>
-<Tab language="ruby" title="Ruby">
+            using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+            {
+                response.EnsureSuccessStatusCode();
+                var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+                return jsonDoc.RootElement.GetProperty("upload_url").GetString();
+            }
+        }
+    }
 
-```ruby
-require 'assemblyai'
 
-client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+    private static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+    {
+      var data = new { audio_url = audioUrl };
+      var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-# You can upload and transcribe a local file:
-# uploaded_file = client.files.upload(file: '/path/to/your/file')
-# transcript = client.transcripts.transcribe(audio_url: uploaded_file.upload_url, speaker_labels: true)
+      using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+      {
+          response.EnsureSuccessStatusCode();
+          return await response.Content.ReadFromJsonAsync<Transcript>();
+      }
+    }
 
-# Or use a publicly-accessible URL:
-audio_url = 'https://assembly.ai/sports_injuries.mp3'
+    private static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+      var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
 
-transcript = client.transcripts.transcribe(
-  audio_url: audio_url,
-  speaker_labels: true
-)
+      while (true)
+      {
+          var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+          transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+          switch (transcript.Status)
+          {
+              case "processing":
+              case "queued":
+                  await Task.Delay(TimeSpan.FromSeconds(3));
+                  break;
+              case "completed":
+                  return transcript;
+              case "error":
+                  throw new Exception($"Transcription failed: {transcript.Error}");
+              default:
+                  throw new Exception("This code shouldn't be reachable.");
+          }
+      }
+    }
+    ```
 
-abort transcript.error if transcript.status == AssemblyAI::Transcripts::TranscriptStatus::ERROR
+  </Tab>
+<Tab language="ruby" title="Ruby SDK">
 
-puts transcript.text
+    ```ruby
+    require 'assemblyai'
 
-transcript.utterances.each do |utterance|
-  printf('Speaker %<speaker>s: %<text>s', speaker: utterance.speaker, text: utterance.text)
-end
+    client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+    # You can upload and transcribe a local file:
+    # uploaded_file = client.files.upload(file: '/path/to/your/file')
+    # transcript = client.transcripts.transcribe(audio_url: uploaded_file.upload_url, speaker_labels: true)
+
+    # Or use a publicly-accessible URL:
+    audio_url = 'https://assembly.ai/sports_injuries.mp3'
+
+    transcript = client.transcripts.transcribe(
+      audio_url: audio_url,
+      speaker_labels: true
+    )
+
+    abort transcript.error if transcript.status == AssemblyAI::Transcripts::TranscriptStatus::ERROR
+
+    puts transcript.text
+
+    transcript.utterances.each do |utterance|
+      printf('Speaker %<speaker>s: %<text>s', speaker: utterance.speaker, text: utterance.text)
+    end
 ```
 
 </Tab>
 </Tabs>
-
-  
 
 
 ## Before you begin
@@ -275,55 +456,55 @@ To complete this tutorial, you need:
 ## Step 1: Install the SDK
 
 <Tabs groupId="language">
-<Tab language="python" title="Python" default>
-Install the package via pip:
+  <Tab language="python" title="Python" default>
+      Install the package via pip:
 
-```bash
-pip install assemblyai
-```
+      ```bash
+      pip install assemblyai
+      ```
 
-</Tab>
+      </Tab>
 
-<Tab language="typescript" title="TypeScript">
-Install the package via NPM:
+      <Tab language="typescript" title="TypeScript">
+        Install the package via NPM:
 
-```bash
-npm install assemblyai
-```
+        ```bash
+        npm install assemblyai
+        ```
 
-</Tab>
-<Tab language="golang" title="Go">
-Install the package via `go get`:
+      </Tab>
+      <Tab language="golang" title="Go">
+      Install the package via `go get`:
 
-```bash
-go get github.com/AssemblyAI/assemblyai-go-sdk
-```
+      ```bash
+      go get github.com/AssemblyAI/assemblyai-go-sdk
+      ```
 
-</Tab>
-<Tab language="java" title="Java">
-Include the latest version of [AssemblyAI's Java SDK](https://central.sonatype.com/artifact/com.assemblyai/assemblyai-java) in your project dependencies:
-<Tabs groupId="java-language">
-<Tab title="Maven">
+  </Tab>
+  <Tab language="java" title="Java">
+  Include the latest version of [AssemblyAI's Java SDK](https://central.sonatype.com/artifact/com.assemblyai/assemblyai-java) in your project dependencies:
+  <Tabs groupId="java-language">
+    <Tab title="Maven">
 
-```xml
-<dependency>
-    <groupId>com.assemblyai</groupId>
-    <artifactId>assemblyai-java</artifactId>
-    <version>ASSEMBLYAI_SDK_VERSION</version>
-</dependency>
-```
+      ```xml
+      <dependency>
+          <groupId>com.assemblyai</groupId>
+          <artifactId>assemblyai-java</artifactId>
+          <version>ASSEMBLYAI_SDK_VERSION</version>
+      </dependency>
+      ```
 
-</Tab>
-<Tab title="Gradle">
+      </Tab>
+      <Tab title="Gradle">
 
-```groovy
-dependencies {
-    implementation 'com.assemblyai:assemblyai-java:ASSEMBLYAI_SDK_VERSION'
-}
-```
+      ```groovy
+      dependencies {
+          implementation 'com.assemblyai:assemblyai-java:ASSEMBLYAI_SDK_VERSION'
+      }
+      ```
 
-</Tab>
-</Tabs>
+    </Tab>
+  </Tabs>
 </Tab>
 <Tab language="csharp" title="C#">
 Add the [AssemblyAI NuGet package](https://www.nuget.org/packages/AssemblyAI) to your project:
@@ -605,7 +786,7 @@ YouTube URLs are not supported. If you want to transcribe a YouTube video, you n
 
 <Tab language="python" title="Python" default>
 
-To generate the transcript, pass the audio URL to `client.Transcripts.Transcribe()`. This may take a minute while we're processing the audio.
+To generate the transcript, pass the audio URL to `transcriber.transcribe()`. This may take a minute while we're processing the audio.
 
 
 ```python
@@ -635,7 +816,7 @@ transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
 </Tab>
 <Tab language="java" title="Java">
 
-To generate the transcript, pass the audio URL to `transcribe()`. This may take a minute while we're processing the audio.
+To generate the transcript, pass the audio URL to `client.transcripts().transcribe()`. This may take a minute while we're processing the audio.
 
 
 ```java
@@ -645,7 +826,7 @@ Transcript transcript = client.transcripts().transcribe(audioUrl);
 </Tab>
 <Tab language="csharp" title="C#">
 
-To generate the transcript, pass the audio URL to `transcribe()`. This may take a minute while we're processing the audio.
+To generate the transcript, pass the audio URL to `client.Transcripts.TranscribeAsync()`. This may take a minute while we're processing the audio.
 
 
 ```csharp
@@ -658,7 +839,7 @@ var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
 </Tab>
 <Tab language="ruby" title="Ruby">
 
-To generate the transcript, pass the audio URL to `transcribe()`. This may take a minute while we're processing the audio.
+To generate the transcript, pass the audio URL to `client.transcripts.transcribe()`. This may take a minute while we're processing the audio.
 
 
 ```ruby
@@ -718,7 +899,7 @@ if err != nil {
 <Tab language="java" title="Java">
 
 If the transcription failed, the `status` of the transcription will be set to
-`error`. To see why it failed you can print the value of `error`.
+`error`. To see why it failed you can print the value of `ERROR`.
 
 ```java
 if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
@@ -731,7 +912,7 @@ if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
 <Tab language="csharp" title="C#">
 
 If the transcription failed, the `status` of the transcription will be set to
-`error`. To see why it failed you can print the value of `error`.
+`error`. To see why it failed you can print the value of `Error`.
 
 ```csharp
 if (transcript.Status == TranscriptStatus.Error)
@@ -749,7 +930,7 @@ if (transcript.Status == TranscriptStatus.Error)
 <Tab language="ruby" title="Ruby">
 
 If the transcription failed, the `status` of the transcription will be set to
-`error`. To see why it failed you can print the value of `error`.
+`error`. To see why it failed you can print the value of `ERROR`.
 
 ```ruby
 abort transcript.error if transcript.status == AssemblyAI::Transcripts::TranscriptStatus::ERROR
