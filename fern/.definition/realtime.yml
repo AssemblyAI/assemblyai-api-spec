@@ -1,0 +1,388 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ""
+  endpoints:
+    createTemporaryToken:
+      path: /v2/realtime/token
+      method: POST
+      auth: true
+      docs: Create a temporary authentication token for Streaming Speech-to-Text
+      display-name: Create temporary authentication token for Streaming STT
+      request:
+        name: CreateRealtimeTemporaryTokenParams
+        body:
+          properties:
+            expires_in:
+              type: integer
+              docs: The amount of time until the token expires in seconds
+              validation:
+                min: 60
+        content-type: application/json
+      response:
+        docs: Temporary authentication token generated
+        type: RealtimeTemporaryTokenResponse
+      errors:
+        - root.BadRequestError
+        - root.UnauthorizedError
+        - root.NotFoundError
+        - root.TooManyRequestsError
+        - root.InternalServerError
+        - root.ServiceUnavailableError
+        - root.GatewayTimeoutError
+      examples:
+        - request:
+            expires_in: 480
+          response:
+            body:
+              token: fe4145dd1e7a2e149488dcd2d553a8018a89833fc5084837d66fd1bcf5a105d4
+  source:
+    openapi: ../openapi.yml
+types:
+  Realtime:
+    enum:
+      - value: pcm_s16le
+        docs: PCM signed 16-bit little-endian
+        casing:
+          camel: pcmS16le
+          screaming-snake: PCM_S16LE
+          snake: pcm_s16le
+          pascal: PcmS16le
+      - value: pcm_mulaw
+        docs: PCM Mu-law
+        casing:
+          camel: pcmMulaw
+          screaming-snake: PCM_MULAW
+          snake: pcm_mulaw
+          pascal: PcmMulaw
+    docs: The encoding of the audio data
+    default: pcm_s16le
+    source:
+      openapi: ../asyncapi.yml
+  receiveMessage:
+    discriminated: false
+    docs: Receive messages from the WebSocket
+    union:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionInformation
+      - SessionTerminated
+      - RealtimeError
+    source:
+      openapi: ../asyncapi.yml
+  sendMessage:
+    discriminated: false
+    docs: Send messages to the WebSocket
+    union:
+      - AudioData
+      - TerminateSession
+      - ForceEndUtterance
+      - ConfigureEndUtteranceSilenceThreshold
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeBaseMessage:
+    properties:
+      message_type:
+        type: MessageType
+        docs: Describes the type of the message
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeMessage:
+    discriminated: false
+    union:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionInformation
+      - SessionTerminated
+      - RealtimeError
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeError:
+    properties:
+      error: string
+    source:
+      openapi: ../asyncapi.yml
+  MessageType:
+    enum:
+      - SessionBegins
+      - PartialTranscript
+      - FinalTranscript
+      - SessionInformation
+      - SessionTerminated
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeTranscriptType:
+    enum:
+      - PartialTranscript
+      - FinalTranscript
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeTranscript:
+    discriminated: false
+    union:
+      - PartialTranscript
+      - FinalTranscript
+    source:
+      openapi: ../asyncapi.yml
+  SessionBegins:
+    properties:
+      message_type:
+        type: literal<"SessionBegins">
+        docs: Describes the type of the message
+      session_id:
+        type: string
+        docs: Unique identifier for the established session
+        validation:
+          format: uuid
+      expires_at:
+        type: datetime
+        docs: Timestamp when this session will expire
+    source:
+      openapi: ../asyncapi.yml
+  SessionInformation:
+    docs: >
+      Information about the session that is concluding.
+
+      This message is sent at the end of the session, before the
+      SessionTerminated message.
+    properties:
+      message_type:
+        type: literal<"SessionInformation">
+        docs: Describes the type of the message
+      audio_duration_seconds:
+        type: float
+        docs: The total duration of the audio in seconds
+    source:
+      openapi: ../asyncapi.yml
+  SessionTerminated:
+    properties:
+      message_type:
+        type: literal<"SessionTerminated">
+        docs: Describes the type of the message
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeBaseTranscript:
+    properties:
+      audio_start:
+        type: integer
+        docs: Start time of audio sample relative to session start, in milliseconds
+      audio_end:
+        type: integer
+        docs: End time of audio sample relative to session start, in milliseconds
+      confidence:
+        type: double
+        docs: The confidence score of the entire transcription, between 0 and 1
+        validation:
+          min: 0
+          max: 1
+      text:
+        type: string
+        docs: The partial transcript for your audio
+      words:
+        docs: >
+          An array of objects, with the information for each word in the
+          transcription text.
+
+          Includes the start and end time of the word in milliseconds, the
+          confidence score of the word, and the text, which is the word itself.
+        type: list<Word>
+      created:
+        type: datetime
+        docs: The timestamp for the partial transcript
+    source:
+      openapi: ../asyncapi.yml
+  PartialTranscript:
+    properties:
+      message_type:
+        type: literal<"PartialTranscript">
+        docs: Describes the type of message
+    extends:
+      - RealtimeBaseTranscript
+    source:
+      openapi: ../asyncapi.yml
+  FinalTranscript:
+    properties:
+      message_type:
+        type: literal<"FinalTranscript">
+        docs: Describes the type of message
+      punctuated:
+        type: boolean
+        docs: Whether the text is punctuated and cased
+      text_formatted:
+        type: boolean
+        docs: Whether the text is formatted, for example Dollar -> $
+    extends:
+      - RealtimeBaseTranscript
+    source:
+      openapi: ../asyncapi.yml
+  Word:
+    properties:
+      start:
+        type: integer
+        docs: Start time of the word in milliseconds
+      end:
+        type: integer
+        docs: End time of the word in milliseconds
+      confidence:
+        type: double
+        docs: Confidence score of the word
+        validation:
+          min: 0
+          max: 1
+      text:
+        type: string
+        docs: The word itself
+    source:
+      openapi: ../asyncapi.yml
+  AudioData:
+    type: string
+    docs: Binary audio data
+    validation:
+      format: binary
+  ForceEndUtterance:
+    docs: Manually end an utterance
+    properties:
+      force_end_utterance:
+        type: boolean
+        docs: >-
+          A boolean value to communicate that you wish to force the end of the
+          utterance
+    source:
+      openapi: ../asyncapi.yml
+  ConfigureEndUtteranceSilenceThreshold:
+    docs: >-
+      Configure the threshold for how long to wait before ending an utterance.
+      Default is 700ms.
+    properties:
+      end_utterance_silence_threshold:
+        type: integer
+        docs: The duration threshold in milliseconds
+        validation:
+          min: 0
+          max: 20000
+    source:
+      openapi: ../asyncapi.yml
+  TerminateSession:
+    properties:
+      terminate_session:
+        type: boolean
+        docs: Set to true to end your streaming session forever
+    source:
+      openapi: ../asyncapi.yml
+  AudioEncoding:
+    enum:
+      - value: pcm_s16le
+        docs: PCM signed 16-bit little-endian
+        casing:
+          camel: pcmS16le
+          screaming-snake: PCM_S16LE
+          snake: pcm_s16le
+          pascal: PcmS16le
+      - value: pcm_mulaw
+        docs: PCM Mu-law
+        casing:
+          camel: pcmMulaw
+          screaming-snake: PCM_MULAW
+          snake: pcm_mulaw
+          pascal: PcmMulaw
+    docs: The encoding of the audio data
+    default: pcm_s16le
+    source:
+      openapi: ../asyncapi.yml
+  RealtimeTemporaryTokenResponse:
+    properties:
+      token:
+        type: string
+        docs: The temporary authentication token for Streaming Speech-to-Text
+    source:
+      openapi: ../openapi.yml
+channel:
+  path: /v2/realtime/ws
+  auth: false
+  display-name: Streaming Speech-to-Text
+  query-parameters:
+    sample_rate:
+      type: integer
+      docs: The sample rate of the streamed audio
+    word_boost:
+      type: optional<string>
+      docs: >
+        Add up to 2500 characters of custom vocabulary.
+
+        The parameter value must be a JSON encoded array of strings. The JSON
+        must be URL encoded like other query string parameters.
+    encoding:
+      type: optional<Realtime>
+      docs: The encoding of the audio data
+    token:
+      type: optional<string>
+      docs: >
+        Authenticate using a [generated temporary
+        token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)
+    disable_partial_transcripts:
+      type: optional<boolean>
+      docs: Set to true to not receive partial transcripts. Defaults to false.
+    enable_extra_session_information:
+      type: optional<boolean>
+      docs: >-
+        Set to true to receive the SessionInformation message before the session
+        ends. Defaults to false.
+  headers:
+    Authentication:
+      type: optional<string>
+      name: authentication
+      docs: Authenticate using your AssemblyAI API key
+  messages:
+    subscribe:
+      origin: server
+      body:
+        type: receiveMessage
+        docs: Receive messages from the WebSocket
+    publish:
+      origin: client
+      body:
+        type: sendMessage
+        docs: Send messages to the WebSocket
+  examples:
+    - messages:
+        - type: publish
+          body: UklGRtjIAABXQVZFZ
+        - type: subscribe
+          body:
+            audio_start: 0
+            audio_end: 1500
+            confidence: 0.987190506414702
+            text: there is a house in new orleans
+            words:
+              - start: 0
+                end: 300
+                confidence: 1
+                text: there
+            created: "2023-05-24T06:09:10Z"
+            message_type: PartialTranscript
+        - type: subscribe
+          body:
+            audio_start: 0
+            audio_end: 1500
+            confidence: 0.987190506414702
+            text: there is a house in new orleans
+            words:
+              - start: 0
+                end: 300
+                confidence: 1
+                text: there
+            created: "2023-05-24T06:09:10Z"
+            message_type: FinalTranscript
+            punctuated: true
+            text_formatted: true
+        - type: publish
+          body:
+            terminate_session: true
+        - type: subscribe
+          body:
+            message_type: SessionTerminated
+      query-parameters:
+        sample_rate: 1
