@@ -1,0 +1,193 @@
+---
+title: 'Automatic language detection'
+description: 'Automatic language detection in AssemblyAI Speech-to-Text API'
+---
+
+Identify the dominant language spoken in an audio file and use it during the transcription. Enable it to detect any of the [supported languages](/docs/getting-started/supported-languages).
+
+To reliably identify the dominant language, the file must contain **at least 50 seconds** of spoken audio.
+
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+To enable it, set `language_detection` to `True` in the transcription config.
+
+```python {1}
+config = aai.TranscriptionConfig(language_detection=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+To enable it, set `language_detection` to `true` in the transcription parameters.
+
+```ts {3}
+const params = {
+  audio: audioUrl,
+  language_detection: true
+}
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+To enable it, set `LanguageDetection` to `true` in the transcription parameters.
+
+```go {2}
+transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+    LanguageDetection: aai.Bool(true),
+})
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+To enable it, set `languageDetection` to `true` in the transcription parameters.
+
+```java
+var params = TranscriptOptionalParams.builder()
+        .languageDetection(true)
+        .build();
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+To enable it, set `LanguageDetection` to `true` in the transcription parameters.
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    LanguageDetection = true
+});
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+To enable it, set `language_detection` to `True` in the transcription config.
+
+```ruby
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  language_detection: true
+)
+```
+
+  </Tab>
+</Tabs>
+
+<Tip title="Select model class based on detected language">
+By performing automatic language detection on a small chunk of audio first, you can then select between the Best or Nano model depending on the detected language. To learn more, see [Separating automatic language detection from transcription](../05-guides/automatic-language-detection-workflow.mdx).
+</Tip>
+
+### Confidence score
+
+If language detection is enabled, the API returns a confidence score for the detected language. The score ranges from 0.0 (low confidence) to 1.0 (high confidence).
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+
+```python
+print(transcript.json_response["language_confidence"])
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+
+```ts
+console.log(transcript.language_confidence)
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+
+```go
+fmt.Printf(aai.ToFloat64(transcript.LanguageConfidence))
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+
+```java
+System.out.println(transcript.getLanguageConfidence().get());
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+
+```ruby
+puts transcript.language_confidence
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+
+```csharp
+Console.WriteLine(transcript.LanguageConfidence);
+```
+
+  </Tab>
+</Tabs>
+
+### Set a language confidence threshold
+
+You can set the confidence threshold that must be reached if language detection is enabled. An error will be returned
+if the language confidence is below this threshold. Valid values are in the range [0,1] inclusive.
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+
+```python {3}
+config = aai.TranscriptionConfig(
+    language_detection=True,
+    language_confidence_threshold=0.4
+)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+
+```ts {3-4}
+const params = {
+  ...
+  language_detection: true,
+  language_confidence_threshold: 0.4
+}
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+
+```go {2-3}
+transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+    LanguageDetection:           aai.Bool(true),
+    LanguageConfidenceThreshold: aai.Float64(0.4),
+})
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+
+```java {2-3}
+var params = TranscriptOptionalParams.builder()
+        .languageDetection(true)
+        .languageConfidenceThreshold(0.4)
+        .build();
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+
+```ruby {3-4}
+transcript = client.transcripts.transcribe(
+  ...
+  language_detection: true,
+  language_confidence_threshold: 0.4
+)
+```
+
+  </Tab>
+</Tabs>
+
+<Tip title="Fallback to a default language">
+For a workflow that resubmits a transcription request using a default language if the threshold is not reached, see [this cookbook](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/automatic-language-detection-route-default-language-python.ipynb).
+</Tip>
