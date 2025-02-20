@@ -1,0 +1,81 @@
+---
+title: 'How to Implement Retry Server Error Logic'
+---
+
+# How to Implement Retry Server Error Logic
+
+In this guide, we'll show you how to setup automatic server error retry logic in your transcription process.
+
+Server Errors indicate an server-side issue during the transcription process. These rarely happen but can occasionally occur on our side. If a transcription fails due to a server error, we recommend that you resubmit the file for transcription to allow another server to process the audio. If the issue persists, please reach out to our Support team!: support@assemblyai.com
+
+This workflow is designed to automatically retry these transcripts if a server error is encountered.
+
+> **If your transcription fails due to a server error on our side, we will automatically retry the request up to three times. You can find this option in your [Account Settings](https://assemblyai.com/app/account).**
+
+## Get started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+## Step-by-step instructions
+
+Install the SDK:
+
+
+```python
+%pip install assemblyai
+```
+
+Import the `assemblyai` and `time` package and set your API key:
+
+
+```python
+import assemblyai as aai
+import time
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Create a function that handles errors that may occur during the transcription process. The default number of retires is 1. The default wait time before retranscribing is 5 seconds.
+
+
+```python
+def handle_error_transcription(audio_url, transcriber, config, retries=1, wait_time=5):
+    for attempt in range(retries + 1):
+        transcript = transcriber.transcribe(audio_url, config)
+        if transcript.error == "Server error, developers have been alerted":
+            if attempt < retries:
+                print(f"Encountered a server error. Retrying in {wait_time} second(s)...")
+                time.sleep(wait_time)
+            else:
+                print("Retry failed with a server error. Please contact AssemblyAI Support: support@assemblyai.com")
+                return None
+        elif transcript.status == aai.TranscriptStatus.error:
+            print(f"Transcription failed: {transcript.error}")
+            return None
+        else:
+            return transcript
+```
+
+Define the audio file which you want to transcribe.
+
+
+```python
+audio_url = "https://storage.googleapis.com/aai-web-samples/5_common_sports_injuries.mp3"
+```
+
+Create a `Transcriber` object and specify features in `TranscriptionConfig`.
+
+
+```python
+transcriber = aai.Transcriber()
+config = aai.TranscriptionConfig()
+```
+
+Call the function to handle transcription with error handling. Specify number of retries and wait time. Return the transcribed text if transcription is successful.
+
+
+```python
+transcript = handle_error_transcription(audio_url, transcriber, config, retries=1, wait_time=5)
+if transcript:
+    print(transcript.text)
+```

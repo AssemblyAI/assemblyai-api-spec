@@ -1,0 +1,71 @@
+---
+title: 'Automatic Language Detection: Route to Default Language if Language Confidence is Low'
+---
+
+
+
+
+# Automatic Language Detection: Route to Default Language if Language Confidence is Low
+
+This guide will show you how to use AssemblyAI's API to resubmit a request using a default language if the Automatic Language Detection's `language_confidence` is below a certain threshold. The following code uses the Python SDK. Prefer JavaScript? [Here is the same code using the JS SDK](automatic-language-detection-route-default-language-js.md)!
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+## Step-by-Step Instructions
+
+Install the SDK:
+
+
+```python
+%pip install assemblyai
+```
+
+Import the `assemblyai` package and set the API key.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Define a `default_language`, which will be set to the [language code](https://www.assemblyai.com/docs/getting-started/supported-languages) that will be used in case the detected language has a low `language_confidence`. 
+
+
+```python
+default_language = "LANGUAGE_CODE"
+```
+
+Define a `Transcriber`, an `audio_url` set to a link to the audio file, and a `TranscriptionConfig` with `language_detection=True`. We also need to define our `language_confidence_threshold`. For the purposes of this example, we'll set it to 0.8, representing 80% confidence.
+
+If a transcript ends up with a `language_confidence` below this value, the transcript will error out, and we'll return the transcript using the `default_language`.
+
+
+```python
+transcriber = aai.Transcriber()
+audio_url = ("https://example.org/audio.mp3")
+config = aai.TranscriptionConfig(language_detection=True, language_confidence_threshold=0.8)
+transcript = transcriber.transcribe(audio_url, config)
+```
+
+If there is an error with the transcript, first it will check if it is a `language_confidence` related error message. If this is true, a message will be printed saying that the transcript is being rerun, the transcript is run again with the `language_code` set to the `default_language`, and the transcript ID and text of the new transcript are both printed. If there is , then the transcript ID and text of the original transcript are printed. 
+
+NOTE: You will not be charged for the first transcript if there is an error. You will only be charged for the transcript that processes successfully.
+
+
+```python
+if transcript.error:
+    if "below the requested confidence threshold value" in transcript.error:
+        print(f"{transcript.error}. Running transcript again with language set to '{default_language}'.")
+        new_config = aai.TranscriptionConfig(language_code=default_language)
+        transcript = transcriber.transcribe(audio_url, new_config)
+        print(f"Transcript ID: {transcript.id}")
+        print(transcript.text)
+    else:
+        print(transcript.error)
+else:
+    print(f"Transcript ID: {transcript.id}")
+    print(transcript.text)
+```

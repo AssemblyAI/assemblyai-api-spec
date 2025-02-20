@@ -1,0 +1,95 @@
+---
+title: 'Leverage LeMUR for Customer Call Sentiment Analysis'
+---
+
+
+
+
+# Leverage LeMUR for Customer Call Sentiment Analysis
+
+In this guide, we'll show you how to use AssemblyAI's LeMUR (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and then use [LeMUR's Question & Answer feature](https://www.assemblyai.com/docs/api-reference/lemur) to automatically detect sentiment analysis from customer calls as "positive", "negative", or "neutral". In addition, we will glean additional insights beyond these three sentiments and learn the reasoning behind these detected sentiments.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+LeMUR features are currently only available to paid users at two pricing tiers: LeMUR and LeMUR Basic. Refer to [the pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR) for more detail.
+
+### Step-by-Step Instructions
+
+In this guide, we will ask five questions to learn about the sentiment of the customer and agent. You can adjust the questions to suit your project's needs.
+
+
+Import the `assemblyai` package and set your API key.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "your_api_key"
+```
+
+Use the `Transcriber` object's `transcribe` method and pass in the audio file's path as a parameter. The `transcribe` method will save the results of the transcription to the `Transcriber` object's `transcript` attribute.
+
+
+```python
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe("./meeting.mp3")
+```
+
+Define your LeMUR request `context` parameters for the Question & Answer feature.
+
+
+```python
+agent_context = "The agent is trying to get the customer to go through with the update to their car."
+customer_context = "The customer is calling to check how much it would cost to update the map in his car."
+```
+
+Define your `answer_format` and `questions` parameters for the Question & Answer feature.
+
+
+```python
+answer_format = "<answer in one sentence> <reason in one sentence>"
+
+questions = [
+    aai.LemurQuestion(
+        question="What was the overall sentiment of the call?",
+        context=customer_context,
+        answer_format=answer_format,
+    ),
+    aai.LemurQuestion(
+        question="What was the sentiment of the agent in this call?",
+        context=agent_context,
+        answer_format=answer_format,
+    ),
+    aai.LemurQuestion(
+        question="What was the sentiment of the customer in this call?",
+        context=customer_context,
+        answer_format=answer_format,
+    ),
+    aai.LemurQuestion(
+        question="What quote best demonstrates the customer's level of interest?",
+        context=customer_context,
+        answer_format=answer_format,
+    ),
+    aai.LemurQuestion(
+        question="Provide a quote from the agent that demonstrates their level of enthusiasm.",
+        context=agent_context,
+        answer_format=answer_format,
+    ),
+]
+```
+
+Run the `question` method on `transcript` and print the result to your terminal.
+
+
+```python
+result = transcript.lemur.question(questions, final_model=aai.LemurModel.claude3_5_sonnet)
+
+for qa in result.response:
+    print(qa.question)
+    print(qa.answer)
+```
+
+The output will look similar to the example below.
+

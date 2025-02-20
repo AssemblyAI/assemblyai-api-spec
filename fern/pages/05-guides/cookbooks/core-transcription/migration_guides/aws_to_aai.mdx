@@ -1,0 +1,85 @@
+---
+title: 'Migration guide: AWS Transcribe to AssemblyAI'
+---
+
+
+
+
+# Migration guide: AWS Transcribe to AssemblyAI
+
+This guide walks through the process of migrating from AWS Transcribe to AssemblyAI.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+
+## Side-by-side code comparison
+
+Below is a side-by-side comparison of a basic snippet to transcribe a file by AWS Transcribe and AssemblyAI
+
+
+| <h3>AWS Transcribe</h3> | <h3>AssemblyAI</h3> |
+|----------------|------------|
+| <pre><code>import time<br>import boto3<br><br>def transcribe_file(job_name, file_uri, transcribe_client):<br>    transcribe_client.start_transcription_job(<br>        TranscriptionJobName=job_name,<br>        Media={"MediaFileUri": file_uri},<br>        MediaFormat="wav",<br>        LanguageCode="en-US",<br>    )<br>    max_tries = 60<br>    while max_tries > 0:<br>        max_tries -= 1<br>        job = transcribe_client.get_transcription_job(<br>            TranscriptionJobName=job_name<br>        )<br>        job_status = job["TranscriptionJob"]["TranscriptionJobStatus"]<br>        if job_status in ["COMPLETED", "FAILED"]:<br>            print(f"Job {job_name} is {job_status}.")<br>            if job_status == "COMPLETED":<br>                print(<br>                    f"Download the transcript from\n"<br>                    f"\t{job['TranscriptionJob']['Transcript']['TranscriptFileUri']}."<br>                )<br>            break<br>        else:<br>            print(f"Waiting for {job_name}. Current status is {job_status}.")<br>        time.sleep(10)<br><br>def main():<br>    transcribe_client = boto3.client("transcribe")<br>    file_uri = "s3://test-transcribe/answer2.wav"<br>    transcribe_file("Example-job", file_uri, transcribe_client)<br><br>if __name__ == "__main__":<br>    main()</code></pre> | <pre><code>import assemblyai as aai<br><br>aai.settings.api_key = "YOUR-API-KEY"<br>transcriber = aai.Transcriber()<br><br># You can use a local filepath:<br># audio_file = "./example.mp3"<br># Or use a publicly-accessible URL:<br>audio_file = (<br>    "https://assembly.ai/sports_injuries.mp3"<br>)<br><br>config = aai.TranscriptionConfig(speaker_labels=True)<br>transcript = transcriber.transcribe(audio_file, config)<br><br>if transcript.status == aai.TranscriptStatus.error:<br>    print(f"Transcription failed: {transcript.error}")<br>    exit(1)<br><br>print(transcript.text)<br>for utterance in transcript.utterances:<br>    print(f"Speaker {utterance.speaker}: {utterance.text}")</code></pre> |
+
+
+## Installation
+
+| <h3>AWS Transcribe</h3> | <h3>AssemblyAI</h3> |
+|----------------|------------|
+|<pre><code>import boto3<br>import time<br><br>transcribe_client = boto3.client("transcribe")</code></pre>|<pre><code>import assemblyai as aai<br><br>aai.settings.api_key = "YOUR-API-KEY"<br>transcriber = aai.Transcriber()</code></pre>|
+
+
+When migrating from AWS to AssemblyAI, you'll first need to handle authentication and SDK setup:
+
+Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/dashboard/login) \
+Check our [documentation for the full list of available SDKs](https://www.assemblyai.com/docs/#quickstart)
+
+Things to know:
+- Store your API key securely in an environment variable
+- API key authentication works the same across all AssemblyAI SDKs
+
+
+## Audio File Sources
+
+| <h3>AWS Transcribe</h3> | <h3>AssemblyAI</h3> |
+|----------------|------------|
+|<pre><code>def transcribe_file(job_name, file_uri, transcribe_client):<br>    transcribe_client.start_transcription_job(<br>        TranscriptionJobName=job_name,<br>        Media={"MediaFileUri": file_uri},<br>        MediaFormat="wav",<br>        LanguageCode="en-US",<br>    )</code></pre> | <pre><code>transcriber = aai.Transcriber()<br><br># Local files<br>transcript = transcriber.transcribe("./audio.mp3")<br><br># Public URLs<br>transcript = transcriber.transcribe("https://example.com/audio.mp3")<br><br># S3 files (using pre-signed URLs)<br>s3_client = boto3.client('s3')<br>presigned_url = s3_client.generate_presigned_url(<br>    'get_object',<br>    Params={'Bucket': 'my-bucket', 'Key': 'audio.mp3'},<br>    ExpiresIn=3600<br>)<br>transcript = transcriber.transcribe(presigned_url)</code></pre> |
+
+
+Here are helpful things to know when migrating your audio input handling:
+- There's no need to specify the audio format to AssemblyAI - it's auto-detected. AssemblyAI accepts almost every audio/video file type: [here is a full list of all our supported file types](https://support.assemblyai.com/articles/2616970375-what-audio-and-video-file-types-are-supported-by-your-api)
+- Our SDK handles file upload and transcription automatically in one step
+- For S3 files, you'll need to generate pre-signed URLs ([see example in cookbook](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/transcribe_from_s3.ipynb))
+
+
+## Basic Transcription
+
+| <h3>AWS Transcribe</h3> | <h3>AssemblyAI</h3> |
+|----------------|------------|
+|<pre><code>while max_tries > 0:<br>    max_tries -= 1<br>    job = transcribe_client.get_transcription_job(<br>        TranscriptionJobName=job_name<br>    )<br>    job_status = job["TranscriptionJob"]["TranscriptionJobStatus"]<br>    if job_status in ["COMPLETED", "FAILED"]:<br>        break<br>    time.sleep(10)</code></pre> | <pre><code>transcriber = aai.Transcriber()<br>transcript = transcriber.transcribe(audio_file)<br><br>if transcript.status == aai.TranscriptStatus.error:<br>    print(f"Transcription failed: {transcript.error}")<br>else:<br>    print(transcript.text)</code></pre> |
+
+
+
+Here are helpful things to know about our `transcribe` method:
+- The SDK handles polling under the hood
+- Transcript is directly accessible via `transcript.text`
+- English is the default language if none is specified
+- We have a [cookbook for error handling common errors](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/common_errors_and_solutions.md) when using our API.
+
+
+## Adding Features
+
+
+| <h3>AWS Transcribe</h3> | <h3>AssemblyAI</h3> |
+|----------------|------------|
+|<pre><code>transcribe_client.start_transcription_job(<br>    TranscriptionJobName=job_name,<br>    Media={"MediaFileUri": file_uri},<br>    Settings={<br>        "ShowSpeakerLabels": True,<br>        "MaxSpeakerLabels": 2<br>    }<br>)</code></pre> | <pre><code>config = aai.TranscriptionConfig(<br>    speaker_labels=True,           # Speaker diarization<br>    auto_chapters=True,           # Auto chapter detection<br>    entity_detection=True,        # Named entity detection<br>)<br><br>transcript = transcriber.transcribe(audio_file, config)<br><br># Access speaker labels<br>for utterance in transcript.utterances:<br>    print(f"Speaker {utterance.speaker}: {utterance.text}")</code></pre> |
+
+
+
+Key differences:
+- Use `aai.TranscriptionConfig` to specify any extra features that you wish to use
+- The results for Speaker Diarization are stored in `transcript.utterances`. To see the full transcript response object, refer to our [API Reference](https://www.assemblyai.com/docs/api-reference).
+- Check our [documentation](https://www.assemblyai.com/docs/audio-intelligence) for our full list of available features and their parameters
+

@@ -1,0 +1,58 @@
+---
+title: 'Extracting Transcript Quotes with LeMURs Custom Text Input Parameter'
+---
+
+
+
+
+# Extracting Transcript Quotes with LeMUR's Custom Text Input Parameter
+
+This Colab will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and find the best quotes included in it by sending in the timestamped transcript via LeMUR's `input_text` parameter.
+
+## Getting Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://www.assemblyai.com/dashboard/signup/) for an AssemblyAI account and get your API key from your [dashboard](https://www.assemblyai.com/app/account).
+
+First, let's install the AssemblyAI SDK.
+
+
+```python
+%pip install -U assemblyai
+```
+
+Then we'll import the SDK and set our AssemblyAI API key.
+
+
+```python
+import assemblyai
+
+assemblyai.settings.api_key = "API_KEY_HERE"
+```
+
+Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use.
+
+
+```python
+transcriber = assemblyai.Transcriber()
+
+transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
+```
+
+Then we'll take the timestamped `sentences` array from our transcript and provide it to the LeMUR Q&A endpoint to extract the most engaging quotes from this transcript with their associated timestamps.
+
+
+```python
+result = assemblyai.Lemur().question(
+    input_text=f"{[(sentence.text, sentence.start, sentence.end) for sentence in transcript.get_sentences()]}",
+    final_model=assemblyai.LemurModel.claude3_5_sonnet,
+    questions=[
+        {
+            "question": "What are the most engaging quotes from this transcript?",
+            "context": "This is a list of sentences from the transcript, with each sentence having a start and end timestamp in milliseconds.",
+            "answer_format": "Exact quotes with the start and end timestamp of each sentence."
+        }
+    ]
+)
+
+print(result.response[0].answer)
+```

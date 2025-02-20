@@ -1,0 +1,113 @@
+---
+title: 'Processing Audio Files with LLMs using LeMUR'
+---
+
+
+
+
+# Processing Audio Files with LLMs using LeMUR
+
+In this guide, we'll show you how to use AssemblyAI's LeMUR (Leveraging Large Language Models to Understand Recognized Speech) framework to process audio files with an LLM. You can use LeMUR to ask questions and generate answers, summarize, and extract action items from one or more transcripts processed by AssemblyAI.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
+
+LeMUR features are currently only available to paid users, at two pricing tiers: LeMUR and LeMUR Basic. Refer to [pricing](https://www.assemblyai.com/pricing) for more details.
+
+
+### Task
+
+Use _LeMUR Task_ to send any prompt to the LLM and easily apply the model to your transcribed audio files. 
+
+Install the SDK.
+
+
+```python
+pip install -U assemblyai
+```
+
+Import the `assemblyai` package and set your API key.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Use the `Transcriber` object's `transcribe` method and pass in the audio files' paths as a parameter. The `transcribe` method saves the results of the transcription to the `Transcriber` object's `transcript_group` attribute.
+
+
+```python
+transcriber = aai.Transcriber()
+transcript_group = transcriber.transcribe_group(
+    [
+        "https://example.org/customer1.mp3",
+        "https://example.org/customer2.mp3",
+    ],
+)
+```
+
+Next, define your LeMUR request parameters for Task.
+
+
+```python
+params = {
+    "prompt": "You are a helpful coach. Provide an analysis of the transcript and offer areas to improve with exact quotes. Include no preamble. Start with an overall summary then get into the examples with feedback."
+}
+```
+
+Run `lemur`'s `task` method on your transcript(s) and pass in `params` as a parameter. The result is stored in `response` as a string.
+
+
+```python
+result = transcript_group.lemur.task(**params, final_model=aai.LemurModel.claude3_5_sonnet)
+
+print(result.response)
+```
+
+### Delete Data for a LeMUR Request
+
+Delete the data for a previously submitted LeMUR request. Response data from the LLM, as well as any context provided in the original request will be removed.
+
+You can only delete successful LeMUR requests. If you haven't yet submitted a LeMUR request, see Task for an example. You can find the `request_id` in the response of a successful LeMUR request.
+
+
+```python
+result = transcript_group.lemur.task(**params, final_model=aai.LemurModel.claude3_5_sonnet)
+
+print(result.request_id)
+```
+
+Now that we have a `request_id`, we can submit a deletion request.
+
+
+```python
+deletion_response = aai.Lemur.purge_request_data(request_id=result.request_id)
+```
+
+The response contains information about the status of the deletion request.
+
+
+```python
+print(deletion_response)
+```
+
+### Conclusion
+
+Building [Generative AI](https://www.assemblyai.com/blog/introduction-generative-ai/) products centered around human speech is challenging because audio files present challenges for LLMs. LeMUR chains together prompts, connects multiple Large Language Models together, and overcomes the need for extensive set-up or implementing a vector database for long-term information storage. LeMUR makes it possible to process and get responses on multiple audio files at once with a single API request.
+
+You can also adjust the model and parameters based on your specifications. This includes:
+- [Changing the model type](https://www.assemblyai.com/docs/lemur/processing-audio-with-llms-using-lemur#change-the-model-type)
+- [Changing the maximum output size](https://www.assemblyai.com/docs/lemur/processing-audio-with-llms-using-lemur#change-the-maximum-output-size)
+- [Changing the temperature](https://www.assemblyai.com/docs/lemur/processing-audio-with-llms-using-lemur#change-the-temperature)
+- [Sending customized input](https://www.assemblyai.com/docs/lemur/processing-audio-with-llms-using-lemur#send-customized-input)
+- [Inputting multiple transcripts](https://www.assemblyai.com/docs/lemur/processing-audio-with-llms-using-lemur#inputting-multiple-transcripts)
+
+To learn more about LeMUR, refer to [the AssemblyAI blog](https://www.assemblyai.com/blog/lemur-early-access/).
+
+If you encounter any issues or have any questions, you can refer to our [FAQ](https://www.assemblyai.com/docs/concepts/faq) or reach out to our Support team by email at support@assemblyai.com.
+
+For details on how to call the LeMUR API, check out the [LeMUR API Docs](https://www.assemblyai.com/docs/lemur). You can find detailed information about all LeMUR API endpoints and parameters in the [LeMUR API Ref](https://www.assemblyai.com/docs/api-reference/lemur).
+

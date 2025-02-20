@@ -1,0 +1,122 @@
+---
+title: 'Transcribe system audio in real-time (macOS)'
+---
+
+
+
+
+# Transcribe system audio in real-time (macOS)
+
+
+This guide solves the challenge of transcribing system audio, which is can be used for transcribing media content or online calls. By using virtual audio devices, you'll learn how to easily pipe system audio to AssemblyAI's transcription API on both Mac and Windows.
+
+The key to success lies in creating a virtual input device that captures your speaker output and converts it into an input stream. This approach allows you to bypass the limitations of direct system audio access.
+
+For Mac Users: We recommend using [Blackhole](https://github.com/ExistentialAudio/BlackHole), a free open-source tool available through Homebrew. Blackhole creates a virtual audio device that can route your system audio to AssemblyAI's API seamlessly.
+For Windows Users: [Virtual Audio Cable (VAC)](https://vac.muzychenko.net/en/) is a popular option. While we don't provide specific Windows instructions in this guide, VAC offers similar functionality to Blackhole for the Windows environment.
+
+You can copy the full script for this cookbook [here](https://gist.github.com/m-ods/54514403e14b59918bf14e84cb3a8939).
+
+
+## Setup
+
+
+First, install the following packages: assemblyai, pyaudio, asyncio, sys
+
+
+```python
+!pip install assemblyai pyaudio asyncio
+```
+
+```python
+import assemblyai as aai
+import pyaudio
+import asyncio
+import sys
+```
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can sign up for a free account and get your API key from your dashboard. Please note that Streaming Speech-to-text is available for upgraded accounts only. If you're on the free plan, you'll need to upgrade your account by adding a credit card.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+```
+
+**Make sure not to share this token with anyone** - it is a private key associated uniquely to your account.
+
+
+Create functions to handle different events during transcription.
+
+
+```python
+def on_open(session_opened: aai.RealtimeSessionOpened):
+    print("Session ID:", session_opened.session_id)
+
+def on_data(transcript: aai.RealtimeTranscript):
+    if not transcript.text:
+        return
+    if isinstance(transcript, aai.RealtimeFinalTranscript):
+        print(transcript.text, end="\r\n")
+    else:
+        print(transcript.text, end="\r")
+
+def on_error(error: aai.RealtimeError):
+    print("An error occurred:", error)
+
+def on_close():
+    print("Closing Session")
+```
+
+Create a function to get the device index for your BlackHole virtual input device.
+
+
+```python
+def get_blackhole_device_index():
+    p = pyaudio.PyAudio()
+    for i in range(p.get_device_count()):
+        dev_info = p.get_device_info_by_index(i)
+        if dev_info['name'].startswith('BlackHole'):
+            return i
+    return None
+
+blackhole_index = get_blackhole_device_index()
+```
+
+Now we create our transcriber and MicrophoneStream, setting the BlackHole virtual device index.
+
+
+```python
+transcriber = aai.RealtimeTranscriber(
+    sample_rate=44_100,
+    on_data=on_data,
+    on_error=on_error,
+    on_open=on_open,
+    on_close=on_close,
+    end_utterance_silence_threshold=500
+)
+
+transcriber.connect()
+
+microphone_stream = aai.extras.MicrophoneStream(sample_rate=44_100)
+microphone_stream.device_index = blackhole_index
+transcriber.stream(microphone_stream)
+
+transcriber.close()
+```
+
+You can press Ctrl+C to stop the transcription.
+
+
+## Troubleshooting:
+- You need to select BlackHole as your system output device for the audio to be piped correctly
+
+- If you still need to hear the audio, you can create a multi-output device on Mac that sends audio to both BlackHole and your speakers/headphones
+Here's how to set it up:
+Open "Audio MIDI Setup" (you can find this by searching in Spotlight).
+Click the "+" button in the bottom left corner and choose "Create Multi-Output Device".
+In the list on the right, check both your regular output (e.g., "MacBook Pro Speakers") and "BlackHole 2ch".
+Optionally, rename this new device to something like "BlackHole + Speakers". You may need to modify your script to search for this new device.
+
+

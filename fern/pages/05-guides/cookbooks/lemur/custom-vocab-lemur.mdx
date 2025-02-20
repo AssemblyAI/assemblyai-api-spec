@@ -1,0 +1,135 @@
+---
+title: 'Boosting Transcription Accuracy with LeMUR (LeMUR Custom Vocab)'
+---
+
+
+
+
+# Boosting Transcription Accuracy with LeMUR (LeMUR Custom Vocab)
+
+This Cookbook is designed to help you transcribe audio files using the AssemblyAI API and boost transcription accuracy using a custom vocabulary list and [LeMUR](https://www.assemblyai.com/blog/lemur/). Custom vocabulary can include company names, industry-specific terms, and other rare words that might not be accurately transcribed by pre-trained models. For example, a company name like `Sprinklr` may be transcribed incorrectly, and this is where customer vocabulary boosting can help.
+
+## Getting Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://www.assemblyai.com/dashboard/signup/) for an AssemblyAI account and get your API key from your [dashboard](https://www.assemblyai.com/app/account).
+
+### Side Note: Costs
+
+We've optimized the LeMUR prompt to minimize the number of output tokens produced by the model, which will reduce the overall cost of this solution significantly, but if you do want to calculate the total number of input / output tokens and cost associated with them, please use our [LeMUR pricing cookbook](https://github.com/AssemblyAI/cookbook/blob/master/lemur/counting-tokens.ipynb) as a reference on how to do so.
+
+## Step-by-Step Instructions
+
+Now let's install the AssemblyAI SDK and the [Termcolor library](https://pypi.org/project/termcolor/), which will be used for showing which corrections LeMUR has made to the transcript.
+
+
+```python
+%pip install -U assemblyai termcolor
+```
+
+Then we'll import the SDK and set our AssemblyAI API key.
+
+
+```python
+import assemblyai
+
+assemblyai.settings.api_key = "API_KEY"
+```
+
+Next, we'll transcribe our file and save it for later use with LeMUR.
+
+
+```python
+transcriber = assemblyai.Transcriber()
+
+transcript = transcriber.transcribe("https://drive.google.com/u/0/uc?id=1E1UUnabkXH-wN-CGbr-zd9dT_izZg1e6&export=download")
+```
+
+Now we'll define our first function for this use case. This function will correct a given sentence using LeMUR with the provided custom vocab list. We'll then call this function for each sentence in our transcript to correct specific words. Please note, though, that this means each sentence will require another request to LeMUR, which may cause you to hit request per minute (RPM) limits and receive an error. If you do end up receiving RPM errors often, please reach out to support@assemblyai.com to have your RPM limit increased.
+
+
+```python
+def correct_sentence(sentence, word_list = []):
+    prompt = """
+             You are an expert in correcting speech-to-text model outputs given a list of custom vocabulary words.
+             You will be given a sentence from a transcript.
+             You will also be given a list of custom vocabulary word that could be in the sentence.
+             Your job is to identify any words from the custom vocabulary list that are in the sentence and correct them if they are spelled incorrectly.
+             Only focus on spelling errors, you do not need to make corrections for miscased words.
+
+             Only focus on corrections that are related to the custom vocabulary list.
+             If there are no words from the custom vocabulary list in the sentence, you should return an empty array.
+             If there are words from the list, return the original word, the corrected word, and your confidence in the correction.
+
+             Return your answer in JSON with no explanation. The JSON should have the following format:
+             [{
+                 "original_word": "word1",
+                 "corrected_word": "word2",
+                 "confidence": 0.8
+             }]
+             """
+    
+    response = assemblyai.Lemur().task(
+        prompt=prompt,
+        input_text="Sentence: {}\nWord List: {}".format(sentence, ", ".join(word_list)),
+        final_model=assemblyai.LemurModel.claude3_5_sonnet # Use .claude3_haiku for a faster, more cost-effective option.
+    )
+
+    return response.response
+```
+
+Then we can define our second function. This function will extract all of the sentences from our transcript and pass them to LeMUR with our custom vocabulary list for correction. We'll be importing `termcolor` to show which words have been corrected with LeMUR.
+
+
+```python
+from json import loads
+from termcolor import colored
+
+def correct_transcript(transcript, word_list = []):
+    sentences = transcript.get_sentences()
+    new_transcript = ""
+
+    for sentence in sentences:
+
+        # Optional: You can include word confidence scores as part of your input to guide LeMUR to incorrectly spelled words.
+        # sentence_str = ""
+        # for word in sentence.words:
+        #     sentence_str += word.text + f" [{word.confidence}] "
+
+        corrections = correct_sentence(sentence.text, word_list)
+        corrections_json = loads(corrections)
+        corrected_sentence = sentence.text
+
+        for correction in corrections_json:
+            if correction["confidence"] > 0.25: # Configure as needed.
+                corrected_sentence = corrected_sentence.replace(correction["original_word"], correction["corrected_word"])
+            else:
+                print(colored("Confidence is less than 0.25", correction["original_word"], correction["corrected_word"], correction["confidence"], "red"))
+
+        new_transcript += corrected_sentence + " "
+
+        if len(corrections_json) > 0:
+            print("Identified sentence to correct: ", colored(sentence.text, "yellow"))
+    
+    print()
+    return new_transcript
+
+```
+
+### Run your Example
+
+Now you can try an example using our sample MP3 file and some word corrections. We chose to use some media with a lot of unique words, a World of Warcraft trailer, to help showcase how this solution can account for multiple ways that a unique word might be mis-transcribed initially. Below is the original transcript, the corrections made, and the final corrected transcript for comparison.
+
+
+```python
+word_list = [
+    'Azj-Kahet',
+    'Neferess',
+    "Ny'alotha",
+    "Xal'atath"
+    "Ansurek"
+]
+
+print(transcript.text)
+print()
+print(correct_transcript(transcript, word_list))
+```

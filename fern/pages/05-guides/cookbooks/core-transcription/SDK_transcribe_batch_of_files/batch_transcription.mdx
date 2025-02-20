@@ -1,0 +1,90 @@
+---
+title: 'Transcribing multiple files simultaneously '
+---
+
+
+
+
+# Transcribing multiple files simultaneously 
+
+In this guide, we'll show you how to use the AssemblyAI API to transcribe multiple audio files at once. This guide focuses on demonstrating how to use the AssemblyAI Python SDK to acheive this.
+
+You can also look at an alternative method to acheive this with Webhooks and integrating a server API [here](core-transcription/transcribe_batch_of_files).
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+### Step-by-Step Instructions
+
+Install the SDK.
+
+
+```python
+pip install -U assemblyai
+```
+
+Import the `assemblyai `package and set the API key. Import `threading` and `OS` Python libraries that enable concurrent task processing and file path interactions respectively.
+
+
+```python
+import assemblyai as aai
+import threading
+import os
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Set the folders. The `batch` folder contains the audio files that you want to process and transcribe. The `transcription_result_folder` stores the .txt transcript files.
+
+
+```python
+batch_folder = "audio"
+transcription_result_folder = "transcripts"
+```
+
+Create a `Transcriber` object.
+
+
+```python
+transcriber = aai.Transcriber()
+```
+
+Function to transcribe an audio file. Once the transcript is complete, a .txt file is generated to the `transcription_result_folder`. If there is an error with the transcription, it will not be processed to the results folder.
+
+
+```python
+def transcribe_audio(audio_file):
+    transcriber = aai.Transcriber()
+    transcript = transcriber.transcribe(os.path.join(batch_folder, audio_file))
+    if transcript.status == "completed":
+        with open(f"{transcription_result_folder}/{audio_file}.txt", "w") as f:
+            f.write(transcript.text)
+    elif transcript.status == "error":
+        print("Error: ", transcript.error)
+```
+
+Open threads to transcribe each file concurrently. Once all the threads are complete you will receive the "All transcriptions are complete" message in your terminal.
+
+
+```python
+threads = []
+for filename in os.listdir(batch_folder):
+    thread = threading.Thread(target=transcribe_audio, args=(filename,))
+    threads.append(thread)
+    thread.start()
+
+for thread in threads:
+    thread.join()
+
+print("All transcriptions are complete.")
+```
+
+### Conclusion
+
+This guide aims to demonstrate how to use AssemblyAI Python SDK to concurrently process multiple audio files at once. The output is transcript text files for each audio file in the specified folder.
+
+Other integrations and features can be built on top of this main function. These include and are not limited to: exporting the file in different formats, adding Core Transcription or Audio Intelligence features. 
+
+If you have any questions, please feel free to reach out to our Support team -  [support@assemblyai.com](mailto:support@assemblyai.com) or in our Community Discord!
+

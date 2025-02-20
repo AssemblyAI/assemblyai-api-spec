@@ -1,0 +1,92 @@
+---
+title: 'Extract Dialogue Data with LeMUR and JSON'
+---
+
+
+
+
+# Extract Dialogue Data with LeMUR and JSON
+
+In this guide, we'll show you how to use AssemblyAI's LeMUR (Leveraging Large Language Models to Understand Recognized Speech) framework to process several audio files, and then format your results in JSON (JavaScript Object Notation) format.
+
+JSON allows you to programmatically format, parse, and transfer resopnses from LeMUR, which is useful for implementing LeMUR with a wide range of other applications.
+
+In this example, we will leverage the JSON formatting to create a .csv file from a directory of files that must be transcribed and submitted to LeMUR. However, you can use the same concepts in this guide to generate a JSON-formatted response, which you can then use to update a database table or interact with other APIs.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+LeMUR features are currently only available to paid users to two pricing tiers: LeMUR and LeMUR Basic. Refer to [the pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR) for more detail.
+
+
+### Step-by-Step Instructions
+
+In this guide, we will ask the same questions to LeMUR about multiple files. Then, we will collate the answers in a .csv file.
+
+Import the necessary libraries for making an HTTP request and set your API key.
+
+
+```python
+import assemblyai as aai
+import json
+import os
+import csv
+
+aai.settings.api_key = "your_api_key"
+# configure the name of your output .csv file
+output_filename = "profiles.csv"
+```
+
+Transcribe your audio files.
+
+
+```python
+transcriber = aai.Transcriber()
+# Create a new Transcript Group with every file in the directory "interviews"
+transcript_group = transcriber.transcribe_group([os.path.join("interviews", file) for file in os.listdir("interviews")])
+```
+
+Define your LeMUR request prompt for the Task feature.
+
+
+```python
+prompt = """
+         You are an HR executive scanning through an interview transcript to extract information about a candidate.
+         You are required to create a JSON response with key information about the candidate.
+         You will use this template for your answer:
+         {
+            "Name": "<candidate-name>",
+            "Position": "<job position that candidate is applying for>",
+            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>",
+         }
+
+         Do not include any other text in your response. Only respond in JSON format, as your response will be parsed programmatically as JSON.
+         """
+```
+
+Construct your .csv file and parse the JSON data.
+
+
+```python
+with open(output_filename, "w", newline="") as file:
+    writer = csv.writer(file)
+    # define the header of your .csv file
+    header = ["Name", "Position", "Past Experience"]
+    writer.writerow(header)
+
+    print("Prompting LeMUR")
+    for transcript in transcript_group:
+        result = transcript.lemur.task(prompt=prompt, final_model=aai.LemurModel.claude3_5_sonnet)
+        # json.loads() method can be used to parse a valid JSON string and convert it into a Python dictionary.
+        interviewee_data = json.loads(result.response)
+        writer.writerow(interviewee_data.values())
+
+print(f"Created .csv file {output_filename}")
+```
+
+For context, this is the response from LeMUR with our prompt.
+
+
+You can now run your Python script and you should see that a `profiles.csv` file is generated. Your result will look similar to the example below.
+

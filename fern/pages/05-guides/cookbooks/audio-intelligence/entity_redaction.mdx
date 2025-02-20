@@ -1,0 +1,86 @@
+---
+title: 'Untitled'
+---
+
+
+
+
+This guide will walk you through using AssemblyAI’s Entity Detection model to redact specific entities from an audio transcription.
+
+While AssemblyAI offers a PII Redaction model for automatic redaction, this method is ideal for scenarios where you need both a redacted and a non-redacted version of the transcript.
+
+We’ll use the AssemblyAI Python SDK to demonstrate this. By the end of this guide, you’ll be able to effectively redact sensitive information from your transcriptions while preserving the original text.
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Python](https://www.python.org/) installed.
+- An [AssemblyAI account](https://www.assemblyai.com/dashboard/signup).
+
+
+```python
+!pip install assemblyai
+```
+
+Import the `assemblyai` package and set your API key:
+
+
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+```
+
+Define a Transcriber and a TranscriptionConfig with entity_detection set to True, and then create a transcript.
+
+
+```python
+transcriber = aai.Transcriber()
+
+audio_url = (
+    "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(entity_detection=True)
+
+transcript = transcriber.transcribe(audio_url, config)
+```
+
+To redact all detected entities, iterate through the entities in the transcript and replace their text with their entity type:
+
+
+```python
+redacted_transcript = transcript.text
+
+# redact ALL entities
+for entity in transcript.entities:
+    redacted_transcript = redacted_transcript.replace(entity.text, f"[{entity.entity_type.upper()}]")
+
+print(redacted_transcript[:500])
+```
+
+If you want to redact only certain types of entities (e.g., locations), filter them using a list of entity types:
+
+
+```python
+# filter for some entities
+redacted_transcript2 = transcript.text
+
+pii_policies = ["location"]
+
+for entity in transcript.entities:
+    if entity.entity_type in pii_policies:
+        redacted_transcript2 = redacted_transcript2.replace(entity.text, f"[{entity.entity_type.upper()}]")
+
+print(redacted_transcript2[:500])
+```
+
+## Conclusion
+
+**Disclaimer**: This method only creates a local redacted copy of the text. If you make a GET request for the transcript again, the text field will remain unredacted.
+
+This tutorial demonstrated how to use the AssemblyAI Python SDK to redact sensitive information from your transcriptions using our Entity Detection model. If you have any further questions or need additional assistance, feel free to reach out to the AssemblyAI Support team at support@assemblyai.com!
+

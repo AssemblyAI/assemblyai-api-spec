@@ -1,0 +1,146 @@
+---
+title: 'Identifying Duplicate Dual Channel Files'
+---
+
+
+
+
+# Identifying Duplicate Dual Channel Files
+
+In this guide, you'll learn how to identify Dual Channel (Stereo) files that contain the same content on each channel. With AssemblyAI's API, we support Dual Channel files by transcribing each channel individually, then intelligently combining the results into one transcript. If a file contains the same content on both channels, then you may end up with duplicate content in your transcript.
+
+To programmatically identify duplicate channels, you can hash the audio content found on each channel and compare the hashes to quickly determine whether you should remove a channel and then submit the file for more accurate results.
+
+## Getting Started
+
+To get started, you'll need to install a few prerequisites:
+
+
+```python
+%pip install -U pydub numpy audioop-lts assemblyai
+```
+
+# Helper Functions
+
+Now we'll need to define a few helper functions before we set up our full workflow. The first one, `load_audio` will load any audio file, regardless of format, and return each channel as a NumPy array.
+
+
+```python
+from pydub import AudioSegment
+import numpy as np
+
+def load_audio(file_path):
+    # Load the audio file.
+    audio = AudioSegment.from_file(file_path)
+
+    # Ensure audio is stereo.
+    if audio.channels != 2:
+        raise ValueError("This function only supports stereo audio files.")
+    
+    # Convert audio data to raw samples.
+    samples = np.array(audio.get_array_of_samples())
+
+    # Reshape samples to separate channels.
+    samples = samples.reshape((-1, audio.channels))
+
+    # Extract left and right channels.
+    left_channel = samples[:, 0]
+    right_channel = samples[:, 1]
+
+    return left_channel, right_channel
+```
+
+Our next function, `hash_audio_data` hashes each channel to return a SHA-256 hash.
+
+
+```python
+import hashlib
+
+def hash_audio_data(data):
+    hasher = hashlib.sha256()
+    hasher.update(data.tobytes())
+    return hasher.hexdigest()
+```
+
+Our next function, `compare_audio_channels` lets us know via a flag if the audio channels are the same, with 1 meaning that they are the same, and 0 meaning they're not.
+
+
+```python
+def compare_audio_channels(file_path):
+    try:
+        left_channel, right_channel = load_audio(file_path)
+
+        # Compute hashes for both channels.
+        left_hash = hash_audio_data(left_channel)
+        right_hash = hash_audio_data(right_channel)
+
+        # Compare hashes.
+        if left_hash == right_hash:
+            return True
+        else:
+            return False
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+```
+
+Based on the result of this function, we now need a way to remove the duplicate content to avoid duplicate transcription results. To do this, we'll define one final function, `convert_to_mono_if_duplicate` that removes one of the audio channels and creates a new mono file that we can submit to AssemblyAI, returning the path to it. If the file contains different content on each channel, however, this function will instead return the original file path.
+
+
+```python
+import os
+
+def convert_to_mono_if_duplicate(file_path):
+    if compare_audio_channels(file_path):
+        print("The audio content for this file is identical on both channels. Converting to mono...")
+
+        # Load the audio file again with pydub.
+        audio = AudioSegment.from_file(file_path)
+
+        # Convert to mono by selecting one channel (since both are identical).
+        mono_audio = audio.set_channels(1)
+
+        # Save the new mono file.
+        output_path = os.path.splitext(file_path)[0] + "_mono" + os.path.splitext(file_path)[1]
+        mono_audio.export(output_path, format=os.path.splitext(file_path)[1][1:])
+
+        print("File converted.\n")
+
+        return output_path
+    else:
+        return file_path
+```
+
+## Combining with AssemblyAI
+
+Now we can combine this workflow with AssemblyAI to programmatically catch files that could cause duplicate results and modify them before submitting them to AssemblyAI. To get started, you'll need an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+Now we'll create a workflow that checks if we should convert a file before using AssemblyAI's SDK to transcribe it.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "API_KEY"
+
+original_path = "FILE_PATH"
+
+updated_path = convert_to_mono_if_duplicate(original_path)
+
+# Check if we modified the file and thus appended _mono to it.
+if updated_path != original_path:
+    # Use the default configuration, which will treat the file as mono, which it now is.
+    transcriber = aai.Transcriber()
+
+    # Transcribe our new mono file.
+    print(transcriber.transcribe(updated_path).text)
+else:
+    # Submit the file as Dual Channel if the content wasn't the same.
+    config = aai.TranscriptionConfig(dual_channel=True)
+
+    # Load the config into our Transcriber.
+    transcriber = aai.Transcriber(config=config)
+
+    # Transcribe the stereo file.
+    print(transcriber.transcribe(updated_path).text)
+```

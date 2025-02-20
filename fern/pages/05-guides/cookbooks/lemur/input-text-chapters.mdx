@@ -1,0 +1,97 @@
+---
+title: 'Creating Chapter Summaries with LeMURs Custom Text Input Parameter'
+---
+
+
+
+
+
+# Creating Chapter Summaries with LeMUR's Custom Text Input Parameter
+
+In this guide, we'll show you how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and summarize it into chapters by sending in the timestamped transcript via LeMUR's `input_text` parameter.
+
+> **Note**  
+> Calling LeMUR using `transcript_ids` is preferred as default. Depending on your use case, you can alternatively use the `input_text` parameter to call LeMUR with custom formatted transcript data including edited transcripts, speaker-labelled transcripts and more.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
+
+LeMUR features are currently only available to paid users, at two pricing tiers: LeMUR and LeMUR Basic. Refer to [pricing](https://www.assemblyai.com/pricing) for more details.
+
+First, let's install the AssemblyAI SDK.
+
+
+
+```python
+pip install -U assemblyai
+```
+
+Import the `assemblyai` package and set your API key.
+
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "API_KEY"
+```
+
+Use the `Transcriber` object's `transcribe` method and parse the audio file URL path as a parameter. The `transcribe` method will save the results of the transcription to the `Transcriber` object's `transcript` attribute.
+
+
+
+```python
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(
+    "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3"
+)
+```
+
+Next we'll use the SDK to fetch all of the paragraphs generated out of this transcript and combine them into groups. We set a `step` variable that controls how many paragraphs we combine into one overall paragraph to help LeMUR have more context to create better summaries.
+
+We also extract the appropriate `start` and `end` timestamps, and save all of our combined paragraphs in string form to send into LeMUR in a later step.
+
+
+
+```python
+paragraphs = transcript.get_paragraphs()
+combined_paragraphs = []
+step = 2  # Adjust as needed if you want combined paragraphs to be shorter or longer in length.
+
+# Combine paragraphs into groups, finding the appropriate timestamps and combining all their text into one string.
+for i in range(0, len(paragraphs), step):
+    paragraph_group = paragraphs[i : i + step]
+    start = paragraph_group[0].start
+    end = paragraph_group[-1].end
+    text = ""
+    for paragraph in paragraph_group:
+        text += f"{paragraph.text} "
+    combined_paragraphs.append(f"Paragraph: {text} Start: {start} End: {end}")
+```
+
+Now we'll use LeMUR's task endpoint in conjuction with the `input_text` parameter to send in all of our `combined_paragraphs` to create summaries for each one.
+
+The summary for each paragraph then gets saved to a `results` array so we can output all of them at the same time.
+
+
+
+```python
+results = []
+
+for paragraph in combined_paragraphs:
+    result = aai.Lemur().task(
+        prompt="Summarize this text as a whole and provide start and end timestamps.",
+        input_text=paragraph,
+        final_model=aai.LemurModel.claude3_5_sonnet,
+    )
+    results.append(result.response)
+
+for result in results:
+    print(f"{result}\n")
+```
+
+The output will look similar to the example below.
+
+
