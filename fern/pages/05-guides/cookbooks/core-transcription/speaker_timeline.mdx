@@ -1,5 +1,5 @@
 ---
-title: 'Create A Speaker Timeline'
+title: 'How To Plot A Speaker Timeline'
 ---
 
 
@@ -8,14 +8,51 @@ title: 'Create A Speaker Timeline'
 
 
 
-# Create A Speaker Timeline
 
-In this guide, we'll show you how to plot a speaker timeline using results from the speaker diarization model.
+In this guide, we'll show you how to plot a speaker timeline with matplotlib, using results from the speaker diarization model.
 
+Here's the full sample code for what you'll build in this tutorial:
+
+```python
+import assemblyai as aai
+import matplotlib.pyplot as plt
+
+aai.settings.api_key = "YOUR_API_KEY"
+
+config = aai.TranscriptionConfig(speaker_labels=True)
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe("./my-audio.mp3", config)
+utterances = transcript.utterances
+
+def plot_speaker_timeline(utterances):
+    fig, ax = plt.subplots(figsize=(12, 4))
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    speaker_colors = {}
+
+    for utterance in utterances:
+        start = utterance.start / 60000 # in minutes
+        end = utterance.end / 60000 # in minutes
+        speaker = utterance.speaker
+
+        if speaker not in speaker_colors:
+            speaker_colors[speaker] = colors[len(speaker_colors) % len(colors)] # set a colour for each new speaker
+
+        ax.barh(speaker, end - start, left=start, color=speaker_colors[speaker], height=0.4) # create horizontal bar plot
+
+    ax.set_xlabel('Time (mins)')
+    ax.set_ylabel('Speakers')
+    ax.set_title('Speaker Timeline')
+    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.show()
+
+plot_speaker_timeline(utterances)
+```
 
 ### Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+### Full Code Snippet
 
 ### Step-by-Step Instructions
 
@@ -27,7 +64,7 @@ Install the SDK.
 !pip install -U matplotlib
 ```
 
-Import the `assemblyai `package and set the API key.
+Import the `assemblyai` package and set the API key.
 
 
 ```python
@@ -57,12 +94,7 @@ Use the Transcriber object's `transcribe` method and pass in the audio file's pa
 transcript = transcriber.transcribe("./my-audio.mp3", config)
 ```
 
-Alternatively, you can pass in a path to an audio file saved on the internet.
-
-
-```python
-transcript = transcriber.transcribe("https://example.org/audio.mp3", config)
-```
+<Tip> Alternatively, you can use an audio URL available on the internet. </Tip>
 
 Extract the utterances from the transcript and set this to `utterances`.
 
@@ -103,7 +135,7 @@ def plot_speaker_timeline(utterances):
 
 Finally, call the `plot_speaker_timeline` function passing `utterances` as a parameter to see the plot image result.
 
-
 ```python
 plot_speaker_timeline(utterances)
 ```
+
