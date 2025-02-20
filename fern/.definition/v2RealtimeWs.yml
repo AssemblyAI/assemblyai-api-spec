@@ -1,0 +1,140 @@
+imports:
+  realtime: realtime.yml
+types:
+  Realtime:
+    default: pcm_s16le
+    docs: The encoding of the audio data
+    enum:
+      - casing:
+          camel: pcmS16le
+          pascal: PcmS16le
+          screaming-snake: PCM_S16LE
+          snake: pcm_s16le
+        docs: PCM signed 16-bit little-endian
+        value: pcm_s16le
+      - casing:
+          camel: pcmMulaw
+          pascal: PcmMulaw
+          screaming-snake: PCM_MULAW
+          snake: pcm_mulaw
+        docs: PCM Mu-law
+        value: pcm_mulaw
+    source:
+      openapi: ../asyncapi.yml
+  receiveMessage:
+    discriminated: false
+    docs: Receive messages from the WebSocket
+    source:
+      openapi: ../asyncapi.yml
+    union:
+      - realtime.SessionBegins
+      - realtime.PartialTranscript
+      - realtime.FinalTranscript
+      - realtime.SessionInformation
+      - realtime.SessionTerminated
+      - realtime.RealtimeError
+  sendMessage:
+    discriminated: false
+    docs: Send messages to the WebSocket
+    source:
+      openapi: ../asyncapi.yml
+    union:
+      - realtime.AudioData
+      - realtime.TerminateSession
+      - realtime.ForceEndUtterance
+      - realtime.ConfigureEndUtteranceSilenceThreshold
+channel:
+  auth: false
+  display-name: Streaming Speech-to-Text
+  examples:
+    - messages:
+        - body: UklGRtjIAABXQVZFZ
+          type: publish
+        - body:
+            audio_end: 1500
+            audio_start: 0
+            confidence: 0.987190506414702
+            created: '2023-05-24T06:09:10Z'
+            message_type: PartialTranscript
+            text: there is a house in new orleans
+            words:
+              - confidence: 1
+                end: 300
+                start: 0
+                text: there
+          type: subscribe
+        - body:
+            audio_end: 1500
+            audio_start: 0
+            confidence: 0.987190506414702
+            created: '2023-05-24T06:09:10Z'
+            message_type: FinalTranscript
+            punctuated: true
+            text: there is a house in new orleans
+            text_formatted: true
+            words:
+              - confidence: 1
+                end: 300
+                start: 0
+                text: there
+          type: subscribe
+        - body:
+            terminate_session: true
+          type: publish
+        - body:
+            message_type: SessionTerminated
+          type: subscribe
+      query-parameters:
+        sample_rate: 16000
+        token: eyJhbGciOiJIUzI1...
+        word_boost: '["foo","bar"]'
+  headers:
+    Authorization:
+      docs: Authenticate using your AssemblyAI API key
+      name: authorization
+      type: optional<string>
+  messages:
+    publish:
+      body:
+        docs: Send messages to the WebSocket
+        type: sendMessage
+      origin: client
+    subscribe:
+      body:
+        docs: Receive messages from the WebSocket
+        type: receiveMessage
+      origin: server
+  path: /v2/realtime/ws
+  query-parameters:
+    disable_partial_transcripts:
+      default: false
+      docs: Set to true to not receive partial transcripts. Defaults to false.
+      type: optional<boolean>
+    enable_extra_session_information:
+      default: false
+      docs: >-
+        Set to true to receive the SessionInformation message before the session
+        ends. Defaults to false.
+      type: optional<boolean>
+    encoding:
+      default: pcm_s16le
+      docs: The encoding of the audio data
+      type: optional<Realtime>
+    sample_rate:
+      docs: The sample rate of the streamed audio
+      type: integer
+    token:
+      docs: >
+        Authenticate using a [generated temporary
+        token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)
+      type: optional<string>
+      validation:
+        format: password
+    word_boost:
+      docs: >
+        Add up to 2500 characters of custom vocabulary.
+
+        The parameter value must be a JSON encoded array of strings. The JSON
+        must be URL encoded like other query string parameters.
+      type: optional<string>
+  url: API
