@@ -1,3 +1,30 @@
+(function () {
+  let k = window.Kapa;
+  if (!k) {
+    let i = function () {
+      i.c(arguments);
+    };
+    i.q = [];
+    i.c = function (args) {
+      i.q.push(args);
+    };
+    window.Kapa = i;
+  }
+})();
+
+window.Kapa("onSearchResultsCompleted", () => {
+  const searchInput = document
+    .querySelector("#kapa-widget-container")
+    .shadowRoot.querySelector("input[type=text]");
+  const query = searchInput.value;
+  searchInput.addEventListener("keyup", function handleQuery(event) {
+    this.removeEventListener("keyup", handleQuery);
+    if (event.key === "Enter") {
+      window.Kapa("open", { mode: "ai", query: query, submit: true });
+    }
+  });
+});
+
 function insertKapa() {
   const originalElement = document.getElementById('fern-search-button');
   const clonedElement = originalElement.cloneNode(true);
