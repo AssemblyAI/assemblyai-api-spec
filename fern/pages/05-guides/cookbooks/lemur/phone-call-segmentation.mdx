@@ -1,13 +1,65 @@
 ---
-title: 'Phone Call Segmentation'
+title: 'How To Segment A Phone Call using LeMUR'
 ---
 
 
 
 
-# Phone Call Segmentation
 
 In this guide we will show you how to use AssemblyAI's LLM, [LeMUR](https://www.assemblyai.com/docs/lemur/examples), to segment a phone call. 
+
+Here’s the full sample code for what you’ll build in this tutorial:
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+audio_url = "YOUR_AUDIO_URL" # You can also provide a path to a local audio file
+
+transcript = transcriber.transcribe(audio_url)
+
+phases = [
+    "Introduction",
+    "Complaint",
+    "Resolution",
+    "Goodbye"
+]
+
+prompt = f'''
+Analyze the following transcript of a phone call conversation and divide it into the following phases:
+{', '.join(phases)}
+
+You will be given the transcript in the format of VTT captions.
+
+For each phase:
+1. Identify the start and end timestamps (in seconds)
+2. Provide a brief summary of what happened in that phase
+
+Format your response as a JSON object with the following structure:
+{{
+    "phases": [
+        {{
+            "name": "Phase Name",
+            "start_time": start_time_in_seconds,
+            "end_time": end_time_in_seconds,
+            "summary": "Brief summary of the phase"
+        }},
+        ...
+    ]
+}}
+
+Ensure that all parts of the conversation are covered by a phase, using "Other" for any parts that don't fit into the specified phases.
+'''
+
+result = aai.Lemur().task(
+    input_text=transcript.export_subtitles_vtt(),
+    prompt=prompt,
+    final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
 
 ## Get Started
 
@@ -20,8 +72,8 @@ Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](
 Install the SDK:
 
 
-```python
-%pip install assemblyai
+```bash
+pip install assemblyai
 ```
 
 Import the SDK and set your AssemblyAI API key.
