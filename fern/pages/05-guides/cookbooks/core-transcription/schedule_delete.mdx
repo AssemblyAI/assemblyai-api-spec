@@ -2,30 +2,68 @@
 title: 'Schedule a DELETE request with AssemblyAI and EasyCron'
 ---
 
-
-
-
-# Schedule a DELETE request with AssemblyAI and EasyCron
-
-
 This tutorial guides you through the process of scheduling a DELETE request for a transcript created with AssemblyAI's transcription service, utilizing EasyCron for scheduling.
 
 
-## Setup
-
-
-To get started, paste your API token into the empty string below. If you don't already have an API token, you can get one for free [here](https://www.assemblyai.com/dashboard/signup).
-
-
+## Quickstart
 ```python
-AAI_API_TOKEN = ""
+import assemblyai as aai
+import requests
+from datetime import datetime, timedelta, timezone
+
+# Set up AssemblyAI API key
+# In production, store this in an environment variable
+aai.settings.api_key = "YOUR_ASSEMBLYAI_API_KEY"
+
+# Get an EasyCron API key here: https://www.easycron.com/user/token
+# Set up EasyCron API key
+# In production, store this in an environment variable
+EASYCRON_API_TOKEN = "YOUR_EASYCRON_API_KEY"
+
+# Create transcriber instance and transcribe audio
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe('https://assembly.ai/sports_injuries.mp3')
+
+# Get the transcript ID
+transcript_id = transcript.id
+
+# Construct the URL for the DELETE request
+url_to_call = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+
+# Calculate the time 24 hours from now for the cron expression
+time_24_hours_from_now = datetime.now(timezone.utc) + timedelta(hours=24)
+cron_minute = time_24_hours_from_now.minute
+cron_hour = time_24_hours_from_now.hour
+cron_day = time_24_hours_from_now.day
+cron_month = time_24_hours_from_now.month
+cron_year = time_24_hours_from_now.year
+
+# Create the cron expression
+cron_expression = f'{cron_minute} {cron_hour} {cron_day} {cron_month} * {cron_year}'
+
+# EasyCron API endpoint for creating a new cron job
+api_endpoint = 'https://www.easycron.com/rest/add'
+
+# Data payload for EasyCron API
+data = {
+    'token': EASYCRON_API_TOKEN,
+    'url': url_to_call,
+    'cron_expression': cron_expression,
+    'http_method': "DELETE",
+    'http_headers': f'Authorization: {aai.settings.api_key}',
+    'timezone': 'UTC'
+}
+
+# Make the request to EasyCron's API
+response = requests.post(api_endpoint, data=data)
+
+# Print the response from EasyCron
+print("EasyCron API Response:")
+print(response.text)
 ```
 
-**Make sure not to share this token with anyone** - it is a private key associated uniquely to your account.
-
-
-Next, we'll install the AssemblyAI Python SDK, which will allow us to easily use LeMUR in just a few lines of code.
-
+## Step-by-step guide
+To get started, install the AssemblyAI Python SDK.
 
 ```bash
 pip install "assemblyai"
@@ -38,17 +76,17 @@ Finally, import the `assemblyai` package and set your API token in the settings:
 import assemblyai as aai
 
 # set the API key
-aai.settings.api_key = f"{AAI_API_TOKEN}"
+aai.settings.api_key = f"{YOUR_API_KEY}"
 ```
 
 ```python
 transcriber = aai.Transcriber()
 
-# transcript = transcriber.transcribe('./my-audio.mp3')
-transcript = transcriber.transcribe('/content/audio.mp3')
+# this is just an example file
+transcript = transcriber.transcribe('https://assembly.ai/sports_injuries.mp3')
 ```
 
-Save the transcript ID
+Store the transcript ID
 
 
 ```python
@@ -65,19 +103,17 @@ url_to_call = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
 ## Using EasyCron's API to schedule a DELETE request
 
 
-First, sign up for an account with EasyCron here. Locate your EasyCron API key [in your user dashboard.](https://www.easycron.com/user/token)
+First, sign up for an account with EasyCron [here](https://www.easycron.com/cron-jobs). Locate your EasyCron API key [in your user dashboard.](https://www.easycron.com/user/token)
 
-Then, paste your EasyCron API key below.
-
-
-```python
-EASYCRON_API_TOKEN = ""
-```
+Then, insert your EasyCron API key into your code.
 
 Next, we will use the datetime module to generate a `cron` expression for 24 hours from now (although you can configure the `timedelta` argument to be whatever you want)
 
 
 ```python
+# In production, you should store your API keys in environment variables
+EASYCRON_API_TOKEN = "YOUR_EASYCRON_API_KEY"
+
 from datetime import datetime, timedelta, timezone
 
 # Calculate the time 24 hours from now in EasyCron's expected format
@@ -93,12 +129,7 @@ cron_year = time_24_hours_from_now.year
 cron_expression = f'{cron_minute} {cron_hour} {cron_day} {cron_month} * {cron_year}'
 ```
 
-```python
-cron_expression
-```
-
 Now, we will schedule a `cron` job 24 hours from now with EasyCron to send a delete request to AssemblyAI for the transcript that we just generated.
-
 
 ```python
 import requests
@@ -127,7 +158,6 @@ print(response.text)
 `Error 3: The cron expression you entered is invalid or it cannot be matched in a realitic future.`: Check that your [EasyCron account settings](https://www.easycron.com/user/edit) has UTC configured as the default timezone.
 
 
-## Further Documentation
+### Other resources
 [AssemblyAI DELETE endpoint API reference](https://www.assemblyai.com/docs/api-reference/transcript#delete-a-transcript)    
 [EasyCron API reference](https://www.easycron.com/document/add)
-

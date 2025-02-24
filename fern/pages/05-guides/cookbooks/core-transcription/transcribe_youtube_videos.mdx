@@ -2,9 +2,7 @@
 title: 'How to Get YouTube Video Transcripts with yt-dlp'
 ---
 
-# How to Get YouTube Video Transcripts with yt-dlp
-
-In this guide, we'll show you how to get YouTube transcripts.
+In this guide, we'll show you how to transcribe YouTube videos.
 
 For this, we use the [yt-dlp](https://github.com/yt-dlp/yt-dlp) library to download YouTube videos and then transcribe it with the AssemblyAI API.
 
@@ -17,6 +15,53 @@ In this guide we'll show 2 different approaches:
 
 Let's get started!
 
+# Quickstart
+```python
+import assemblyai as aai
+import yt_dlp
+
+def transcribe_youtube_video(video_url: str, api_key: str) -> str:
+    """
+    Transcribe a YouTube video given its URL.
+    
+    Args:
+        video_url: The YouTube video URL to transcribe
+        api_key: AssemblyAI API key
+    
+    Returns:
+        The transcript text
+    """
+    # Configure yt-dlp options for audio extraction
+    ydl_opts = {
+        'format': 'm4a/bestaudio/best',
+        'outtmpl': '%(id)s.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'm4a',
+        }]
+    }
+
+    # Download and extract audio
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([video_url])
+        # Get video ID from info dict
+        info = ydl.extract_info(video_url, download=False)
+        video_id = info['id']
+    
+    # Configure AssemblyAI
+    aai.settings.api_key = api_key
+    
+    # Transcribe the downloaded audio file
+    transcriber = aai.Transcriber()
+    transcript = transcriber.transcribe(f"{video_id}.m4a")
+    
+    return transcript.text
+
+transcript_text = transcribe_youtube_video("https://www.youtube.com/watch?v=wtolixa9XTg", "YOUR-API-KEY")
+print(transcript_text)
+```
+
+# Step-by-step guide
 
 ## Install Dependencies
 
@@ -45,8 +90,8 @@ To download it, use the `yt-dlp` command with the following options:
 - `wtolixa9XTg`: the id of the video.
 
 
-```python
-!yt-dlp -f m4a/bestaudio -o "%(id)s.%(ext)s" wtolixa9XTg
+```bash
+yt-dlp -f m4a/bestaudio -o "%(id)s.%(ext)s" https://www.youtube.com/watch?v=wtolixa9XTg
 ```
 
 Next, set up the AssemblyAI SDK and trancribe the file. Replace `YOUR_API_KEY` with your own key. If you don't have one, you can [sign up here](https://assemblyai.com/dashboard/signup) for free.
@@ -61,10 +106,7 @@ aai.settings.api_key = "YOUR_API_KEY"
 
 transcriber = aai.Transcriber()
 transcript = transcriber.transcribe("wtolixa9XTg.m4a")
-```
-
-```python
-transcript.text
+print(transcript.text)
 ```
 
 ## Option 2: Download video via code
@@ -94,7 +136,7 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
     error_code = ydl.download(URLS)
 ```
 
-After downloading, you can again use the code from option 1 to transcribe the file:
+After downloading, you can use the same code from option 1 to transcribe the file:
 
 
 ```python
