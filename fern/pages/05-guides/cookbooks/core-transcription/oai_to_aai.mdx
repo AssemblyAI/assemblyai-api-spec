@@ -1,0 +1,193 @@
+---
+title: 'Migration guide: OpenAI to AssemblyAI'
+---
+
+
+
+
+
+This guide walks through the process of migrating from OpenAI to AssemblyAI.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+
+## Side-By-Side Code Comparison
+
+Below is a side-by-side comparison of a basic snippet to transcribe a **local file** by OpenAI and AssemblyAI:
+
+<Tabs groupId="language">
+<Tab language="openai" title="OpenAI">
+```python
+from openai import OpenAI
+
+api_key = "YOUR_OPENAI_API_KEY"
+client = OpenAI(api_key)
+
+audio_file = open("./example.wav", "rb")
+
+transcript = client.audio.transcriptions.create(
+    model = "whisper-1",
+    file = audio_file
+)
+
+print(transcript.text)
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+transcriber = aai.Transcriber()
+
+audio_file = "./example.wav"
+
+transcript = transcriber.transcribe(audio_file)
+
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+
+print(transcript.text)
+```
+</Tab>
+</Tabs>
+
+
+Here are helpful things to know about our `transcribe` method:
+- The SDK handles polling under the hood
+- Transcript is directly accessible via `transcript.text`
+- English is the default language and Best is the default speech model if none is specified
+- We have a [cookbook for error handling common errors](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/common_errors_and_solutions.md) when using our API.
+
+
+## Installation
+
+<Tabs groupId="language">
+<Tab language="openai" title="OpenAI">
+```python
+from openai import OpenAI 
+
+api_key = "YOUR_OPENAI_API_KEY"
+client = OpenAI(api_key)
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+transcriber = aai.Transcriber()
+
+```
+</Tab>
+</Tabs>
+
+When migrating from OpenAI to AssemblyAI, you'll first need to handle authentication and SDK setup:
+
+Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/dashboard/login) \
+To follow this guide, install AssemblyAI's Python SDK by typing this code into your terminal: `pip install assemblyai` \
+Check our [documentation for the full list of available SDKs](https://www.assemblyai.com/docs/#quickstart)
+
+Things to know:
+- Store your API key securely in an environment variable
+- API key authentication works the same across all AssemblyAI SDKs
+
+
+## Audio File Sources
+
+<Tabs groupId="language">
+<Tab language="openai" title="OpenAI">
+```python
+client = OpenAI()
+
+# Local Files
+audio_file = open("./example.wav", "rb")
+transcript = client.audio.transcriptions.create(
+    model = "whisper-1",
+    file = audio_file
+)
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+transcriber = aai.Transcriber()
+
+# Local Files
+transcript = transcriber.transcribe("./audio.mp3")
+
+# Public URLs
+transcript = transcriber.transcribe("https://example.com/audio.mp3")
+```
+</Tab>
+</Tabs>
+
+Here are helpful things to know when migrating your audio input handling:
+- AssemblyAI natively supports transcribing publicly accessible audio URLs (for example, S3 URLs), the Whisper API only natively supports transcribing local files.
+- There's no need to specify the audio format to AssemblyAI - it's auto-detected. AssemblyAI accepts almost every audio/video file type: [here is a full list of all our supported file types](https://support.assemblyai.com/articles/2616970375-what-audio-and-video-file-types-are-supported-by-your-api)
+- The Whisper API only supports file sizes up to 25MB, AssemblyAI supports file sizes up to 5GB.
+
+
+
+
+## Adding Features
+
+
+<Tabs groupId="language">
+<Tab language="openai" title="OpenAI">
+```python
+transcript = client.audio.transcriptions.create(
+   file = audio_file,
+   prompt = "INSERT_PROMPT" # Optional text to guide the model's style
+   language = "en" # Set language code
+   model = "whisper-1",
+   response_format = "verbose_json",
+   timestamp_granularities = ["word"] 
+)
+
+# Access word-level timestamps
+print(transcript.words)
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+config = aai.TranscriptionConfig(
+    language_code = "en" # Set language code 
+    speaker_labels = True, # Speaker diarization
+    sentiment_analysis=True, # Sentiment Analysis 
+    entity_detection = True, # Named entity detection
+)
+
+transcript = transcriber.transcribe(audio_url, config)
+
+# Access word-level timestamps
+print(transcript.words)
+
+# Access speaker labels
+for utterance in transcript.utterances:
+    print(f"Speaker {utterance.speaker}: {utterance.text}")
+
+# Prompt LeMUR as a post processing step
+prompt = "Identify any action items from the transcript."
+result = transcript.lemur.task(
+    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+)
+```
+</Tab>
+</Tabs>
+
+
+Key differences:
+- OpenAI does not offer audio intelligence features for their speech-to-text API
+- Use `aai.TranscriptionConfig` to specify any extra features that you wish to use
+- With AssemblyAI, timestamp granularity is word-level by default
+- The results for Speaker Diarization are stored in `transcript.utterances`. To see the full transcript response object, refer to our [API Reference](https://www.assemblyai.com/docs/api-reference).
+- Check our [documentation](https://www.assemblyai.com/docs/audio-intelligence) for our full list of available features and their parameters
+- If you want to send a custom prompt to the LLM, you can use [LeMUR Task](https://www.assemblyai.com/docs/lemur/examples) and apply the model to your transcribed audio files.
+
