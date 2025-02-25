@@ -1,11 +1,10 @@
 ---
-title: 'Identifying Hate Speech in Audio or Video Files'
+title: 'Identify Hate Speech in Audio or Video Files'
 ---
 
 
 
 
-# Identifying Hate Speech in Audio or Video Files
 
 Our [Content Moderation](https://www.assemblyai.com/docs/models/content-moderation) model can help you ensure that your content is safe and appropriate for all audiences.
 
@@ -13,19 +12,53 @@ The model pinpoints sensitive discussions in spoken data and provides informatio
 
 In this guide, we'll learn about how to use the Content Moderation model, and look at at example response to understand its structure.
 
-### Get Started
+## Quickstart
+
+```python
+import assemblyai as aai
+aai.settings.api_key = "YOUR_API_KEY"
+
+config = aai.TranscriptionConfig(content_safety=True)
+transcriber = aai.Transcriber(config=config)
+FILE_URL = "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3"
+
+transcript = transcriber.transcribe(FILE_URL)
+
+# Get the parts of the transcript which were flagged as sensitive
+for result in transcript.content_safety_results:
+    print(result.text) # Sensitive text snippet
+    print(result.timestamp.start)
+    print(result.timestamp.end)
+
+    for label in result.labels:
+        print(label.label) # Content safety category
+        print(label.confidence) # Model's confidence that the text is in this category
+        print(label.severity) # Severity of the text in relation to the category
+
+# Get the confidence of the most common labels in relation to the entire audio file
+for label, confidence in transcript.content_safety.summary.items():
+    print(f"{confidence * 100}% confident that the audio contains {label}")
+
+# Get the overall severity of the most common labels in relation to the entire audio file
+for label, severity_confidence in transcript.content_safety.severity_score_summary.items():
+    print(f"{severity_confidence.low * 100}% confident that the audio contains low-severity {label}")
+    print(f"{severity_confidence.medium * 100}% confident that the audio contains mid-severity {label}")
+    print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
+```
+
+## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
 
 Here is an audio example for this guide:
 
 
-### Step-by-Step Instructions
+## Step-by-Step Instructions
 
 Install the SDK.
 
 
-```python
+```bash
 pip install -U assemblyai
 ```
 
@@ -86,7 +119,7 @@ for label, severity_confidence in transcript.content_safety.severity_score_summa
     print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
 ```
 
-### Understanding the Response
+## Understanding the Response
 
 In the JSON response, there'll be an additional key called `content_safety_labels` that contains information about any sensitive content detected. The full text is contained in the `text` key and each problematic utterance has its own `labels` and `timestamp`. The entire audio is assigned a `summary` and a `severity_score_summary` for each category of unsafe content. Each label is returned with a confidence score and a severity score.
 
@@ -133,7 +166,7 @@ In the JSON response, there'll be an additional key called `content_safety_label
 
 For more information, see the [Content Moderation model documentation](https://www.assemblyai.com/docs/models/content-moderation#understanding-the-response) or refer to the [API reference](https://www.assemblyai.com/docs/api-reference/transcript).
 
-### Conclusion
+## Conclusion
 
 The AssemblyAI API supports many different [content safety labels](https://www.assemblyai.com/docs/models/content-moderation#all-labels-supported-by-the-model). Identifying hate speech is only a single, important use case for automated content moderation, and you can learn about others on the [AssemblyAI blog](https://www.assemblyai.com/blog/content-moderation-what-it-is-how-it-works-best-apis-2/).
 
