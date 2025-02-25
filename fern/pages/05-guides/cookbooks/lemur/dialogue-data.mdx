@@ -10,14 +10,59 @@ JSON allows you to programmatically format, parse, and transfer resopnses from L
 
 In this example, we will leverage the JSON formatting to create a .csv file from a directory of files that must be transcribed and submitted to LeMUR. However, you can use the same concepts in this guide to generate a JSON-formatted response, which you can then use to update a database table or interact with other APIs.
 
-### Get Started
+## Quickstart
+
+```python
+import assemblyai as aai
+import json
+import os
+import csv
+
+aai.settings.api_key = "your_api_key"
+# configure the name of your output .csv file
+output_filename = "profiles.csv"
+
+transcriber = aai.Transcriber()
+# Create a new Transcript Group with every file in the directory "interviews"
+transcript_group = transcriber.transcribe_group([os.path.join("interviews", file) for file in os.listdir("interviews")])
+
+prompt = """
+         You are an HR executive scanning through an interview transcript to extract information about a candidate.
+         You are required to create a JSON response with key information about the candidate.
+         You will use this template for your answer:
+         {
+            "Name": "<candidate-name>",
+            "Position": "<job position that candidate is applying for>",
+            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>",
+         }
+
+         Do not include any other text in your response. Only respond in JSON format, as your response will be parsed programmatically as JSON.
+         """
+
+with open(output_filename, "w", newline="") as file:
+    writer = csv.writer(file)
+    # define the header of your .csv file
+    header = ["Name", "Position", "Past Experience"]
+    writer.writerow(header)
+
+    print("Prompting LeMUR")
+    for transcript in transcript_group:
+        result = transcript.lemur.task(prompt=prompt, final_model=aai.LemurModel.claude3_5_sonnet)
+        # json.loads() method can be used to parse a valid JSON string and convert it into a Python dictionary.
+        interviewee_data = json.loads(result.response)
+        writer.writerow(interviewee_data.values())
+
+print(f"Created .csv file {output_filename}")
+```
+
+## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
 LeMUR features are currently only available to paid users to two pricing tiers: LeMUR and LeMUR Basic. Refer to [the pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR) for more detail.
 
 
-### Step-by-Step Instructions
+## Step-by-Step Instructions
 
 In this guide, we will ask the same questions to LeMUR about multiple files. Then, we will collate the answers in a .csv file.
 
