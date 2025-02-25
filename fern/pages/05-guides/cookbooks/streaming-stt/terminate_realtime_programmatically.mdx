@@ -1,32 +1,101 @@
 ---
-title: 'Terminate Streaming session after inactivity'
+title: 'How to Terminate Streaming Session After Inactivity'
 ---
-
-# Terminate Streaming session after inactivity
-
 
 An often-overlooked aspect of implementing AssemblyAI's Streaming Speech-to-Text (STT) service is efficiently terminating transcription sessions. In this cookbook, you will learn how to terminate a Streaming session after any fixed duration of silence.
 
-[For the full code, refer to this GitHub gist.](https://gist.github.com/m-ods/133f7c7e4c08abf97ae53dc7577cadf7)
+For the full code, refer to this [GitHub gist.](https://gist.github.com/m-ods/133f7c7e4c08abf97ae53dc7577cadf7)
 
-
-First, install AssemblyAI's Python SDK.
-
-
-```bash
-pip install "assemblyai[all]"
-```
-
-Before we begin, make sure you have an AssemblyAI account and an API key. You can sign up for a free account and get your API key from your dashboard. Please note that Streaming STT is only available for Pro accounts. If you're on the free plan, you'll need to upgrade.
-
-
-
+Here's the full sample code for what you'll build in this tutorial:
 
 ```python
 import assemblyai as aai
 from datetime import datetime, timedelta
 
-aai.settings.api_key = "YOUR-API-KEY"
+aai.settings.api_key = "YOUR_API_KEY"
+
+def on_open(session_opened: aai.RealtimeSessionOpened):
+  # This function is called when the connection has been established.
+
+  print("Session ID:", session_opened.session_id)
+
+def on_error(error: aai.RealtimeError):
+  # This function is called when the connection has been closed.
+
+  print("An error occured:", error)
+
+last_transcript_received = datetime.now()
+terminated = False
+
+def on_data(transcript: aai.RealtimeTranscript):
+    global last_transcript_received
+    global terminated
+
+    if terminated:
+        return
+
+    if transcript.text == "":
+        # You can set the total_seconds of inactivity to be higher or lower
+        if (datetime.now() - last_transcript_received).total_seconds() > 5:
+            print("5 seconds without new transcription, terminating...")
+            terminate_transcription()
+        return
+
+    if isinstance(transcript, aai.RealtimeFinalTranscript):
+        print(transcript.text, end="\r\n")
+    else:
+        print(transcript.text, end="\r")
+
+    last_transcript_received = datetime.now()
+
+def on_close():
+    global terminated
+    if not terminated:
+        print("Closing Session")
+        terminated = True
+
+def terminate_transcription():
+    global terminated
+    if not terminated:
+        transcriber.close()
+        terminated = True
+
+# Create the Streaming STT transcriber
+transcriber = aai.RealtimeTranscriber(
+  on_data=on_data,
+  on_error=on_error,
+  sample_rate=44_100,
+  on_open=on_open, # optional
+  on_close=on_close, # optional
+)
+
+# Start the connection
+transcriber.connect()
+
+# Open a microphone stream
+microphone_stream = aai.extras.MicrophoneStream()
+
+# Press CTRL+C to abort
+transcriber.stream(microphone_stream)
+```
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+## Step-by-step instructions
+
+First, install AssemblyAI's Python SDK.
+
+```bash
+pip install assemblyai
+```
+
+```python
+import assemblyai as aai
+from datetime import datetime, timedelta
+
+aai.settings.api_key = "YOUR_API_KEY"
 ```
 
 ## Handling inactivity
@@ -61,12 +130,12 @@ Define your Streaming functions as per normal.
 
 ```python
 def on_open(session_opened: aai.RealtimeSessionOpened):
-  "This function is called when the connection has been established."
+  # This function is called when the connection has been established.
 
   print("Session ID:", session_opened.session_id)
 
 def on_error(error: aai.RealtimeError):
-  "This function is called when the connection has been closed."
+  # This function is called when the connection has been closed.
 
   print("An error occured:", error)
 ```
@@ -85,7 +154,7 @@ terminated = False
 Next, define your `on_data` function:
 *   Access the global variable `last_transcript_received`, as well as `terminated`
 *   If the Streaming STT transcriber has been terminated, don't return anything.
-*   If `transcript.text` is empty, check if it has been 5 seconds since the last empty transcript. When true, terminate the transcriber.
+*   If `transcript.text` is empty, check if it has been 5 seconds since the last empty transcript. When `true`, terminate the transcriber.
 *   Else, just print the text in our terminal as per usual, and set the time of the last transcript received to now.
 
 
@@ -99,7 +168,7 @@ def on_data(transcript: aai.RealtimeTranscript):
         return
 
     if transcript.text == "":
-        # you can set the total_seconds of inactivity to be higher or lower
+        # You can set the total_seconds of inactivity to be higher or lower
         if (datetime.now() - last_transcript_received).total_seconds() > 5:
             print("5 seconds without new transcription, terminating...")
             terminate_transcription()
@@ -113,9 +182,9 @@ def on_data(transcript: aai.RealtimeTranscript):
     last_transcript_received = datetime.now()
 ```
 
-Lastly, we define our `on_close` and `terminate_transcription` function. On_close simply sets terminated to true when the Websocket connection closes.
+Lastly, we define our `on_close` and `terminate_transcription` function. `on_close` simply sets `terminated` to `true` when the websocket connection closes.
 
-`terminate_transcription` just accesses the global `transcriber` and closes the session when the function is called by `on_data`.
+`terminate_transcription` just accesses the global transcriber and closes the session when the function is called by `on_data`.
 
 
 
