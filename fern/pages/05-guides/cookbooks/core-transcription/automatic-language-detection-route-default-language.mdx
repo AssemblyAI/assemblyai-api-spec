@@ -1,0 +1,148 @@
+---
+title: 'Automatic Language Detection: Route to Default Language if Language Confidence is Low'
+---
+
+This guide will show you how to use AssemblyAI's API to resubmit a request using a default language if the Automatic Language Detection's `language_confidence` is below a certain threshold.
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+## Step-by-Step Instructions
+
+Install the SDK:
+
+<CodeBlocks>
+```js
+npm install assemblyai
+```
+```python
+pip install assemblyai
+```
+</CodeBlocks>
+
+Import the `assemblyai` package and set the API key.
+
+<CodeBlocks>
+```js
+import { AssemblyAI } from 'assemblyai';
+
+const client = new AssemblyAI({
+    apiKey: 'YOUR_API_KEY' 
+});
+```
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+</CodeBlocks>
+
+
+
+Define a `default_language`, which should be set to the [language code](https://www.assemblyai.com/docs/getting-started/supported-languages) that will be used to rerun the transcript if language detection runs with low `language_confidence`.
+<CodeBlocks>
+```js
+const default_language = 'LANGUAGE_CODE';
+```
+
+```python
+default_language = "LANGUAGE_CODE"
+```
+</CodeBlocks>
+
+
+
+Define an `audio_url` that is set to a link to the audio file. Define and set the parameters `audio: audioUrl` and `language_detection: true`. We also need to define our `language_confidence_threshold`. For the purposes of this example, we'll set it to 0.8, representing 80% confidence.
+
+If a transcript ends up with a `language_confidence` below this value, the transcript will error out and will return the transcript using the `default_language`.  
+
+<CodeBlocks>
+```js
+const audioUrl = 'https://example.org/audio.mp3';
+
+const params = {
+    audio: audioUrl,
+    language_detection: true,
+    language_confidence_threshold: 0.8,
+    // Add any other params
+};
+```
+
+```python
+transcriber = aai.Transcriber()
+audio_url = ("https://example.org/audio.mp3")
+config = aai.TranscriptionConfig(language_detection=True, language_confidence_threshold=0.8)
+transcript = transcriber.transcribe(audio_url, config)
+```
+</CodeBlocks>
+
+
+You can handle the error safely by checking the error message and rerunning the transcript with the `language_code` set to the `default_language`.
+
+The error handling flow works as follows:
+
+1. If there is no error, the transcript ID and text are printed
+2. If there is an error:
+   - Check if it's related to `language_confidence` being below threshold
+   - If so:
+     - Print message about rerunning with default language
+     - Create new transcript with `default_language` as the `language_code`
+     - Print new transcript ID and text
+   - If not:
+     - Print the error message
+
+When rerunning with the default language, the configuration is updated to:
+- Turn off `language_detection` 
+- Remove `language_confidence_threshold`
+- Set `language_code` to the `default_language`
+
+<Note>
+You will not be charged for the first transcript if there is an error. You will only be charged for the transcript that processes successfully.
+</Note>
+
+<CodeBlocks>
+```js
+const run = async (params) => {
+
+    const transcript = await client.transcripts.transcribe(params);
+
+    if (transcript.status === 'error') {
+        if (transcript.error.includes("below the requested confidence threshold value")) {
+            console.log(
+                `${transcript.error}. Running transcript again with language set to '${default_language}'.`
+            );
+            params = {...params, language_detection: false, language_confidence_threshold: null, language_code: default_language};
+            run(params);
+            return;
+        }
+
+        console.log(transcript.error);
+        return;
+    }
+
+    console.log(`Transcript ID: ${transcript.id}`);
+    console.log(transcript.text);
+};
+
+run(params);
+```
+
+```python
+if transcript.error:
+    if "below the requested confidence threshold value" in transcript.error:
+        print(f"{transcript.error}. Running transcript again with language set to '{default_language}'.")
+        new_config = aai.TranscriptionConfig(language_code=default_language)
+        transcript = transcriber.transcribe(audio_url, new_config)
+        print(f"Transcript ID: {transcript.id}")
+        print(transcript.text)
+    else:
+        print(transcript.error)
+else:
+    print(f"Transcript ID: {transcript.id}")
+    print(transcript.text)
+```
+</CodeBlocks>
+
+
