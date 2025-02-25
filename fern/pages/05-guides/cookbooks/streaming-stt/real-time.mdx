@@ -1,21 +1,19 @@
 ---
-title: 'Using Streaming Speech-to-Text'
+title: 'Transcribe Live Audio Streams with Streaming Speech-to-Text'
 ---
 
 
 
 
-# Using Streaming Speech-to-Text
-
 AssemblyAI's Streaming Speech-to-Text (STT) service allows you to transcribe live audio streams with high accuracy and low latency. By streaming your audio data to our secure WebSocket API, you can receive transcripts back within a few hundred milliseconds, and our system continues to revise these transcripts with greater accuracy over time as more context arrives.
 
-In this Colab, you'll learn how to establish a WebSocket connection, send audio data, and receive partial and final transcription results. Streaming Speech-to-Text (STT) requires [16-bit signed integer PCM-encoded, single-channel audio](http://trac.ffmpeg.org/wiki/audio%20types), matching a predefined sample rate. You can send between 100 and 2000 milliseconds of audio over a WebSocket at a time.
+In this guide, you'll learn how to establish a WebSocket connection, send audio data, and receive partial and final transcription results. Streaming Speech-to-Text (STT) requires [16-bit signed integer PCM-encoded, single-channel audio](http://trac.ffmpeg.org/wiki/audio%20types), matching a predefined sample rate. You can send between 100 and 2000 milliseconds of audio over a WebSocket at a time.
 
-### Get Started
+## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard. Please note that this feature is available for paid accounts only. If you're on the free plan, you'll need to upgrade.
 
-### Step-by-Step Instructions
+## Step-by-Step Instructions
 
 Install the AssemblyAI Python SDK. To use the microphone stream, you need to install the extras for this SDK. Mac and Linux users also need to install `portaudio` before installing the extras.
 
@@ -93,7 +91,7 @@ transcriber.stream(microphone_stream)
 transcriber.close()
 ```
 
-### Audio Requirements
+## Audio Requirements
 
 The raw audio data in the `audio_data` field above must comply with a strict encoding format. This is because we don't do any transcoding to your data. We send it directly to the model for transcription to reduce latency. The encoding of your audio must be in:
 - WAV PCM16
@@ -102,36 +100,36 @@ The raw audio data in the `audio_data` field above must comply with a strict enc
 - 100 to 2000 milliseconds of audio per message
 
 
-### Request Types
+## Request Types
 
 There are the types of requests that can be sent to the WebSocket API.
 
-#### Opening a Session
+### Opening a Session
 
 When opening a session, you can pass the following query attributes to the WebSocket URL:
 
-##### `sample_rate`
+#### `sample_rate`
 
 The sample rate of the streamed audio.
 
 Example: `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000`
 
-##### `word_boost`
+#### `word_boost`
 
 See the Adding Custom Vocabulary section.
 
-##### `token`
+#### `token`
 
 See the Creating Temporary Authentication Tokens section.
 
-#### Sending Audio
+### Sending Audio
 
 When sending audio over the WebSocket connection, you should send a JSON payload with the following parameters:
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | `audio_data` | `"UklGRtjIAABXQVZFZ"` | Raw audio data, base 64 encoded. This can be the raw data recorded directly from a microphone or read from an audio file. |
 
-#### Terminating a Session
+### Terminating a Session
 When you've completed your sessino, clients should send a JSON message with the following field.
 | Field | Example | Description |
 | ----- | ------- | ----------- |
@@ -139,11 +137,11 @@ When you've completed your sessino, clients should send a JSON message with the 
 
 After requesting session termination, the server will send the remaining transcript messages, followed by a [SessionTerminated message](https://www.assemblyai.com/docs/guides/real-time-streaming-transcription#session-terminated).
 
-### Response Types
+## Response Types
 
 These are the types of responses that can be received from the WebSocket API.
 
-#### Session Start
+### Session Start
 
 Once your request is authorized and connection established, your client receives a `SessionBegins` message with the following JSON data:
 | Field | Example | Description |
@@ -152,11 +150,11 @@ Once your request is authorized and connection established, your client receives
 | `session_id` | `"d3e8c537-2f11-494b-b497-e59a434588bd"` | Unique identifier for the established session. |
 | `expires_at` | `"2023-05-24T08:09:10.161850"` | Timestamp when this session will expire. |
 
-#### Transcripts
+### Transcripts
 
 Our Streaming STT pipeline uses a two-phase transcription strategy, broken into partial and final results.
 
-#### Partial Transcripts
+### Partial Transcripts
 
 As you send audio data to the API, the API immediately starts responding with Partial Results. The following keys are returned from the WebSocket API.
 | Field | Example | Description |
@@ -169,7 +167,7 @@ As you send audio data to the API, the API immediately starts responding with Pa
 | `words` | `[{"start": 0, "end": 440, "confidence": 1.0, "text": "there"}, ...]` | An array of objects, with the information for each word in the trancription text. Includes the `start`/`end` time (in milliseconds) of the word, the `confidence` score of the word, and the `text` (i.e. the word itself). |
 | `created` | `"2023-05-24T08:09:10:161850"` | The timestamp for the partial transcript. |
 
-#### Final Transcripts
+### Final Transcripts
 
 After you've received your partial results, our model continues to analyze incoming audio and, when it detects the end of an "utterance" (usually a pause in speech), it'll finalize the results sent to you so far with higher accuracy, as well as add punctuation and casing to the transcription text.
 
@@ -186,14 +184,14 @@ The following keys are returned from the WebSocket API when Final Results are se
 | `punctuated` | `true` | Whether the text has been punctuated and cased. |
 | `text_formatted` | `true` | Whether the text has been formatted (e.g. Dollar -> $) |
 
-#### Session Terminated
+### Session Terminated
 
 After requesting session termination, the server will send the remaining transcript messages, followed by a `SessionTerminated` message. Your client receives a `SessionTerminated` message with the following JSON data:
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | `message_type` | `"SessionTerminated"` | Describes the type of the message. |
 
-### Closing and Status Codes
+## Closing and Status Codes
 
 The WebSocket specification provides [standard errors](https://github.com/Luka967/websocket-close-codes).
 
@@ -218,7 +216,7 @@ Our API provides application-level WebSocket errors for well-known scenarios.
 | reconnected | `4103` | "This session has been reconnected. This WebSocket is no longer valid." |
 | reconnected attempts exhausted | `1013` | "Temporary server condition forced blocking client's request" |
 
-### Quotas and Limits
+## Quotas and Limits
 
 The following limits are imposed to ensure performance and service quality.
 - **Idle Sessions** - Sessions that don't receive audio within 1 minute will be terminated.
@@ -226,7 +224,7 @@ The following limits are imposed to ensure performance and service quality.
 - **Session Uniqueness** - Only one WebSocket per session.
 - **Audio Sampling Rate Limit** - Customers must send data in near real-time. If a client sends data faster than 1 second of audio per second for longer than 1 minute, we'll terminate the session.
 
-### Using Custom Vocabulary
+## Using Custom Vocabulary
 
 Developers can also add up to 2500 characters of custom vocabulary to their Streaming STT session by adding the optional query parameter `word_boost` in the URL. The parameter should map to a JSON encoded list of strings as shown in this Python example:
 
@@ -243,7 +241,7 @@ params = {"sample_rate": sample_rate, "word_boost": json.dumps(word_boost)}
 url = f"wss://api.assemblyai.com/v2/realtime/ws?{urlencode(params)}"
 ```
 
-### Creating Temporary Authentication Tokens
+## Creating Temporary Authentication Tokens
 
 In some cases, a developer needs to authenticate on the client-side and doesn't want to expose their AssemblyAI API key. You can do this by sending a `POST` request to `https://api.assemblyai.com/v2/realtime/token` with the parameter `expires_in: {TTL in seconds}`. Below is a quick example in curl.
 
@@ -271,7 +269,7 @@ socket = new WebSocket(
 )
 ```
 
-### Conclusion
+## Conclusion
 
 Streaming STT is a powerful feature with even more powerful possibilities for integratino. On the AssemblyAI blog, you can learn about using Streaming STT to:
 - [Automatically Transcribe Zoom Calls in real-time](https://www.assemblyai.com/blog/how-to-automatically-transcribe-zoom-calls/)
