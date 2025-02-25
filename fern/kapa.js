@@ -13,10 +13,11 @@
 })();
 
 // track event for kapa modal opening
-// to do: fix for search versus ask ai
 window.Kapa("onModalOpen", function ({ mode }) {
-  // to do: remove for ask ai query on enter
-  rudderanalytics.track("docs_click_search-open");
+  rudderanalytics.track("docs_click_search-open",
+    {
+      "search_mode": mode,
+    });
   if(rudderanalytics.getUserId()!=='') {
     window.kapaSettings = {
       user: {
@@ -29,7 +30,10 @@ window.Kapa("onModalOpen", function ({ mode }) {
 
 // track event for kapa modal closing
 window.Kapa("onModalClose", function ({ mode }) {
-  rudderanalytics.track("docs_click_search-close");
+  rudderanalytics.track("docs_click_search-close",
+    {
+      "search_mode": mode,
+    });
 });
 
 // track event for kapa modal search completing
