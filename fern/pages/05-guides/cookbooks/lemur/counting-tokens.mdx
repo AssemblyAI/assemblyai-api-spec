@@ -1,15 +1,35 @@
 ---
-title: 'Estimating Input Token Costs for LeMUR'
+title: 'How To Estimate Input Token Costs for LeMUR'
 ---
 
 
 
 
-# Estimating Input Token Costs for LeMUR
 
 AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework is a powerful way to extract insights from transcripts generated from audio and video files. Given how varied the type of input and output could be for these use cases, the [pricing](https://www.assemblyai.com/pricing) for LeMUR is based on input and output tokens.
 
 Output tokens can be controlled via LeMUR's [max_output_size](https://www.assemblyai.com/docs/lemur/advanced/customize-parameters#change-the-maximum-output-size) parameter, but how do you determine the amount of input tokens you'll be sending to LeMUR? How many tokens does an audio file contain? This Colab will show you how to calculate that information to help predict LeMUR's cost ahead of time.
+
+Here’s the full sample code for what you’ll build in this tutorial:
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
+character_count = len(transcript.text)
+count_in_thousands = character_count / 1000
+
+sonnet_cost = 0.003 * count_in_thousands
+opus_cost = 0.015 * count_in_thousands
+haiku_cost = 0.00025 * count_in_thousands
+
+print(f"LeMUR Claude 3.5 Sonnet | LeMUR Claude 3 Sonnet Cost: ${sonnet_cost}")
+print(f"LeMUR Default | LeMUR Claude 2.1 | LeMUR Claude 3 Opus Cost: ${opus_cost}")
+print(f"LeMUR Claude 3 Haiku Cost: ${haiku_cost}")
+```
 
 To get started, you'll need to install the AssemblyAI Python SDK, which we'll use to transcribe our file.
 
@@ -54,12 +74,10 @@ count_in_thousands = character_count / 1000
 sonnet_cost = 0.003 * count_in_thousands
 opus_cost = 0.015 * count_in_thousands
 haiku_cost = 0.00025 * count_in_thousands
-basic_cost = 0.002 * count_in_thousands
 
 print(f"LeMUR Claude 3.5 Sonnet | LeMUR Claude 3 Sonnet Cost: ${sonnet_cost}")
 print(f"LeMUR Default | LeMUR Claude 2.1 | LeMUR Claude 3 Opus Cost: ${opus_cost}")
 print(f"LeMUR Claude 3 Haiku Cost: ${haiku_cost}")
-print(f"LeMUR Basic Cost: ${basic_cost}")
 ```
 
 Here we've determined how much the input tokens from our transcript will cost with LeMUR, not including the tokens of our prompt. To calculate how much the input tokens will cost for your prompt, or how much the amount of output tokens you're limited to will cost, you can follow this same method, replacing `transcript.text` with the text of your prompt, or `num_tokens` with the `max_output_size` amount you've specified to LeMUR.
