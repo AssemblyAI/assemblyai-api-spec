@@ -1,0 +1,183 @@
+---
+title: 'Segment A Phone Call using LeMUR'
+---
+
+
+
+
+
+In this guide we will show you how to use AssemblyAI's LLM, [LeMUR](https://www.assemblyai.com/docs/lemur/examples), to segment a phone call. 
+
+## Quickstart
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+audio_url = "YOUR_AUDIO_URL" # You can also provide a path to a local audio file
+
+transcript = transcriber.transcribe(audio_url)
+
+phases = [
+    "Introduction",
+    "Complaint",
+    "Resolution",
+    "Goodbye"
+]
+
+prompt = f'''
+Analyze the following transcript of a phone call conversation and divide it into the following phases:
+{', '.join(phases)}
+
+You will be given the transcript in the format of VTT captions.
+
+For each phase:
+1. Identify the start and end timestamps (in seconds)
+2. Provide a brief summary of what happened in that phase
+
+Format your response as a JSON object with the following structure:
+{{
+    "phases": [
+        {{
+            "name": "Phase Name",
+            "start_time": start_time_in_seconds,
+            "end_time": end_time_in_seconds,
+            "summary": "Brief summary of the phase"
+        }},
+        ...
+    ]
+}}
+
+Ensure that all parts of the conversation are covered by a phase, using "Other" for any parts that don't fit into the specified phases.
+'''
+
+result = aai.Lemur().task(
+    input_text=transcript.export_subtitles_vtt(),
+    prompt=prompt,
+    final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LeMUR.
+
+Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
+
+## Step-by-Step Instructions
+
+Install the SDK:
+
+
+```bash
+pip install assemblyai
+```
+
+Import the SDK and set your AssemblyAI API key.
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "API_KEY"
+```
+
+Use AssemblyAI to transcribe a file and save the transcript.
+
+
+```python
+audio_url = "YOUR_AUDIO_URL"
+
+transcript = aai.Transcriber().transcribe(audio_url)
+```
+
+Define the phases you want to identify. 
+
+Here is an example of `phases` that can be used for customer support calls:
+
+
+```python
+phases = [
+    "Introduction",
+    "Complaint",
+    "Resolution",
+    "Goodbye"
+]
+```
+
+Prompt LeMUR using the Task Endpoint, analyze the transcript to divide it into phases, and return the response. This is an example prompt, which you can modify to suit your specific requirements. See our documentation for more information about [prompt engineering](https://www.assemblyai.com/docs/lemur/improving-your-prompt).
+
+
+```python
+prompt = f'''
+Analyze the following transcript of a phone call conversation and divide it into the following phases:
+{', '.join(phases)}
+
+You will be given the transcript in the format of VTT captions.
+
+For each phase:
+1. Identify the start and end timestamps (in seconds)
+2. Provide a brief summary of what happened in that phase
+
+Format your response as a JSON object with the following structure:
+{{
+    "phases": [
+        {{
+            "name": "Phase Name",
+            "start_time": start_time_in_seconds,
+            "end_time": end_time_in_seconds,
+            "summary": "Brief summary of the phase"
+        }},
+        ...
+    ]
+}}
+
+Ensure that all parts of the conversation are covered by a phase, using "Other" for any parts that don't fit into the specified phases.
+'''
+
+result = aai.Lemur().task(
+    input_text=transcript.export_subtitles_vtt(),
+    prompt=prompt,
+    final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
+
+Example output of the analysis of a transcript divided into phases and formatted as a JSON object:
+
+```
+
+{
+    "phases": [
+        {
+            "name": "Introduction",
+            "start_time": 1.52,
+            "end_time": 15.57,
+            "summary": "The customer service representative greets the caller and asks how they can help. The caller states they want to know the status of their order refund."
+        },
+        {
+            "name": "Complaint",
+            "start_time": 15.57,
+            "end_time": 59.41,
+            "summary": "The representative asks for the order ID, which the caller provides. The representative confirms the order details and that it was cancelled. The caller mentions they couldn't complete their test."
+        },
+        {
+            "name": "Resolution",
+            "start_time": 59.41,
+            "end_time": 210.01,
+            "summary": "The representative informs the caller that the refund was initiated on April 8th and will be credited by April 21st. They explain the refund timeline and bank processing days. The caller expresses some confusion about the timeline, and the representative clarifies the process."
+        },
+        {
+            "name": "Goodbye",
+            "start_time": 210.01,
+            "end_time": 235.8,
+            "summary": "The caller accepts the explanation. The representative asks if there's anything else they can help with, requests feedback, and concludes the call with a farewell."
+        }
+    ]
+}
+```
+

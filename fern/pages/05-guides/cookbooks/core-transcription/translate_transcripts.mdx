@@ -1,0 +1,185 @@
+---
+title: 'Translate AssemblyAI Transcripts Into Other Languages Using Commercial Models'
+---
+
+
+
+
+This Cookbook walks through how to translate AssemblyAI transcripts using a variety of commerical and open-source machine translation models.
+
+Choosing a model depends on your use-case and preferences. Here are some considerations you may want to make when choosing a model to use for translation:
+
+- Accuracy and Quality of Translation: you should compare the translations from each provider to see which translation you prefer
+- Language Support: check the supported languages for [Google Translate](https://cloud.google.com/translate/docs/languages), [DeepL](https://www.deepl.com/docs-api/translate-text), and [python-translate](https://github.com/terryyin/translate-python) respectively
+- Cost: while commercial models usually have a free-tier or trials, they will incur costs eventually
+
+
+
+## Setup
+
+
+To get started, paste your API token into the empty string below. If you don't already have an API token, you can get one for free [here](https://www.assemblyai.com/dashboard/signup).
+
+
+```python
+AAI_API_TOKEN = ""
+```
+
+**Make sure not to share this token with anyone** - it is a private key associated uniquely to your account.
+
+
+Next, we'll install the AssemblyAI Python SDK, which will allow us to easily use LeMUR in just a few lines of code.
+
+
+```bash
+pip install "assemblyai"
+```
+
+Finally, import the `assemblyai` package and set your API token in the settings:
+
+
+```python
+import assemblyai as aai
+
+# set the API key
+aai.settings.api_key = f"{AAI_API_TOKEN}"
+```
+
+```python
+config = aai.TranscriptionConfig(language_detection=True)
+transcriber = aai.Transcriber(config=config)
+
+transcript = transcriber.transcribe('./my-audio.mp3')
+```
+
+Specify the target language for the translation
+
+
+
+```python
+to_lang = 'en'
+```
+
+Get detected language code from the AAI JSON response
+
+
+```python
+from_lang = transcript.json_response['language_code']
+```
+
+# Commercial Models
+
+
+## Google Translate API
+
+https://cloud.google.com/translate/docs/reference/libraries/v2/python
+
+Note: you will need a GCP account as well as app credentials to make this API request.
+
+
+```bash
+pip install google-cloud-translate==2.0.1
+```
+
+Follow Google's docs on how to generate a credentials JSON file: https://cloud.google.com/docs/authentication/application-default-credentials
+
+
+```python
+import os
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = './translate_creds.json'
+```
+
+```python
+from google.cloud import translate_v2
+
+def translate(target: str, text: str) -> dict:
+    """Translates text into the target language.
+
+    Target must be an ISO 639-1 language code.
+    See https://g.co/cloud/translate/v2/translate-reference#supported_languages
+    """
+    from google.cloud import translate_v2 as translate
+
+    translate_client = translate.Client()
+
+    if isinstance(text, bytes):
+        text = text.decode("utf-8")
+
+    # Text can also be a sequence of strings, in which case this method
+    # will return a sequence of results for each text.
+    result = translate_client.translate(text, target_language=target)
+
+    print("Text: {}".format(result["input"]))
+    print("Translation: {}".format(result["translatedText"]))
+    print()
+
+    return result
+
+for sent in transcript.get_sentences():
+  translate(to_lang, sent.text)
+```
+
+## DeepL API
+
+https://www.deepl.com/en/docs-api
+
+
+```bash
+pip install deepl
+```
+
+You will need a DeepL account and API token, which can be found here: https://www.deepl.com/pro-api
+
+
+```python
+DEEPL_API_TOKEN = ''
+```
+
+```python
+import deepl
+
+def translate(text):
+    translator = deepl.Translator(DEEPL_API_TOKEN)
+    result = translator.translate_text(text, target_lang="EN-US") # Note: DeepL requires more formal language code
+    return result.text
+
+# Example usage
+for sent in transcript.get_sentences():
+  translated_text = translate(sent.text)
+  print("Text: {}".format(sent.text))
+  print("Translation: {}".format(translated_text))
+  print()
+```
+
+# Open-Source Models
+
+
+## `translate-python` Library
+
+https://github.com/terryyin/translate-python
+
+
+
+
+```bash
+pip install translate
+```
+
+```python
+from translate import Translator
+
+def translate(text):
+    translator = Translator(to_lang=to_lang, from_lang=from_lang)
+    translation = translator.translate(text)
+    return translation
+
+for sent in transcript.get_sentences():
+  translated_text = translate(sent.text)
+  print("Text: {}".format(sent.text))
+  print("Translation: {}".format(translated_text))
+  print()
+```
+
+# Further Documentation
+Cookbook: [Translate subtitles](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/translate_subtitles.ipynb)
+

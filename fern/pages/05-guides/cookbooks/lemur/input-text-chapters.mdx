@@ -1,0 +1,168 @@
+---
+title: 'Create Chapter Summaries with LeMURs Custom Text Input Parameter'
+---
+
+In this guide, we'll show you how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and summarize it into chapters by sending in the timestamped transcript via LeMUR's `input_text` parameter.
+
+<Note>
+Calling LeMUR using `transcript_ids` is preferred as default. Depending on your use case, you can alternatively use the `input_text` parameter to call LeMUR with custom formatted transcript data including edited transcripts, speaker-labelled transcripts and more.
+</Note>
+
+## Quickstart
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(
+    "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3"
+)
+
+paragraphs = transcript.get_paragraphs()
+combined_paragraphs = []
+step = 2  # Adjust as needed if you want combined paragraphs to be shorter or longer in length.
+
+# Combine paragraphs into groups, finding the appropriate timestamps and combining all their text into one string.
+for i in range(0, len(paragraphs), step):
+    paragraph_group = paragraphs[i : i + step]
+    start = paragraph_group[0].start
+    end = paragraph_group[-1].end
+    text = ""
+    for paragraph in paragraph_group:
+        text += f"{paragraph.text} "
+    combined_paragraphs.append(f"Paragraph: {text} Start: {start} End: {end}")
+
+results = []
+
+for paragraph in combined_paragraphs:
+    result = aai.Lemur().task(
+        prompt="Summarize this text as a whole and provide start and end timestamps.",
+        input_text=paragraph,
+        final_model=aai.LemurModel.claude3_5_sonnet,
+    )
+    results.append(result.response)
+
+for result in results:
+    print(f"{result}\n")
+```
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
+
+LeMUR features are currently only available to paid users, at two pricing tiers: LeMUR and LeMUR Basic. Refer to [pricing](https://www.assemblyai.com/pricing) for more details.
+
+## Step-by-Step Instructions
+
+First, let's install the AssemblyAI SDK.
+
+
+
+```bash
+pip install -U assemblyai
+```
+
+Import the `assemblyai` package and set your API key.
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Use the `Transcriber` object's `transcribe` method and parse the audio file URL path as a parameter. The `transcribe` method will save the results of the transcription to the `Transcriber` object's `transcript` attribute.
+
+
+
+```python
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(
+    "https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3"
+)
+```
+
+Next we'll use the SDK to fetch all of the paragraphs generated out of this transcript and combine them into groups. We set a `step` variable that controls how many paragraphs we combine into one overall paragraph to help LeMUR have more context to create better summaries.
+
+We also extract the appropriate `start` and `end` timestamps, and save all of our combined paragraphs in string form to send into LeMUR in a later step.
+
+
+
+```python
+paragraphs = transcript.get_paragraphs()
+combined_paragraphs = []
+step = 2  # Adjust as needed if you want combined paragraphs to be shorter or longer in length.
+
+# Combine paragraphs into groups, finding the appropriate timestamps and combining all their text into one string.
+for i in range(0, len(paragraphs), step):
+    paragraph_group = paragraphs[i : i + step]
+    start = paragraph_group[0].start
+    end = paragraph_group[-1].end
+    text = ""
+    for paragraph in paragraph_group:
+        text += f"{paragraph.text} "
+    combined_paragraphs.append(f"Paragraph: {text} Start: {start} End: {end}")
+```
+
+Now we'll use LeMUR's task endpoint in conjuction with the `input_text` parameter to send in all of our `combined_paragraphs` to create summaries for each one.
+
+The summary for each paragraph then gets saved to a `results` array so we can output all of them at the same time.
+
+
+
+```python
+results = []
+
+for paragraph in combined_paragraphs:
+    result = aai.Lemur().task(
+        prompt="Summarize this text as a whole and provide start and end timestamps.",
+        input_text=paragraph,
+        final_model=aai.LemurModel.claude3_5_sonnet,
+    )
+    results.append(result.response)
+
+for result in results:
+    print(f"{result}\n")
+```
+
+The output will look similar to the example below.
+
+```
+Summary:
+This transcript discusses the widespread impact of Canadian wildfires on air quality across the United States. Smoke from these fires is causing hazy conditions and air quality alerts in multiple states, prompting warnings to stay indoors in some areas. Peter DeCarlo, an environmental health expert from Johns Hopkins University, explains that dry conditions and specific weather patterns are channeling the smoke southward, affecting the mid-Atlantic and Northeast regions.
+
+Start timestamp: 240
+End timestamp: 60890
+
+Summary:
+The transcript discusses the unhealthy air quality in Baltimore due to high levels of particulate matter. These microscopic particles can affect respiratory, cardiovascular, and neurological systems. The concentration of particulate matter has reached dangerous levels, measuring 150 micrograms per cubic meter, which is 10 times higher than the annual average and 4 times higher than the recommended 24-hour average.
+
+Start timestamp: 62270
+End timestamp: 113214
+
+Summary:
+The text discusses the health impacts of high levels of air pollution, likely due to smoke from wildfires. It explains that the concentration of particles in the air is much higher than usual, leading to various health problems. The most vulnerable groups are identified as children, the elderly, and those with pre-existing health conditions, particularly respiratory or heart issues. The situation is severe enough that outdoor activities are being canceled in places like New York City, despite it being early summer.
+
+Start timestamp: 113342
+End timestamp: 158870
+
+Summary:
+The text discusses air quality issues related to smoke from wildfires. It mentions that some areas, like New York, are experiencing higher concentrations of smoke, but this will change as the air moves. The impact will vary across different areas over the next few days. The speaker doesn't expect concentrations to increase significantly even if more fires start. The duration of the smoke's impact on the US depends on weather system changes, while the fires themselves are expected to continue burning for some time.
+
+Start timestamp: 162090
+End timestamp: 203856
+
+Summary:
+The transcript discusses the impact of weather systems on smoke from wildfires affecting the Mid-Atlantic and Northeast regions. It predicts that changing weather patterns will soon push the smoke away from these areas. The speaker also addresses the connection between climate change and increased wildfires, suggesting that such air quality issues may become more frequent in the future, particularly in the western United States.
+
+Start timestamp: 203968
+End timestamp: 258010
+
+Summary:
+Peter DeCarlo, an associate professor at Johns Hopkins University, discusses how climate change is likely to increase the frequency of extreme weather events in the eastern United States. He suggests that while such events are currently unusual for the region, they may become more common in the future due to climate change.
+
+Start timestamp: 258130
+End timestamp: 280290
+```

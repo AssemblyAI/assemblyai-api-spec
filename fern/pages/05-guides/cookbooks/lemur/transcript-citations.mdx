@@ -1,0 +1,213 @@
+---
+title: 'Extract Quotes with Timestamps Using LeMUR + Semantic Search'
+---
+
+
+
+
+
+This Colab will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and find the best quotes included in it through [Semantic Search](https://www.elastic.co/what-is/semantic-search).
+
+## Quickstart
+
+```python
+import datetime
+import numpy as np
+import assemblyai as aai
+from sklearn.neighbors import NearestNeighbors
+from sentence_transformers import SentenceTransformer
+
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe("URL_OR_FILE_PATH_HERE")
+
+embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+
+embeddings = {}
+sentences = transcript.get_sentences()
+
+def sliding_window(elements, distance, stride):
+    idx = 0
+    results = []
+    while idx + distance < len(elements):
+        results.append(elements[idx:idx + distance])
+        idx += (distance - stride)
+    return results
+
+# Sliding window to determine length of sentence groups. Tune based on desired quote length and duration.
+sentence_groups = sliding_window(sentences, 5, 2)
+
+for sentence_group in sentence_groups:
+    sentence = {
+        "text": " ".join([sentence.text for sentence in sentence_group]),
+        "start": sentence_group[0].start,
+        "end": sentence_group[-1].end,
+    }
+    embeddings[(sentence["start"], sentence["end"], transcript.id, sentence["text"])] = embedder.encode(sentence["text"])
+
+questions = [
+    aai.LemurQuestion(
+        question="What are the 3 best quotes from this video?",
+        context="Please provide exactly 3 quotes.",
+    )
+]
+
+qa_results = transcript.lemur.question(questions, final_model=aai.LemurModel.claude3_5_sonnet).response
+
+# Embed the output from LeMUR for use in our comparison.
+lemur_embedding = embedder.encode(qa_results[0].answer)
+
+# Vectorize our initial transcript embeddings.
+np_embeddings = np.array(list(embeddings.values()))
+metadata = list(embeddings.keys())
+
+# Find the top 3 most similar quotes to what LeMUR surfaced.
+knn = NearestNeighbors(n_neighbors=3, metric="cosine")
+knn.fit(np_embeddings)
+distances, indices = knn.kneighbors([lemur_embedding])
+
+matches = []
+for distance, index in zip(distances[0], indices[0]):
+    result_metadata = metadata[index]
+    matches.append(
+        {
+            "start_timestamp": result_metadata[0],
+            "end_timestamp": result_metadata[1],
+            "transcript_id": result_metadata[2],
+            "text": result_metadata[3],
+            "confidence": 1 - distance,
+        }
+    )
+
+for index, m in enumerate(matches):
+    print('QUOTE #{}: "{}"'.format(index + 1, m['text']))
+    print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['start_timestamp']/1000)))
+    print('END TIMESTAMP:', str(datetime.timedelta(seconds=m['end_timestamp']/1000)))
+    print('CONFIDENCE:', m['confidence'])
+    print()
+```
+
+## Getting Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://www.assemblyai.com/dashboard/signup) for an AssemblyAI account and get your API key from your [dashboard](https://www.assemblyai.com/app/account).
+
+You'll also need to install a few libraries that this code depends on:
+- The AssemblyAI [Python SDK](https://github.com/AssemblyAI/assemblyai-python-sdk).
+- [Numpy](https://numpy.org/), a scientific computing library.
+- [Sciki-Learn](https://scikit-learn.org/stable/), a library for predictive data analysis.
+- [Sentence-Transformers](https://www.sbert.net/index.html), a framework for state-of-the-art sentence and text embedding.
+
+## Step-by-Step Instructions    
+
+```bash
+pip install -U assemblyai numpy scikit-learn sentence-transformers
+```
+
+Then we'll import all of these libraries and set our AssemblyAI API key.
+
+
+```python
+import datetime
+import numpy as np
+import assemblyai as aai
+from sklearn.neighbors import NearestNeighbors
+from sentence_transformers import SentenceTransformer
+
+aai.settings.api_key = "API_KEY_HERE"
+```
+
+Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use.
+
+
+```python
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe("URL_OR_FILE_PATH_HERE")
+```
+
+Now we can iterate over all of the paragraphs in our transcript and create [embeddings](https://github.com/microsoft/semantic-kernel/blob/main/docs/EMBEDDINGS.md) for them to use as part of our Semantic Search later.
+
+We'll be relying on SentenceTransformer's `multi-qa-mpnet-base-dot-v1` model, which has been fine-tuned specifically for Semantic Search, and is their [highest-performing model](https://www.sbert.net/docs/pretrained_models.html) for this task.
+
+We'll also be implementing a [sliding window](https://blandthony.medium.com/methods-for-semantic-text-segmentation-prior-to-generating-text-embeddings-vectorization-6442afdb086), which allows us to group sentences together in different combinations to retain their semantic meaning and context while also enabling us to customize the length (and thus duration) of the quotes. By default, we'll group 5 sentences together while having 2 of them overlap when the window moves. This should give us quotes around 30 seconds in length at most.
+
+
+```python
+embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+
+embeddings = {}
+sentences = transcript.get_sentences()
+
+def sliding_window(elements, distance, stride):
+    idx = 0
+    results = []
+    while idx + distance < len(elements):
+        results.append(elements[idx:idx + distance])
+        idx += (distance - stride)
+    return results
+
+# Sliding window to determine length of sentence groups. Tune based on desired quote length and duration.
+sentence_groups = sliding_window(sentences, 5, 2)
+
+for sentence_group in sentence_groups:
+    sentence = {
+        "text": " ".join([sentence.text for sentence in sentence_group]),
+        "start": sentence_group[0].start,
+        "end": sentence_group[-1].end,
+    }
+    embeddings[(sentence["start"], sentence["end"], transcript.id, sentence["text"])] = embedder.encode(sentence["text"])
+```
+
+Now we can query LeMUR to provide the type of quotes we want. In this case, let's prompt LeMUR to find the best 3 quotes out of a video that we transcribed.
+
+
+```python
+questions = [
+    aai.LemurQuestion(
+        question="What are the 3 best quotes from this video?",
+        context="Please provide exactly 3 quotes.",
+    )
+]
+
+qa_results = transcript.lemur.question(questions, final_model=aai.LemurModel.claude3_5_sonnet).response
+```
+
+Now we can take the embeddings from the transcript text, as well as the embeddings from LeMUR's output, and use them in our [k-nearest neighbors](https://www.ibm.com/topics/knn) algorithm to determine their similarity. The most similar quotes to what LeMUR identified will be surfaced as our 3 best quotes, along with their timestamps and confidence scores.
+
+We'll be relying on [cosine similarity](https://github.com/microsoft/semantic-kernel/blob/main/docs/COSINE_SIMILARITY.md) rather than the default Euclidean distance metric since it takes into account both the magnitude and direction of our vectors.
+
+
+```python
+# Embed the output from LeMUR for use in our comparison.
+lemur_embedding = embedder.encode(qa_results[0].answer)
+
+# Vectorize our initial transcript embeddings.
+np_embeddings = np.array(list(embeddings.values()))
+metadata = list(embeddings.keys())
+
+# Find the top 3 most similar quotes to what LeMUR surfaced.
+knn = NearestNeighbors(n_neighbors=3, metric="cosine")
+knn.fit(np_embeddings)
+distances, indices = knn.kneighbors([lemur_embedding])
+
+matches = []
+for distance, index in zip(distances[0], indices[0]):
+    result_metadata = metadata[index]
+    matches.append(
+        {
+            "start_timestamp": result_metadata[0],
+            "end_timestamp": result_metadata[1],
+            "transcript_id": result_metadata[2],
+            "text": result_metadata[3],
+            "confidence": 1 - distance,
+        }
+    )
+
+for index, m in enumerate(matches):
+    print('QUOTE #{}: "{}"'.format(index + 1, m['text']))
+    print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['start_timestamp']/1000)))
+    print('END TIMESTAMP:', str(datetime.timedelta(seconds=m['end_timestamp']/1000)))
+    print('CONFIDENCE:', m['confidence'])
+    print()
+```
