@@ -18,34 +18,95 @@ By the end of this tutorial, you'll be able to:
 
 Here's the full sample code for what you'll build in this tutorial:
 
-```python
-import assemblyai as aai
+<Tabs groupId="language">
+  <Tab language="python-sdk" title="Python SDK" default>
+    ```python
+    import assemblyai as aai
 
-aai.settings.api_key = "<YOUR_API_KEY>"
+    aai.settings.api_key = "<YOUR_API_KEY>"
 
-transcriber = aai.Transcriber()
+    transcriber = aai.Transcriber()
 
-# You can use a local filepath:
-# audio_file = "./example.mp3"
+    # You can use a local filepath:
+    # audio_file = "./example.mp3"
 
-# Or use a publicly-accessible URL:
-audio_file = (
-    "https://assembly.ai/sports_injuries.mp3"
-)
+    # Or use a publicly-accessible URL:
+    audio_file = (
+        "https://assembly.ai/sports_injuries.mp3"
+    )
 
-config = aai.TranscriptionConfig(speaker_labels=True)
+    config = aai.TranscriptionConfig(speaker_labels=True)
 
-transcript = transcriber.transcribe(audio_file, config)
+    transcript = transcriber.transcribe(audio_file, config)
 
-if transcript.status == aai.TranscriptStatus.error:
-    print(f"Transcription failed: {transcript.error}")
-    exit(1)
+    if transcript.status == aai.TranscriptStatus.error:
+        print(f"Transcription failed: {transcript.error}")
+        exit(1)
 
-print(transcript.text)
+    print(transcript.text)
 
-for utterance in transcript.utterances:
-	print(f"Speaker {utterance.speaker}: {utterance.text}")
-```
+    for utterance in transcript.utterances:
+      print(f"Speaker {utterance.speaker}: {utterance.text}")
+    ```
+  </Tab>
+  <Tab language="python" title="Python">
+  ```python
+  import requests
+  import time 
+
+  base_url = "https://api.assemblyai.com/v2"
+  headers = {"authorization": "<YOUR_API_KEY>"}
+
+  """Use a publicly-accessible URL: 
+  data = {"audio_url": "https://assembly.ai/sports_injuries.mp3"}"""
+
+
+  # Or upload a local file using lines 12-29
+  with open("./audio/adam-silver.mp4", "rb") as f:
+      response = requests.post(base_url + "/upload", headers=headers, data=f)
+
+  if response.status_code != 200:
+      print(f"Error: {response.status_code}, Response: {response.text}")
+      response.raise_for_status()
+
+  try:
+      json_response = response.json()
+  except requests.exceptions.JSONDecodeError:
+      print(f"Failed to parse JSON. Raw response: {response.text}")
+      exit(1)
+
+  upload_url = json_response["upload_url"]
+  data = {
+          "audio_url": upload_url,
+          "speaker_labels": True 
+         }
+
+  response = requests.post(base_url + "/transcript", headers=headers, json=data)
+
+  if response.status_code != 200:
+      print(f"Error: {response.status_code}, Response: {response.text}")
+      response.raise_for_status()
+
+  transcript_response = response.json()
+  transcript_id = transcript_response["id"]
+  polling_endpoint = f"{base_url}/transcript/{transcript_id}"
+
+  while True:
+      transcript = requests.get(polling_endpoint, headers=headers).json()
+      if transcript["status"] == "completed":
+          print(f"Full Transcript:\n{transcript["text"]}")
+
+          print("\nSpeaker Segmentation:")
+          for utterance in transcript["utterances"]:
+              print(f"Speaker {utterance["speaker"]}: {utterance["text"]}\n")
+          break
+      elif transcript["status"] == "error":
+          raise RuntimeError(f"Transcription failed: {transcript['error']}")
+      else:
+          time.sleep(3)
+  ```
+  </Tab>
+</Tabs>
 
 ## Before you begin
 
