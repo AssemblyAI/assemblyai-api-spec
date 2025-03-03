@@ -1,0 +1,1690 @@
+---
+title: 'Python SDK Reference'
+---
+
+# Pre-recorded audio
+
+Our Speech-to-Text model enables you to transcribe pre-recorded audio into written text.
+
+On top of the transcription, you can enable other features and models, such as [Speaker Diarization](/docs/speech-to-text/speaker-diarization), by adding additional parameters to the same transcription request.
+
+<Tip title="Choose model class">
+Choose between [_Best_ and _Nano_](#select-the-speech-model-with-best-and-nano) based on the cost and performance tradeoffs best suited for your application.
+</Tip>
+
+The following example transcribes an audio file from a URL.
+
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(audio_file)
+
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+
+print(transcript.text)
+```
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And...
+```
+
+
+## Word-level timestamps
+
+The response also includes an array with information about each word:
+
+
+
+```python
+print(transcript.words)
+```
+
+```plain
+[Word(text='Smoke', start=250, end=650, confidence=0.73033), Word(text='from', start=730, end=1022, confidence=0.99996), ...]
+```
+
+  
+
+
+## Transcript status
+
+After you've submitted a file for transcription, your transcript has one of the following statuses:
+
+| Status | Description |
+| --- | --- |
+| `processing` | The audio file is being processed. |
+| `queued` | The audio file is waiting to be processed. |
+| `completed` | The transcription has completed successfully. |
+| `error` | An error occurred while processing the audio file. |
+
+### Handling errors
+
+If the transcription fails, the status of the transcript is `error`, and the transcript includes an `error` property explaining what went wrong.
+
+
+
+```python
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+```
+
+  
+
+<Note>
+A transcription may fail for various reasons:
+
+- Unsupported file format
+- Missing audio in file
+- Unreachable audio URL
+
+If a transcription fails due to a server error, we recommend that you resubmit the file for transcription to allow another server to process the audio.
+</Note>
+
+
+
+
+
+## Select the speech model with Best and Nano
+
+We use a combination of models to produce your results. You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application.
+You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">pricing page</a> for more information on our model tiers.
+
+
+| Name | SDK Parameter | Description |
+| --- | --- | --- |
+| **Best** (default) | `aai.SpeechModel.best` | Use our most accurate and capable models with the best results, recommended for most use cases. |
+| **Nano** | `aai.SpeechModel.nano` | Use our less accurate, but much lower cost models to produce your results. |
+
+<br/>
+
+
+
+  You can change the model by setting the `speech_model` in the transcription config:
+
+```python {1}
+config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.nano)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+For a list of the supported languages for each model, see [Supported languages](/docs/getting-started/supported-languages).
+
+
+## Select the region
+
+
+The default region is US, with base URL `api.assemblyai.com`. For EU data residency requirements, you can use our base URL for EU at `api.eu.assemblyai.com`.
+
+<Note>
+  The base URL for EU is currently only available for Async transcription.
+</Note>
+
+| Region | Base URL |
+| --- | --- |
+| US (default) | `api.assemblyai.com` |
+| EU | `api.eu.assemblyai.com` |
+<br/>
+
+
+To use the EU endpoint, set the `base_url` in the client settings like this:
+
+```python {1}
+aai.settings.base_url = "https://api.eu.assemblyai.com"
+```
+
+  
+
+
+## Automatic punctuation and casing
+
+By default, the API automatically punctuates the transcription text and formats proper nouns, as well as converts numbers to their numerical form.
+
+
+
+To disable punctuation and text formatting, set `punctuate` and `format_text` to `False` in the transcription config.
+
+```python {2}
+# create a new TranscriptionConfig
+config = aai.TranscriptionConfig(punctuate=False, format_text=False)
+
+# set the configuration
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Automatic language detection
+
+Identify the dominant language spoken in an audio file and use it during the transcription. Enable it to detect any of the [supported languages](/docs/getting-started/supported-languages).
+
+To reliably identify the dominant language, the file must contain **at least 50 seconds** of spoken audio.
+
+
+
+To enable it, set `language_detection` to `True` in the transcription config.
+
+```python {1}
+config = aai.TranscriptionConfig(language_detection=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+**Confidence score**
+
+If language detection is enabled, the API returns a confidence score for the detected language. The score ranges from 0.0 (low confidence) to 1.0 (high confidence).
+
+
+
+```python
+print(transcript.json_response["language_confidence"])
+```
+
+  
+
+**Set a language confidence threshold**
+
+You can set the confidence threshold that must be reached if language detection is enabled. An error will be returned
+if the language confidence is below this threshold. Valid values are in the range [0,1] inclusive.
+
+
+
+```python {3}
+config = aai.TranscriptionConfig(
+    language_detection=True,
+    language_confidence_threshold=0.4
+)
+```
+
+  
+
+<Tip title="Fallback to a default language">
+For a workflow that resubmits a transcription request using a default language if the threshold is not reached, see [this cookbook](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/automatic-language-detection-route-default-language-python.ipynb).
+</Tip>
+
+
+
+
+
+## Set language manually
+
+If you already know the dominant language, you can use the `language_code` key to specify the language of the speech in your audio file.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(language_code="es")
+```
+
+  
+
+To see all supported languages and their codes, see [Supported languages](/docs/getting-started/supported-languages).
+
+
+
+
+
+## Custom spelling
+
+Custom Spelling lets you customize how words are spelled or formatted in the transcript.
+
+
+
+To use Custom Spelling, pass a dictionary to `set_custom_spelling()` on the transcription config. Each key-value pair specifies a mapping from a word or phrase to a new spelling or format. The key specifies the new spelling or format, and the corresponding value is the word or phrase you want to replace.
+
+```python {2-8}
+config = aai.TranscriptionConfig()
+config.set_custom_spelling(
+  {
+    "Gettleman": ["gettleman"],
+    "SQL": ["Sequel"],
+  }
+)
+transcriber = aai.Transcriber(config=config)
+```
+
+<Note>
+
+The key is case-sensitive, but the value isn't. Additionally, the value can contain multiple words.
+
+</Note>
+
+  
+
+
+
+
+
+
+
+## Custom vocabulary
+
+To improve the transcription accuracy, you can boost certain words or phrases that appear frequently in your audio file.
+
+To boost words or phrases, include the `word_boost` parameter in the transcription config.
+
+You can also control how much weight to apply to each keyword or phrase. Include `boost_param` in the transcription config with a value of `low`, `default`, or `high`.
+
+
+
+```python {1-4}
+config = aai.TranscriptionConfig(
+  word_boost=["aws", "azure", "google cloud"],
+  boost_param="high"
+)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+<Note>
+Follow formatting guidelines for custom vocabulary to ensure the best results:
+
+- Remove all punctuation except apostrophes.
+- Make sure each word is in its spoken form. For example, `iphone seven` instead of `iphone 7`.
+- Remove spaces between letters in acronyms.
+
+Additionally, the model still accepts words with unique characters such as é, but converts them to their ASCII equivalent.
+
+You can boost a maximum of 1,000 unique keywords and phrases, where each of them can contain up to 6 words.
+</Note>
+
+
+
+
+
+## Multichannel transcription
+
+If you have a multichannel audio file with multiple speakers, you can transcribe each of them separately.
+
+
+To enable it, set `multichannel` to `True` in your transcription config.
+
+```python {1}
+config = aai.TranscriptionConfig(multichannel=True)
+
+transcriber = aai.Transcriber(config=config)
+transcript = transcriber.transcribe(audio_url)
+
+print(transcript.json_response["audio_channels"])
+
+print(transcript.utterances)
+```
+
+  
+
+<Note>
+
+Multichannel audio increases the transcription time by approximately 25%.
+
+The response includes an `audio_channels` property with the number of different channels, and an additional `utterances` property, containing a list of turn-by-turn utterances.
+
+Each utterance contains channel information, starting at 1.
+
+Additionally, each word in the `words` array contains the channel identifier.
+
+</Note>
+
+
+
+
+
+## Dual-channel transcription
+
+<Warning>
+Use [Multichannel](#multichannel-transcription) instead.
+</Warning>
+
+
+
+
+
+## Export SRT or VTT caption files
+
+You can export completed transcripts in SRT or VTT format, which can be used for subtitles and closed captions in videos.
+
+You can also customize the maximum number of characters per caption by specifying the `chars_per_caption` parameter.
+
+
+
+```python
+srt = transcript.export_subtitles_srt()
+srt = transcript.export_subtitles_srt(chars_per_caption=32)
+
+vtt = transcript.export_subtitles_vtt()
+vtt = transcript.export_subtitles_vtt(chars_per_caption=32)
+```
+
+
+
+  
+
+
+
+
+
+## Export paragraphs and sentences
+
+You can retrieve transcripts that are automatically segmented into paragraphs or sentences, for a more reader-friendly experience.
+
+The text of the transcript is broken down by either paragraphs or sentences, along with additional metadata.
+
+
+
+```python
+sentences = transcript.get_sentences()
+for sentence in sentences:
+  print(sentence.text)
+
+paragraphs = transcript.get_paragraphs()
+for paragraph in paragraphs:
+  print(paragraph.text)
+```
+
+
+
+  
+
+The response is an array of objects, each representing a sentence or a paragraph in the transcript. See the [API reference](https://www.assemblyai.com/docs/api-reference/transcripts/get-sentences) for more info.
+
+
+
+
+
+## Filler words
+
+The following filler words are removed by default:
+
+- "um"
+- "uh"
+- "hmm"
+- "mhm"
+- "uh-huh"
+- "ah"
+- "huh"
+- "hm"
+- "m"
+
+If you want to keep filler words in the transcript, you can set the `disfluencies` to `true` in the transcription config.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(disfluencies=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Profanity filtering
+
+You can automatically filter out profanity from the transcripts by setting `filter_profanity` to `true` in your transcription config.
+
+Any profanity in the returned `text` will be replaced with asterisks.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(filter_profanity=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+<Note>
+Profanity filter isn't perfect. Certain words may still be missed or improperly filtered.
+</Note>
+
+
+
+
+
+## Set the start and end of the transcript
+
+If you only want to transcribe a portion of your file, you can set the `audio_start_from` and the `audio_end_at` parameters in your transcription config.
+
+
+
+```python {2-3}
+config = aai.TranscriptionConfig(
+  audio_start_from=5000,  # The start time of the transcription in milliseconds
+  audio_end_at=15000  # The end time of the transcription in milliseconds
+)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Speech threshold
+
+To only transcribe files that contain at least a specified percentage of spoken audio, you can set the `speech_threshold` parameter. You can pass any value between 0 and 1.
+
+If the percentage of speech in the audio file is below the provided threshold, the value of `text` is `None` and the response contains an `error` message:
+
+```plain
+Audio speech threshold 0.9461 is below the requested speech threshold value 1.0
+```
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(speech_threshold=0.1)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Word search
+
+You can search through a completed transcript for a specific set of keywords, which is useful for quickly finding relevant information.
+
+The parameter can be a list of words, numbers, or phrases up to five words.
+
+
+
+```python
+# Set the words you want to search for
+words = ["foo", "bar", "foo bar", "42"]
+
+matches = transcript.word_search(words)
+
+for match in matches:
+    print(f"Found '{match.text}' {match.count} times in the transcript")
+```
+
+  
+
+
+
+
+
+## Delete transcripts
+
+You can remove the data from the transcript and mark it as deleted.
+
+
+
+```python
+aai.Transcript.delete_by_id("1234")
+```
+
+  
+
+<Note title="Account-level TTL value">
+Starting on 11-26-2024, the platform will assign an account-level Time to Live (TTL) for customers who have executed a Business Associate Agreement (BAA) with AssemblyAI. For those customers, all transcripts generated via the async transcription endpoint will be deleted after the TTL period.
+
+As of the feature launch date:
+
+- The TTL is set to 3 days (subject to change).
+- Customers can still manually delete transcripts before the TTL period by using the deletion endpoint.
+  However, they cannot keep transcripts on the platform after the TTL
+  period has expired.
+
+BAAs are limited to customers who process PHI, subject to HIPAA. If you are processing PHI and require a BAA, please reach out to sales@assemblyai.com.
+
+</Note>
+
+  
+## Speaker Diarization
+
+The Speaker Diarization model lets you detect multiple speakers in an audio file and what each speaker said.
+
+If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
+
+<Warning title="Speaker Diarization and multichannel">
+Speaker Diarization doesn't support multichannel transcription. Enabling both Speaker Diarization and [multichannel](/docs/speech-to-text/pre-recorded-audio#multichannel-transcription) will result in an error.
+</Warning>
+
+
+
+**Quickstart**
+
+
+To enable Speaker Diarization, set `speaker_labels` to `True` in the transcription config.
+
+```python {14,19-20}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(
+  speaker_labels=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Speaker A: Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. And in some places, the air quality warnings include the warning to stay inside. We wanted to better understand what's happening here and why, so we called Peter DiCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US. Is because there's a couple of weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the Mid Atlantic and the Northeast and kind of just dropping the smoke there.
+Speaker A: So what is it in this haze that makes it harmful? And I'm assuming it is.
+...
+```
+
+
+**Set number of speakers**
+
+
+  If you know the number of speakers in advance, you can improve the diarization performance by setting the `speakers_expected` parameter.
+
+
+```python {3}
+config = aai.TranscriptionConfig(
+  speaker_labels=True,
+  speakers_expected=3
+)
+```
+
+<Note>
+The `speakers_expected` parameter is ignored for audio files with a duration less than 2 minutes.
+</Note>
+
+
+  
+
+
+# Streaming Speech-to-Text
+
+
+
+  
+AssemblyAI's Streaming Speech-to-Text (STT) allows you to transcribe live audio streams with high accuracy and low latency. By streaming your audio data to our secure WebSocket API, you can receive transcripts back within a few hundred milliseconds.
+
+<Note title="Supported languages">
+Streaming Speech-to-Text is only available for English.
+</Note>
+
+
+## Audio requirements
+
+The audio format must conform to the following requirements:
+
+- PCM16 or Mu-law encoding (See [Specify the encoding](#specify-the-encoding))
+- A sample rate that matches the value of the supplied `sample_rate` parameter
+- Single-channel
+- 100 to 2000 milliseconds of audio per message
+
+<Tip>
+Audio segments with a duration between 100 ms and 450 ms produce the best results in transcription accuracy.
+</Tip>
+
+
+## Specify the encoding
+
+
+By default, transcriptions expect [PCM16 encoding](http://trac.ffmpeg.org/wiki/audio%20types). If you want to use [Mu-law encoding](http://trac.ffmpeg.org/wiki/audio%20types), you must set the `encoding` parameter to `aai.AudioEncoding.pcm_mulaw`:
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    encoding=aai.AudioEncoding.pcm_mulaw
+)
+```
+
+  
+
+
+| Encoding | SDK Parameter | Description |
+| --- | --- | --- |
+| **PCM16** (default) | `aai.AudioEncoding.pcm_s16le` | PCM signed 16-bit little-endian. |
+| **Mu-law** | `aai.AudioEncoding.pcm_mulaw` | PCM Mu-law. |
+
+
+
+## Add custom vocabulary
+
+You can add up to 2500 characters of custom vocabulary to boost their transcription probability.
+
+
+For this, create a list of strings and set the `word_boost` parameter:
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    word_boost=["aws", "azure", "google cloud"]
+)
+```
+
+  
+
+<Note>
+If you're not using one of the SDKs, you must ensure that the `word_boost` parameter is a JSON array that is URL encoded.
+See this [code example](/docs/guides/real-time-streaming-transcription#adding-custom-vocabulary).
+</Note>
+
+
+
+
+
+## Authenticate with a temporary token
+
+If you need to authenticate on the client, you can avoid exposing your API key by using temporary authentication tokens.
+You should generate this token on your server and pass it to the client.
+
+<Steps>
+<Step>
+
+
+
+To generate a temporary token, call `aai.RealtimeTranscriber.create_temporary_token()`.
+
+Use the `expires_in` parameter to specify how long the token should be valid for, in seconds.
+
+```python
+token = aai.RealtimeTranscriber.create_temporary_token(
+    expires_in=60
+)
+```
+
+  
+
+<Note>
+The expiration time must be a value between 60 and 360000 seconds.
+</Note>
+
+</Step>
+<Step>
+
+The client should retrieve the token from the server and use the token to authenticate the transcriber.
+
+<Note>
+Each token has a one-time use restriction and can only be used for a single session.
+</Note>
+
+
+  
+  To use it, specify the `token` parameter when initializing the streaming transcriber.
+
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    token=token
+)
+```
+
+  
+
+</Step>
+</Steps>
+
+
+
+
+
+## Manually end current utterance
+
+
+
+To manually end an utterance, call `force_end_utterance()`:
+
+```python
+transcriber.force_end_utterance()
+```
+
+  
+
+Manually ending an utterance immediately produces a final transcript.
+
+
+
+
+
+## Configure the threshold for automatic utterance detection
+
+You can configure the threshold for how long to wait before ending an utterance.
+ 
+
+
+To change the threshold, you can specify the `end_utterance_silence_threshold` parameter when initializing the streaming transcriber.
+
+After the session has started, you can change the threshold by calling `configure_end_utterance_silence_threshold()`.
+
+```python {3,6}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    end_utterance_silence_threshold=500
+)
+
+transcriber.configure_end_utterance_silence_threshold(300)
+```
+
+  
+
+<Note>
+By default, Streaming Speech-to-Text ends an utterance after 700 milliseconds of silence. You can configure the duration threshold any number of times during a session after the session has started.
+The valid range is between 0 and 20000.
+</Note>
+
+
+
+
+
+## Disable partial transcripts
+
+If you're only using the final transcript, you can disable partial transcripts to reduce network traffic.
+
+
+
+To disable partial transcripts, set the `disable_partial_transcripts` parameter to `True`.
+
+```python {3}
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    disable_partial_transcripts=True
+)
+```
+
+  
+
+
+
+
+
+## Enable extra session information
+
+
+
+If you enable extra session information, the client receives a `RealtimeSessionInformation` message right before receiving the session termination message.
+
+To enable it, define a callback function to handle the event and cofigure the `on_extra_session_information` parameter.
+
+```python {2,8}
+# Define a callback to handle the session information message
+def on_extra_session_information(data: aai.RealtimeSessionInformation):
+    print(data.audio_duration_seconds)
+
+# Configure the RealtimeTranscriber
+transcriber = aai.RealtimeTranscriber(
+    ...,
+    on_extra_session_information=on_extra_session_information,
+)
+```
+
+  
+
+For best practices, see the Best Practices section in the [Streaming guide](/docs/speech-to-text/streaming#best-practices).
+  
+# Audio Intelligence
+
+## Auto Chapters
+
+The Auto Chapters model summarizes audio data over time into chapters. Chapters makes it easy for users to navigate and find specific information.
+
+Each chapter contains the following:
+
+- Summary
+- One-line gist
+- Headline
+- Start and end timestamps
+
+<Warning title="Auto Chapters and Summarization">
+You can only enable one of the Auto Chapters and [Summarization](/docs/audio-intelligence/summarization) models in the same transcription.
+</Warning>
+
+**Quickstart**
+
+
+  
+  Enable Auto Chapters by setting `auto_chapters` to `true` in the transcription config. `punctuate` must be enabled to use Auto Chapters (`punctuate` is enabled by default).
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(auto_chapters=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for chapter in transcript.chapters:
+  print(f"{chapter.start}-{chapter.end}: {chapter.headline}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+250-28840: Smoke from hundreds of wildfires in Canada is triggering air quality alerts across US
+29610-280340: High particulate matter in wildfire smoke can lead to serious health problems
+```
+
+<Tip title="Auto Chapters Using LeMUR">
+Check out this cookbook [Creating Chapter Summaries](https://github.com/AssemblyAI/cookbook/blob/master/lemur/input-text-chapters.ipynb) for an example of how to leverage LeMUR's custom text input parameter for chapter summaries.
+</Tip>
+
+For the full API reference, see the [API reference section on the Auto Chapters page](/docs/audio-intelligence/auto-chapters#api-reference).
+
+## Content Moderation
+
+The Content Moderation model lets you detect inappropriate content in audio files to ensure that your content is safe for all audiences.
+
+The model pinpoints sensitive discussions in spoken data and their severity.
+
+**Quickstart**
+
+
+
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(content_safety=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+# Get the parts of the transcript which were flagged as sensitive.
+for result in transcript.content_safety.results:
+    print(result.text)
+    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
+
+    # Get category, confidence, and severity.
+    for label in result.labels:
+      print(f"{label.label} - {label.confidence} - {label.severity}")  # content safety category
+    print()
+
+# Get the confidence of the most common labels in relation to the entire audio file.
+for label, confidence in transcript.content_safety.summary.items():
+    print(f"{confidence * 100}% confident that the audio contains {label}")
+
+print()
+
+# Get the overall severity of the most common labels in relation to the entire audio file.
+for label, severity_confidence in transcript.content_safety.severity_score_summary.items():
+    print(f"{severity_confidence.low * 100}% confident that the audio contains low-severity {label}")
+    print(f"{severity_confidence.medium * 100}% confident that the audio contains medium-severity {label}")
+    print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+disasters - 0.8141 - 0.4014
+
+So what is it about the conditions right now that have caused this round of wildfires to...
+Timestamp: 29290 - 56190
+disasters - 0.9217 - 0.5665
+
+So what is it in this haze that makes it harmful? And I'm assuming it is...
+Timestamp: 56340 - 88034
+health_issues - 0.9358 - 0.8906
+
+...
+
+99.42% confident that the audio contains disasters
+92.70% confident that the audio contains health_issues
+
+57.43% confident that the audio contains low-severity disasters
+42.56% confident that the audio contains mid-severity disasters
+0.0% confident that the audio contains high-severity disasters
+23.57% confident that the audio contains low-severity health_issues
+30.22% confident that the audio contains mid-severity health_issues
+46.19% confident that the audio contains high-severity health_issues
+```
+
+
+
+
+
+**Adjust the confidence threshold**
+
+The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
+
+
+
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```python {4}
+# Setting the content safety confidence threshold to 60%.
+config = aai.TranscriptionConfig(
+  content_safety=True,
+  content_safety_confidence=60
+)
+```
+
+  
+
+
+For the full API reference, as well as the supported labels and FAQs, refer to the [full Content Moderation page](/docs/audio-intelligence/content-moderation).
+  
+## Entity Detection
+
+The Entity Detection model lets you automatically identify and categorize key information in transcribed audio content.
+
+Here are a few examples of what you can detect:
+
+- Names of people
+- Organizations
+- Addresses
+- Phone numbers
+- Medical data
+- Social security numbers
+
+For the full list of entities that you can detect, see [Supported entities](#supported-entities).
+
+<Tip title="Supported languages">
+Entity Detection is available in multiple languages. See [Supported languages](/docs/getting-started/supported-languages).
+</Tip>
+
+**Quickstart**
+
+
+
+  
+  Enable Entity Detection by setting `entity_detection` to `true` in the transcription config.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(entity_detection=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for entity in transcript.entities:
+    print(entity.text)
+    print(entity.entity_type)
+    print(f"Timestamp: {entity.start} - {entity.end}\n")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Canada
+location
+Timestamp: 2548 - 3130
+
+the US
+location
+Timestamp: 5498 - 6350
+
+...
+```
+
+For the full API reference, as well as the supported entities and FAQs, refer to the [full Entity Detection page](/docs/audio-intelligence/entity-detection).
+
+
+## Key Phrases
+
+
+The Key Phrases model identifies significant words and phrases in your transcript and lets you extract the most important concepts or highlights from your audio or video file.
+
+
+
+**Quickstart**
+
+
+  
+  Enable Key Phrases by setting `auto_highlights` to `true` in the transcription config.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(auto_highlights=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for result in transcript.auto_highlights.results:
+    print(f"Highlight: {result.text}, Count: {result.count}, Rank: {result.rank}, Timestamps: {result.timestamps}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Highlight: air quality alerts, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=3978, end=5114)]
+Highlight: wide ranging air quality consequences, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=235388, end=238838)]
+Highlight: more fires, Count: 1, Rank: 0.07, Timestamps: [Timestamp(start=184716, end=185186)]
+...
+```
+
+For the full API reference and FAQs, refer to the [full Key Phrases page](/docs/audio-intelligence/key-phrases).
+
+
+## PII Redaction  
+
+The PII Redaction model lets you minimize sensitive information about individuals by automatically identifying and removing it from your transcript.
+
+Personal Identifiable Information (PII) is any information that can be used to identify a person, such as a name, email address, or phone number.
+
+When you enable the PII Redaction model, your transcript will look like this:
+
+- With `hash` substitution: `Hi, my name is ####!`
+- With `entity_name` substitution: `Hi, my name is [PERSON_NAME]!`
+
+You can also [Create redacted audio files](#create-redacted-audio-files) to replace sensitive information with a beeping sound.
+
+<Tip title="Supported languages">
+PII Redaction is available in multiple languages. See [Supported languages](/docs/getting-started/supported-languages).
+</Tip>
+
+<Warning title="Redacted properties">
+PII only redacts words in the `text` property. Properties from other features may still include PII, such as `entities` from [Entity Detection](/docs/audio-intelligence/entity-detection) or `summary` from [Summarization](/docs/audio-intelligence/summarization).
+</Warning>
+
+
+**Quickstart**
+
+
+  Enable PII Redaction on the `TranscriptionConfig` using the `set_redact_pii()`
+method.
+
+Set `policies` to specify the information you want to redact. For the full list of policies, see [PII policies](#pii-policies).
+
+```python {8-15}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig().set_redact_pii(
+    policies=[
+        aai.PIIRedactionPolicy.person_name,
+        aai.PIIRedactionPolicy.organization,
+        aai.PIIRedactionPolicy.occupation,
+    ],
+    substitution=aai.PIISubstitutionPolicy.hash,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And in some places, the air quality warnings include the warning to stay
+inside. We wanted to better understand what's happening here and why, so we
+called ##### #######, an ######### ######### in the ########## ## #############
+###### ### ########### at ##### ####### ##########. Good morning, #########.
+Good morning. So what is it about the conditions right now that have caused this
+round of wildfires to affect so many people so far away? Well, there's a couple
+of things. The season has been pretty dry already, and then the fact that we're
+getting hit in the US. Is because there's a couple of weather systems that ...
+```
+
+**Create redacted audio files**
+
+In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out.
+
+
+  
+  Enable Sentiment Analysis by setting `sentiment_analysis` to `true` in the transcription config.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(sentiment_analysis=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for sentiment_result in transcript.sentiment_analysis:
+    print(sentiment_result.text)
+    print(sentiment_result.sentiment)  # POSITIVE, NEUTRAL, or NEGATIVE
+    print(sentiment_result.confidence)
+    print(f"Timestamp: {sentiment_result.start} - {sentiment_result.end}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US.
+SentimentType.negative
+0.8181032538414001
+Timestamp: 250 - 6350
+...
+```
+<Tip title="Sentiment Analysis Using LeMUR">
+Check out this cookbook [LeMUR for Customer Call Sentiment Analysis](https://github.com/AssemblyAI/cookbook/blob/master/lemur/call-sentiment-analysis.ipynb) for an example of how to leverage LeMUR's QA feature for sentiment analysis.
+</Tip>
+
+**Add speaker labels to sentiments**
+
+
+  
+  To add speaker labels to each sentiment analysis result, using [Speaker Diarization](/docs/speech-to-text/speaker-diarization), enable `speaker_labels` in the transcription config.
+
+Each sentiment result will then have a `speaker` field that contains the speaker label.
+
+```python {3}
+config = aai.TranscriptionConfig(
+  sentiment_analysis=True,
+  speaker_labels=True
+)
+
+# ...
+
+for sentiment_result in transcript.sentiment_analysis:
+  print(sentiment_result.speaker)
+```
+
+  
+
+
+For the full API reference and FAQs, refer to the [full Sentiment Analysis page](/docs/audio-intelligence/sentiment-analysis).
+  
+
+## Summarization
+
+Distill important information by summarizing your audio files.
+
+The Summarization model generates a summary of the resulting transcript. You can control the style and format of the summary using [Summary models](#summary-models) and [Summary types](#summary-types).
+
+<Warning title="Summarization and Auto Chapters">
+You can only enable one of the Summarization and [Auto Chapters](/docs/audio-intelligence/auto-chapters) models in the same transcription.
+</Warning>
+
+**Quickstart**
+
+
+
+  
+  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` and `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```python {9-11}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(
+  summarization=True,
+  summary_model=aai.SummarizationModel.informative,
+  summary_type=aai.SummarizationType.bullets
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.summary)
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+- Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. In some places, the air quality warnings include the warning to stay inside.
+- Air pollution levels in Baltimore are considered unhealthy. Exposure to high levels can lead to a host of health problems. With climate change, we are seeing more wildfires. Will we be seeing more of these kinds of wide ranging air quality consequences?
+```
+
+<Tip title="Custom Summaries Using LeMUR">
+If you want more control of the output format, see how to generate a [Custom summary using LeMUR](/docs/lemur/summarize-audio).
+</Tip>
+
+For the full API reference, as well as the supported summary models/types and FAQs, refer to the [full Summarization page](/docs/audio-intelligence/summarization).
+
+
+## Topic Detection
+
+The Topic Detection model lets you identify different topics in the transcript. The model uses the [IAB Content Taxonomy](https://airtable.com/shr7KNXOtvfhTTS4i/tblqVLDb7YSsCMXo4?backgroundColor=purple&viewControls=on), a standardized language for content description which consists of 698 comprehensive topics.
+
+**Quickstart**
+
+
+
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription parameters.
+
+
+```python {8}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(iab_categories=True)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+# Get the parts of the transcript that were tagged with topics
+for result in transcript.iab_categories.results:
+    print(result.text)
+    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
+    for label in result.labels:
+        print(f"{label.label} ({label.relevance})")
+
+# Get a summary of all topics in the transcript
+for topic, relevance in transcript.iab_categories.summary.items():
+    print(f"Audio is {relevance * 100}% relevant to {topic}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+Home&Garden>IndoorEnvironmentalQuality (0.9881)
+NewsAndPolitics>Weather (0.5561)
+MedicalHealth>DiseasesAndConditions>LungAndRespiratoryHealth (0.0042)
+...
+Audio is 100.0% relevant to NewsAndPolitics>Weather
+Audio is 93.78% relevant to Home&Garden>IndoorEnvironmentalQuality
+...
+```
+
+<Tip title="Topic Detection Using LeMUR">
+Check out this cookbook [Custom Topic Tags](https://github.com/AssemblyAI/cookbook/blob/master/lemur/custom-topic-tags.ipynb) for an example of how to leverage LeMUR for custom topic detection.
+</Tip>
+
+
+For the full API reference, as well as the full list of supported topics and FAQs, refer to the [full Topic Detection page](/docs/audio-intelligence/topic-detection).
+
+
+# LeMUR
+
+## Summarize your audio data
+
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+transcriber = aai.Transcriber()
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/sports_injuries.mp3"
+)
+transcript = transcriber.transcribe(audio_file)
+
+prompt = "Provide a brief summary of the transcript."
+
+result = transcript.lemur.task(
+    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
+
+  
+
+If you run the code above, you'll see the following output:
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+## Ask questions about your audio data
+
+**Q&A with the task endpoint**
+
+
+  
+  To ask question about your audio data, define a prompt with your questions and call `transcript.lemur.task()`. The underlying `transcript` is automatically used as additional context for the model.
+
+```python {12-13,15-18}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# Step 1: Transcribe an audio file.
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/sports_injuries.mp3"
+
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe(audio_file)
+
+# Step 2: Define a prompt with your question(s).
+prompt = "What is a runner's knee?"
+
+# Step 3: Apply LeMUR.
+result = transcript.lemur.task(
+    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+)
+
+print(result.response)
+```
+
+  
+
+#**Example output**
+
+```plain
+Based on the transcript, runner's knee is a condition characterized
+by pain behind or around the kneecap. It is caused by overuse,
+muscle imbalance and inadequate stretching. Symptoms include pain
+under or around the kneecap and pain when walking.
+```
+
+**Q&A with the question-answer endpoint**
+
+The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
+
+
+
+  To use it, define a list of `aai.LemurQuestion` objects. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+
+
+```python {8-16,18-22}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_url = "https://assembly.ai/meeting.mp4"
+transcript = aai.Transcriber().transcribe(audio_url)
+
+questions = [
+    aai.LemurQuestion(
+        question="What are the top level KPIs for engineering?",
+        context="KPI stands for key performance indicator",
+        answer_format="short sentence"),
+    aai.LemurQuestion(
+        question="How many days has it been since the data team has gotten updated metrics?",
+        answer_options=["1", "2", "3", "4", "5", "6", "7", "more than 7"]),
+]
+
+result = transcript.lemur.question(
+    final_model=aai.LemurModel.claude3_5_sonnet,
+    questions,
+    context="A GitLab meeting to discuss logistics"
+)
+
+for qa_response in result.response:
+    print(f"Question: {qa_response.question}")
+    print(f"Answer: {qa_response.answer}")
+```
+
+  
+
+
+For the full API reference, as well as the supported models and FAQs, refer to the [full LeMUR Q&A guide](/docs/lemur/ask-questions).
+
+
+## Change the model type
+
+LeMUR features the following LLMs:
+
+- Claude 3.5 Sonnet
+- Claude 3 Opus
+- Claude 3 Haiku
+- Claude 3 Sonnet
+
+You can switch the model by specifying the `final_model` parameter.
+
+
+
+```python {3}
+result = transcript.lemur.task(
+    prompt,
+    final_model=aai.LemurModel.claude3_5_sonnet
+)
+```
+| Model | SDK Parameter | Description |
+| --- | --- | --- | 
+| **Claude 3.5 Sonnet** | `aai.LemurModel.claude3_5_sonnet` | Claude 3.5 Sonnet is the most intelligent model to date, outperforming Claude 3 Opus on a wide range of evaluations, with the speed and cost of Claude 3 Sonnet. This uses Anthropic's Claude 3.5 Sonnet model version `claude-3-5-sonnet-20240620`. |
+| **Claude 3.0 Opus** | `aai.LemurModel.claude3_opus` | Claude 3 Opus is good at handling complex analysis, longer tasks with many steps, and higher-order math and coding tasks. |
+| **Claude 3.0 Haiku** | `aai.LemurModel.claude3_haiku` | Claude 3 Haiku is the fastest model that can execute lightweight actions. |
+| **Claude 3.0 Sonnet** | `aai.LemurModel.claude3_sonnet` | Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks. |
+
+  
+
+You can find more information on pricing for each model <a href="https://www.assemblyai.com/pricing" target="_blank">here</a>.
+
+
+
+## Change the maximum output size
+
+
+
+  
+  You can change the maximum output size in tokens by specifying the `max_output_size` parameter. Up to 4000 tokens are allowed.
+
+
+```python {3}
+result = transcript.lemur.task(
+    prompt,
+    max_output_size=1000
+)
+```
+
+  
+
+
+## Change the temperature
+
+You can change the temperature by specifying the `temperature` parameter, ranging from 0.0 to 1.0.
+
+Higher values result in answers that are more creative, lower values are more conservative.
+
+
+
+```python {3}
+result = transcript.lemur.task(
+    prompt,
+    temperature=0.7
+)
+```
+
+  
+
+
+
+
+
+## Send customized input
+
+You can submit custom text inputs to LeMUR without transcript IDs. This allows you to customize the input, for example, you could include the speaker labels for the LLM.
+
+
+
+  
+  To submit custom text input, use the `input_text` parameter on `aai.Lemur().task()`.
+
+
+```python {12}
+config = aai.TranscriptionConfig(
+  speaker_labels=True,
+)
+transcript = transcriber.transcribe(audio_url, config=config)
+
+text_with_speaker_labels = ""
+for utt in transcript.utterances:
+    text_with_speaker_labels += f"Speaker {utt.speaker}:\n{utt.text}\n"
+
+result = aai.Lemur().task(
+    prompt,
+    input_text=text_with_speaker_labels
+)
+```
+
+  
+
+
+
+
+## Submit multiple transcripts
+
+LeMUR can easily ingest multiple transcripts in a single API call.
+
+You can feed in up to a maximum of 100 files or 100 hours, whichever is lower.
+
+
+
+```python {1-7}
+transcript_group = transcriber.transcribe_group(
+    [
+        "https://example.org/customer1.mp3",
+        "https://example.org/customer2.mp3",
+        "https://example.org/customer3.mp3",
+    ],
+)
+
+# Or use existing transcripts:
+# transcript_group = aai.TranscriptGroup.get_by_ids([id1, id2, id3])
+
+result = transcript_group.lemur.task(
+  prompt="Provide a summary of these customer calls."
+)
+```
+
+  
+
+
+
+
+
+## Delete LeMUR request data
+
+You can delete the data for a previously submitted LeMUR request.
+
+Response data from the LLM, as well as any context provided in the original request will be removed.
+
+
+
+```python {3}
+result = transcript.lemur.task(prompt)
+
+deletion_response = aai.Lemur.purge_request_data(result.request_id)
+```
+
+  
+
