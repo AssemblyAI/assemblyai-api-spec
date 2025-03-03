@@ -1,0 +1,226 @@
+---
+title: 'Pre-recorded audio'
+description: 'Transcribe a pre-recorded audio file'
+---
+Our Speech-to-Text model enables you to transcribe pre-recorded audio into written text.
+
+On top of the transcription, you can enable other features and models, such as [Speaker Diarization](/docs/speech-to-text/speaker-diarization), by adding additional parameters to the same transcription request.
+
+<Tip title="Choose model class">
+Choose between [_Best_ and _Nano_](#select-the-speech-model-with-best-and-nano) based on the cost and performance tradeoffs best suited for your application.
+</Tip>
+
+# Quickstart
+
+The following example transcribes an audio file from a URL.
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(audio_file)
+
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+
+print(transcript.text)
+```
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xnr8yS3SeiiI-4gwuhP-uuAHrcK76LR9#scrollTo=Due0e0X51clE)
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+
+```ts
+import { AssemblyAI } from 'assemblyai'
+
+const client = new AssemblyAI({
+  apiKey: '<YOUR_API_KEY>'
+})
+
+// You can use a local filepath:
+// const audioFile = "./example.mp3"
+
+// Or use a publicly-accessible URL:
+const audioFile = 'https://assembly.ai/wildfires.mp3'
+
+const params = {
+  audio: audioFile
+}
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params)
+
+  if (transcript.status === 'error') {
+    console.error(`Transcription failed: ${transcript.error}`)
+    process.exit(1)
+  }
+
+  console.log(transcript.text)
+}
+
+run()
+```
+
+  </Tab>
+  <Tab language="golang" title="Go">
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    // You can use a local file:
+    /*
+    f, err := os.Open("./example.mp3")
+    [error handling here]
+    transcript, err := client.Transcripts.TranscribeFromReader(ctx, f, nil)
+    */
+
+    // Or use a publicly-accessible URL:
+    audioURL := "https://assembly.ai/wildfires.mp3"
+
+    transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+    if err != nil {
+      fmt.Println("Something bad happened:", err)
+      os.Exit(1)
+    }
+
+    log.Println(aai.ToString(transcript.Text))
+}
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+
+```java
+import com.assemblyai.api.AssemblyAI;
+import com.assemblyai.api.resources.transcripts.types.*;
+
+public final class App {
+  public static void main(String[] args) {
+
+      AssemblyAI client = AssemblyAI.builder()
+              .apiKey("YOUR_API_KEY")
+              .build();
+
+      // You can use a local file:
+      /*
+      Transcript transcript = aai.transcripts().transcribe(
+               new File("./example.mp3"));
+      */
+
+      // Or use a publicly-accessible URL:
+      String audioUrl = "https://assembly.ai/wildfires.mp3";
+
+      Transcript transcript = client.transcripts().transcribe(audioUrl);
+
+      if (transcript.getStatus().equals(TranscriptStatus.ERROR)) {
+        System.err.println(transcript.getError().get());
+        System.exit(1);
+      }
+
+      System.out.println(transcript.getText().get());
+  }
+}
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+
+```csharp
+using AssemblyAI;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// You can use a local file:
+/*
+var transcript = await client.Transcripts.TranscribeAsync(
+    new FileInfo("./example.mp3")
+);
+*/
+
+// Or use a publicly-accessible URL:
+const string audioUrl = "https://assembly.ai/wildfires.mp3";
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl
+});
+
+if (transcript.Status == TranscriptStatus.Error)
+{
+    Console.WriteLine(transcript.Error);
+    Environment.Exit(1);
+}
+
+// Alternatively, you can use the EnsureStatusCompleted() method
+// to throw an exception if the transcription status is not "completed".
+// transcript.EnsureStatusCompleted();
+
+Console.WriteLine(transcript.Text);
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+
+```ruby
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# You can upload and transcribe a local file:
+# uploaded_file = client.files.upload(file: '/path/to/your/file')
+# transcript = client.transcripts.transcribe(audio_url: uploaded_file.upload_url)
+
+# Or use a publicly-accessible URL:
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+abort transcript.error if transcript.status == AssemblyAI::Transcripts::TranscriptStatus::ERROR
+
+puts transcript.text
+```
+
+  </Tab>
+</Tabs>
+
+# Example output
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And...
+```
+
+# API reference
+
+You can find the API reference [here](/docs/api-reference/transcripts/submit).
+
