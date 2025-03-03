@@ -119,7 +119,7 @@ function insertKapa() {
   script.setAttribute("data-project-color", "#2C4BD4");
   script.setAttribute("data-project-logo", "https://www.assemblyai.com/static/images/logo-blue400x400.jpeg");
   script.setAttribute("data-modal-override-open-id-search", "fern-search-button");
-  script.setAttribute("data-search-include-source-names", '["Pylon FAQ", "Documentation"]');
+  script.setAttribute("data-search-include-source-names", '["FAQ", "Documentation"]');
   script.setAttribute("data-user-analytics-fingerprint-enabled", true);
   document.head.appendChild(script);
   
