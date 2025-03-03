@@ -1,0 +1,648 @@
+---
+title: 'Python SDK Reference'
+---
+
+
+
+# Pre-recorded audio
+
+Our Speech-to-Text model enables you to transcribe pre-recorded audio into written text.
+
+On top of the transcription, you can enable other features and models, such as [Speaker Diarization](/docs/speech-to-text/speaker-diarization), by adding additional parameters to the same transcription request.
+
+<Tip title="Choose model class">
+Choose between [_Best_ and _Nano_](#select-the-speech-model-with-best-and-nano) based on the cost and performance tradeoffs best suited for your application.
+</Tip>
+
+The following example transcribes an audio file from a URL.
+
+
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+transcriber = aai.Transcriber()
+
+transcript = transcriber.transcribe(audio_file)
+
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+
+print(transcript.text)
+```
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And...
+```
+
+
+## Word-level timestamps
+
+The response also includes an array with information about each word:
+
+
+
+```python
+print(transcript.words)
+```
+
+```plain
+[Word(text='Smoke', start=250, end=650, confidence=0.73033), Word(text='from', start=730, end=1022, confidence=0.99996), ...]
+```
+
+  
+
+
+## Transcript status
+
+After you've submitted a file for transcription, your transcript has one of the following statuses:
+
+| Status | Description |
+| --- | --- |
+| `processing` | The audio file is being processed. |
+| `queued` | The audio file is waiting to be processed. |
+| `completed` | The transcription has completed successfully. |
+| `error` | An error occurred while processing the audio file. |
+
+### Handling errors
+
+If the transcription fails, the status of the transcript is `error`, and the transcript includes an `error` property explaining what went wrong.
+
+
+
+```python
+if transcript.status == aai.TranscriptStatus.error:
+    print(f"Transcription failed: {transcript.error}")
+    exit(1)
+```
+
+  
+
+<Note>
+A transcription may fail for various reasons:
+
+- Unsupported file format
+- Missing audio in file
+- Unreachable audio URL
+
+If a transcription fails due to a server error, we recommend that you resubmit the file for transcription to allow another server to process the audio.
+</Note>
+
+
+
+
+
+## Select the speech model with Best and Nano
+
+We use a combination of models to produce your results. You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application.
+You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">pricing page</a> for more information on our model tiers.
+
+
+| Name | SDK Parameter | Description |
+| --- | --- | --- |
+| **Best** (default) | `aai.SpeechModel.best` | Use our most accurate and capable models with the best results, recommended for most use cases. |
+| **Nano** | `aai.SpeechModel.nano` | Use our less accurate, but much lower cost models to produce your results. |
+
+<br/>
+
+
+
+  You can change the model by setting the `speech_model` in the transcription config:
+
+```python {1}
+config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.nano)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+For a list of the supported languages for each model, see [Supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+
+
+## Select the region
+
+
+The default region is US, with base URL `api.assemblyai.com`. For EU data residency requirements, you can use our base URL for EU at `api.eu.assemblyai.com`.
+
+<Note>
+  The base URL for EU is currently only available for Async transcription.
+</Note>
+
+| Region | Base URL |
+| --- | --- |
+| US (default) | `api.assemblyai.com` |
+| EU | `api.eu.assemblyai.com` |
+<br/>
+
+
+To use the EU endpoint, set the `base_url` in the client settings like this:
+
+```python {1}
+aai.settings.base_url = "https://api.eu.assemblyai.com"
+```
+
+  
+
+
+## Automatic punctuation and casing
+
+By default, the API automatically punctuates the transcription text and formats proper nouns, as well as converts numbers to their numerical form.
+
+
+
+To disable punctuation and text formatting, set `punctuate` and `format_text` to `False` in the transcription config.
+
+```python {2}
+# create a new TranscriptionConfig
+config = aai.TranscriptionConfig(punctuate=False, format_text=False)
+
+# set the configuration
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Automatic language detection
+
+Identify the dominant language spoken in an audio file and use it during the transcription. Enable it to detect any of the [supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+
+To reliably identify the dominant language, the file must contain **at least 50 seconds** of spoken audio.
+
+
+
+To enable it, set `language_detection` to `True` in the transcription config.
+
+```python {1}
+config = aai.TranscriptionConfig(language_detection=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+**Confidence score**
+
+If language detection is enabled, the API returns a confidence score for the detected language. The score ranges from 0.0 (low confidence) to 1.0 (high confidence).
+
+
+
+```python
+print(transcript.json_response["language_confidence"])
+```
+
+  
+
+**Set a language confidence threshold**
+
+You can set the confidence threshold that must be reached if language detection is enabled. An error will be returned
+if the language confidence is below this threshold. Valid values are in the range [0,1] inclusive.
+
+
+
+```python {3}
+config = aai.TranscriptionConfig(
+    language_detection=True,
+    language_confidence_threshold=0.4
+)
+```
+
+  
+
+<Tip title="Fallback to a default language">
+For a workflow that resubmits a transcription request using a default language if the threshold is not reached, see [this cookbook](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/automatic-language-detection-route-default-language-python.ipynb).
+</Tip>
+
+
+
+
+
+## Set language manually
+
+If you already know the dominant language, you can use the `language_code` key to specify the language of the speech in your audio file.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(language_code="es")
+```
+
+  
+
+To see all supported languages and their codes, see [Supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+
+
+
+
+
+## Custom spelling
+
+Custom Spelling lets you customize how words are spelled or formatted in the transcript.
+
+
+
+To use Custom Spelling, pass a dictionary to `set_custom_spelling()` on the transcription config. Each key-value pair specifies a mapping from a word or phrase to a new spelling or format. The key specifies the new spelling or format, and the corresponding value is the word or phrase you want to replace.
+
+```python {2-8}
+config = aai.TranscriptionConfig()
+config.set_custom_spelling(
+  {
+    "Gettleman": ["gettleman"],
+    "SQL": ["Sequel"],
+  }
+)
+transcriber = aai.Transcriber(config=config)
+```
+
+<Note>
+
+The key is case-sensitive, but the value isn't. Additionally, the value can contain multiple words.
+
+</Note>
+
+  
+
+
+
+
+
+
+
+## Custom vocabulary
+
+To improve the transcription accuracy, you can boost certain words or phrases that appear frequently in your audio file.
+
+To boost words or phrases, include the `word_boost` parameter in the transcription config.
+
+You can also control how much weight to apply to each keyword or phrase. Include `boost_param` in the transcription config with a value of `low`, `default`, or `high`.
+
+
+
+```python {1-4}
+config = aai.TranscriptionConfig(
+  word_boost=["aws", "azure", "google cloud"],
+  boost_param="high"
+)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+<Note>
+Follow formatting guidelines for custom vocabulary to ensure the best results:
+
+- Remove all punctuation except apostrophes.
+- Make sure each word is in its spoken form. For example, `iphone seven` instead of `iphone 7`.
+- Remove spaces between letters in acronyms.
+
+Additionally, the model still accepts words with unique characters such as é, but converts them to their ASCII equivalent.
+
+You can boost a maximum of 1,000 unique keywords and phrases, where each of them can contain up to 6 words.
+</Note>
+
+
+
+
+
+## Multichannel transcription
+
+If you have a multichannel audio file with multiple speakers, you can transcribe each of them separately.
+
+
+To enable it, set `multichannel` to `True` in your transcription config.
+
+```python {1}
+config = aai.TranscriptionConfig(multichannel=True)
+
+transcriber = aai.Transcriber(config=config)
+transcript = transcriber.transcribe(audio_url)
+
+print(transcript.json_response["audio_channels"])
+
+print(transcript.utterances)
+```
+
+  
+
+<Note>
+
+Multichannel audio increases the transcription time by approximately 25%.
+
+The response includes an `audio_channels` property with the number of different channels, and an additional `utterances` property, containing a list of turn-by-turn utterances.
+
+Each utterance contains channel information, starting at 1.
+
+Additionally, each word in the `words` array contains the channel identifier.
+
+</Note>
+
+
+
+
+
+## Dual-channel transcription
+
+<Warning>
+Use [Multichannel](#multichannel-transcription) instead.
+</Warning>
+
+
+
+
+
+## Export SRT or VTT caption files
+
+You can export completed transcripts in SRT or VTT format, which can be used for subtitles and closed captions in videos.
+
+You can also customize the maximum number of characters per caption by specifying the `chars_per_caption` parameter.
+
+
+
+```python
+srt = transcript.export_subtitles_srt()
+srt = transcript.export_subtitles_srt(chars_per_caption=32)
+
+vtt = transcript.export_subtitles_vtt()
+vtt = transcript.export_subtitles_vtt(chars_per_caption=32)
+```
+
+
+
+  
+
+
+
+
+
+## Export paragraphs and sentences
+
+You can retrieve transcripts that are automatically segmented into paragraphs or sentences, for a more reader-friendly experience.
+
+The text of the transcript is broken down by either paragraphs or sentences, along with additional metadata.
+
+
+
+```python
+sentences = transcript.get_sentences()
+for sentence in sentences:
+  print(sentence.text)
+
+paragraphs = transcript.get_paragraphs()
+for paragraph in paragraphs:
+  print(paragraph.text)
+```
+
+
+
+  
+
+The response is an array of objects, each representing a sentence or a paragraph in the transcript. See the [API reference](https://www.assemblyai.com/docs/api-reference/transcripts/get-sentences) for more info.
+
+
+
+
+
+## Filler words
+
+The following filler words are removed by default:
+
+- "um"
+- "uh"
+- "hmm"
+- "mhm"
+- "uh-huh"
+- "ah"
+- "huh"
+- "hm"
+- "m"
+
+If you want to keep filler words in the transcript, you can set the `disfluencies` to `true` in the transcription config.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(disfluencies=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Profanity filtering
+
+You can automatically filter out profanity from the transcripts by setting `filter_profanity` to `true` in your transcription config.
+
+Any profanity in the returned `text` will be replaced with asterisks.
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(filter_profanity=True)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+<Note>
+Profanity filter isn't perfect. Certain words may still be missed or improperly filtered.
+</Note>
+
+
+
+
+
+## Set the start and end of the transcript
+
+If you only want to transcribe a portion of your file, you can set the `audio_start_from` and the `audio_end_at` parameters in your transcription config.
+
+
+
+```python {2-3}
+config = aai.TranscriptionConfig(
+  audio_start_from=5000,  # The start time of the transcription in milliseconds
+  audio_end_at=15000  # The end time of the transcription in milliseconds
+)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Speech threshold
+
+To only transcribe files that contain at least a specified percentage of spoken audio, you can set the `speech_threshold` parameter. You can pass any value between 0 and 1.
+
+If the percentage of speech in the audio file is below the provided threshold, the value of `text` is `None` and the response contains an `error` message:
+
+```plain
+Audio speech threshold 0.9461 is below the requested speech threshold value 1.0
+```
+
+
+
+```python {1}
+config = aai.TranscriptionConfig(speech_threshold=0.1)
+
+transcriber = aai.Transcriber(config=config)
+```
+
+  
+
+
+
+
+
+## Word search
+
+You can search through a completed transcript for a specific set of keywords, which is useful for quickly finding relevant information.
+
+The parameter can be a list of words, numbers, or phrases up to five words.
+
+
+
+```python
+# Set the words you want to search for
+words = ["foo", "bar", "foo bar", "42"]
+
+matches = transcript.word_search(words)
+
+for match in matches:
+    print(f"Found '{match.text}' {match.count} times in the transcript")
+```
+
+  
+
+
+
+
+
+## Delete transcripts
+
+You can remove the data from the transcript and mark it as deleted.
+
+
+
+```python
+aai.Transcript.delete_by_id("1234")
+```
+
+  
+
+<Note title="Account-level TTL value">
+Starting on 11-26-2024, the platform will assign an account-level Time to Live (TTL) for customers who have executed a Business Associate Agreement (BAA) with AssemblyAI. For those customers, all transcripts generated via the async transcription endpoint will be deleted after the TTL period.
+
+As of the feature launch date:
+
+- The TTL is set to 3 days (subject to change).
+- Customers can still manually delete transcripts before the TTL period by using the deletion endpoint.
+  However, they cannot keep transcripts on the platform after the TTL
+  period has expired.
+
+BAAs are limited to customers who process PHI, subject to HIPAA. If you are processing PHI and require a BAA, please reach out to sales@assemblyai.com.
+
+</Note>
+
+  
+## Speaker Diarization
+
+The Speaker Diarization model lets you detect multiple speakers in an audio file and what each speaker said.
+
+If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
+
+<Warning title="Speaker Diarization and multichannel">
+Speaker Diarization doesn't support multichannel transcription. Enabling both Speaker Diarization and [multichannel](/docs/speech-to-text/pre-recorded-audio/multichannel-transcription) will result in an error.
+</Warning>
+
+
+
+**Quickstart**
+
+
+To enable Speaker Diarization, set `speaker_labels` to `True` in the transcription config.
+
+```python {14,19-20}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(
+  speaker_labels=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+
+
+  
+
+**Example output**
+
+```plain
+Speaker A: Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. And in some places, the air quality warnings include the warning to stay inside. We wanted to better understand what's happening here and why, so we called Peter DiCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US. Is because there's a couple of weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the Mid Atlantic and the Northeast and kind of just dropping the smoke there.
+Speaker A: So what is it in this haze that makes it harmful? And I'm assuming it is.
+...
+```
+
+
+**Set number of speakers**
+
+
+  If you know the number of speakers in advance, you can improve the diarization performance by setting the `speakers_expected` parameter.
+
+
+```python {3}
+config = aai.TranscriptionConfig(
+  speaker_labels=True,
+  speakers_expected=3
+)
+```
+
+<Note>
+The `speakers_expected` parameter is ignored for audio files with a duration less than 2 minutes.
+</Note>

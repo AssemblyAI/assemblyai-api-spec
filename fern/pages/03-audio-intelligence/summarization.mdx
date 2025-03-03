@@ -23,11 +23,11 @@ You can only enable one of the Summarization and [Auto Chapters](/docs/audio-int
 
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
+  <Tab language="python-sdk" title="Python SDK" default>
   
-  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+  Enable Summarization by setting `summarization` to `True` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
 
-If you specify one of `summary_model` and `summary_type`, then you must specify the other.
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
 
 The following example returns an informative summary in a bulleted list.
 
@@ -47,17 +47,74 @@ config = aai.TranscriptionConfig(
 
 transcript = aai.Transcriber().transcribe(audio_file, config)
 
+print(f"Transcript ID: ", transcript.id)
 print(transcript.summary)
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xnr8yS3SeiiI-4gwuhP-uuAHrcK76LR9#scrollTo=TfnrKdbV1dVD)
 
   </Tab>
-  <Tab language="typescript" title="TypeScript">
+  <Tab language="python" title="Python" default>
+  
+  Enable Summarization by setting `summarization` to `True` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```python {20-22}
+import requests
+import json
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "summarization": True,
+    "summary_model": "informative",
+    "summary_type": "bullets"
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID: ", transcript_id)
+    print(transcription_result['summary'])
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+```
+
+  </Tab>
+  <Tab language="typescript-sdk" title="TypeScript SDK">
   
   Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
 
-If you specify one of `summary_model` and `summary_type`, then you must specify the other.
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
 
 The following example returns an informative summary in a bulleted list.
 
@@ -82,6 +139,7 @@ const params = {
 const run = async () => {
   const transcript = await client.transcripts.transcribe(params)
 
+  console.log("Transcript ID: ", transcript.id)
   console.log(transcript.summary)
 }
 
@@ -89,130 +147,326 @@ run()
 ```
 
   </Tab>
-  <Tab language="golang" title="Go">
+  <Tab language="typescript" title="TypeScript">
   
-  Enable `Summarization` in the transcription parameters. Use `SummaryModel` and `SummaryType` to change the summary format.
+  Enable Summarization by setting `summarization` to `true` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
 
-If you specify one of `SummaryModel` and `SummaryType`, then you must specify the other.
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
 
 The following example returns an informative summary in a bulleted list.
 
-```go {19-21}
-package main
+```ts {19-21}
+import axios from 'axios'
+import fs from 'fs-extra'
 
-import (
-    "context"
-    "fmt"
+const baseUrl = 'https://api.assemblyai.com'
 
-    aai "github.com/AssemblyAI/assemblyai-go-sdk"
-)
-
-func main() {
-    client := aai.NewClient("YOUR_API_KEY")
-
-    // For local files see our Getting Started guides.
-    audioURL := "https://assembly.ai/wildfires.mp3"
-
-    ctx := context.Background()
-
-    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
-        Summarization: aai.Bool(true),
-        SummaryModel:  "informative",
-        SummaryType:   "bullets",
-    })
-
-    fmt.Println(aai.ToString(transcript.Summary))
+const headers = {
+  authorization: '<YOUR_API_KEY>'
 }
-```
 
-  </Tab>
-  <Tab language="java" title="Java">
-  
-  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summaryModel` and `summaryType` to change the summary format.
+const path = './my-audio.mp3'
+const audioData = await fs.readFile(path)
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers
+})
+const uploadUrl = uploadResponse.data.upload_url
 
-If you specify one of `summaryModel` and `summaryType`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```java {15-17}
-import com.assemblyai.api.AssemblyAI;
-import com.assemblyai.api.resources.transcripts.types.*;
-
-public final class App {
-    public static void main(String[] args) {
-
-        AssemblyAI client = AssemblyAI.builder()
-                .apiKey("<YOUR_API_KEY>")
-                .build();
-
-        // For local files see our Getting Started guides.
-        String audioUrl = "https://assembly.ai/wildfires.mp3";
-
-        var params = TranscriptOptionalParams.builder()
-                .summarization(true)
-                .summaryModel(SummaryModel.INFORMATIVE)
-                .summaryType(SummaryType.BULLETS)
-                .build();
-
-        Transcript transcript = client.transcripts().transcribe(audioUrl, params);
-
-        System.out.println(transcript.getSummary().get());
-    }
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  summarization: true,
+  summary_model: 'informative',
+  summary_type: 'bullets'
 }
+
+const url = `${baseUrl}/v2/transcript`
+const response = await axios.post(url, data, { headers: headers })
+
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    console.log("Transcript ID: ", transcriptionResult.id)
+    console.log(transcriptionResult.summary)
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+
 ```
 
   </Tab>
   <Tab language="csharp" title="C#">
   
-  Enable `Summarization` in the transcription parameters. Use `SummaryModel` and `SummaryType` to change the summary format.
-
-If you specify one of `SummaryModel` and `SummaryType`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```csharp {10-12}
-using AssemblyAI;
-using AssemblyAI.Transcripts;
-
-var client = new AssemblyAIClient("<YOUR_API_KEY>");
-
-var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
-{
-    // For local files see our Getting Started guides.
-    AudioUrl = "https://assembly.ai/wildfires.mp3",
-    Summarization = true,
-    SummaryModel = SummaryModel.Informative,
-    SummaryType = SummaryType.Bullets
-});
-
-Console.WriteLine(transcript.Summary);
-```
-
-  </Tab>
-  <Tab language="ruby" title="Ruby">
-  
-  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+  Enable Summarization by setting `summarization` to `true` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
 
 If you specify one of `summary_model` and `summary_type`, then you must specify the other.
 
 The following example returns an informative summary in a bulleted list.
 
-```ruby {10-12}
-require 'assemblyai'
+<Info>
+Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
+</Info>
 
-client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+```csharp {46}
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 
-# For local files see our Getting Started guides.
-audio_url = 'https://assembly.ai/wildfires.mp3'
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        using (var httpClient = new HttpClient())
+        {
+            httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("<YOUR_API_KEY>");
 
-transcript = client.transcripts.transcribe(
-  audio_url: audio_url,
-  summarization: true,
-  summary_model: AssemblyAI::Transcripts::SummaryModel::INFORMATIVE,
-  summary_type: AssemblyAI::Transcripts::SummaryType::BULLETS
-)
+            var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
 
-puts transcript.summary
+            Console.WriteLine(transcript.Summary);
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+            {
+                response.EnsureSuccessStatusCode();
+                var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+                return jsonDoc.RootElement.GetProperty("upload_url").GetString();
+            }
+        }
+    }
+
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+    {
+        var data = new { audio_url = audioUrl, summarization = true, summary_model = "informative", summary_type = "bullets" };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
+        }
+    }
+
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+            switch (transcript.Status)
+            {
+                case "processing":
+                case "queued":
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("This code shouldn't be reachable.");
+            }
+        }
+    }
+
+    public class Transcript
+    {
+        public string Id { get; set; }
+        public string Status { get; set; }
+        public string Text { get; set; }
+        public string Summary { get; set; }
+
+        [JsonPropertyName("language_code")]
+        public string LanguageCode { get; set; }
+
+        public string Error { get; set; }
+    }
+}
+```
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+  
+  Enable Summarization by setting `summarization` to `true` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```ruby {23-25}
+require 'net/http'
+require 'json'
+
+base_url = 'https://api.assemblyai.com'
+
+headers = {
+  'authorization' => '<YOUR_API_KEY>',
+  'content-type' => 'application/json'
+}
+
+path = "/my_audio.mp3"
+uri = URI("#{base_url}/v2/upload")
+request = Net::HTTP::Post.new(uri, headers)
+request.body = File.read(path)
+
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+upload_response = http.request(request)
+upload_url = JSON.parse(upload_response.body)["upload_url"]
+
+data = {
+    "audio_url" => upload_url, # You can also use a URL to an audio or video file on the web
+    "summarization" => true,
+    "summary_model" => "informative",
+    "summary_type" => "bullets"
+}
+
+uri = URI.parse("#{base_url}/v2/transcript")
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+
+request = Net::HTTP::Post.new(uri.request_uri, headers)
+request.body = data.to_json
+
+response = http.request(request)
+response_body = JSON.parse(response.body)
+
+unless response.is_a?(Net::HTTPSuccess)
+  raise "API request failed with status #{response.code}: #{response.body}"
+end
+
+transcript_id = response_body['id']
+puts "Transcript ID: #{transcript_id}"
+
+polling_endpoint = URI.parse("#{base_url}/v2/transcript/#{transcript_id}")
+
+while true
+  polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+  polling_http.use_ssl = true
+  polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+  polling_response = polling_http.request(polling_request)
+  
+  transcription_result = JSON.parse(polling_response.body)
+
+  if transcription_result['status'] == 'completed'
+    puts "Transcription text: #{transcription_result['summary']}"
+    break
+  elsif transcription_result['status'] == 'error'
+    raise "Transcription failed: #{transcription_result['error']}"
+  else
+    puts 'Waiting for transcription to complete...'
+    sleep(3)
+  end
+end
+```
+
+  </Tab>
+  <Tab language="php" title="PHP">
+  
+  Enable Summarization by setting `summarization` to `true` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` or `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```php {30-32}
+<?php
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$base_url = "https://api.assemblyai.com";
+
+$headers = array(
+    "authorization: <YOUR_API_KEY>",
+    "content-type: application/json"
+);
+
+$path = "./local_file.mp3";
+
+$ch = curl_init();
+
+curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/upload");
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+$response = curl_exec($ch);
+$response_data = json_decode($response, true);
+$upload_url = $response_data["upload_url"];
+
+curl_close($ch);
+
+$data = array(
+    "audio_url" => $upload_url, // You can also use a URL to an audio or video file on the web
+    "summarization" => true,
+    "summary_model" => "informative",
+    "summary_type" => "bullets"
+);
+
+$url = $base_url . "/v2/transcript";
+$curl = curl_init($url);
+
+curl_setopt($curl, CURLOPT_POST, true);
+curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($curl);
+
+$response = json_decode($response, true);
+
+curl_close($curl);
+
+$transcript_id = $response['id'];
+echo "Transcript ID: $transcript_id\n";
+
+$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $polling_response = curl_init($polling_endpoint);
+
+    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
+
+    $transcription_result = json_decode(curl_exec($polling_response), true);
+
+    if ($transcription_result['status'] === "completed") {
+        echo $transcription_result['summary'];
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3);
+    }
+}
 ```
 
   </Tab>
@@ -302,7 +556,7 @@ The inference speed of the Summary model depends on the desired output length. H
 
 <Accordion title="Can I extract individual words and their corresponding speaker labels with Summarization?" theme="dark" iconColor="white" >
   
-No. Summarization only generates a single abstractive summary of the entire audio file, and doesn't provide word-level information or speaker labels. If you need word-level information, consider using [Word-level timestamps](/docs/speech-to-text/pre-recorded-audio#word-level-timestamps) and [Speaker Diarization](/docs/speech-to-text/speaker-diarization) instead.
+No. Summarization only generates a single abstractive summary of the entire audio file, and doesn't provide word-level information or speaker labels. If you need word-level information, consider using [Word-level timestamps](/docs/speech-to-text/pre-recorded-audio/word-level-timestamps) and [Speaker Diarization](/docs/speech-to-text/speaker-diarization) instead.
 
   </Accordion>
 

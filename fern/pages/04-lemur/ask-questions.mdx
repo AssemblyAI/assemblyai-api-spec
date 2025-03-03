@@ -27,13 +27,11 @@ To use LeMUR, you need an <a href="https://www.assemblyai.com/dashboard/signup" 
 
 ## Basic Q&A example
 
-If you want to send a custom prompt to the LLM, you can use the [LeMUR Task](https://assemblyai.com/docs/api-reference/lemur/task) and apply the model to your transcribed audio files.
+To ask a question about your audio data, define a prompt with your questions and call the [LeMUR Task](https://assemblyai.com/docs/api-reference/lemur/task) endpoint. The underlying transcript is used as additional context for the model.
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
+  <Tab language="python-sdk" title="Python SDK" default>
   
-  To ask question about your audio data, define a prompt with your questions and call `transcript.lemur.task()`. The underlying `transcript` is automatically used as additional context for the model.
-
 ```python {12-13,15-18}
 import assemblyai as aai
 
@@ -58,9 +56,68 @@ print(result.response)
 ```
 
   </Tab>
-  <Tab language="typescript" title="TypeScript">
+
+  <Tab language="python" title="Python">
+
+```python {42-43,45-52}
+import requests
+import time 
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+# Step 1: Transcribe an audio file.
+# You can use a local filepath:
+# with open("./my-audio.mp3", "rb") as f:
+# response = requests.post(base_url + "/v2/upload",
+#                         headers=headers,
+#                         data=f)
+# upload_url = response.json()["upload_url"]
+
+# Or use a publicly-accessible URL:
+upload_url = "https://assembly.ai/sports_injuries.mp3"
+
+data = {
+  "audio_url": upload_url 
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcript["status"] == "completed":
+    break
+
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+  else:
+    time.sleep(3)
+
+# Step 2: Define a prompt with your question(s).
+prompt = "What is a runner's knee?"
+
+# Step 3: Apply LeMUR.
+lemur_data = {
+  "prompt": prompt,
+  "transcript_ids": [transcript_id],
+  "final_model": "anthropic/claude-3-5-sonnet",
+}
+
+result = requests.post(base_url + "/lemur/v3/generate/task", headers=headers, json=lemur_data)
+print(result.json()["response"])
+```
+
+  </Tab>
+  <Tab language="typescript-sdk" title="Typescript SDK">
   
-  To ask question about your audio data, define a prompt with your questions and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
 
 ```ts {14-15,17-22}
 import { AssemblyAI } from 'assemblyai'
@@ -93,143 +150,351 @@ run()
 ```
 
   </Tab>
-  <Tab language="golang" title="Go">
+  <Tab language="typescript" title="Typescript">
   
-  To summarize the content in your audio data, define a summarization prompt and call `client.LeMUR.Task()`. Use the `TranscriptIDs` parameter to send one or more transcripts as additional context for the model.
+```ts {43-44,46-53}
+import axios from 'axios';
 
-```go {19-20,22-28}
-package main
+const base_url = "https://api.assemblyai.com";
 
-import (
-    "context"
-    "fmt"
+const headers = {
+  authorization: "<YOUR_API_KEY>"
+};
 
-    aai "github.com/AssemblyAI/assemblyai-go-sdk"
-)
+// Step 1: Transcribe an audio file.
+// import fs from 'fs-extra';
+// const path = './my-audio.mp3';
+// const audioData = await fs.readFile(path)
+// const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+// headers
+// })
+// const uploadUrl = uploadResponse.data.upload_url
 
-func main() {
-    ctx := context.Background()
+// Or use a publicly-accessibly URL:
+const uploadUrl = "https://assembly.ai/sports_injuries.mp3";
 
-    client := aai.NewClient("<YOUR_API_KEY>")
-
-    // Step 1: Transcribe an audio file. For local files see our Getting Started guides.
-    audioURL := "https://assembly.ai/sports_injuries.mp3"
-    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
-
-    // Step 2: Define a prompt with your question.
-    prompt := "What is a runner's knee?"
-
-    // Step 3: Apply LeMUR.
-    var params aai.LeMURTaskParams
-    params.Prompt = aai.String(prompt)
-    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
-    params.FinalModel = "anthropic/claude-3-5-sonnet"
-
-    result, _ := client.LeMUR.Task(ctx, params)
-
-    fmt.Println(*result.Response)
+const data = {
+  audio_url: uploadUrl 
 }
+
+const response = await axios.post(base_url + "/v2/transcript", data, { headers });
+
+const transcript_id = response.data.id;
+const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
+
+while (true) {
+  const transcript = (await axios.get(polling_endpoint, { headers })).data;
+
+  if (transcript.status === "completed") {
+    break;
+  }
+  else if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  }
+  else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+
+// Step 2: Define a prompt with your question(s).
+const prompt = "What is a runner's knee?";
+
+// Step 3: Apply LeMUR.
+const lemur_data = {
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  final_model: "anthropic/claude-3-5-sonnet"
+};
+
+const result = await axios.post(base_url + "/lemur/v3/generate/task", lemur_data, { headers });
+console.log(result.data.response);
 ```
 
   </Tab>
-  <Tab language="java" title="Java">
   
-  To ask question about your audio data, define a prompt with your questions and call `client.lemur().task()`. Use the `transcriptIds` parameter to send one or more transcripts as additional context for the model.
-
-```java {17-18,20-25}
-import com.assemblyai.api.AssemblyAI;
-import com.assemblyai.api.resources.transcripts.types.*;
-import com.assemblyai.api.resources.lemur.requests.*;
-import java.util.List;
-
-public final class App {
-    public static void main(String[] args) {
-
-        AssemblyAI client = AssemblyAI.builder()
-                .apiKey("<YOUR_API_KEY>")
-                .build();
-
-        // Step 1: Transcribe an audio file. For local files see our Getting Started guides.
-        String audioUrl = "https://assembly.ai/sports_injuries.mp3";
-        Transcript transcript = client.transcripts().transcribe(audioUrl);
-
-        // Step 2: Define a prompt with your question(s).
-        String prompt = "What is a runner's knee?";
-
-        // Step 3: Apply LeMUR.
-        var params = LemurTaskParams.builder()
-                .prompt(prompt)
-                .transcriptIds(List.of(transcript.getId()))
-                .finalModel(LemurModel.ANTHROPIC_CLAUDE3_5_SONNET)
-                .build();
-
-        var response = client.lemur().task(params);
-
-        System.out.println(response.getResponse());
-    }
-}
-```
-
-  </Tab>
   <Tab language="csharp" title="C#">
   
   
-To ask question about your audio data, define a prompt with your questions and call `client.Lemur.TaskAsync()`. Use the `TranscriptIds` parameter to send one or more transcripts as additional context for the model.
+```csharp {122-123,125-127}
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 
-```csharp {13-14,16-22}
-using AssemblyAI;
-using AssemblyAI.Lemur;
-using AssemblyAI.Transcripts;
-
-var client = new AssemblyAIClient("<YOUR_API_KEY>");
-
-// Step 1: Transcribe an audio file. For local files see our Getting Started guides.
-var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+public class Transcript
 {
-    AudioUrl = "https://assembly.ai/sports_injuries.mp3"
-});
+   public string Id { get; set; }
+   public string Status { get; set; }
+   public string Text { get; set; }
 
-// Step 2: Define a prompt with your question(s).
-const string prompt = "What is a runner's knee?";
+   [JsonPropertyName("language_code")]
+   public string LanguageCode { get; set; }
 
-// Step 3: Apply LeMUR.
-var lemurTaskParams = new LemurTaskParams
+   public string Error { get; set; }
+}
+
+public class LemurResponse
 {
-    Prompt = prompt,
-    TranscriptIds = [transcript.Id],
-    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet
-};
+  [JsonPropertyName("request_id")]
+  public string RequestId { get; set; }
+  
+  public string Response { get; set; }
+  
+  public Usage Usage { get; set; }
+}
 
-var response = await client.Lemur.TaskAsync(lemurTaskParams);
+public class Usage
+{
+  [JsonPropertyName("input_tokens")]
+  public int InputTokens { get; set; }
+  
+  [JsonPropertyName("output_tokens")] 
+  public int OutputTokens { get; set; }
+}
 
-Console.WriteLine(response.Response);
+private static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+{
+    using (var fileStream = File.OpenRead(filePath))
+    using (var fileContent = new StreamContent(fileStream))
+    {
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+        {
+            response.EnsureSuccessStatusCode();
+            var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+            return jsonDoc.RootElement.GetProperty("upload_url").GetString();
+        }
+    }
+}
+
+
+private static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+{
+   var data = new { audio_url = audioUrl };
+   var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+   using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+   {
+       response.EnsureSuccessStatusCode();
+       return await response.Content.ReadFromJsonAsync<Transcript>();
+   }
+}
+
+private static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+{
+   var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+   while (true)
+   {
+       var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+       transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+       switch (transcript.Status)
+       {
+           case "processing":
+           case "queued":
+               await Task.Delay(TimeSpan.FromSeconds(3));
+               break;
+           case "completed":
+               return transcript;
+           case "error":
+               throw new Exception($"Transcription failed: {transcript.Error}");
+           default:
+               throw new Exception("This code shouldn't be reachable.");
+       }
+   }
+}
+
+private static async Task<LemurResponse> GenerateTaskAsync(string prompt, List<string> transcriptIds, HttpClient httpClient)
+{
+   var data = new
+   {
+       transcript_ids = transcriptIds,
+       prompt,
+       final_model = "anthropic/claude-3-5-sonnet"
+   };
+
+   var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+   
+   using var response = await httpClient.PostAsync("https://api.assemblyai.com/lemur/v3/generate/task", content);
+   response.EnsureSuccessStatusCode();
+   return await response.Content.ReadFromJsonAsync<LemurResponse>();
+}
+
+using (var httpClient = new HttpClient())
+{
+   httpClient.DefaultRequestHeaders.Authorization =
+       new AuthenticationHeaderValue("<YOUR_API_KEY>");
+
+   // Step 1: Transcribe an audio file.
+   // var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
+   // Or use a publicly-accessible URL.
+   var uploadUrl = "https://assembly.ai/sports_injuries.mp3";
+   var transcript = await CreateTranscriptAsync(uploadUrl, httpClient); 
+   transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+   // Step 2: Define a prompt with your question(s).
+   const string prompt = "What is a runner's knee?";
+
+   // Step 3: Apply LeMUR.
+   var transcriptIds = new List<string> { transcript.Id };
+   var lemurResponse = await GenerateTaskAsync(prompt, transcriptIds, httpClient);
+
+   Console.WriteLine(lemurResponse.Response);
+}
 ```
 
   </Tab>
+
   <Tab language="ruby" title="Ruby">
-  
-  To ask question about your audio data, define a prompt with your questions and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
 
-```ruby {9-10,12-17}
-require 'assemblyai'
+```ruby {47-48,50-59}
+require 'net/http'
+require 'json'
 
-client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+base_url = "https://api.assemblyai.com"
+headers = {
+   "authorization" => "<YOUR_API_KEY>",
+   "content-type" => "application/json"
+}
 
-# Step 1: Transcribe an audio file. For local files see our Getting Started guides.
-audio_url = 'https://assembly.ai/sports_injuries.mp3'
-transcript = client.transcripts.transcribe(audio_url: audio_url)
+# Step 1: Transcribe an audio file.
+# path = "/my_audio.mp3"
+# uri = URI("#{base_url}/v2/upload")
+# request = Net::HTTP::Post.new(uri, headers)
+# request.body = File.read(path)
+
+# http = Net::HTTP.new(uri.host, uri.port)
+# http.use_ssl = true
+# upload_response = http.request(request)
+# upload_url = JSON.parse(upload_response.body)["upload_url"]
+
+# Or use a publicly-accessible URL:
+upload_url = "https://assembly.ai/sports_injuries.mp3"
+
+uri = URI("#{base_url}/v2/transcript")
+request = Net::HTTP::Post.new(uri, headers)
+request.body = { audio_url: upload_url }.to_json 
+
+response = http.request(request)
+transcript_id = JSON.parse(response.body)["id"]
+polling_endpoint = "#{base_url}/v2/transcript/#{transcript_id}"
+
+while true
+   polling_uri = URI(polling_endpoint)
+   polling_request = Net::HTTP::Get.new(polling_uri, headers)
+   polling_response = http.request(polling_request)
+   transcription_result = JSON.parse(polling_response.body)
+
+   if transcription_result["status"] == "completed"
+       break
+   elsif transcription_result["status"] == "error"
+       raise "Transcription failed: #{transcription_result["error"]}"
+   else
+       sleep(3)
+   end
+end
 
 # Step 2: Define a prompt with your question(s).
 prompt = "What is a runner's knee?"
 
 # Step 3: Apply LeMUR.
-response = client.lemur.task(
+lemur_uri = URI("#{base_url}/lemur/v3/generate/task")
+lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
+lemur_request.body = {
+  final_model: "anthropic/claude-3-5-sonnet",
   prompt: prompt,
-  transcript_ids: [transcript.id],
-  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET
-)
+  transcript_ids: [transcript_id]
+}.to_json
 
-puts response.response
+lemur_response = http.request(lemur_request)
+lemur_result = JSON.parse(lemur_response.body)
+puts lemur_result["response"]
+```
+  </Tab>
+
+  <Tab language="php" title="PHP">
+
+```php {57-58,60-73}
+<?php
+$base_url = "https://api.assemblyai.com";
+$headers = array(
+    "authorization: <YOUR_API_KEY>",
+    "content-type: application/json"
+);
+
+// Step 1: Transcribe an audio file.
+// $path = "/my_audio.mp3";
+// $ch = curl_init($base_url . "/v2/upload");
+// curl_setopt_array($ch, [
+//     CURLOPT_POST => true,
+//     CURLOPT_POSTFIELDS => file_get_contents($path),
+//     CURLOPT_HTTPHEADER => $headers,
+//     CURLOPT_RETURNTRANSFER => true
+// ]);
+
+// $response = curl_exec($ch);
+// $upload_url = json_decode($response, true)["upload_url"];
+// curl_close($ch);
+
+// Or use a publicly-accessible URL:
+$upload_url = "https://assembly.ai/sports_injuries.mp3"
+
+$ch = curl_init($base_url . "/v2/transcript");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode(["audio_url" => $upload_url]), // You can also replace upload_url with an audio file URL
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_RETURNTRANSFER => true
+]);
+
+$response = curl_exec($ch);
+$transcript_id = json_decode($response, true)['id'];
+curl_close($ch);
+
+$polling_endpoint = $base_url . "/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $ch = curl_init($polling_endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true
+    ]);
+
+    $transcription_result = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+
+    if ($transcription_result['status'] === "completed") {
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    }
+    sleep(3);
+}
+
+// Step 2: Define a prompt with your question(s).
+$prompt = "What is a runner's knee?";
+
+// Step 3: Apply LeMUR.
+$ch = curl_init($base_url . "/lemur/v3/generate/task");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_POSTFIELDS => json_encode([
+        'final_model' => 'anthropic/claude-3-5-sonnet',
+        'prompt' => $prompt,
+        'transcript_ids' => [$transcript_id]
+    ])
+]);
+
+$response = curl_exec($ch);
+$result = json_decode($response, true);
+echo $result['response'];
+curl_close($ch);
 ```
 
   </Tab>
@@ -253,10 +518,7 @@ under or around the kneecap and pain when walking.
 The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-
-  To use it, define a list of `aai.LemurQuestion` objects. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
-
+  <Tab language="python-sdk" title="Python SDK" default>
 
 ```python {8-16,18-22}
 import assemblyai as aai
@@ -288,9 +550,67 @@ for qa_response in result.response:
 ```
 
   </Tab>
-  <Tab language="typescript" title="TypeScript">
 
-  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+  <Tab language="python" title="Python">
+
+```python {33-41, 43-49}
+import requests
+import time 
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+upload_url = "https://assembly.ai/meeting.mp4"
+
+data = {
+  "audio_url": upload_url 
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcript["status"] == "completed":
+    break
+
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+  else:
+    time.sleep(3)
+
+questions = [{
+  "question": "What are the top level KPIs for engineering?",
+  "context": "KPI stands for key performance indicator",
+  "answer_format": "short sentence"
+},
+{
+  "question": "How many days has it been since the data team has gotten updated metrics?",
+  "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
+}]
+
+lemur_data = {
+  "questions": questions,
+  "transcript_ids": [transcript_id],
+  "final_model": "anthropic/claude-3-5-sonnet",
+}
+
+result = requests.post(base_url + "/lemur/v3/generate/question-answer", headers=headers, json=lemur_data)
+
+for qa_response in result.json()["response"]:
+  print(f"Question: {qa_response['question']}")
+  print(f"Answer: {qa_response['answer']}")
+```
+
+  </Tab>
+  <Tab language="typescript-sdk" title="Typescript SDK">
 
 
 ```ts {12-23,25-30}
@@ -335,190 +655,353 @@ run()
 ```
 
   </Tab>
-  <Tab language="golang" title="Go">
+  <Tab language="typescript" title="Typescript">
 
-  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+```ts {33-43,45-51}
+import axios from 'axios';
 
+const base_url = "https://api.assemblyai.com";
 
-```go {18-28,30-34}
-package main
-
-import (
-    "context"
-    "fmt"
-
-    aai "github.com/AssemblyAI/assemblyai-go-sdk"
-)
-
-func main() {
-    ctx := context.Background()
-
-    client := aai.NewClient("<YOUR_API_KEY>")
-
-    audioURL := "https://assembly.ai/meeting.mp4"
-    transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
-
-    questions := []aai.LemurQuestion{
-        {
-            Question: "What are the top level KPIs for engineering?",
-            Context:  aai.String("KPI stands for key performance indicator"),
-            AnswerFormat: aai.String("short sentence"),
-        },
-        {
-            Question: "How many days has it been since the data team has gotten updated metrics?",
-            AnswerOptions: &[]string{"1", "2", "3", "4", "5", "6", "7", "more than 7"},
-        },
-    }
-
-    var params aai.LemurQuestionParams
-    params.Questions = questions
-    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
-    params.Context = aai.String("A GitLab meeting to discuss logistics")
-    params.FinalModel = aai.String("anthropic/claude-3-5-sonnet")
-
-    result, err := client.LeMUR.Question(ctx, params)
-
-
-    for _, response := range result.Response {
-        fmt.Printf("Question: %s\n", response.Question)
-        fmt.Printf("Answer: %s\n\n", response.Answer)
-    }
-}
-```
-
-  </Tab>
-  <Tab language="java" title="Java">
-
-  To use it, define a list of `LemurQuestion` objects. For each question, you can define additional `context` and specify either a `answerFormat` or a list of `answerOptions`. Additionally, you can define an overall `context`.
-
-
-```java {17-31}
-import com.assemblyai.api.AssemblyAI;
-import com.assemblyai.api.resources.transcripts.types.*;
-import com.assemblyai.api.resources.lemur.requests.*;
-import java.util.List;
-
-public final class App {
-    public static void main(String[] args) {
-
-        AssemblyAI client = AssemblyAI.builder()
-                .apiKey("<YOUR_API_KEY>")
-                .build();
-
-        String audioUrl = "https://assembly.ai/meeting.mp4";
-
-        Transcript transcript = client.transcripts().transcribe(audioUrl);
-
-        var question1 = LemurQuestion.builder()
-                .question("What are the top level KPIs for engineering?")
-                .context(LemurQuestionContext.of("KPI stands for key performance indicator"))
-                .answerFormat("short sentence").build();
-
-        var question2 = LemurQuestion.builder()
-                .question("How many days has it been since the data team has gotten updated metrics?")
-                .answerOptions(List.of("1", "2", "3", "4", "5", "6", "7", "more than 7")).build();
-
-        var response = client.lemur().questionAnswer(LemurQuestionAnswerParams.builder()
-                .transcriptIds(List.of(transcript.getId()))
-                .finalModel(LemurModel.ANTHROPIC_CLAUDE3_5_SONNET)
-                .context(LemurBaseParamsContext.of("A GitLab meeting to discuss logistic"))
-                .questions(List.of(question1, question2))
-                .build());
-
-        for (var qa : response.getResponse()) {
-            System.out.println("Question: " + qa.getQuestion());
-            System.out.println("Answer: " + qa.getAnswer());
-        }
-    }
-}
-```
-
-  </Tab>
-  <Tab language="csharp" title="C#">
-
-  To use it, define a list of `LemurQuestion` objects. For each question, you can define additional `Context` and specify either a `AnswerFormat` or a list of `AnswerOptions`. Additionally, you can define an overall `Context`.
-
-
-```csharp {12-32}
-using AssemblyAI;
-using AssemblyAI.Lemur;
-using AssemblyAI.Transcripts;
-
-var client = new AssemblyAIClient("<YOUR_API_KEY>");
-
-var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
-{
-    AudioUrl = "https://assembly.ai/meeting.mp4"
-});
-
-var lemurTaskParams = new LemurQuestionAnswerParams
-{
-    TranscriptIds = [transcript.Id],
-    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet,
-    Context = "A GitLab meeting to discuss logistic",
-    Questions =
-    [
-        new LemurQuestion
-        {
-            Question = "What are the top level KPIs for engineering?",
-            Context = "KPI stands for key performance indicator",
-            AnswerFormat = "short sentence"
-        },
-        new LemurQuestion
-        {
-            Question = "How many days has it been since the data team has gotten updated metrics?",
-            Context = "KPI stands for key performance indicator",
-            AnswerOptions = ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
-        }
-    ]
+const headers = {
+  authorization: "<YOUR_API_KEY>"
 };
 
-var response = await client.Lemur.QuestionAnswerAsync(lemurTaskParams);
+const uploadUrl = "https://assembly.ai/meeting.mp4"
 
-foreach (var qa in response.Response)
+const data = {
+  audio_url: uploadUrl
+}
+
+const response = await axios.post(base_url + "/v2/transcript", data, { headers });
+
+const transcript_id = response.data.id;
+const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
+
+while (true) {
+  const transcript = (await axios.get(polling_endpoint, { headers })).data;
+
+  if (transcript.status === "completed") {
+    break;
+  }
+  else if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  }
+  else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+
+const questions = [
+  {
+    "question": "What are the top level KPIs for engineering?",
+    "context": "KPI stands for key performance indicator",
+    "answer_format": "short sentence"
+  },
+  {
+    "question": "How many days has it been since the data team has gotten updated metrics?",
+    "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
+  }
+];
+
+const lemur_data = {
+  questions: questions,
+  transcript_ids: [transcript_id],
+  final_model: "anthropic/claude-3-5-sonnet"
+};
+
+const result = await axios.post(base_url + "/lemur/v3/generate/question-answer", lemur_data, { headers });
+
+for (const qa_response of result.data.response) {
+  console.log(`Question: ${qa_response.question}`);
+  console.log(`Answer: ${qa_response.answer}`);
+}
+```
+
+  </Tab>
+  
+  <Tab language="csharp" title="C#">
+
+```csharp {107-120,126-127}
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
+public class Transcript
 {
-    Console.WriteLine($"Question: {qa.Question}");
-    Console.WriteLine($"Answer: {qa.Answer}");
+   public string Id { get; set; }
+   public string Status { get; set; }
+   public string Text { get; set; }
+
+   [JsonPropertyName("language_code")]
+   public string LanguageCode { get; set; }
+
+   public string Error { get; set; }
+}
+
+public class LemurResponse
+{
+    [JsonPropertyName("request_id")]
+    public string RequestId { get; set; }
+    
+    [JsonPropertyName("response")]
+    public List<QuestionAnswer> Response { get; set; }
+    
+    public Usage Usage { get; set; }
+}
+
+public class QuestionAnswer
+{
+    public string Question { get; set; }
+    
+    public string Answer { get; set; }
+}
+
+public class Usage
+{
+  [JsonPropertyName("input_tokens")]
+  public int InputTokens { get; set; }
+  
+  [JsonPropertyName("output_tokens")] 
+  public int OutputTokens { get; set; }
+}
+
+private static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+{
+   var data = new { audio_url = audioUrl };
+   var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+   using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+   {
+       response.EnsureSuccessStatusCode();
+       return await response.Content.ReadFromJsonAsync<Transcript>();
+   }
+}
+
+private static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+{
+   var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+   while (true)
+   {
+       var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+       transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+       switch (transcript.Status)
+       {
+           case "processing":
+           case "queued":
+               await Task.Delay(TimeSpan.FromSeconds(3));
+               break;
+           case "completed":
+               return transcript;
+           case "error":
+               throw new Exception($"Transcription failed: {transcript.Error}");
+           default:
+               throw new Exception("This code shouldn't be reachable.");
+       }
+   }
+}
+
+private static async Task<LemurResponse> GenerateQuestionAnswerAsync(List<object> questions, List<string> transcriptIds, HttpClient httpClient)
+{
+   var data = new
+   {
+       transcript_ids = transcriptIds,
+       questions = questions,
+       final_model = "anthropic/claude-3-5-sonnet"
+   };
+
+   var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+   
+   using var response = await httpClient.PostAsync("https://api.assemblyai.com/lemur/v3/generate/question-answer", content);
+   response.EnsureSuccessStatusCode();
+   return await response.Content.ReadFromJsonAsync<LemurResponse>();
+}
+
+using (var httpClient = new HttpClient())
+{
+   httpClient.DefaultRequestHeaders.Authorization =
+       new AuthenticationHeaderValue("<YOUR_API_KEY>");
+
+   var questions = new List<object>
+   {
+       new
+       {
+           question = "What are the top level KPIs for engineering?",
+           context = "KPI stands for key performance indicator",
+           answer_format = "short sentence"
+       },
+       new
+       {
+           question = "How many days has it been since the data team has gotten updated metrics?",
+           answer_options = new List<string> { "1", "2", "3", "4", "5", "6", "7", "more than 7" }
+       }
+   };
+
+   var uploadUrl = "https://assembly.ai/meeting.mp4";
+   var transcript = await CreateTranscriptAsync(uploadUrl, httpClient); 
+   transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+   var transcriptIds = new List<string> { transcript.Id };
+   var lemurResponse = await GenerateQuestionAnswerAsync(questions, transcriptIds, httpClient);
+
+   foreach (var qa_response in lemurResponse.Response)
+   {
+       Console.WriteLine($"Question: {qa_response.Question}");
+       Console.WriteLine($"Answer: {qa_response.Answer}");
+   }
 }
 ```
 
   </Tab>
   <Tab language="ruby" title="Ruby">
 
-  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+```ruby {35-45,47-55}
+require 'net/http'
+require 'json'
 
+base_url = "https://api.assemblyai.com"
+headers = {
+   "authorization" => "<YOUR_API_KEY>",
+   "content-type" => "application/json"
+}
 
-```ruby {9-25}
-require 'assemblyai'
+upload_url = "https://assembly.ai/meeting.mp4"
 
-client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+uri = URI("#{base_url}/v2/transcript")
+request = Net::HTTP::Post.new(uri, headers)
+request.body = { audio_url: upload_url }.to_json 
 
-audio_url = 'https://assembly.ai/meeting.mp4'
+response = http.request(request)
+transcript_id = JSON.parse(response.body)["id"]
+polling_endpoint = "#{base_url}/v2/transcript/#{transcript_id}"
 
-transcript = client.transcripts.transcribe(audio_url: audio_url)
+while true
+   polling_uri = URI(polling_endpoint)
+   polling_request = Net::HTTP::Get.new(polling_uri, headers)
+   polling_response = http.request(polling_request)
+   transcription_result = JSON.parse(polling_response.body)
 
-response = client.lemur.question_answer(
-  transcript_ids: [transcript.id],
-  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET,
-  context: 'A GitLab meeting to discuss logistic',
-  questions: [
-    {
-      question: 'What are the top level KPIs for engineering?',
-      context: 'KPI stands for key performance indicator',
-      answer_format: 'short sentence'
-    },
-    {
-      question: 'How many days has it been since the data team has gotten updated metrics?',
-      context: 'KPI stands for key performance indicator',
-      answer_options: ['1', '2', '3', '4', '5', '6', '7', 'more than 7']
-    }
-  ]
-)
-
-response.response.each do |qa|
-  printf("Question: %<question>s\n", question: qa.question)
-  printf("Answer: %<answer>s\n", answer: qa.answer)
+   if transcription_result["status"] == "completed"
+       break
+   elsif transcription_result["status"] == "error"
+       raise "Transcription failed: #{transcription_result["error"]}"
+   else
+       sleep(3)
+   end
 end
+
+questions = [
+  {
+    question: "What are the top level KPIs for engineering?",
+    context: "KPI stands for key performance indicator",
+    answer_format: "short sentence"
+  },
+  {
+    question: "How many days has it been since the data team has gotten updated metrics?",
+    answer_options: ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
+  }
+]
+
+lemur_uri = URI("#{base_url}/lemur/v3/generate/question-answer")
+lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
+lemur_request.body = {
+  final_model: "anthropic/claude-3-5-sonnet",
+  questions: questions,
+  transcript_ids: [transcript_id]
+}.to_json
+
+lemur_response = http.request(lemur_request)
+lemur_result = JSON.parse(lemur_response.body)
+
+lemur_result["response"].each do |qa_response|
+  puts "Question: #{qa_response['question']}"
+  puts "Answer: #{qa_response['answer']}"
+end
+```
+
+  </Tab>
+
+  <Tab language="php" title="PHP">
+
+```php
+<?php
+$base_url = "https://api.assemblyai.com";
+$headers = array(
+    "authorization: <YOUR_API_KEY>",
+    "content-type: application/json"
+);
+
+$upload_url = "https://assembly.ai/meeting.mp4"
+
+$ch = curl_init($base_url . "/v2/transcript");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode(["audio_url" => $upload_url]),
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_RETURNTRANSFER => true
+]);
+
+$response = curl_exec($ch);
+$transcript_id = json_decode($response, true)['id'];
+curl_close($ch);
+
+$polling_endpoint = $base_url . "/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $ch = curl_init($polling_endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true
+    ]);
+
+    $transcription_result = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+
+    if ($transcription_result['status'] === "completed") {
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    }
+    sleep(3);
+}
+
+$questions = [
+    [
+        "question" => "What are the top level KPIs for engineering?",
+        "context" => "KPI stands for key performance indicator",
+        "answer_format" => "short sentence"
+    ],
+    [
+        "question" => "How many days has it been since the data team has gotten updated metrics?",
+        "answer_options" => ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
+    ]
+];
+
+$ch = curl_init($base_url . "/lemur/v3/generate/question-answer");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_POSTFIELDS => json_encode([
+        'final_model' => 'anthropic/claude-3-5-sonnet',
+        'questions' => $questions,
+        'transcript_ids' => [$transcript_id]
+    ])
+]);
+
+$response = curl_exec($ch);
+$result = json_decode($response, true);
+curl_close($ch);
+
+foreach ($result['response'] as $qa_response) {
+    echo "Question: " . $qa_response['question'] . PHP_EOL;
+    echo "Answer: " . $qa_response['answer'] . PHP_EOL;
+}
 ```
 
   </Tab>
