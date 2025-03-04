@@ -1,0 +1,710 @@
+---
+title: 'C# SDK Reference - Pre-recorded audio'
+---
+
+# Pre-recorded audio
+
+Our Speech-to-Text model enables you to transcribe pre-recorded audio into written text.
+
+On top of the transcription, you can enable other features and models, such as [Speaker Diarization](/docs/speech-to-text/speaker-diarization), by adding additional parameters to the same transcription request.
+
+<Tip title="Choose model class">
+Choose between [_Best_ and _Nano_](#select-the-speech-model-with-best-and-nano) based on the cost and performance tradeoffs best suited for your application.
+</Tip>
+
+The following example transcribes an audio file from a URL.
+
+
+
+```csharp
+using AssemblyAI;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// You can use a local file:
+/*
+var transcript = await client.Transcripts.TranscribeAsync(
+    new FileInfo("./example.mp3")
+);
+*/
+
+// Or use a publicly-accessible URL:
+const string audioUrl = "https://assembly.ai/wildfires.mp3";
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl
+});
+
+if (transcript.Status == TranscriptStatus.Error)
+{
+    Console.WriteLine(transcript.Error);
+    Environment.Exit(1);
+}
+
+// Alternatively, you can use the EnsureStatusCompleted() method
+// to throw an exception if the transcription status is not "completed".
+// transcript.EnsureStatusCompleted();
+
+Console.WriteLine(transcript.Text);
+```
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And...
+```
+
+
+## Word-level timestamps
+
+The response also includes an array with information about each word:
+
+
+
+```csharp
+foreach (var word in transcript.Words!)
+{
+    Console.WriteLine(
+        "Word: {0}, Start: {1}, End: {2}, Confidence: {3}",
+        word.Text, word.Start, word.End, word.Confidence
+    );
+}
+```
+
+```plain
+Word: Smoke, Start: 250, End: 650, Confidence: 0.73033
+Word: from, Start: 730, End: 1022, Confidence: 0.99996
+...
+```
+
+  
+
+
+## Transcript status
+
+After you've submitted a file for transcription, your transcript has one of the following statuses:
+
+| Status | Description |
+| --- | --- |
+| `processing` | The audio file is being processed. |
+| `queued` | The audio file is waiting to be processed. |
+| `completed` | The transcription has completed successfully. |
+| `error` | An error occurred while processing the audio file. |
+
+### Handling errors
+
+If the transcription fails, the status of the transcript is `error`, and the transcript includes an `error` property explaining what went wrong.
+
+
+
+```csharp
+if (transcript.Status == TranscriptStatus.Error)
+{
+    Console.WriteLine(transcript.Error);
+    Environment.Exit(1);
+}
+
+// Alternatively, you can use the EnsureStatusCompleted() method
+// to throw an exception if the transcription status is not "completed".
+// transcript.EnsureStatusCompleted();
+```
+
+  
+
+<Note>
+A transcription may fail for various reasons:
+
+- Unsupported file format
+- Missing audio in file
+- Unreachable audio URL
+
+If a transcription fails due to a server error, we recommend that you resubmit the file for transcription to allow another server to process the audio.
+</Note>
+
+
+
+
+
+## Select the speech model with Best and Nano
+
+We use a combination of models to produce your results. You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application.
+You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">pricing page</a> for more information on our model tiers.
+
+
+| Name | SDK Parameter | Description |
+| --- | --- | --- |
+| **Best** (default) | `SpeechModel.Best` | Use our most accurate and capable models with the best results, recommended for most use cases. |
+| **Nano** | `SpeechModel.Nano` | Use our less accurate, but much lower cost models to produce your results. |
+
+<br/>
+
+
+You can change the model by setting the `SpeechModel` in the transcription parameters:
+
+```csharp {4}
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    SpeechModel = SpeechModel.Nano
+});
+```
+
+  
+
+For a list of the supported languages for each model, see [Supported languages](/docs/getting-started/supported-languages).
+
+
+## Select the region
+
+
+The default region is US, with base URL `api.assemblyai.com`. For EU data residency requirements, you can use our base URL for EU at `api.eu.assemblyai.com`.
+
+<Note>
+  The base URL for EU is currently only available for Async transcription.
+</Note>
+
+| Region | Base URL |
+| --- | --- |
+| US (default) | `api.assemblyai.com` |
+| EU | `api.eu.assemblyai.com` |
+<br/>
+
+
+To use the EU endpoint, set the `BaseUrl` in the `ClientOptions` object like this:
+
+```csharp {5}
+// Create ClientOptions object
+var options = new ClientOptions
+{
+    ApiKey = Environment.GetEnvironmentVariable("YOUR_API_KEY")!,
+    BaseUrl = "https://api.eu.assemblyai.com"
+};
+
+// Initialize client with options
+var client = new AssemblyAIClient(options);
+```
+
+  
+
+
+## Automatic punctuation and casing
+
+By default, the API automatically punctuates the transcription text and formats proper nouns, as well as converts numbers to their numerical form.
+
+
+
+  To disable punctuation and text formatting, set `Punctuate` and `FormatText` to `false` in the transcription config.
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    Punctuate = false,
+    FormatText = false
+});
+```
+
+  
+
+
+
+
+
+## Automatic language detection
+
+Identify the dominant language spoken in an audio file and use it during the transcription. Enable it to detect any of the [supported languages](/docs/getting-started/supported-languages).
+
+To reliably identify the dominant language, the file must contain **at least 50 seconds** of spoken audio.
+
+
+
+To enable it, set `LanguageDetection` to `true` in the transcription parameters.
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    LanguageDetection = true
+});
+```
+
+  
+
+
+**Confidence score**
+
+If language detection is enabled, the API returns a confidence score for the detected language. The score ranges from 0.0 (low confidence) to 1.0 (high confidence).
+
+
+
+```csharp
+Console.WriteLine(transcript.LanguageConfidence);
+```
+
+  
+
+**Set a language confidence threshold**
+
+You can set the confidence threshold that must be reached if language detection is enabled. An error will be returned
+if the language confidence is below this threshold. Valid values are in the range [0,1] inclusive.
+
+
+
+```csharp {4}
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    LanguageCode = TranscriptLanguageCode.Es
+});
+```
+
+  
+
+To see all supported languages and their codes, see [Supported languages](/docs/getting-started/supported-languages).
+
+
+
+
+
+## Custom spelling
+
+Custom Spelling lets you customize how words are spelled or formatted in the transcript.
+
+
+
+To use Custom Spelling, include `CustomSpelling` in your transcription parameters. The parameter should be an array of objects, with each object specifying a mapping from a word or phrase to a new spelling or format.
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    CustomSpelling =
+    [
+        new TranscriptCustomSpelling
+        {
+            From = ["gettleman"],
+            To = "Gettleman"
+        },
+        new TranscriptCustomSpelling
+        {
+            From = ["Sequel"],
+            To = "SQL"
+        }
+    ]
+});
+```
+
+<Note>
+
+The value in the `to` key is case-sensitive, but the value in the `from` key isn't. Additionally, the `to` key must only contain one word, while the `from` key can contain multiple words.
+
+</Note>
+
+  
+
+
+
+
+
+
+
+## Custom vocabulary
+
+To improve the transcription accuracy, you can boost certain words or phrases that appear frequently in your audio file.
+
+To boost words or phrases, include the `word_boost` parameter in the transcription config.
+
+You can also control how much weight to apply to each keyword or phrase. Include `boost_param` in the transcription config with a value of `low`, `default`, or `high`.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    WordBoost = ["aws", "azure", "google cloud"],
+    BoostParam = TranscriptBoostParam.High
+});
+```
+
+  
+
+<Note>
+Follow formatting guidelines for custom vocabulary to ensure the best results:
+
+- Remove all punctuation except apostrophes.
+- Make sure each word is in its spoken form. For example, `iphone seven` instead of `iphone 7`.
+- Remove spaces between letters in acronyms.
+
+Additionally, the model still accepts words with unique characters such as é, but converts them to their ASCII equivalent.
+
+You can boost a maximum of 1,000 unique keywords and phrases, where each of them can contain up to 6 words.
+</Note>
+
+
+
+
+
+## Multichannel transcription
+
+If you have a multichannel audio file with multiple speakers, you can transcribe each of them separately.
+
+
+To enable it, set `Multichannel` to `true` in the transcription parameters.
+
+```csharp {4}
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    Multichannel = true
+});
+
+foreach (var utterance in transcript.Utterances!)
+{
+    Console.WriteLine($"Speaker: {utterance.Speaker}, Word: {utterance.Text}");
+}
+```
+
+  
+
+<Note>
+
+Multichannel audio increases the transcription time by approximately 25%.
+
+The response includes an `audio_channels` property with the number of different channels, and an additional `utterances` property, containing a list of turn-by-turn utterances.
+
+Each utterance contains channel information, starting at 1.
+
+Additionally, each word in the `words` array contains the channel identifier.
+
+</Note>
+
+
+
+
+
+## Dual-channel transcription
+
+<Warning>
+Use [Multichannel](#multichannel-transcription) instead.
+</Warning>
+
+
+
+
+
+## Export SRT or VTT caption files
+
+You can export completed transcripts in SRT or VTT format, which can be used for subtitles and closed captions in videos.
+
+You can also customize the maximum number of characters per caption by specifying the `chars_per_caption` parameter.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl
+});
+
+var stt = await client.Transcripts.GetSubtitlesAsync(transcript.Id, SubtitleFormat.Srt);
+stt = await client.Transcripts.GetSubtitlesAsync(transcript.Id, SubtitleFormat.Srt, charsPerCaption: 32);
+
+var vtt = await client.Transcripts.GetSubtitlesAsync(transcript.Id, SubtitleFormat.Vtt);
+vtt = await client.Transcripts.GetSubtitlesAsync(transcript.Id, SubtitleFormat.Vtt, charsPerCaption: 32);
+```
+
+  
+
+
+
+
+
+## Export paragraphs and sentences
+
+You can retrieve transcripts that are automatically segmented into paragraphs or sentences, for a more reader-friendly experience.
+
+The text of the transcript is broken down by either paragraphs or sentences, along with additional metadata.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl
+});
+
+var sentencesResponse = await client.Transcripts.GetSentencesAsync(transcript.Id);
+foreach (var sentence in sentencesResponse.Sentences) {
+    Console.WriteLine(sentence.Text);
+}
+
+var paragraphsResponse = await client.Transcripts.GetParagraphsAsync(transcript.Id);
+foreach (var paragraph in paragraphsResponse.Paragraphs) {
+    Console.WriteLine(paragraph.Text);
+}
+```
+
+  
+
+The response is an array of objects, each representing a sentence or a paragraph in the transcript. See the [API reference](https://www.assemblyai.com/docs/api-reference/transcripts/get-sentences) for more info.
+
+
+
+
+
+## Filler words
+
+The following filler words are removed by default:
+
+- "um"
+- "uh"
+- "hmm"
+- "mhm"
+- "uh-huh"
+- "ah"
+- "huh"
+- "hm"
+- "m"
+
+If you want to keep filler words in the transcript, you can set the `disfluencies` to `true` in the transcription config.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    Disfluencies = true
+});
+```
+
+  
+
+
+
+
+
+## Profanity filtering
+
+You can automatically filter out profanity from the transcripts by setting `filter_profanity` to `true` in your transcription config.
+
+Any profanity in the returned `text` will be replaced with asterisks.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    FilterProfanity = true
+});
+```
+
+  
+
+<Note>
+Profanity filter isn't perfect. Certain words may still be missed or improperly filtered.
+</Note>
+
+
+
+
+
+## Set the start and end of the transcript
+
+If you only want to transcribe a portion of your file, you can set the `audio_start_from` and the `audio_end_at` parameters in your transcription config.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    AudioStartFrom = 5000,
+    AudioEndAt = 15000
+});
+```
+
+  
+
+
+
+
+
+## Speech threshold
+
+To only transcribe files that contain at least a specified percentage of spoken audio, you can set the `speech_threshold` parameter. You can pass any value between 0 and 1.
+
+If the percentage of speech in the audio file is below the provided threshold, the value of `text` is `None` and the response contains an `error` message:
+
+```plain
+Audio speech threshold 0.9461 is below the requested speech threshold value 1.0
+```
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    SpeechThreshold = 0.1f
+});
+```
+
+  
+
+
+
+
+
+## Word search
+
+You can search through a completed transcript for a specific set of keywords, which is useful for quickly finding relevant information.
+
+The parameter can be a list of words, numbers, or phrases up to five words.
+
+
+
+```csharp
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+});
+
+var matchesResponse = await client.Transcripts.WordSearchAsync(
+    transcript.Id,
+    ["foo", "bar", "foo bar", "42"]
+);
+
+foreach (var match in matchesResponse.Matches)
+{
+    Console.WriteLine($"Found '{match.Text}' {match.Count} times in the transcript");
+}
+```
+
+  
+
+
+
+
+
+## Delete transcripts
+
+You can remove the data from the transcript and mark it as deleted.
+
+
+
+```csharp
+await client.Transcripts.DeleteAsync("1234");
+```
+
+  
+
+<Note title="Account-level TTL value">
+Starting on 11-26-2024, the platform will assign an account-level Time to Live (TTL) for customers who have executed a Business Associate Agreement (BAA) with AssemblyAI. For those customers, all transcripts generated via the async transcription endpoint will be deleted after the TTL period.
+
+As of the feature launch date:
+
+- The TTL is set to 3 days (subject to change).
+- Customers can still manually delete transcripts before the TTL period by using the deletion endpoint.
+  However, they cannot keep transcripts on the platform after the TTL
+  period has expired.
+
+BAAs are limited to customers who process PHI, subject to HIPAA. If you are processing PHI and require a BAA, please reach out to sales@assemblyai.com.
+
+</Note>
+
+  
+## Speaker Diarization
+
+The Speaker Diarization model lets you detect multiple speakers in an audio file and what each speaker said.
+
+If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
+
+<Warning title="Speaker Diarization and multichannel">
+Speaker Diarization doesn't support multichannel transcription. Enabling both Speaker Diarization and [multichannel](/docs/speech-to-text/pre-recorded-audio#multichannel-transcription) will result in an error.
+</Warning>
+
+
+
+**Quickstart**
+
+
+  To enable Speaker Diarization, set `SpeakerLabels` to `true` in the transcription parameters.
+
+```csharp {23,26-29}
+using AssemblyAI;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// You can use a local file:
+/*
+var transcript = await client.Transcripts.TranscribeAsync(
+    new FileInfo("./example.mp3"),
+    new TranscriptOptionalParams
+    {
+        SpeakerLabels = true
+    }
+);
+*/
+
+// Or use a publicly-accessible URL:
+const string audioUrl = "https://assembly.ai/wildfires.mp3";
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    SpeakerLabels = true
+});
+
+foreach (var utterance in transcript.Utterances!)
+{
+    Console.WriteLine($"Speaker {utterance.Speaker}: {utterance.Text}");
+}
+```
+
+  
+
+**Example output**
+
+```plain
+Speaker A: Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. And in some places, the air quality warnings include the warning to stay inside. We wanted to better understand what's happening here and why, so we called Peter DiCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US. Is because there's a couple of weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the Mid Atlantic and the Northeast and kind of just dropping the smoke there.
+Speaker A: So what is it in this haze that makes it harmful? And I'm assuming it is.
+...
+```
+
+
+**Set number of speakers**
+
+
+  
+  If you know the number of speakers in advance, you can improve the diarization performance by setting the `SpeakersExpected` parameter.
+
+
+```csharp {5}
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl,
+    SpeakerLabels = true,
+    SpeakersExpected = 3
+});
+```
+
+<Note>
+The `SpeakersExpected` parameter is ignored for audio files with a duration less than 2 minutes.
+</Note>
+
+
+  
+
