@@ -55,11 +55,10 @@ Here's the full sample code for what you'll build in this tutorial:
   base_url = "https://api.assemblyai.com/v2"
   headers = {"authorization": "<YOUR_API_KEY>"}
 
-  """Use a publicly-accessible URL:
+  # Use a publicly-accessible URL:
   audio_file = "https://assembly.ai/sports_injuries.mp3"
-  data = {"audio_url": audio_file}"""
 
-  # Or upload a local file using lines 12-29
+  ''' Or upload a local file:
   with open("./example.mp3", "rb") as f:
       response = requests.post(base_url + "/upload", headers=headers, data=f)
 
@@ -73,9 +72,10 @@ Here's the full sample code for what you'll build in this tutorial:
       print(f"Failed to parse JSON. Raw response: {response.text}")
       exit(1)
 
-  upload_url = json_response["upload_url"]
+  upload_url = json_response["upload_url"]'''
+
   data = {
-          "audio_url": upload_url,
+          "audio_url": audio_file, # Or "audio_url": upload_url,
           "speaker_labels": True 
          }
 
@@ -85,7 +85,6 @@ Here's the full sample code for what you'll build in this tutorial:
       print(f"Error: {response.status_code}, Response: {response.text}")
       response.raise_for_status()
 
-  transcript_response = response.json()
   transcript_id = transcript_response["id"]
   polling_endpoint = f"{base_url}/transcript/{transcript_id}"
 
@@ -275,6 +274,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
               exit(1)
           upload_url = json_response["upload_url"]
           ```
+          We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding upload_url is no longer valid.
         </Note>
 
         <Note title="YouTube">
@@ -289,38 +289,49 @@ In this step, you'll submit the audio file for transcription and wait until it's
 
         ```python
         data = {"audio_url": audio_file}
+        # Or pass the upload_url if you used the upload endpoint
+        # data = {"audio_url": upload_url}
         ```
 
         <Tip title="Select the speech model">
-        You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
+          You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
         </Tip>
       </Step>
       <Step>
-        If the transcription failed, the `status` of the transcription will be set to
-        `error`. To see why it failed you can print the value of `error`.
+        Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors.
 
         ```python
-        if transcript.error:
-          print(transcript.error)
-          exit(1)
+        response = requests.post(base_url + "/transcript", headers=headers, json=data)
+
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}, Response: {response.text}")
+            response.raise_for_status()
         ```
       </Step>
       <Step>
 
-        Print the complete transcript.
+        After making the request, you’ll receive an `id` for the transcription. Use it to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
 
         ```python
-        print(transcript.text)
+        transcript_id = transcript_response["id"]
+        polling_endpoint = f"{base_url}/transcript/{transcript_id}"
+
+        while True:
+            transcript = requests.get(polling_endpoint, headers=headers).json()
+            if transcript["status"] == "completed":
+                print(transcript["text"])
+            elif transcript["status"] == "error":
+                raise RuntimeError(f"Transcription failed: {transcript['error']}")
+            else:
+                time.sleep(3)
         ```
       </Step>
       <Step>
-      Run the application and wait for it to finish.
+        Run the application and wait for it to finish.
       </Step>
     </Steps>
   </Tab>
 </Tabs>
-
-
 
 
 You've successfully transcribed your first audio file. You can see all submitted transcription jobs in the <a href="https://www.assemblyai.com/app/processing-queue" target="_blank">Processing queue</a>.
