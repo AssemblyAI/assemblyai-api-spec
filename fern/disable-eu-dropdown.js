@@ -10,7 +10,7 @@ function handleDropdowns() {
                 // Remove all existing click event listeners
                 const newButton = button.cloneNode(true);
                 button.parentNode.replaceChild(newButton, button);
-                
+
                 // Add capturing phase event listener to block all clicks
                 newButton.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -19,21 +19,21 @@ function handleDropdowns() {
             });
         });
     });
+}
 
-    // Listen for URL changes, even when the app doesn't reload the full page
-    function watchForUrlChanges() {
-        let lastUrl = window.location.href;
+// Listen for URL changes, even when the app doesn't reload the full page
+function watchForUrlChanges() {
+    let lastUrl = window.location.href;
 
-        // Set an interval to check for URL changes every 500ms
-        setInterval(() => {
-            const currentUrl = window.location.href;
+    // Set an interval to check for URL changes every 500ms
+    setInterval(() => {
+        const currentUrl = window.location.href;
 
-            if (currentUrl !== lastUrl) {
-                lastUrl = currentUrl;
-                handleDropdowns();
-            }
-        }, 500);
-    }
+        if (currentUrl !== lastUrl) {
+            lastUrl = currentUrl;
+            handleDropdowns();
+        }
+    }, 500);
 }
 
 // run logic when page initially loads
