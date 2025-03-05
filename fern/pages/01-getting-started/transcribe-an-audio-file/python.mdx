@@ -274,7 +274,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
               exit(1)
           upload_url = json_response["upload_url"]
           ```
-          We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding upload_url is no longer valid.
+          We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
         </Note>
 
         <Note title="YouTube">
@@ -340,25 +340,62 @@ You've successfully transcribed your first audio file. You can see all submitted
 
 You can extract even more insights from the audio by enabling any of our [AI models](/audio-intelligence) using _transcription options_. In this step, you'll enable the [Speaker diarization](/docs/speech-to-text/speaker-diarization) model to detect who said what.
 
-<Steps>
-  <Step>
-    Create a `TranscriptionConfig` with `speaker_labels` set to `True`, and then pass it as the second argument to `transcribe()`.
+<Tabs groupId="language">
+  <Tab language="python-sdk" title="Python SDK" default>
+    <Steps>
+      <Step>
+        Create a `TranscriptionConfig` with `speaker_labels` set to `True`, and then pass it as the second argument to `transcribe()`.
 
-    ```python
-    config = aai.TranscriptionConfig(speaker_labels=True)
+        ```python
+        config = aai.TranscriptionConfig(speaker_labels=True)
 
-    transcript = transcriber.transcribe(audio_file, config)
-    ```
-  </Step>
-  <Step>
-    In addition to the full transcript, you now have access to utterances from each speaker.
+        transcript = transcriber.transcribe(audio_file, config)
+        ```
+      </Step>
+      <Step>
+        In addition to the full transcript, you now have access to utterances from each speaker.
 
-    ```python
-    for utterance in transcript.utterances:
-      print(f"Speaker {utterance.speaker}: {utterance.text}")
-    ```
-  </Step>
-</Steps>
+        ```python
+        for utterance in transcript.utterances:
+          print(f"Speaker {utterance.speaker}: {utterance.text}")
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+    <Tab language="python" title="Python">
+    <Steps>
+      <Step>
+        Add the `speaker_labels` parameter to the data object.
+
+        ```python
+        data = {
+                "audio_url": audio_file, # Or "audio_url": upload_url,
+                "speaker_labels": True 
+               }
+        ```
+      </Step>
+      <Step>
+        Update your polling statment to iterate over the `utterances` value and print the speakers. In addition to the full transcript, you now have access to utterances from each speaker.
+
+        ```python
+        while True:
+            transcript = requests.get(polling_endpoint, headers=headers).json()
+            if transcript["status"] == "completed":
+                print(f"Full Transcript:\n{transcript["text"]}")
+                print("\nSpeaker Segmentation:")
+                for utterance in transcript["utterances"]:
+                    print(f"Speaker {utterance["speaker"]}: {utterance["text"]}\n")
+                break
+            elif transcript["status"] == "error":
+                raise RuntimeError(f"Transcription failed: {transcript['error']}")
+            else:
+                time.sleep(3)
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
 
 Many of the properties in the transcript object only become available after you enable the corresponding model. For more information, see the models under [Speech-to-Text](/speech-to-text) and [Audio Intelligence](/audio-intelligence).
 
