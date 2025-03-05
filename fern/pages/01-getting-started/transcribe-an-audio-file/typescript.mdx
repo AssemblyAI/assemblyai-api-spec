@@ -18,141 +18,349 @@ By the end of this tutorial, you'll be able to:
 
 Here's the full sample code for what you'll build in this tutorial:
 
-```ts
-import { AssemblyAI } from 'assemblyai'
-
-const client = new AssemblyAI({
-  apiKey: '<YOUR_API_KEY>'
-})
-
-// You can use a local filepath:
-// const audioFile = "./example.mp3"
-
-// Or use a publicly-accessible URL:
-const audioFile = 'https://assembly.ai/sports_injuries.mp3'
-
-const params = {
-  audio: audioFile,
-  speaker_labels: true
-}
-
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params)
-
-  if (transcript.status === 'error') {
-    console.error(`Transcription failed: ${transcript.error}`)
-    process.exit(1)
-  }
-
-  console.log(transcript.text)
-
-  for (let utterance of transcript.utterances!) {
-    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
-  }
-}
-
-run()
-```
-
-## Before you begin
-
-To complete this tutorial, you need:
-
-- [Python](https://www.python.org/), [TypeScript](https://www.typescriptlang.org/), [Go](https://go.dev), Java, [.NET](https://dotnet.microsoft.com/en-us/download), or [Ruby](https://www.ruby-lang.org/en/documentation/installation/) installed.
-- A <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">free AssemblyAI account</a>.
-
-
-## Step 1: Install the SDK
-Install the package via NPM:
-
-```bash
-npm install assemblyai
-```
-
-## Step 2: Configure the SDK
-
-In this step, you 'll create an SDK client and configure it to use your API key.
-
-<Steps>
-  <Step>
-    Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
-  </Step>
-
-  <Step>
-    Create a new client using your API key. Replace `YOUR_API_KEY` with your copied API key.
-
+<Tabs groupId="language">
+  <Tab language="typescript-sdk" title="TypeScript SDK" default>
     ```ts
     import { AssemblyAI } from 'assemblyai'
 
     const client = new AssemblyAI({
       apiKey: '<YOUR_API_KEY>'
     })
+
+    // You can use a local filepath:
+    // const audioFile = "./example.mp3"
+
+    // Or use a publicly-accessible URL:
+    const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+
+    const params = {
+      audio: audioFile,
+      speaker_labels: true
+    }
+
+    const run = async () => {
+      const transcript = await client.transcripts.transcribe(params)
+
+      if (transcript.status === 'error') {
+        console.error(`Transcription failed: ${transcript.error}`)
+        process.exit(1)
+      }
+
+      console.log(transcript.text)
+
+      for (let utterance of transcript.utterances!) {
+        console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+      }
+    }
+
+    run()
     ```
-  </Step>
-</Steps>
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+    ```ts
+    import axios from 'axios'
+    import fs from 'fs-extra' //For reading local files
+
+    const baseUrl = 'https://api.assemblyai.com/v2'
+
+    const headers = {
+      authorization: '<YOUR_API_KEY>'
+    }
+
+    // Use a publicly-accessible URL:
+    const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+
+    /* Or upload a local file:
+    const audio = './my-audio.mp3'
+    const audioData = await fs.readFile(path)
+    const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
+      headers
+    })
+
+    if (uploadResponse.status !== 200) {
+      console.error(`Error: ${response.status}, Response: ${response.statusText}`);
+      return;
+    }
+
+    const uploadUrl = uploadResponse.data.upload_url
+
+    */
+
+    const data = {
+      audio_url: audioFile, // For local files use: audio_url: uploadUrl
+      speaker_labels: true 
+    }
+
+    const url = `${baseUrl}/transcript`
+    const transcriptResponse = await axios.post(url, data, { headers: headers })
+
+    if (transcriptResponse.status !== 200) {
+      console.error(`Error: ${response.status}, Response: ${response.statusText}`);
+      return;
+    }
+
+    const transcriptId = response.data.id
+    const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+
+    while (true) {
+      const pollingResponse = await axios.get(pollingEndpoint, {
+        headers: headers
+      })
+      const transcriptionResult = pollingResponse.data
+
+      if (transcriptionResult.status === 'completed') {
+            console.log("Full Transcript:", transcriptionResult.text)
+    
+        if (transcriptionResult.utterances) {
+          console.log("Speaker Segmentation:")
+          transcriptionResult.utterances.forEach(utterance => {
+            console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+          });
+        }
+        break
+      } else if (transcriptionResult.status === 'error') {
+        throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [TypeScript](https://www.typescriptlang.org/) installed.
+- <a href="https://www.assemblyai.com/dashboard/signup" target="_blank"> A free AssemblyAI account</a>.
+
+
+<Tabs groupId="language">
+  <Tab language="typescript-sdk" title="TypeScript SDK" default>
+    ## Step 1: Install the SDK
+    Install the package via NPM:
+
+    ```bash
+    npm install assemblyai
+    ```
+  </Tab>
+  
+  <Tab language="typescript" title="TypeScript">
+    ## Step 1: Install axios and fs-extra
+    Install the packages via NPM:
+
+    ```bash
+    npm install axios fs-extra
+    ```
+    Create a new file and import axios and fs-extra.
+
+    ```ts
+    import axios from 'axios'
+    import fs from 'fs-extra'
+    ```
+  </Tab>
+</Tabs>
+
+<Tabs groupId="language">
+
+  <Tab language="typescript-sdk" title="TypeScript SDK" default>
+    ## Step 2: Configure the SDK
+
+    In this step, you 'll create an SDK client and configure it to use your API key.
+
+    <Steps>
+      <Step>
+        Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
+      </Step>
+
+      <Step>
+        Create a new client using your API key. Replace `YOUR_API_KEY` with your copied API key.
+
+        ```ts
+        import { AssemblyAI } from 'assemblyai'
+
+        const client = new AssemblyAI({
+          apiKey: '<YOUR_API_KEY>'
+        })
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab language="typescript" title="TypeScript">
+    ## Step 2: Set up the API endpoint and headers
+    In this step you'll set the base URL and configure your API key.
+      <Steps>
+        <Step>
+          Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
+        </Step>
+
+        <Step>
+          Set the base URL and set your headers. Replace `YOUR_API_KEY` with your copied API key.
+          ```ts
+          const baseUrl = 'https://api.assemblyai.com/v2'
+
+          const headers = {
+            authorization: '<YOUR_API_KEY>'
+          }
+          ```
+        </Step>
+      </Steps>
+  </Tab>
+</Tabs>
+
+
 
 ## Step 3: Submit audio for transcription
 
 In this step, you'll submit the audio file for transcription and wait until it's completes. The time it takes to process an audio file depends on its duration and the enabled models. Most transcriptions complete within 45 seconds.
 
-<Steps>
-  <Step>
+<Tabs groupId="language">
 
-  Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+  <Tab language="typescript-sdk" title="TypeScript SDK" default>
+    <Steps>
+      <Step>
 
-    ```ts
-    const audioFile = 'https://assembly.ai/sports_injuries.mp3'
-    ```
+      Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
 
-    <Note title="Local audio files">
-      If you want to use a local file, you can also specify a local path, for example:
+        ```ts
+        const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+        ```
 
-      ```ts
-      const audioFile = 'https://assembly.ai/sports_injuries.mp3'
-      ```
-    </Note>
+        <Note title="Local audio files">
+          If you want to use a local file, you can also specify a local path, for example:
 
-    <Note title="YouTube">
+          ```ts
+          const audioFile = '/example.mp3'
+          ```
+        </Note>
 
-      YouTube URLs are not supported. If you want to transcribe a YouTube video, you need to download the audio first.
+        <Note title="YouTube">
 
-    </Note>
+          YouTube URLs are not supported. If you want to transcribe a YouTube video, you need to download the audio first.
 
-  </Step>
-  <Step>
-    To generate the transcript, pass the audio URL to `client.transcripts.transcribe()`. This may take a minute while we're processing the audio.
+        </Note>
 
-    ```ts
-    const transcript = await client.transcripts.transcribe({ audio: audioFile })
-    ```
+      </Step>
+      <Step>
+        To generate the transcript, pass the audio URL to `client.transcripts.transcribe()`. This may take a minute while we're processing the audio.
 
-    <Tip title="Select the speech model">
-    You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
-    </Tip>
-  </Step>
-  <Step>
-    If the transcription failed, the `status` of the transcription will be set to
-    `error`. To see why it failed you can print the value of `error`.
+        ```ts
+        const transcript = await client.transcripts.transcribe({ audio: audioFile })
+        ```
 
-    ```ts
-    if (transcript.status === 'error') {
-      console.error(transcript.error)
-      process.exit(1)
-    }
-    ```
-  </Step>
-  <Step>
+        <Tip title="Select the speech model">
+        You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
+        </Tip>
+      </Step>
+      <Step>
+        If the transcription failed, the `status` of the transcription will be set to
+        `error`. To see why it failed you can print the value of `error`.
 
-    Print the complete transcript.
+        ```ts
+        if (transcript.status === 'error') {
+          console.error(transcript.error)
+          process.exit(1)
+        }
+        ```
+      </Step>
+      <Step>
 
-    ```ts
-    console.log(transcript.text)
-    ```
-  </Step>
-  <Step>
-  Run the application and wait for it to finish.
-  </Step>
-</Steps>
+        Print the complete transcript.
+
+        ```ts
+        console.log(transcript.text)
+        ```
+      </Step>
+      <Step>
+      Run the application and wait for it to finish.
+      </Step>
+    </Steps>
+
+  </Tab>
+  
+  <Tab language="typescript" title="TypeScript">
+      <Steps>
+        <Step>
+
+        Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+
+        ```ts
+        const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+        ```
+
+          <Note title="Local audio files">
+            If you want to use a local file, you can send the file to our upload endpoint. You'll want to add some error handling in case the upload fails. If the request is successful, the upload endpoint will respond with an upload URL :
+
+            ```ts
+            const audio = './my-audio.mp3'
+            const audioData = await fs.readFile(path)
+            const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
+              headers
+            })
+
+            const uploadUrl = uploadResponse.data.upload_url
+            ```
+            We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
+          </Note>
+
+          <Note title="YouTube">
+
+            YouTube URLs are not supported. If you want to transcribe a YouTube video, you need to download the audio first.
+
+          </Note>
+
+        </Step>
+        <Step>
+          Pass the audio URL to the data object.
+
+          ```python
+          data = {"audio_url": audio_file}
+          # Or pass the upload_url if you used the upload endpoint
+          # data = {"audio_url": upload_url}
+          ```
+
+          <Tip title="Select the speech model">
+            You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
+          </Tip>
+        </Step>
+        <Step>
+          Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors.
+
+          ```python
+          response = requests.post(base_url + "/transcript", headers=headers, json=data)
+
+          if response.status_code != 200:
+              print(f"Error: {response.status_code}, Response: {response.text}")
+              response.raise_for_status()
+          ```
+        </Step>
+        <Step>
+
+          After making the request, you’ll receive an `id` for the transcription. Use it to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+
+          ```python
+          transcript_id = transcript_response["id"]
+          polling_endpoint = f"{base_url}/transcript/{transcript_id}"
+
+          while True:
+              transcript = requests.get(polling_endpoint, headers=headers).json()
+              if transcript["status"] == "completed":
+                  print(transcript["text"])
+              elif transcript["status"] == "error":
+                  raise RuntimeError(f"Transcription failed: {transcript['error']}")
+              else:
+                  time.sleep(3)
+          ```
+        </Step>
+        <Step>
+          Run the application and wait for it to finish.
+        </Step>
+      </Steps>
+  </Tab>
+</Tabs>
+
 
 You've successfully transcribed your first audio file. You can see all submitted transcription jobs in the <a href="https://www.assemblyai.com/app/processing-queue" target="_blank">Processing queue</a>.
 
