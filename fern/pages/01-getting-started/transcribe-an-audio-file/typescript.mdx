@@ -58,72 +58,77 @@ Here's the full sample code for what you'll build in this tutorial:
   </Tab>
   <Tab language="typescript" title="TypeScript">
     ```ts
-    import axios from 'axios'
-    import fs from 'fs-extra' //For reading local files
+      import axios from 'axios'
+      import fs from 'fs-extra' 
 
-    const baseUrl = 'https://api.assemblyai.com/v2'
+      const baseUrl = 'https://api.assemblyai.com/v2'
 
-    const headers = {
-      authorization: '<YOUR_API_KEY>'
-    }
-
-    // Use a publicly-accessible URL:
-    const audioFile = 'https://assembly.ai/sports_injuries.mp3'
-
-    /* Or upload a local file:
-    const audio = './my-audio.mp3'
-    const audioData = await fs.readFile(path)
-    const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
-      headers
-    })
-
-    if (uploadResponse.status !== 200) {
-      console.error(`Error: ${response.status}, Response: ${response.statusText}`);
-      return;
-    }
-
-    const uploadUrl = uploadResponse.data.upload_url
-
-    */
-
-    const data = {
-      audio_url: audioFile, // For local files use: audio_url: uploadUrl
-      speaker_labels: true 
-    }
-
-    const url = `${baseUrl}/transcript`
-    const transcriptResponse = await axios.post(url, data, { headers: headers })
-
-    if (transcriptResponse.status !== 200) {
-      console.error(`Error: ${response.status}, Response: ${response.statusText}`);
-      return;
-    }
-
-    const transcriptId = response.data.id
-    const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
-
-    while (true) {
-      const pollingResponse = await axios.get(pollingEndpoint, {
-        headers: headers
-      })
-      const transcriptionResult = pollingResponse.data
-
-      if (transcriptionResult.status === 'completed') {
-            console.log("Full Transcript:", transcriptionResult.text)
-    
-        if (transcriptionResult.utterances) {
-          console.log("Speaker Segmentation:")
-          transcriptionResult.utterances.forEach(utterance => {
-            console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
-          });
-        }
-        break
-      } else if (transcriptionResult.status === 'error') {
-        throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+      const headers = {
+        authorization: '<YOUR_API_KEY>'
       }
-    }
+
+      async function transcribe() {
+        // Use a publicly accessible URL:
+        const audioFile = 'https://assembly.ai/sports_injuries.mp3'  
+
+      /*  Or upload a local file
+        let uploadUrl
+
+        try {
+          const audio = './example.mp3'
+          const audioData = await fs.readFile(audio)
+          const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, { headers })
+          uploadUrl = uploadResponse.data.upload_url
+
+        } catch(error) {
+          console.error("Error from '/upload' request:", error.response.data)
+        }
+      */
+        const data = {
+          audio_url: audioFile, // For local files use: audio_url: uploadUrl
+          speaker_labels: true
+        }
+
+        try {
+          const url = `${baseUrl}/transcript`
+
+          let transcriptId
+
+          try {
+            const transcriptResponse = await axios.post(url, data, { headers })
+            transcriptId = transcriptResponse.data.id
+          } catch (error) {
+            console.error("Error from POST '/transcript' request:", error.response.data.error)
+          }
+          
+          const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+
+          while (true) {
+            const pollingResponse = await axios.get(pollingEndpoint, { headers })
+            const transcriptionResult = pollingResponse.data
+
+            if (transcriptionResult.status === 'completed') {
+              console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
+
+              if (transcriptionResult.utterances) {
+                console.log("Speaker Segmentation:")
+                transcriptionResult.utterances.forEach(utterance => {
+                  console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+                });
+              }
+              break
+            } else if (transcriptionResult.status === 'error') {
+              throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+            } else {
+              await new Promise((resolve) => setTimeout(resolve, 3000))
+            }
+          }
+        } catch (error) {
+          console.error(error.message)
+        }
+      }
+
+      transcribe()
     ```
   </Tab>
 </Tabs>
@@ -232,7 +237,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
           If you want to use a local file, you can also specify a local path, for example:
 
           ```ts
-          const audioFile = '/example.mp3'
+          const audioFile = './example.mp3'
           ```
         </Note>
 
@@ -284,23 +289,30 @@ In this step, you'll submit the audio file for transcription and wait until it's
       <Steps>
         <Step>
 
-        Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+        Creat a transcribe function and specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
 
         ```ts
-        const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+        async function transcribe() {
+          const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+        }
         ```
 
           <Note title="Local audio files">
             If you want to use a local file, you can send the file to our upload endpoint. You'll want to add some error handling in case the upload fails. If the request is successful, the upload endpoint will respond with an upload URL :
 
             ```ts
-            const audio = './my-audio.mp3'
-            const audioData = await fs.readFile(path)
-            const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
-              headers
-            })
+            async function transcribe() {
+              let uploadUrl
 
-            const uploadUrl = uploadResponse.data.upload_url
+              try {
+                const audio = './example.mp3'
+                const audioData = await fs.readFile(audio)
+                const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, { headers })
+                uploadUrl = uploadResponse.data.upload_url
+              } catch(error) {
+                console.error("Error from '/upload' request:", error.response.data)
+              }
+            }
             ```
             We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
           </Note>
@@ -313,12 +325,16 @@ In this step, you'll submit the audio file for transcription and wait until it's
 
         </Step>
         <Step>
-          Pass the audio URL to the data object.
+          Pass the `audioFile` to the data object.
 
-          ```python
-          data = {"audio_url": audio_file}
-          # Or pass the upload_url if you used the upload endpoint
-          # data = {"audio_url": upload_url}
+          ```ts
+          async function transcribe() {
+            //Upload request code or audio URL here
+
+            const data = { audio_url: audioFile }
+            // Or pass the uploadUrl if you used the upload endpoint likeso:
+            // const data = { audio_url: uploadUrl } 
+          }
           ```
 
           <Tip title="Select the speech model">
@@ -326,36 +342,66 @@ In this step, you'll submit the audio file for transcription and wait until it's
           </Tip>
         </Step>
         <Step>
-          Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors.
+          Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors. After making the request, you’ll receive an `id` for the transcription. Store it to use in the next step.
 
-          ```python
-          response = requests.post(base_url + "/transcript", headers=headers, json=data)
-
-          if response.status_code != 200:
-              print(f"Error: {response.status_code}, Response: {response.text}")
-              response.raise_for_status()
+          ```ts
+          async function transcribe() {
+            //Upload request code or audio URL here
+            // data object here
+            try {
+              const url = `${baseUrl}/transcript`
+              let transcriptId
+              try {
+                const transcriptResponse = await axios.post(url, data, { headers })
+                transcriptId = transcriptResponse.data.id
+              } catch (error) {
+                console.error("Error from POST '/transcript' request:", error.response.data.error)
+              }
+            } catch (error) {
+              console.error(error.message)
+            }
+          }
           ```
         </Step>
         <Step>
 
-          After making the request, you’ll receive an `id` for the transcription. Use it to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+          Use the `id` to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+          ```ts
+          async function transcribe() {
+            //Upload request code or audio URL here
+            //data object here
 
-          ```python
-          transcript_id = transcript_response["id"]
-          polling_endpoint = f"{base_url}/transcript/{transcript_id}"
+            try {
 
-          while True:
-              transcript = requests.get(polling_endpoint, headers=headers).json()
-              if transcript["status"] == "completed":
-                  print(transcript["text"])
-              elif transcript["status"] == "error":
-                  raise RuntimeError(f"Transcription failed: {transcript['error']}")
-              else:
-                  time.sleep(3)
+              //POST request code here
+              
+              const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+
+              while (true) {
+                const pollingResponse = await axios.get(pollingEndpoint, { headers })
+
+                const transcriptionResult = pollingResponse.data
+
+                if (transcriptionResult.status === 'completed') {
+                  console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
+                  break
+                } else if (transcriptionResult.status === 'error') {
+                  throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+                } else {
+                  await new Promise((resolve) => setTimeout(resolve, 3000))
+                }
+              }
+            } catch (error) {
+              console.error(error.message)
+            }
+          }
           ```
         </Step>
         <Step>
-          Run the application and wait for it to finish.
+          Call the `transcribe` function, run the application and wait for it to finish.
+          ```ts
+          transcribe()
+          ```
         </Step>
       </Steps>
   </Tab>
@@ -368,29 +414,88 @@ You've successfully transcribed your first audio file. You can see all submitted
 
 You can extract even more insights from the audio by enabling any of our [AI models](/audio-intelligence) using _transcription options_. In this step, you'll enable the [Speaker diarization](/docs/speech-to-text/speaker-diarization) model to detect who said what.
 
-<Steps>
-  <Step>
-    Set the `speaker_labels` property to `true` in the `params` object.
+<Tabs groupId="language">
 
-    ```ts
-    const params = {
-      audio: audioFile,
-      speaker_labels: true
-    }
+  <Tab language="typescript-sdk" title="TypeScript SDK" default>
+    <Steps>
+      <Step>
+        Set the `speaker_labels` property to `true` in the `params` object.
 
-    const transcript = await client.transcripts.transcribe(params)
-    ```
-  </Step>
-  <Step>
-    In addition to the full transcript, you now have access to utterances from each speaker.
+        ```ts
 
-    ```typescript
-    for (let utterance of transcript.utterances!) {
-      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
-    }
-    ```
-  </Step>
-</Steps>
+        const params = {
+          audio: audioFile,
+          speaker_labels: true
+        }
+
+        ```
+      </Step>
+      <Step>
+        In addition to the full transcript, you now have access to utterances from each speaker.
+
+        ```typescript
+        for (let utterance of transcript.utterances!) {
+          console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab language="typescript" title="TypeScript">
+      <Steps>
+      <Step>
+        Set the `speaker_labels` property to `true` in the `data` object.
+
+        ```ts
+        async function transcribe() {
+          //Upload request code or audio URL here
+
+          const data = { 
+            audio_url: audioFile, // Or audio: uploadFile,
+            speaker_labels: true 
+          }
+          //POST and Polling code here
+        }    
+        ```
+      </Step>
+      <Step>
+        In addition to the full transcript, you now have access to utterances from each speaker. Adjust the polling logic to print out the speakers.
+
+        ```ts
+          async function transcribe() {
+            //Upload request code or audio URL here
+            //data object here
+
+            try {
+
+              // POST request and polling endpoint here
+              
+              while (true) {
+                
+                // GET request and repsonse code here
+
+                if (transcriptionResult.status === 'completed') {
+                  console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
+                  if (transcriptionResult.utterances) {
+                    console.log("Speaker Segmentation:")
+                    transcriptionResult.utterances.forEach(utterance => {
+                      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+                    });
+                  }
+                  break
+                } // error handling code here
+              }
+            } catch (error) {
+              console.error(error.message)
+            }
+          }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
 
 Many of the properties in the transcript object only become available after you enable the corresponding model. For more information, see the models under [Speech-to-Text](/speech-to-text) and [Audio Intelligence](/audio-intelligence).
 
