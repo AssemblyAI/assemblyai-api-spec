@@ -39,6 +39,8 @@ config = aai.TranscriptionConfig(content_safety=True)
 
 transcript = aai.Transcriber().transcribe(audio_file, config)
 
+print(f"Transcript ID:", transcript.id)
+
 for result in transcript.content_safety.results:
     print(result.text)
     print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
@@ -94,19 +96,20 @@ response = requests.post(url, json=data, headers=headers)
 transcript_id = response.json()['id']
 polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
 
+print(f"Transcript ID:", transcript_id)
+
 while True:
     transcription_result = requests.get(polling_endpoint, headers=headers).json()
 
     if transcription_result['status'] == 'completed':
-        print(f"Transcript ID:", transcript_id)
     
         for result in transcription_result['content_safety_labels']['results']:
             print(result['text'])
             print(f"Timestamp: {result['timestamp']['start']} - {result['timestamp']['end']}")
 
-        # Get category, confidence, and severity.
-        for label in result['labels']:
-            print(f"{label['label']} - {label['confidence']} - {label['severity']}")  # content safety category
+            # Get category, confidence, and severity.
+            for label in result['labels']:
+                print(f"{label['label']} - {label['confidence']} - {label['severity']}")  # content safety category
 
         # Get the confidence of the most common labels in relation to the entire audio file.
         for label, confidence in transcription_result['content_safety_labels']['summary'].items():
@@ -117,12 +120,9 @@ while True:
             print(f"{severity_confidence['low'] * 100}% confident that the audio contains low-severity {label}")
             print(f"{severity_confidence['medium'] * 100}% confident that the audio contains medium-severity {label}")
             print(f"{severity_confidence['high'] * 100}% confident that the audio contains high-severity {label}")
-
         break
-
     elif transcription_result['status'] == 'error':
         raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-
     else:
         time.sleep(3)
 ```
@@ -151,54 +151,32 @@ const params = {
 
 const run = async () => {
   const transcript = await client.transcripts.transcribe(params)
+  console.log(`Transcript ID: ${transcript.id}`)
   const contentSafetyLabels = transcript.content_safety_labels!
 
   // Get the parts of the transcript which were flagged as sensitive
   for (const result of contentSafetyLabels.results) {
     console.log(result.text)
-    console.log(
-      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
-    )
+    console.log(`Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`)
+
     // Get category, confidence, and severity
     for (const label of result.labels) {
       console.log(`${label.label} - ${label.confidence} - ${label.severity}`)
     }
-    console.log()
   }
 
   // Get the confidence of the most common labels in relation to the entire audio file
-  for (const [label, confidence] of Object.entries(
-    contentSafetyLabels.summary
-  )) {
-    console.log(
-      `${confidence * 100}% confident that the audio contains ${label}`
-    )
+  for (const [label, confidence] of Object.entries(contentSafetyLabels.summary)) {
+    console.log(`${confidence * 100}% confident that the audio contains ${label}`)
   }
-
-  console.log()
 
   // Get the overall severity of the most common labels in relation to the entire audio file
-  for (const [label, severity_confidence] of Object.entries(
-    contentSafetyLabels.severity_score_summary
-  )) {
-    console.log(
-      `${
-        severity_confidence.low * 100
-      }% confident that the audio contains low-severity ${label}`
-    )
-    console.log(
-      `${
-        severity_confidence.medium * 100
-      }% confident that the audio contains medium-severity ${label}`
-    )
-    console.log(
-      `${
-        severity_confidence.high * 100
-      }% confident that the audio contains high-severity ${label}`
-    )
+  for (const [label, severity_confidence] of Object.entries(contentSafetyLabels.severity_score_summary)) {
+    console.log(`${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`)
+    console.log(`${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`)
+    console.log(`${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`)
   }
 }
-
 run()
 ```
 
@@ -233,6 +211,8 @@ const url = `${baseUrl}/v2/transcript`
 const response = await axios.post(url, data, { headers: headers })
 
 const transcriptId = response.data.id
+console.log("Transcript ID: ", transcriptId)
+
 const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
 
 while (true) {
@@ -242,8 +222,6 @@ while (true) {
   const transcriptionResult = pollingResponse.data
 
   if (transcriptionResult.status === 'completed') {
-    console.log("Transcript ID: ", transcriptionResult.id)
-        
     const contentSafetyLabels = transcriptionResult.content_safety_labels!
 
     for (const result of contentSafetyLabels.results) {
@@ -255,7 +233,10 @@ while (true) {
         console.log(`${label.label} - ${label.confidence} - ${label.severity}`)  // content safety category
         }
     }
-
+    // Get the confidence of the most common labels in relation to the entire audio file
+    for (const [label, confidence] of Object.entries(contentSafetyLabels.summary)) {
+    console.log(`${confidence * 100}% confident that the audio contains ${label}`)
+    }
     // Get the confidence of the most common labels in relation to the entire audio file.
     for (const [label, severity_confidence] of Object.entries(contentSafetyLabels.severity_score_summary)) {
         console.log(`${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`)
@@ -445,6 +426,10 @@ while true
         puts "#{label['label']} - #{label['confidence']} - #{label['severity']}"  # content safety category
       end
     end
+    # Get the confidence of the most common labels in relation to the entire audio file.
+    transcription_result['content_safety_labels']['summary'].each do |label, confidence|
+      puts "#{confidence * 100}% confident that the audio contains #{label}"
+    end
     # Get the overall severity of the most common labels in relation to the entire audio file.
     transcription_result['content_safety_labels']['severity_score_summary'].each do |label, severity_confidence|
       puts "#{severity_confidence['low'] * 100}% confident that the audio contains low-severity #{label}"
@@ -455,7 +440,6 @@ while true
   elsif transcription_result['status'] == 'error'
     raise "Transcription failed: #{transcription_result['error']}"
   else
-    puts 'Waiting for transcription to complete...'
     sleep(3)
   end
 end
@@ -537,6 +521,10 @@ while (true) {
           foreach ($result['labels'] as $label) {
             echo "{$label['label']} - {$label['confidence']} - {$label['severity']}\n"; // content safety category
           }
+        }
+        // Get the confidence of the most common labels in relation to the entire audio file.
+        foreach ($transcription_result['content_safety_labels']['summary'] as $label => $confidence) {
+          echo round($confidence * 100, 2) . "% confident that the audio contains $label\n";
         }
         // Get the confidence of the most common labels in relation to the entire audio file.
         foreach ($content_safety_labels['severity_score_summary'] as $label => $severity_confidence) {
