@@ -46,9 +46,10 @@ Here's the full sample code for what you'll build in this tutorial:
         process.exit(1)
       }
 
-      console.log(transcript.text)
-
-      for (let utterance of transcript.utterances!) {
+      console.log(`\nFull Transcript:\n\n${transcript.text}\n`)
+      
+      console.log('\nSpeaker Segmentation:\n')
+      for (let utterance of transcript.utterances) {
         console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
       }
     }
@@ -81,7 +82,7 @@ Here's the full sample code for what you'll build in this tutorial:
           uploadUrl = uploadResponse.data.upload_url
 
         } catch(error) {
-          console.error("Error from '/upload' request:", error.response.data)
+          console.error("Error from '/upload' request:", error.response?.data || error.response || error);
         }
       */
         const data = {
@@ -108,13 +109,13 @@ Here's the full sample code for what you'll build in this tutorial:
             const transcriptionResult = pollingResponse.data
 
             if (transcriptionResult.status === 'completed') {
-              console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
+              console.log(`\nFull Transcript:\n\n${transcriptionResult.text}\n`)
 
               if (transcriptionResult.utterances) {
-                console.log("Speaker Segmentation:")
-                transcriptionResult.utterances.forEach(utterance => {
+                console.log('\nSpeaker Segmentation:\n')
+                for (let utterance of transcriptionResult.utterances) {
                   console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
-                });
+                }
               }
               break
             } else if (transcriptionResult.status === 'error') {
@@ -289,7 +290,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
       <Steps>
         <Step>
 
-        Creat a transcribe function and specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+        Create a transcribe function and specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
 
         ```ts
         async function transcribe() {
@@ -310,7 +311,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
                 const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, { headers })
                 uploadUrl = uploadResponse.data.upload_url
               } catch(error) {
-                console.error("Error from '/upload' request:", error.response.data)
+                console.error("Error from '/upload' request:", error.response?.data || error.response || error);
               }
             }
             ```
@@ -332,8 +333,10 @@ In this step, you'll submit the audio file for transcription and wait until it's
             //Upload request code or audio URL here
 
             const data = { audio_url: audioFile }
-            // Or pass the uploadUrl if you used the upload endpoint likeso:
-            // const data = { audio_url: uploadUrl } 
+            /* Or pass the uploadUrl if you used the upload endpoint like so: 
+            const data = { audio_url: uploadUrl } */
+
+            //POST request code for next step will be here 
           }
           ```
 
@@ -342,57 +345,43 @@ In this step, you'll submit the audio file for transcription and wait until it's
           </Tip>
         </Step>
         <Step>
-          Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors. After making the request, you’ll receive an `id` for the transcription. Store it to use in the next step.
+          Under the `data` object, make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors. After making the request, you’ll receive an `id` for the transcription. Store it to use in the next step.
 
           ```ts
-          async function transcribe() {
-            //Upload request code or audio URL here
-            // data object here
+          try {
+            const url = `${baseUrl}/transcript`
+            let transcriptId
             try {
-              const url = `${baseUrl}/transcript`
-              let transcriptId
-              try {
-                const transcriptResponse = await axios.post(url, data, { headers })
-                transcriptId = transcriptResponse.data.id
-              } catch (error) {
-                console.error("Error from POST '/transcript' request:", error.response.data.error)
-              }
+              const transcriptResponse = await axios.post(url, data, { headers })
+              transcriptId = transcriptResponse.data.id
             } catch (error) {
-              console.error(error.message)
+              console.error("Error from POST '/transcript' request:", error.response.data.error)
             }
+
+            //Polling code for next step will be here
+          } catch (error) {
+            console.error(error.message)
           }
           ```
         </Step>
         <Step>
 
-          Use the `id` to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+          Under the `POST` request, use the `id` to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
           ```ts
-          async function transcribe() {
-            //Upload request code or audio URL here
-            //data object here
+          const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
 
-            try {
+          while (true) {
+            const pollingResponse = await axios.get(pollingEndpoint, { headers })
 
-              //POST request code here
-              
-              const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
+            const transcriptionResult = pollingResponse.data
 
-              while (true) {
-                const pollingResponse = await axios.get(pollingEndpoint, { headers })
-
-                const transcriptionResult = pollingResponse.data
-
-                if (transcriptionResult.status === 'completed') {
-                  console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
-                  break
-                } else if (transcriptionResult.status === 'error') {
-                  throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-                } else {
-                  await new Promise((resolve) => setTimeout(resolve, 3000))
-                }
-              }
-            } catch (error) {
-              console.error(error.message)
+            if (transcriptionResult.status === 'completed') {
+              console.log(transcriptionResult.text)
+              break
+            } else if (transcriptionResult.status === 'error') {
+              throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+            } else {
+              await new Promise((resolve) => setTimeout(resolve, 3000))
             }
           }
           ```
@@ -419,7 +408,7 @@ You can extract even more insights from the audio by enabling any of our [AI mod
   <Tab language="typescript-sdk" title="TypeScript SDK" default>
     <Steps>
       <Step>
-        Set the `speaker_labels` property to `true` in the `params` object.
+        Create a `params` object and set the `speaker_labels` property to `true`. Pass `params`to `client.transcripts.transcribe()`.
 
         ```ts
 
@@ -428,13 +417,14 @@ You can extract even more insights from the audio by enabling any of our [AI mod
           speaker_labels: true
         }
 
+        const transcript = await client.transcripts.transcribe(params)
         ```
       </Step>
       <Step>
         In addition to the full transcript, you now have access to utterances from each speaker.
 
         ```typescript
-        for (let utterance of transcript.utterances!) {
+        for (let utterance of transcript.utterances) {
           console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
         }
         ```
@@ -445,51 +435,25 @@ You can extract even more insights from the audio by enabling any of our [AI mod
   <Tab language="typescript" title="TypeScript">
       <Steps>
       <Step>
-        Set the `speaker_labels` property to `true` in the `data` object.
+        Update the `data` object to include the `speaker_labels` property set to `true`.
 
         ```ts
-        async function transcribe() {
-          //Upload request code or audio URL here
-
-          const data = { 
-            audio_url: audioFile, // Or audio: uploadFile,
-            speaker_labels: true 
-          }
-          //POST and Polling code here
-        }    
+        const data = { 
+          audio_url: audioFile, // Or audio: uploadFile,
+          speaker_labels: true 
+        }  
         ```
       </Step>
       <Step>
-        In addition to the full transcript, you now have access to utterances from each speaker. Adjust the polling logic to print out the speakers.
+        Adjust the polling logic to print out the speakers when the transcript completes.
 
         ```ts
-          async function transcribe() {
-            //Upload request code or audio URL here
-            //data object here
-
-            try {
-
-              // POST request and polling endpoint here
-              
-              while (true) {
-                
-                // GET request and repsonse code here
-
-                if (transcriptionResult.status === 'completed') {
-                  console.log(`"Full Transcript:" ${transcriptionResult.text} \n`)
-                  if (transcriptionResult.utterances) {
-                    console.log("Speaker Segmentation:")
-                    transcriptionResult.utterances.forEach(utterance => {
-                      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
-                    });
-                  }
-                  break
-                } // error handling code here
-              }
-            } catch (error) {
-              console.error(error.message)
+        if (transcriptionResult.status === 'completed') {
+            for (let utterance of transcriptionResult.utterances) {
+              console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
             }
-          }
+          break
+        } 
         ```
       </Step>
     </Steps>
