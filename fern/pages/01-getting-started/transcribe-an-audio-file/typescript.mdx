@@ -99,7 +99,7 @@ Here's the full sample code for what you'll build in this tutorial:
             const transcriptResponse = await axios.post(url, data, { headers })
             transcriptId = transcriptResponse.data.id
           } catch (error) {
-            console.error("Error from POST '/transcript' request:", error.response.data.error)
+            console.error("Error from POST '/transcript' request:", error.response.data.error || error)
           }
           
           const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
@@ -290,11 +290,12 @@ In this step, you'll submit the audio file for transcription and wait until it's
       <Steps>
         <Step>
 
-        Create a transcribe function and specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+        Create a `transcribe` function and specify a URL to the audio you want to transcribe. Add a `data` object and pass the `audioFile` throught the `audio_url` parameter. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
 
         ```ts
         async function transcribe() {
           const audioFile = 'https://assembly.ai/sports_injuries.mp3'
+          const data = { audio_url: audioFile }
         }
         ```
 
@@ -313,32 +314,16 @@ In this step, you'll submit the audio file for transcription and wait until it's
               } catch(error) {
                 console.error("Error from '/upload' request:", error.response?.data || error.response || error);
               }
+
+              const data = { audio_url: uploadUrl }
             }
             ```
             We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
           </Note>
 
           <Note title="YouTube">
-
             YouTube URLs are not supported. If you want to transcribe a YouTube video, you need to download the audio first.
-
           </Note>
-
-        </Step>
-        <Step>
-          Pass the `audioFile` to the data object.
-
-          ```ts
-          async function transcribe() {
-            //Upload request code or audio URL here
-
-            const data = { audio_url: audioFile }
-            /* Or pass the uploadUrl if you used the upload endpoint like so: 
-            const data = { audio_url: uploadUrl } */
-
-            //POST request code for next step will be here 
-          }
-          ```
 
           <Tip title="Select the speech model">
             You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
@@ -355,7 +340,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
               const transcriptResponse = await axios.post(url, data, { headers })
               transcriptId = transcriptResponse.data.id
             } catch (error) {
-              console.error("Error from POST '/transcript' request:", error.response.data.error)
+              console.error("Error from POST '/transcript' request:", error.response.data.error || error)
             }
 
             //Polling code for next step will be here
@@ -366,7 +351,7 @@ In this step, you'll submit the audio file for transcription and wait until it's
         </Step>
         <Step>
 
-          Under the `POST` request, use the `id` to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+          After the `POST` request, use the `id` to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
           ```ts
           const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`
 
