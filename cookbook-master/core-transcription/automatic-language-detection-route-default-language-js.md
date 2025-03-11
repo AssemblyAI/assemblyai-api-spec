@@ -30,7 +30,7 @@ const client = new AssemblyAI({
 });
 ```
 
-Define a `default_language`, which should be set to the [language code](https://www.assemblyai.com/docs/getting-started/supported-languages) that will be used to rerun the transcript if language detection runs with low `language_confidence`.
+Define a `default_language`, which should be set to the [language code](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/supported-languages) that will be used to rerun the transcript if language detection runs with low `language_confidence`.
 
 ```js
 const default_language = 'LANGUAGE_CODE';
