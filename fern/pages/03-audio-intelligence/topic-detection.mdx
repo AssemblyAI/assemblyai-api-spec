@@ -376,33 +376,33 @@ puts "Transcript ID: #{transcript_id}"
 polling_endpoint = URI.parse("#{base_url}/v2/transcript/#{transcript_id}")
 
 while true
-polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
-polling_http.use_ssl = true
-polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
-polling_response = polling_http.request(polling_request)
+  polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+  polling_http.use_ssl = true
+  polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+  polling_response = polling_http.request(polling_request)
 
-transcription_result = JSON.parse(polling_response.body)
+  transcription_result = JSON.parse(polling_response.body)
 
-if transcription_result['status'] == 'completed'
-  # Get the parts of the transcript that were tagged with topics
-  transcription_result['iab_categories_result']['results'].each do |result|
-    puts result['text']
-    puts "Timestamp: #{result['timestamp']['start']} - #{result['timestamp']['end']}"
+  if transcription_result['status'] == 'completed'
+    # Get the parts of the transcript that were tagged with topics
+    transcription_result['iab_categories_result']['results'].each do |result|
+      puts result['text']
+      puts "Timestamp: #{result['timestamp']['start']} - #{result['timestamp']['end']}"
 
-    result['labels'].each do |label|
-      puts "#{label['label']} - (#{label['relevance']})"
+      result['labels'].each do |label|
+        puts "#{label['label']} - (#{label['relevance']})"
+      end
     end
+    # Get a summary of all topics in the transcript
+    transcription_result['iab_categories_result']['summary'].each do |topic, relevance|
+      puts "Audio is #{relevance * 100}% relevant to #{topic}"
+    end
+  break
+  elsif transcription_result['status'] == 'error'
+    raise "Transcription failed: #{transcription_result['error']}"
+  else
+    sleep(3)
   end
-  # Get a summary of all topics in the transcript
-  transcription_result['iab_categories_result']['summary'].each do |topic, relevance|
-    puts "Audio is #{relevance * 100}% relevant to #{topic}"
-  end
-break
-elsif transcription_result['status'] == 'error'
-  raise "Transcription failed: #{transcription_result['error']}"
-else
-  sleep(3)
-end
 end
 ```
 
