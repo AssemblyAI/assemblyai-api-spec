@@ -1,0 +1,286 @@
+---
+title: 'Ruby SDK - LeMUR'
+---
+
+
+# LeMUR
+
+## Summarize your audio data
+
+
+
+```ruby
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# You can upload and transcribe a local file:
+# uploaded_file = client.files.upload(file: '/path/to/your/file')
+# transcript = client.transcripts.transcribe(audio_url: uploaded_file.upload_url, speaker_labels: true)
+
+# Or use a publicly-accessible URL:
+audio_url = 'https://assembly.ai/sports_injuries.mp3'
+
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+result = client.lemur.task(
+  transcript_ids: [transcript.id],
+  prompt: 'Provide a brief summary of the transcript.',
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET
+)
+
+puts result.response
+```
+
+
+
+If you run the code above, you'll see the following output:
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+## Ask questions about your audio data
+
+**Q&A with the task endpoint**
+
+
+  
+  To ask question about your audio data, define a prompt with your questions and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
+
+```ruby {9-10,12-17}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/sports_injuries.mp3'
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+# Step 2: Define a prompt with your question(s).
+prompt = "What is a runner's knee?"
+
+# Step 3: Apply LeMUR.
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript.id],
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET
+)
+
+puts response.response
+```
+
+  
+
+#**Example output**
+
+```plain
+Based on the transcript, runner's knee is a condition characterized
+by pain behind or around the kneecap. It is caused by overuse,
+muscle imbalance and inadequate stretching. Symptoms include pain
+under or around the kneecap and pain when walking.
+```
+
+**Q&A with the question-answer endpoint**
+
+The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
+
+
+
+  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+
+
+```ruby {9-25}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+audio_url = 'https://assembly.ai/meeting.mp4'
+
+transcript = client.transcripts.transcribe(audio_url: audio_url)
+
+response = client.lemur.question_answer(
+  transcript_ids: [transcript.id],
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET,
+  context: 'A GitLab meeting to discuss logistic',
+  questions: [
+    {
+      question: 'What are the top level KPIs for engineering?',
+      context: 'KPI stands for key performance indicator',
+      answer_format: 'short sentence'
+    },
+    {
+      question: 'How many days has it been since the data team has gotten updated metrics?',
+      context: 'KPI stands for key performance indicator',
+      answer_options: ['1', '2', '3', '4', '5', '6', '7', 'more than 7']
+    }
+  ]
+)
+
+response.response.each do |qa|
+  printf("Question: %<question>s\n", question: qa.question)
+  printf("Answer: %<answer>s\n", answer: qa.answer)
+end
+```
+
+  
+
+
+For the full API reference, as well as the supported models and FAQs, refer to the [full LeMUR Q&A guide](/docs/lemur/ask-questions).
+
+
+## Change the model type
+
+LeMUR features the following LLMs:
+
+- Claude 3.5 Sonnet
+- Claude 3 Opus
+- Claude 3 Haiku
+- Claude 3 Sonnet
+
+You can switch the model by specifying the `final_model` parameter.
+
+
+
+```ruby {4}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  final_model: AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET
+)
+```
+| Model | SDK Parameter | Description | 
+| --- | --- | --- |
+| **Claude 3.5 Sonnet** | `AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_5_SONNET` | Claude 3.5 Sonnet is the most intelligent model to date, outperforming Claude 3 Opus on a wide range of evaluations, with the speed and cost of Claude 3 Sonnet. This uses Anthropic's Claude 3.5 Sonnet model version `claude-3-5-sonnet-20240620`. |
+| **Claude 3.0 Opus** | `AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_OPUS` | Claude 3 Opus is good at handling complex analysis, longer tasks with many steps, and higher-order math and coding tasks. |
+| **Claude 3.0 Haiku** | `AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_HAIKU` | Claude 3 Haiku is the fastest model that can execute lightweight actions. |
+| **Claude 3.0 Sonnet** | `AssemblyAI::Lemur::LemurModel::ANTHROPIC_CLAUDE3_SONNET` | Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks. |
+
+  
+
+You can find more information on pricing for each model <a href="https://www.assemblyai.com/pricing" target="_blank">here</a>.
+
+
+
+## Change the maximum output size
+
+
+
+  
+  You can change the maximum output size in tokens by specifying the `max_output_size` parameter. Up to 4000 tokens are allowed.
+
+
+```ruby {4}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  max_output_size: 1000
+)
+```
+
+  
+
+
+## Change the temperature
+
+You can change the temperature by specifying the `temperature` parameter, ranging from 0.0 to 1.0.
+
+Higher values result in answers that are more creative, lower values are more conservative.
+
+
+
+```ruby {4}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  temperature: 0.7
+)
+```
+
+  
+
+
+
+
+
+## Send customized input
+
+You can submit custom text inputs to LeMUR without transcript IDs. This allows you to customize the input, for example, you could include the speaker labels for the LLM.
+
+
+
+  
+  To submit custom text input, use the `input_text` parameter instead of `transcript_ids`.
+
+
+```ruby {16}
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  speaker_labels: true
+)
+
+text_with_speaker_labels = (transcript.utterances.map do |utterance|
+  sprintf(
+    "Speaker %<speaker>s:\n%<text>s\n",
+    speaker: utterance.speaker,
+    text: utterance.text
+  )
+end).join("\n")
+
+response = client.lemur.task(
+  prompt: prompt,
+  input_text: text_with_speaker_labels
+)
+
+puts response.response
+```
+
+  
+
+
+
+
+## Submit multiple transcripts
+
+LeMUR can easily ingest multiple transcripts in a single API call.
+
+You can feed in up to a maximum of 100 files or 100 hours, whichever is lower.
+
+
+
+```ruby {3}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [id1, id2, id3]
+)
+```
+
+  
+
+
+
+
+
+## Delete LeMUR request data
+
+You can delete the data for a previously submitted LeMUR request.
+
+Response data from the LLM, as well as any context provided in the original request will be removed.
+
+
+
+```ruby {6}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+)
+
+deletion_response = client.lemur.purge_request_data(request_id: response.request_id)
+```
+
+  

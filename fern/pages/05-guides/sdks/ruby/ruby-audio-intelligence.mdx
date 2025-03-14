@@ -1,0 +1,626 @@
+---
+title: 'Ruby Audio Intelligence'
+---
+
+# Ruby Audio Intelligence
+
+## Auto Chapters
+
+Enable Auto Chapters by setting `auto_chapters` to `true` in the transcription config. `punctuate` must be enabled to use Auto Chapters (`punctuate` is enabled by default).
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  auto_chapters: true
+)
+
+transcript.chapters.each do |chapter|
+  printf(
+    '%<start>d-%<end>d: %<headline>s',
+    start: chapter.start,
+    end: chapter.end_,
+    headline: chapter.headline
+  )
+end
+```
+
+  
+
+**Example output**
+
+```plain
+250-28840: Smoke from hundreds of wildfires in Canada is triggering air quality alerts across US
+29610-280340: High particulate matter in wildfire smoke can lead to serious health problems
+```
+
+<Tip title="Auto Chapters Using LeMUR">
+Check out this cookbook [Creating Chapter Summaries](https://github.com/AssemblyAI/cookbook/blob/master/lemur/input-text-chapters.ipynb) for an example of how to leverage LeMUR's custom text input parameter for chapter summaries.
+</Tip>
+
+For the full API reference, see the [API reference section on the Auto Chapters page](/docs/audio-intelligence/auto-chapters#api-reference).
+
+## Content Moderation
+
+The Content Moderation model lets you detect inappropriate content in audio files to ensure that your content is safe for all audiences.
+
+The model pinpoints sensitive discussions in spoken data and their severity.
+
+**Quickstart**
+
+
+
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  content_safety: true
+)
+
+transcript.content_safety_labels.results.each do |result|
+  puts result.text
+  printf("Timestamp: %<start>d-%<end>d\n", start: result.timestamp.start, end: result.timestamp.end_)
+
+  result.labels.each do |label|
+    printf(
+      "%<label>s - %<confidence>.16f - %<severity>.16f\n",
+      label: label.label,
+      confidence: label.confidence,
+      severity: label.severity
+    )
+  end
+  puts
+end
+
+transcript.content_safety_labels.summary.each_pair do |label, confidence|
+  printf(
+    "%<confidence>d%% confident that the audio contains %<label>s\n",
+    confidence: confidence * 100,
+    label: label
+  )
+end
+
+puts
+
+transcript.content_safety_labels.severity_score_summary.each_pair do |label, severity_confidence|
+  printf(
+    "%<confidence>d%% confident that the audio contains low-severity %<label>s\n",
+    confidence: severity_confidence.low * 100,
+    label: label
+  )
+  printf(
+    "%<confidence>d%% confident that the audio contains medium-severity %<label>s\n",
+    confidence: severity_confidence.medium * 100,
+    label: label
+  )
+  printf(
+    "%<confidence>d%% confident that the audio contains high-severity %<label>s\n",
+    confidence: severity_confidence.high * 100,
+    label: label
+  )
+end
+```
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+disasters - 0.8141 - 0.4014
+
+So what is it about the conditions right now that have caused this round of wildfires to...
+Timestamp: 29290 - 56190
+disasters - 0.9217 - 0.5665
+
+So what is it in this haze that makes it harmful? And I'm assuming it is...
+Timestamp: 56340 - 88034
+health_issues - 0.9358 - 0.8906
+
+...
+
+99.42% confident that the audio contains disasters
+92.70% confident that the audio contains health_issues
+
+57.43% confident that the audio contains low-severity disasters
+42.56% confident that the audio contains mid-severity disasters
+0.0% confident that the audio contains high-severity disasters
+23.57% confident that the audio contains low-severity health_issues
+30.22% confident that the audio contains mid-severity health_issues
+46.19% confident that the audio contains high-severity health_issues
+```
+
+
+
+
+
+**Adjust the confidence threshold**
+
+The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
+
+
+
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+
+```ruby {4}
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  content_safety: true,
+  content_safety_confidence: 60
+)
+```
+
+  
+
+
+For the full API reference, as well as the supported labels and FAQs, refer to the [full Content Moderation page](/docs/audio-intelligence/content-moderation).
+  
+## Entity Detection
+
+The Entity Detection model lets you automatically identify and categorize key information in transcribed audio content.
+
+Here are a few examples of what you can detect:
+
+- Names of people
+- Organizations
+- Addresses
+- Phone numbers
+- Medical data
+- Social security numbers
+
+For the full list of entities that you can detect, see [Supported entities](#supported-entities).
+
+<Tip title="Supported languages">
+Entity Detection is available in multiple languages. See [Supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+</Tip>
+
+**Quickstart**
+
+
+
+  
+  Enable Entity Detection by setting `entity_detection` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  entity_detection: true
+)
+
+transcript.entities.each do |entity|
+  puts entity.text
+  puts entity.entity_type
+  printf("Timestamp: %<start>d - %<end>d\n\n", start: entity.start, end: entity.end_)
+end
+```
+
+  
+
+**Example output**
+
+```plain
+Canada
+location
+Timestamp: 2548 - 3130
+
+the US
+location
+Timestamp: 5498 - 6350
+
+...
+```
+
+For the full API reference, as well as the supported entities and FAQs, refer to the [full Entity Detection page](/docs/audio-intelligence/entity-detection).
+
+
+## Key Phrases
+
+
+The Key Phrases model identifies significant words and phrases in your transcript and lets you extract the most important concepts or highlights from your audio or video file.
+
+
+
+**Quickstart**
+
+
+  
+  Enable Key Phrases by setting `auto_highlights` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  auto_highlights: true
+)
+
+transcript.auto_highlights_result.results.each do |result|
+  timestamps = (result.timestamps.map do |timestamp|
+    format(
+      '[Timestamp(start=%<start>s, end=%<end>s)]',
+      start: timestamp.start,
+      end: timestamp.end_
+    )
+  end).join(', ')
+  printf(
+    "Highlight: %<text>s, Count: %<count>d, Rank %<rank>.2f, Timestamps: %<timestamp>s\n",
+    text: result.text,
+    count: result.count,
+    rank: result.rank,
+    timestamp: timestamps
+  )
+end
+```
+
+  
+
+**Example output**
+
+```plain
+Highlight: air quality alerts, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=3978, end=5114)]
+Highlight: wide ranging air quality consequences, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=235388, end=238838)]
+Highlight: more fires, Count: 1, Rank: 0.07, Timestamps: [Timestamp(start=184716, end=185186)]
+...
+```
+
+For the full API reference and FAQs, refer to the [full Key Phrases page](/docs/audio-intelligence/key-phrases).
+
+
+## PII Redaction  
+
+The PII Redaction model lets you minimize sensitive information about individuals by automatically identifying and removing it from your transcript.
+
+Personal Identifiable Information (PII) is any information that can be used to identify a person, such as a name, email address, or phone number.
+
+When you enable the PII Redaction model, your transcript will look like this:
+
+- With `hash` substitution: `Hi, my name is ####!`
+- With `entity_name` substitution: `Hi, my name is [PERSON_NAME]!`
+
+You can also [Create redacted audio files](#create-redacted-audio-files) to replace sensitive information with a beeping sound.
+
+<Tip title="Supported languages">
+PII Redaction is available in multiple languages. See [Supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+</Tip>
+
+<Warning title="Redacted properties">
+PII only redacts words in the `text` property. Properties from other features may still include PII, such as `entities` from [Entity Detection](/docs/audio-intelligence/entity-detection) or `summary` from [Summarization](/docs/audio-intelligence/summarization).
+</Warning>
+
+
+**Quickstart**
+
+
+  
+  
+Enable PII Redaction by setting `redact_pii` to `true` in the transcription
+config.
+
+Use `redact_pii_policies` to specify the information you want to
+redact. For the full list of policies, see [PII policies](#pii-policies).
+
+```ruby {10-15}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  redact_pii: true,
+  redact_pii_policies: [
+    AssemblyAI::Transcripts::PiiPolicy::PERSON_NAME,
+    AssemblyAI::Transcripts::PiiPolicy::ORGANIZATION,
+    AssemblyAI::Transcripts::PiiPolicy::OCCUPATION
+  ]
+)
+
+puts transcript.text
+```
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And in some places, the air quality warnings include the warning to stay
+inside. We wanted to better understand what's happening here and why, so we
+called ##### #######, an ######### ######### in the ########## ## #############
+###### ### ########### at ##### ####### ##########. Good morning, #########.
+Good morning. So what is it about the conditions right now that have caused this
+round of wildfires to affect so many people so far away? Well, there's a couple
+of things. The season has been pretty dry already, and then the fact that we're
+getting hit in the US. Is because there's a couple of weather systems that ...
+```
+
+**Create redacted audio files**
+
+In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out.
+
+
+
+  To create a redacted version of the audio file, set `redact_pii_audio` to `true` in the transcription config. Use `redact_pii_audio_quality` to specify
+the quality of the redacted audio file.
+
+```ruby {9-11}
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  redact_pii: true,
+  redact_pii_policies: [
+    AssemblyAI::Transcripts::PiiPolicy::PERSON_NAME,
+    AssemblyAI::Transcripts::PiiPolicy::ORGANIZATION,
+    AssemblyAI::Transcripts::PiiPolicy::OCCUPATION
+  ],
+  redact_pii_audio: true,
+  # Optional. Defaults to MP3.
+  redact_pii_audio_quality: AssemblyAI::Transcripts::RedactPiiAudioQuality::WAV
+)
+
+redaction_result = client.transcripts.get_redacted_audio(transcript_id: transcript.id)
+printf(
+  'Status: %<status>s, Redacted audio URL: %<url>s',
+  status: redaction_result.status,
+  url: redaction_result.redacted_audio_url
+)
+```
+
+  
+<Note title="Supported languages">
+
+You can only create redacted audio files for transcriptions in English and Spanish.
+
+</Note>
+
+<Warning title="Maximum audio file size">
+You can only create redacted versions of audio files if the original file is smaller than 1 GB.
+</Warning>
+
+**Example output**
+
+```plain
+https://s3.us-west-2.amazonaws.com/api.assembly.ai.usw2/redacted-audio/ac06721c-d1ea-41a7-95f7-a9463421e6b1.mp3?AWSAccessKeyId=...
+```
+
+For the full API reference, as well as the supported policies and FAQs, refer to the [full PII Redaction page](/docs/audio-intelligence/pii-redaction).
+
+
+## Sentiment Analysis
+
+The Sentiment Analysis model detects the sentiment of each spoken sentence in the transcript text. Use Sentiment Analysis to get a detailed analysis of the positive, negative, or neutral sentiment conveyed in the audio, along with a confidence score for each result.
+
+
+**Quickstart**
+
+
+
+  
+  Enable Sentiment Analysis by setting `sentiment_analysis` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  sentiment_analysis: true
+)
+
+transcript.sentiment_analysis_results.each do |result|
+  puts result.text
+  puts result.sentiment
+  puts result.confidence
+  printf("%<start>d - %<end>d\n", start: result.start, end: result.end_)
+end
+```
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US.
+SentimentType.negative
+0.8181032538414001
+Timestamp: 250 - 6350
+...
+```
+<Tip title="Sentiment Analysis Using LeMUR">
+Check out this cookbook [LeMUR for Customer Call Sentiment Analysis](https://github.com/AssemblyAI/cookbook/blob/master/lemur/call-sentiment-analysis.ipynb) for an example of how to leverage LeMUR's QA feature for sentiment analysis.
+</Tip>
+
+**Add speaker labels to sentiments**
+
+
+  
+  To add speaker labels to each sentiment analysis result, using [Speaker Diarization](/docs/speech-to-text/speaker-diarization), enable `speaker_labels` in the transcription config.
+
+Each sentiment result will then have a `speaker` field that contains the speaker label.
+
+```ruby {4}
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  sentiment_analysis: true,
+  speaker_labels: true
+)
+
+# ...
+
+transcript.sentiment_analysis_results.each do |result|
+  puts result.speaker
+end
+```
+
+  
+
+
+For the full API reference and FAQs, refer to the [full Sentiment Analysis page](/docs/audio-intelligence/sentiment-analysis).
+  
+
+## Summarization
+
+Distill important information by summarizing your audio files.
+
+The Summarization model generates a summary of the resulting transcript. You can control the style and format of the summary using [Summary models](#summary-models) and [Summary types](#summary-types).
+
+<Warning title="Summarization and Auto Chapters">
+You can only enable one of the Summarization and [Auto Chapters](/docs/audio-intelligence/auto-chapters) models in the same transcription.
+</Warning>
+
+**Quickstart**
+
+
+
+  
+  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` and `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```ruby {10-12}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  summarization: true,
+  summary_model: AssemblyAI::Transcripts::SummaryModel::INFORMATIVE,
+  summary_type: AssemblyAI::Transcripts::SummaryType::BULLETS
+)
+
+puts transcript.summary
+```
+
+  
+
+**Example output**
+
+```plain
+- Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. In some places, the air quality warnings include the warning to stay inside.
+- Air pollution levels in Baltimore are considered unhealthy. Exposure to high levels can lead to a host of health problems. With climate change, we are seeing more wildfires. Will we be seeing more of these kinds of wide ranging air quality consequences?
+```
+
+<Tip title="Custom Summaries Using LeMUR">
+If you want more control of the output format, see how to generate a [Custom summary using LeMUR](/docs/lemur/summarize-audio).
+</Tip>
+
+For the full API reference, as well as the supported summary models/types and FAQs, refer to the [full Summarization page](/docs/audio-intelligence/summarization).
+
+
+## Topic Detection
+
+The Topic Detection model lets you identify different topics in the transcript. The model uses the [IAB Content Taxonomy](https://airtable.com/shr7KNXOtvfhTTS4i/tblqVLDb7YSsCMXo4?backgroundColor=purple&viewControls=on), a standardized language for content description which consists of 698 comprehensive topics.
+
+**Quickstart**
+
+
+
+  
+  Enable Topic Detection by setting `iab_categories` to `true` in the transcription config.
+
+
+```ruby {10}
+require 'assemblyai'
+
+client = AssemblyAI::Client.new(api_key: '<YOUR_API_KEY>')
+
+# For local files see our Getting Started guides.
+audio_url = 'https://assembly.ai/wildfires.mp3'
+
+transcript = client.transcripts.transcribe(
+  audio_url: audio_url,
+  iab_categories: true
+)
+
+# Get the parts of the transcript that were tagged with topics
+transcript.iab_categories_result.results.each do |result|
+  puts result.text
+  printf("Timestamp: %<start>d - %<end>d\n", start: result.timestamp.start, end: result.timestamp.end_)
+  result.labels.each do |label|
+    printf("%<label>s (%<relevance>f)\n", label: label.label, relevance: label.relevance)
+  end
+  puts
+end
+
+puts
+
+# Get a summary of all topics in the transcript
+transcript.iab_categories_result.summary.each_pair do |topic, relevance|
+  printf(
+    "Audio is %<relevance>d%% relevant to %<topic>s\n",
+    relevance: relevance * 100,
+    topic: topic
+  )
+end
+```
+
+  
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+Home&Garden>IndoorEnvironmentalQuality (0.9881)
+NewsAndPolitics>Weather (0.5561)
+MedicalHealth>DiseasesAndConditions>LungAndRespiratoryHealth (0.0042)
+...
+Audio is 100.0% relevant to NewsAndPolitics>Weather
+Audio is 93.78% relevant to Home&Garden>IndoorEnvironmentalQuality
+...
+```
+
+<Tip title="Topic Detection Using LeMUR">
+Check out this cookbook [Custom Topic Tags](https://github.com/AssemblyAI/cookbook/blob/master/lemur/custom-topic-tags.ipynb) for an example of how to leverage LeMUR for custom topic detection.
+</Tip>
+
+
+For the full API reference, as well as the full list of supported topics and FAQs, refer to the [full Topic Detection page](/docs/audio-intelligence/topic-detection).
+
