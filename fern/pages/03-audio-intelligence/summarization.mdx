@@ -217,7 +217,7 @@ The following example returns an informative summary in a bulleted list.
 Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
 </Info>
 
-```csharp {46}
+```csharp {52-54}
 using System;
 using System.IO;
 using System.Net.Http;
@@ -236,11 +236,15 @@ class Program
         {
             httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("<YOUR_API_KEY>");
-
-            var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
+                
+            var uploadUrl = await UploadFileAsync("./my-audio.mp3", httpClient);
+            
             var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            
             transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-
+            
+            // Print the transcript ID and summary
+            Console.WriteLine($"Transcript ID: {transcript.Id}");
             Console.WriteLine(transcript.Summary);
         }
     }
@@ -251,7 +255,7 @@ class Program
         using (var fileContent = new StreamContent(fileStream))
         {
             fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-
+            
             using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
             {
                 response.EnsureSuccessStatusCode();
@@ -263,9 +267,15 @@ class Program
 
     static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        var data = new { audio_url = audioUrl, summarization = true, summary_model = "informative", summary_type = "bullets" };
+        var data = new { 
+            audio_url = audioUrl, 
+            summarization = true,
+            summary_model = "informative",
+            summary_type = "bullets"
+        };
+        
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
+        
         using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
             response.EnsureSuccessStatusCode();
@@ -276,37 +286,42 @@ class Program
     static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
     {
         var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
+        
         while (true)
         {
             var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
             transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-            switch (transcript.Status)
+            
+            if (transcript.Status == "completed")
             {
-                case "processing":
-                case "queued":
-                    await Task.Delay(TimeSpan.FromSeconds(3));
-                    break;
-                case "completed":
-                    return transcript;
-                case "error":
-                    throw new Exception($"Transcription failed: {transcript.Error}");
-                default:
-                    throw new Exception("This code shouldn't be reachable.");
+                return transcript;
+            }
+            else if (transcript.Status == "error")
+            {
+                throw new Exception($"Transcription failed: {transcript.Error}");
+            }
+            else
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3));
             }
         }
     }
 
     public class Transcript
     {
+        [JsonPropertyName("id")]
         public string Id { get; set; }
+        
+        [JsonPropertyName("status")]
         public string Status { get; set; }
+        
+        [JsonPropertyName("text")]
         public string Text { get; set; }
+        
+        [JsonPropertyName("summary")]
         public string Summary { get; set; }
-
-        [JsonPropertyName("language_code")]
-        public string LanguageCode { get; set; }
-
+        
+        [JsonPropertyName("error")]
         public string Error { get; set; }
     }
 }
