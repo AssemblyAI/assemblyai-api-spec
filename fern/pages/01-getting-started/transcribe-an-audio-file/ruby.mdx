@@ -1,0 +1,302 @@
+---
+title: 'Transcribe a pre-recorded audio file in Ruby'
+subtitle: 'Learn how to transcribe and analyze an audio file in Ruby .'
+hide-nav-links: true
+description: 'Learn how to transcribe and analyze an audio file in Ruby.'
+---
+
+<Info title="Universal-2 is live">
+Dive into our research paper to see how we're redefining speech AI accuracy. Read more [here](https://www.assemblyai.com/research/universal-2).
+</Info>
+
+## Overview
+
+By the end of this tutorial, you'll be able to:
+
+- Transcribe a pre-recorded audio file.
+- Enable [Speaker Diarization](/docs/speech-to-text/speaker-diarization) to detect speakers in an audio file.
+
+Here's the full sample code for what you'll build in this tutorial:
+
+```ruby
+  require 'net/http'
+  require 'json'
+
+  base_url = 'https://api.assemblyai.com/v2'
+  headers = {
+    authorization: "<YOUR_API_KEY>",
+    content_type: "application/json"
+  }
+
+  # Use a publicly-accessible URL:
+  audio_file = "https://assembly.ai/sports_injuries.mp3"
+
+  ''' Or upload a local file:
+  path = "/my_audio.mp3"
+  uri = URI("#{base_url}/upload")
+  request = Net::HTTP::Post.new(uri, headers)
+  request.body = File.read(path)
+
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true
+  upload_response = http.request(request)
+  upload_url = JSON.parse(upload_response.body)["upload_url"]'''
+
+  data = {
+    audio_url: audio_file, # For local files use: audio_url: upload_url
+    speaker_labels: true
+  }
+
+  uri = URI.parse("#{base_url}/transcript")
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true
+
+  request = Net::HTTP::Post.new(uri.request_uri, headers)
+  request.body = data.to_json
+
+  response = http.request(request)
+  response_body = JSON.parse(response.body)
+
+  unless response.is_a?(Net::HTTPSuccess)
+    raise "API request failed with status #{response.code}: #{response.body}"
+  end
+
+  transcript_id = response_body['id']
+  puts "Transcript ID: #{transcript_id}"
+
+  polling_endpoint = URI.parse("#{base_url}/transcript/#{transcript_id}")
+
+  while true
+    polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+    polling_http.use_ssl = true
+    polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+    polling_response = polling_http.request(polling_request)
+    
+    transcription_result = JSON.parse(polling_response.body)
+
+    if transcription_result['status'] == 'completed'
+      puts "\nFull Transcript:\n\n#{transcription_result['text']}\n"
+
+      if transcription_result['utterances']
+        puts "\nSpeaker Segmentation:\n"
+        transcription_result['utterances'].each do |utterance|
+          puts "Speaker #{utterance['speaker']}: #{utterance['text']}"
+        end
+      end
+      break
+    elsif transcription_result['status'] == 'error'
+      raise "Transcription failed: #{transcription_result['error']}"
+    else
+      puts "Waiting for transcription to complete..."
+      sleep(3)
+    end
+  end
+```
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Ruby](https://www.ruby-lang.org/en/) installed.
+- <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">A free AssemblyAI account</a>.
+
+
+## Step 1: Import the necessary libraries 
+Create a new file and import the net/http and json libraries.
+
+```ruby
+require 'net/http'
+require 'json'
+```
+
+## Step 2: Set up the API endpoint and headers
+In this step you'll set the base URL and configure your API key.
+
+  <Steps>
+    <Step>
+      Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
+    </Step>
+
+    <Step>
+      Set the base URL and set your headers. Replace `YOUR_API_KEY` with your copied API key.
+      ```ruby
+      base_url = 'https://api.assemblyai.com/v2'
+      headers = {
+        authorization: "<YOUR_API_KEY>",
+        content_type: "application/json"
+      }
+      ```
+    </Step>
+  </Steps>
+
+## Step 3: Submit audio for transcription
+
+In this step, you'll submit the audio file for transcription and wait until it's completes. The time it takes to process an audio file depends on its duration and the enabled models. Most transcriptions complete within 45 seconds.
+
+<Steps>
+  <Step>
+
+  Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+
+  ```ruby
+  audio_file = "https://assembly.ai/sports_injuries.mp3"
+  ```
+
+    <Note title="Local audio files">
+      If you want to use a local file, you can send the file to our upload endpoint. You'll want to add some error handling in case the upload fails. If the request is successful, the upload endpoint will respond with an `upload_url` :
+
+      ```ruby
+      path = "/my_audio.mp3"
+      uri = URI("#{base_url}/upload")
+      request = Net::HTTP::Post.new(uri, headers)
+      request.body = File.read(path)
+
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      upload_response = http.request(request)
+      upload_url = JSON.parse(upload_response.body)["upload_url"]
+      ```
+      We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
+    </Note>
+
+    <Note title="YouTube">
+
+      YouTube URLs are not supported. If you want to transcribe a YouTube video, you need to download the audio first.
+
+    </Note>
+
+  </Step>
+  <Step>
+    Pass the audio URL to the data object.
+
+    ```ruby
+    data = { audio_url: audio_file }
+    # Or pass the upload_url if you used the upload endpoint
+    # data = { audio_url: upload_url }
+    ```
+
+    <Tip title="Select the speech model">
+      You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application. See [Select the speech model](/docs/speech-to-text/pre-recorded-audio#select-the-speech-model-with-best-and-nano).
+    </Tip>
+  </Step>
+  <Step>
+    Make a `POST` request to the AssemblyAI API endpoint with the payload and headers and check for potential errors.
+
+    ```ruby
+    uri = URI.parse("#{base_url}/transcript")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+
+    request = Net::HTTP::Post.new(uri.request_uri, headers)
+    request.body = data.to_json
+
+    response = http.request(request)
+    response_body = JSON.parse(response.body)
+
+    unless response.is_a?(Net::HTTPSuccess)
+      raise "API request failed with status #{response.code}: #{response.body}"
+    end
+    ```
+  </Step>
+  <Step>
+    After making the request, you’ll receive an `id` for the transcription. Use it to poll the API every few seconds to check the `status` of the transcript job. Once the `status` is `completed`, you can retrieve the transcript from the API response. If the `status` is `error`, print the error value to get more information on why your request failed. 
+
+    ```ruby
+    transcript_id = response_body['id']
+    puts "Transcript ID: #{transcript_id}"
+    polling_endpoint = URI.parse("#{base_url}/transcript/#{transcript_id}")
+
+    while true
+      polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+      polling_http.use_ssl = true
+      polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+      polling_response = polling_http.request(polling_request)
+      
+      transcription_result = JSON.parse(polling_response.body)
+
+      if transcription_result['status'] == 'completed'
+        puts transcription_result['text']
+        break
+      elsif transcription_result['status'] == 'error'
+        raise "Transcription failed: #{transcription_result['error']}"
+      else
+        puts "Waiting for transcription to complete..."
+        sleep(3)
+      end
+    end
+    ```
+  </Step>
+  <Step>
+    Run the application and wait for it to finish.
+  </Step>
+</Steps>
+
+
+You've successfully transcribed your first audio file. You can see all submitted transcription jobs in the <a href="https://www.assemblyai.com/app/processing-queue" target="_blank">Processing queue</a>.
+
+## Step 4: Enable additional AI models
+
+You can extract even more insights from the audio by enabling any of our [AI models](/audio-intelligence) using _transcription options_. In this step, you'll enable the [Speaker diarization](/docs/speech-to-text/speaker-diarization) model to detect who said what.
+
+<Steps>
+  <Step>
+    Add the `speaker_labels` parameter to the data object.
+
+    ```ruby
+    data = {
+      audio_url: audio_file, # For local files use: audio_url: upload_url
+      speaker_labels: true
+    }
+    ```
+  </Step>
+  <Step>
+    Update your polling statement to iterate over the `utterances` value and print the speakers. In addition to the full transcript, you now have access to utterances from each speaker.
+
+    ```ruby
+    while true
+      polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+      polling_http.use_ssl = true
+      polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+      polling_response = polling_http.request(polling_request)
+      
+      transcription_result = JSON.parse(polling_response.body)
+
+      if transcription_result['status'] == 'completed'
+        puts "\nFull Transcript:\n\n#{transcription_result['text']}\n"
+
+        if transcription_result['utterances']
+          puts "\nSpeaker Segmentation:\n"
+          transcription_result['utterances'].each do |utterance|
+            puts "Speaker #{utterance['speaker']}: #{utterance['text']}"
+          end
+        end
+        break
+      elsif transcription_result['status'] == 'error'
+        raise "Transcription failed: #{transcription_result['error']}"
+      else
+        puts "Waiting for transcription to complete..."
+        sleep(3)
+      end
+    end
+    ```
+  </Step>
+</Steps>
+
+
+Many of the properties in the transcript object only become available after you enable the corresponding model. For more information, see the models under [Speech-to-Text](/speech-to-text) and [Audio Intelligence](/audio-intelligence).
+
+
+## Next steps
+
+In this tutorial, you've learned how to generate a transcript for an audio file and how to extract speaker information by enabling the [Speaker diarization](/docs/speech-to-text/speaker-diarization) model.
+
+Want to learn more?
+
+- For more ways to analyze your audio data, explore our [Audio Intelligence models](/audio-intelligence).
+- If you want to transcribe audio in real-time, see [Transcribe streaming audio from a microphone](/getting-started/transcribe-streaming-audio-from-a-microphone).
+- To search, summarize, and ask questions on your transcripts with LLMs, see [LeMUR](/lemur).
+
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
