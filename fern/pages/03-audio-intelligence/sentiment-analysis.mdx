@@ -198,7 +198,11 @@ while (true) {
   
   Enable Sentiment Analysis by setting `sentiment_analysis` to `true` in the JSON payload.
 
-```csharp {46}
+<Info>
+Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
+</Info>
+
+```csharp {53}
 using System;
 using System.IO;
 using System.Net.Http;
@@ -208,32 +212,36 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Text.Json.Serialization;
+using System.Collections.Generic;
 
 class Program
 {
     static async Task Main(string[] args)
     {
+        string baseUrl = "https://api.assemblyai.com";
+        
         using (var httpClient = new HttpClient())
         {
-            httpClient.DefaultRequestHeaders.Authorization =
+            httpClient.DefaultRequestHeaders.Authorization = 
                 new AuthenticationHeaderValue("<YOUR_API_KEY>");
 
-            var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
-            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+            string uploadUrl = await UploadFileAsync("./local_file.mp3", httpClient, baseUrl);
             
-            Console.WriteLine(transcript.Text);
+            var transcript = await CreateTranscriptWithSentimentAnalysisAsync(uploadUrl, httpClient, baseUrl);
+            
+            Console.WriteLine($"Transcript ID: {transcript.Id}");
+            transcript = await WaitForTranscriptToProcessAndAnalyzeSentiment(transcript, httpClient, baseUrl);
         }
     }
 
-    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient, string baseUrl)
     {
         using (var fileStream = File.OpenRead(filePath))
         using (var fileContent = new StreamContent(fileStream))
         {
             fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-            using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+            using (var response = await httpClient.PostAsync($"{baseUrl}/v2/upload", fileContent))
             {
                 response.EnsureSuccessStatusCode();
                 var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
@@ -242,52 +250,93 @@ class Program
         }
     }
 
-    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+    static async Task<Transcript> CreateTranscriptWithSentimentAnalysisAsync(string audioUrl, HttpClient httpClient, string baseUrl)
     {
-        var data = new { audio_url = audioUrl, sentiment_analysis = true };
+        var data = new 
+        { 
+            audio_url = audioUrl,
+            sentiment_analysis = true
+        };
+        
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        using (var response = await httpClient.PostAsync($"{baseUrl}/v2/transcript", content))
         {
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
 
-    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    static async Task<Transcript> WaitForTranscriptToProcessAndAnalyzeSentiment(Transcript transcript, HttpClient httpClient, string baseUrl)
     {
-        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+        string pollingEndpoint = $"{baseUrl}/v2/transcript/{transcript.Id}";
 
         while (true)
         {
             var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
             transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+            
             switch (transcript.Status)
             {
-                case "processing":
-                case "queued":
-                    await Task.Delay(TimeSpan.FromSeconds(3));
-                    break;
                 case "completed":
+                    // Process sentiment analysis results
+                    if (transcript.SentimentAnalysisResults != null)
+                    {
+                        foreach (var result in transcript.SentimentAnalysisResults)
+                        {
+                            Console.WriteLine(result.Text);
+                            Console.WriteLine(result.Sentiment);  // POSITIVE, NEUTRAL, or NEGATIVE
+                            Console.WriteLine(result.Confidence);
+                            Console.WriteLine($"Timestamp: {result.Start} - {result.End}");
+                        }
+                    }
+                    
                     return transcript;
+                    
                 case "error":
                     throw new Exception($"Transcription failed: {transcript.Error}");
+                    
                 default:
-                    throw new Exception("This code shouldn't be reachable.");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
             }
         }
     }
 
     public class Transcript
     {
+        [JsonPropertyName("id")]
         public string Id { get; set; }
+        
+        [JsonPropertyName("status")]
         public string Status { get; set; }
+        
+        [JsonPropertyName("text")]
         public string Text { get; set; }
-
-        [JsonPropertyName("language_code")]
-        public string LanguageCode { get; set; }
-
+        
+        [JsonPropertyName("sentiment_analysis_results")]
+        public List<SentimentAnalysisResult> SentimentAnalysisResults { get; set; }
+        
+        [JsonPropertyName("error")]
         public string Error { get; set; }
+    }
+
+    public class SentimentAnalysisResult
+    {
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
+        
+        [JsonPropertyName("sentiment")]
+        public string Sentiment { get; set; }
+        
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
+        
+        [JsonPropertyName("start")]
+        public int Start { get; set; }
+        
+        [JsonPropertyName("end")]
+        public int End { get; set; }
     }
 }
 ```
@@ -322,7 +371,6 @@ data = {
   "audio_url" => upload_url, # You can also use a URL to an audio or video file on the web
   "sentiment_analysis" => true,
 }
-
 uri = URI.parse("#{base_url}/v2/transcript")
 http = Net::HTTP.new(uri.host, uri.port)
 http.use_ssl = true
@@ -552,8 +600,42 @@ const data = {
 
 Each sentiment result will then have a `speaker` field that contains the speaker label.
 
-```csharp {1}
-var data = new { audio_url = audioUrl, sentiment_analysis = true, speaker_labels = true };
+```csharp {5,12,33-34}
+  var data = new 
+  { 
+      audio_url = audioUrl,
+      sentiment_analysis = true,
+      speaker_labels = true
+  };
+
+// ...
+
+  foreach (var result in transcript.SentimentAnalysisResults)
+  {
+      Console.WriteLine($"Speaker: {result.Speaker}");
+  }
+
+// ...
+    public class SentimentAnalysisResult
+    {
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
+        
+        [JsonPropertyName("sentiment")]
+        public string Sentiment { get; set; }
+        
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
+        
+        [JsonPropertyName("start")]
+        public int Start { get; set; }
+        
+        [JsonPropertyName("end")]
+        public int End { get; set; }
+
+        [JsonPropertyName("speaker")]
+        public string Speaker { get; set; }
+    }
 ```
 
   </Tab>
