@@ -1,34 +1,33 @@
 // Function to scroll highlighted lines into view
 function scrollHighlightedLines() {
-  // Find all code blocks
-  const codeBlocks = document.querySelectorAll('.code-block-root');
-  
-  codeBlocks.forEach(block => {
-    // Find the scrollable viewport within this code block
+  document.querySelectorAll('.code-block-root').forEach(block => {
     const viewport = block.querySelector('[data-radix-scroll-area-viewport]');
-    
     if (viewport) {
-      // Find all highlighted lines within this code block
       const highlightedLines = block.querySelectorAll('.code-block-line.highlight');
-      
       if (highlightedLines.length > 0) {
-        // If there are multiple highlighted lines, scroll to the first one
         const firstHighlightedLine = highlightedLines[0];
+        const allLines = block.querySelectorAll('.code-block-line');
+        const lineHeight = firstHighlightedLine.clientHeight;
+        const viewportHeight = viewport.clientHeight;
+        const visibleLines = Math.floor(viewportHeight / lineHeight);
+        // -1 because it looks better in my opinion
+        const linesAbove = Math.floor(visibleLines / 2) - 1;
         
-        // Scroll the line into view
-        firstHighlightedLine.scrollIntoView({
-          behavior: 'auto',
-          block: 'center' // Centers the line in the visible area
-        });
+        viewport.scrollTop = firstHighlightedLine.offsetTop - (linesAbove * lineHeight);
       }
     }
   });
 }
 
-// Run when the page loads
+// Run on initial load and navigation
+scrollHighlightedLines();
 document.addEventListener('DOMContentLoaded', scrollHighlightedLines);
 
-// Also run when the page is fully loaded (in case DOMContentLoaded fired too early)
-if (document.readyState === 'complete') {
-  scrollHighlightedLines();
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', scrollHighlightedLines);
+  document.addEventListener('next-navigation', scrollHighlightedLines);
+  document.addEventListener('routeChangeComplete', scrollHighlightedLines);
+  
+  const observer = new MutationObserver(scrollHighlightedLines);
+  observer.observe(document.body, { childList: true, subtree: true });
 } 
