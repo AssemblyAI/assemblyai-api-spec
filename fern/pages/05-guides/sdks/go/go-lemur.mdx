@@ -1,0 +1,375 @@
+---
+title: 'Go LeMUR'
+---
+
+
+# LeMUR
+
+## Summarize your audio data
+
+
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    // You can use a local file:
+    /*
+    f, err := os.Open("./example.mp3")
+    [error handling here]
+    transcript, err := client.Transcripts.TranscribeFromReader(ctx, f, params)
+    */
+
+    // Or use a publicly-accessible URL:
+    audioURL := "https://assembly.ai/sports_injuries.mp3"
+
+    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+
+    prompt := "Provide a brief summary of the transcript."
+
+    var params aai.LeMURTaskParams
+    params.Prompt = aai.String(prompt)
+    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+    params.FinalModel = "anthropic/claude-3-5-sonnet"
+
+    result, _ := client.LeMUR.Task(ctx, params)
+
+    fmt.Println(*result.Response)
+}
+```
+
+  
+
+If you run the code above, you'll see the following output:
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+## Ask questions about your audio data
+
+**Q&A with the task endpoint**
+
+
+  
+  To summarize the content in your audio data, define a summarization prompt and call `client.LeMUR.Task()`. Use the `TranscriptIDs` parameter to send one or more transcripts as additional context for the model.
+
+```go {19-20,22-28}
+package main
+
+import (
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    // Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+    audioURL := "https://assembly.ai/sports_injuries.mp3"
+    transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+
+    // Step 2: Define a prompt with your question.
+    prompt := "What is a runner's knee?"
+
+    // Step 3: Apply LeMUR.
+    var params aai.LeMURTaskParams
+    params.Prompt = aai.String(prompt)
+    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+    params.FinalModel = "anthropic/claude-3-5-sonnet"
+
+    result, _ := client.LeMUR.Task(ctx, params)
+
+    fmt.Println(*result.Response)
+}
+```
+
+  
+
+#**Example output**
+
+```plain
+Based on the transcript, runner's knee is a condition characterized
+by pain behind or around the kneecap. It is caused by overuse,
+muscle imbalance and inadequate stretching. Symptoms include pain
+under or around the kneecap and pain when walking.
+```
+
+**Q&A with the question-answer endpoint**
+
+The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
+
+
+
+  To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+
+
+```go {18-28,30-34}
+package main
+
+import (
+    "context"
+    "fmt"
+
+    aai "github.com/AssemblyAI/assemblyai-go-sdk"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := aai.NewClient("<YOUR_API_KEY>")
+
+    audioURL := "https://assembly.ai/meeting.mp4"
+    transcript, err := client.Transcripts.TranscribeFromURL(ctx, audioURL, nil)
+
+    questions := []aai.LemurQuestion{
+        {
+            Question: "What are the top level KPIs for engineering?",
+            Context:  aai.String("KPI stands for key performance indicator"),
+            AnswerFormat: aai.String("short sentence"),
+        },
+        {
+            Question: "How many days has it been since the data team has gotten updated metrics?",
+            AnswerOptions: &[]string{"1", "2", "3", "4", "5", "6", "7", "more than 7"},
+        },
+    }
+
+    var params aai.LemurQuestionParams
+    params.Questions = questions
+    params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+    params.Context = aai.String("A GitLab meeting to discuss logistics")
+    params.FinalModel = aai.String("anthropic/claude-3-5-sonnet")
+
+    result, err := client.LeMUR.Question(ctx, params)
+
+
+    for _, response := range result.Response {
+        fmt.Printf("Question: %s\n", response.Question)
+        fmt.Printf("Answer: %s\n\n", response.Answer)
+    }
+}
+```
+
+  
+
+
+For the full API reference, as well as the supported models and FAQs, refer to the [full LeMUR Q&A guide](/docs/lemur/ask-questions).
+
+
+## Change the model type
+
+LeMUR features the following LLMs:
+
+- Claude 3.5 Sonnet
+- Claude 3 Opus
+- Claude 3 Haiku
+- Claude 3 Sonnet
+
+You can switch the model by specifying the `final_model` parameter.
+
+
+
+```go {4}
+var params aai.LeMURTaskParams
+params.Prompt = aai.String(prompt)
+params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+params.FinalModel = "anthropic/claude-3-5-sonnet"
+
+result, _ := client.LeMUR.Task(ctx, params)
+```
+| Model | SDK Parameter | Description | 
+| --- | --- | --- |
+| **Claude 3.5 Sonnet** | `"anthropic/claude-3-5-sonnet"` | Claude 3.5 Sonnet is the most intelligent model to date, outperforming Claude 3 Opus on a wide range of evaluations, with the speed and cost of Claude 3 Sonnet. This uses Anthropic's Claude 3.5 Sonnet model version `claude-3-5-sonnet-20240620`. |
+| **Claude 3.0 Opus** | `"anthropic/claude-3-opus"` | Claude 3 Opus is good at handling complex analysis, longer tasks with many steps, and higher-order math and coding tasks. |
+| **Claude 3.0 Haiku** | `"anthropic/claude-3-haiku"` | Claude 3 Haiku is the fastest model that can execute lightweight actions. |
+| **Claude 3.0 Sonnet** | `"anthropic/claude-3-sonnet"` | Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks. |
+
+  
+
+You can find more information on pricing for each model <a href="https://www.assemblyai.com/pricing" target="_blank">here</a>.
+
+
+
+## Change the maximum output size
+
+
+
+  
+  You can change the maximum output size in tokens by specifying the `MaxOutputSize` parameter. Up to 4000 tokens are allowed.
+
+
+```go {4}
+var params aai.LeMURTaskParams
+params.Prompt = aai.String(prompt)
+params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+params.MaxOutputSize = aai.Int64(2000)
+
+result, _ := client.LeMUR.Task(ctx, params)
+```
+
+  
+
+
+## Change the temperature
+
+You can change the temperature by specifying the `temperature` parameter, ranging from 0.0 to 1.0.
+
+Higher values result in answers that are more creative, lower values are more conservative.
+
+
+
+```go {4}
+var params aai.LeMURTaskParams
+params.Prompt = aai.String(prompt)
+params.TranscriptIDs = []string{aai.ToString(transcript.ID)}
+params.Temperature = aai.Float64(0.7)
+
+result, _ := client.LeMUR.Task(ctx, params)
+```
+
+  
+
+
+
+
+
+## Send customized input
+
+You can submit custom text inputs to LeMUR without transcript IDs. This allows you to customize the input, for example, you could include the speaker labels for the LLM.
+
+
+
+  
+  To submit custom text input, use the `InputText` parameter instead of `TranscriptIDs`.
+
+
+```go {16}
+transcript, _ := client.Transcripts.TranscribeFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
+    SpeakerLabels: aai.Bool(true),
+})
+
+var textWithSpeakerLabels string
+
+for _, utterance := range transcript.Utterances {
+    textWithSpeakerLabels += fmt.Sprintf("Speaker %s:\n%s\n",
+        aai.ToString(utterance.Speaker),
+        aai.ToString(utterance.Text),
+    )
+}
+
+var params aai.LeMURTaskParams
+params.Prompt = aai.String(prompt)
+params.InputText = aai.String(textWithSpeakerLabels)
+
+result, _ := client.LeMUR.Task(ctx, params)
+```
+
+  
+
+
+
+
+## Submit multiple transcripts
+
+LeMUR can easily ingest multiple transcripts in a single API call.
+
+You can feed in up to a maximum of 100 files or 100 hours, whichever is lower.
+
+
+
+```go {2}
+var params aai.LeMURTaskParams
+params.TranscriptIDs = []string{id1, id2, id3}
+params.Prompt = aai.String("Provide a summary of these customer calls.")
+
+result, _ := client.LeMUR.Task(ctx, params)
+```
+
+  
+
+
+
+
+
+## Delete LeMUR request data
+
+You can delete the data for a previously submitted LeMUR request.
+
+Response data from the LLM, as well as any context provided in the original request will be removed.
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+
+```python {3}
+result = transcript.lemur.task(prompt)
+
+deletion_response = aai.Lemur.purge_request_data(result.request_id)
+```
+
+  </Tab>
+  <Tab language="typescript" title="TypeScript">
+
+```ts {6}
+const { response, request_id } = await client.lemur.task({
+  transcript_ids: [transcript.id],
+  prompt
+})
+
+const deletionResponse = await client.lemur.purgeRequestData(request_id)
+```
+
+  </Tab>
+  <Tab language="java" title="Java">
+
+```java {6}
+var response = client.lemur().task(LemurTaskParams.builder()
+        .prompt(prompt)
+        .transcriptIds(List.of(transcript.getId()))
+        .build());
+
+var deletionResponse = client.lemur().purgeRequestData(response.getRequestId());
+```
+
+  </Tab>
+  <Tab language="csharp" title="C#">
+
+```csharp {3}
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+
+var deletionResponse = await client.Lemur.PurgeRequestDataAsync(response.RequestId);
+```
+
+  </Tab>
+  <Tab language="ruby" title="Ruby">
+
+```ruby {6}
+response = client.lemur.task(
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+)
+
+deletion_response = client.lemur.purge_request_data(request_id: response.request_id)
+```
+
+  </Tab>
+</Tabs>
