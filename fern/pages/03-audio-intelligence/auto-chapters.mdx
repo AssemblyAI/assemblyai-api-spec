@@ -1,11 +1,22 @@
 ---
-title: 'Auto Chapters'
-description: 'Automatically summarize your audio into chapters'
+title: "Auto Chapters"
+description: "Automatically summarize your audio into chapters"
 ---
 
+import { LanguageTable } from "../../assets/components/LanguagesTable";
 
-  
-
+<Accordion title="Supported languages">
+  <LanguageTable
+    languages={[
+      { name: "Global English", code: "en" },
+      { name: "Australian English", code: "en_au" },
+      { name: "British English", code: "en_uk" },
+      { name: "US English", code: "en_us" },
+    ]}
+    columns={2}
+  />
+  <br />
+</Accordion>
 
 The Auto Chapters model summarizes audio data over time into chapters. Chapters makes it easy for users to navigate and find specific information.
 
@@ -17,12 +28,10 @@ Each chapter contains the following:
 - Start and end timestamps
 
 <Warning title="Auto Chapters and Summarization">
-You can only enable one of the Auto Chapters and [Summarization](/docs/audio-intelligence/summarization) models in the same transcription.
+  You can only enable one of the Auto Chapters and
+  [Summarization](/docs/audio-intelligence/summarization) models in the same
+  transcription.
 </Warning>
-
-
-
-
 
 ## Quickstart
 
@@ -104,33 +113,31 @@ while True:
   
   Enable Auto Chapters by setting `auto_chapters` to `true` in the transcription config. `punctuate` must be enabled to use Auto Chapters (`punctuate` is enabled by default).
 
-
 ```ts {13}
-import { AssemblyAI } from 'assemblyai'
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-  apiKey: '<YOUR_API_KEY>'
-})
+  apiKey: "<YOUR_API_KEY>",
+});
 
 // const audioFile = './local_file.mp3'
-const audioFile =
-  'https://assembly.ai/wildfires.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
 
 const params = {
   audio: audioFile,
-  auto_chapters: true
-}
+  auto_chapters: true,
+};
 
 const run = async () => {
-  const transcript = await client.transcripts.transcribe(params)
-  console.log('Transcript ID: ', transcript.id)
+  const transcript = await client.transcripts.transcribe(params);
+  console.log("Transcript ID: ", transcript.id);
 
   for (const chapter of transcript.chapters!) {
-    console.log(`${chapter.start}-${chapter.end}: ${chapter.headline}`)
+    console.log(`${chapter.start}-${chapter.end}: ${chapter.headline}`);
   }
-}
+};
 
-run()
+run();
 ```
 
   </Tab>
@@ -139,50 +146,50 @@ run()
   Enable Auto Chapters by setting `auto_chapters` to `true` in the JSON payload.
 
 ```ts {19}
-import axios from 'axios'
-import fs from 'fs-extra'
+import axios from "axios";
+import fs from "fs-extra";
 
-const baseUrl = 'https://api.assemblyai.com'
+const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
-  authorization: '<YOUR_API_KEY>'
-}
+  authorization: "<YOUR_API_KEY>",
+};
 
-const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
 const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers
-})
-const uploadUrl = uploadResponse.data.upload_url
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
-  auto_chapters: true
-}
+  auto_chapters: true,
+};
 
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
 
-const transcriptId = response.data.id
-console.log("Transcript ID: ", transcriptId)
+const transcriptId = response.data.id;
+console.log("Transcript ID: ", transcriptId);
 
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
 while (true) {
   const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers
-  })
-  const transcriptionResult = pollingResponse.data
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
 
-  if (transcriptionResult.status === 'completed') {
-    for (const chapter of transcriptionResult.chapters){
-      console.log(`${chapter.start} - ${chapter.end}: ${chapter.headline}`)
+  if (transcriptionResult.status === "completed") {
+    for (const chapter of transcriptionResult.chapters) {
+      console.log(`${chapter.start} - ${chapter.end}: ${chapter.headline}`);
     }
-    break
-  } else if (transcriptionResult.status === 'error') {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
   } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
 ```
@@ -193,9 +200,11 @@ while (true) {
   Enable Auto Chapters by setting `auto_chapters` to `true` in the JSON payload.
 
 <Info>
-Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
+  Most of these libraries are included by default, but on .NET Framework and
+  Mono you need to reference the System.Net.Http library and install the
+  [System.Net.Http.Json NuGet
+  package](https://www.nuget.org/packages/System.Net.Http.Json).
 </Info>
-
 
 ```csharp {53}
 using System;
@@ -214,16 +223,16 @@ class Program
     static async Task Main(string[] args)
     {
         string baseUrl = "https://api.assemblyai.com";
-        
+
         using (var httpClient = new HttpClient())
         {
-            httpClient.DefaultRequestHeaders.Authorization = 
+            httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("<YOUR_API_KEY>");
 
             string uploadUrl = await UploadFileAsync("./local_file.mp3", httpClient, baseUrl);
-            
+
             var transcript = await CreateTranscriptWithAutoChaptersAsync(uploadUrl, httpClient, baseUrl);
-            
+
             Console.WriteLine($"Transcript ID: {transcript.Id}");
             transcript = await WaitForTranscriptToProcessAndGetChapters(transcript, httpClient, baseUrl);
         }
@@ -247,12 +256,12 @@ class Program
 
     static async Task<Transcript> CreateTranscriptWithAutoChaptersAsync(string audioUrl, HttpClient httpClient, string baseUrl)
     {
-        var data = new 
-        { 
+        var data = new
+        {
             audio_url = audioUrl,
             auto_chapters = true
         };
-        
+
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
         using (var response = await httpClient.PostAsync($"{baseUrl}/v2/transcript", content))
@@ -270,7 +279,7 @@ class Program
         {
             var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
             transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-            
+
             switch (transcript.Status)
             {
                 case "completed":
@@ -282,12 +291,12 @@ class Program
                             Console.WriteLine($"{chapter.Start} - {chapter.End}: {chapter.Headline}");
                         }
                     }
-                    
+
                     return transcript;
-                    
+
                 case "error":
                     throw new Exception($"Transcription failed: {transcript.Error}");
-                    
+
                 default:
                     await Task.Delay(TimeSpan.FromSeconds(3));
                     break;
@@ -299,16 +308,16 @@ class Program
     {
         [JsonPropertyName("id")]
         public string Id { get; set; }
-        
+
         [JsonPropertyName("status")]
         public string Status { get; set; }
-        
+
         [JsonPropertyName("text")]
         public string Text { get; set; }
-        
+
         [JsonPropertyName("chapters")]
         public List<Chapter> Chapters { get; set; }
-        
+
         [JsonPropertyName("error")]
         public string Error { get; set; }
     }
@@ -317,15 +326,16 @@ class Program
     {
         [JsonPropertyName("start")]
         public int Start { get; set; }
-        
+
         [JsonPropertyName("end")]
         public int End { get; set; }
-        
+
         [JsonPropertyName("headline")]
         public string Headline { get; set; }
     }
 }
 ```
+
   </Tab>
   <Tab language="ruby" title="Ruby">
   
@@ -381,9 +391,9 @@ while true
   polling_http.use_ssl = true
   polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
   polling_response = polling_http.request(polling_request)
-  
+
   transcription_result = JSON.parse(polling_response.body)
-  
+
   if transcription_result['status'] == 'completed'
     transcription_result['chapters'].each do |chapter|
       puts "#{chapter['start']} - #{chapter['end']}: #{chapter['headline']}"
@@ -486,10 +496,11 @@ while (true) {
 ```
 
 <Tip title="Auto Chapters Using LeMUR">
-Check out this cookbook [Creating Chapter Summaries](https://github.com/AssemblyAI/cookbook/blob/master/lemur/input-text-chapters.ipynb) for an example of how to leverage LeMUR's custom text input parameter for chapter summaries.
+  Check out this cookbook [Creating Chapter
+  Summaries](https://github.com/AssemblyAI/cookbook/blob/master/lemur/input-text-chapters.ipynb)
+  for an example of how to leverage LeMUR's custom text input parameter for
+  chapter summaries.
 </Tip>
-
-
 
 ## API reference
 
@@ -510,22 +521,19 @@ curl https://api.assemblyai.com/v2/transcript \
 | `auto_chapters` | boolean | Enable Auto Chapters. |
 
 ### Response
+
 <Markdown src="auto-chapters-response.mdx" />
 
-| Key | Type | Description |
-| --- | --- | --- |
-| `chapters` | array | An array of temporally sequential chapters for the audio file. |
-| `chapters[i].gist` | string | An short summary in a few words of the content spoken in the i-th chapter. |
-| `chapters[i].headline` | string | A single sentence summary of the content spoken during the i-th chapter. |
-| `chapters[i].summary` | string | A one paragraph summary of the content spoken during the i-th chapter. |
-| `chapters[i].start` | number | The starting time, in milliseconds, for the i-th chapter. |
-| `chapters[i].end` | number | The ending time, in milliseconds, for the i-th chapter. |
+| Key                    | Type   | Description                                                                |
+| ---------------------- | ------ | -------------------------------------------------------------------------- |
+| `chapters`             | array  | An array of temporally sequential chapters for the audio file.             |
+| `chapters[i].gist`     | string | An short summary in a few words of the content spoken in the i-th chapter. |
+| `chapters[i].headline` | string | A single sentence summary of the content spoken during the i-th chapter.   |
+| `chapters[i].summary`  | string | A one paragraph summary of the content spoken during the i-th chapter.     |
+| `chapters[i].start`    | number | The starting time, in milliseconds, for the i-th chapter.                  |
+| `chapters[i].end`      | number | The ending time, in milliseconds, for the i-th chapter.                    |
 
 The response also includes the request parameters used to generate the transcript.
-
-
-
-
 
 ## Frequently asked questions
 
@@ -550,7 +558,3 @@ No, the number of chapters generated by the Auto Chapters model isn't configurab
 One possible reason is that the audio file doesn't contain enough variety in topic or tone for the model to identify separate chapters. Another reason could be due to background noise or low-quality audio interfering with the model's analysis.
 
 </Accordion>
-
-
-
-

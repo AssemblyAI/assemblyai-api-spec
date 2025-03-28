@@ -1,26 +1,33 @@
 ---
-title: 'Content Moderation'
-description: 'Detect sensitive content in your audio files'
+title: "Content Moderation"
+description: "Detect sensitive content in your audio files"
 ---
 
+import { LanguageTable } from "../../assets/components/LanguagesTable";
 
-  
-
-
-
-
-
+<Accordion title="Supported languages">
+  <LanguageTable
+    languages={[
+      { name: "Global English", code: "en" },
+      { name: "Australian English", code: "en_au" },
+      { name: "British English", code: "en_uk" },
+      { name: "US English", code: "en_us" },
+      { name: "Spanish", code: "es" },
+      { name: "French", code: "fr" },
+      { name: "German", code: "de" },
+      { name: "Italian", code: "it" },
+      { name: "Portuguese", code: "pt" },
+    ]}
+    columns={2}
+  />
+  <br />
+</Accordion>
 
 The Content Moderation model lets you detect inappropriate content in audio files to ensure that your content is safe for all audiences.
 
 The model pinpoints sensitive discussions in spoken data and their severity.
 
-
-
-
-
 ## Quickstart
-
 
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
@@ -101,7 +108,7 @@ while True:
     transcription_result = requests.get(polling_endpoint, headers=headers).json()
 
     if transcription_result['status'] == 'completed':
-    
+
         for result in transcription_result['content_safety_labels']['results']:
             print(result['text'])
             print(f"Timestamp: {result['timestamp']['start']} - {result['timestamp']['end']}")
@@ -131,52 +138,64 @@ while True:
   
   Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
 
-
 ```ts {13}
-import { AssemblyAI } from 'assemblyai'
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-  apiKey: '<YOUR_API_KEY>'
-})
+  apiKey: "<YOUR_API_KEY>",
+});
 
 // const audioFile = './local_file.mp3'
-const audioFile =
-  'https://assembly.ai/wildfires.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
 
 const params = {
   audio: audioFile,
-  content_safety: true
-}
+  content_safety: true,
+};
 
 const run = async () => {
-  const transcript = await client.transcripts.transcribe(params)
-  console.log(`Transcript ID: ${transcript.id}`)
-  const contentSafetyLabels = transcript.content_safety_labels!
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(`Transcript ID: ${transcript.id}`);
+  const contentSafetyLabels = transcript.content_safety_labels!;
 
   // Get the parts of the transcript which were flagged as sensitive
   for (const result of contentSafetyLabels.results) {
-    console.log(result.text)
-    console.log(`Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`)
+    console.log(result.text);
+    console.log(
+      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
+    );
 
     // Get category, confidence, and severity
     for (const label of result.labels) {
-      console.log(`${label.label} - ${label.confidence} - ${label.severity}`)
+      console.log(`${label.label} - ${label.confidence} - ${label.severity}`);
     }
   }
 
   // Get the confidence of the most common labels in relation to the entire audio file
-  for (const [label, confidence] of Object.entries(contentSafetyLabels.summary)) {
-    console.log(`${confidence * 100}% confident that the audio contains ${label}`)
+  for (const [label, confidence] of Object.entries(
+    contentSafetyLabels.summary
+  )) {
+    console.log(
+      `${confidence * 100}% confident that the audio contains ${label}`
+    );
   }
 
   // Get the overall severity of the most common labels in relation to the entire audio file
-  for (const [label, severity_confidence] of Object.entries(contentSafetyLabels.severity_score_summary)) {
-    console.log(`${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`)
-    console.log(`${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`)
-    console.log(`${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`)
+  for (const [label, severity_confidence] of Object.entries(
+    contentSafetyLabels.severity_score_summary
+  )) {
+    console.log(
+      `${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`
+    );
+    console.log(
+      `${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`
+    );
+    console.log(
+      `${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`
+    );
   }
-}
-run()
+};
+run();
 ```
 
   </Tab>
@@ -185,71 +204,84 @@ run()
   Enable Content Moderation by setting `content_safety` to `true` in the JSON payload.
 
 ```ts {19}
-import axios from 'axios'
-import fs from 'fs-extra'
+import axios from "axios";
+import fs from "fs-extra";
 
-const baseUrl = 'https://api.assemblyai.com'
+const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
-  authorization: '<YOUR_API_KEY>'
-}
+  authorization: "<YOUR_API_KEY>",
+};
 
-const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
 const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers
-})
-const uploadUrl = uploadResponse.data.upload_url
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
-  content_safety: true
-}
+  content_safety: true,
+};
 
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
 
-const transcriptId = response.data.id
-console.log("Transcript ID: ", transcriptId)
+const transcriptId = response.data.id;
+console.log("Transcript ID: ", transcriptId);
 
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
 while (true) {
   const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers
-  })
-  const transcriptionResult = pollingResponse.data
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
 
-  if (transcriptionResult.status === 'completed') {
-    const contentSafetyLabels = transcriptionResult.content_safety_labels!
+  if (transcriptionResult.status === "completed") {
+    const contentSafetyLabels = transcriptionResult.content_safety_labels!;
     for (const result of contentSafetyLabels.results) {
-        console.log(result.text)
-        console.log(`Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`)
+      console.log(result.text);
+      console.log(
+        `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
+      );
 
-        // Get category, confidence, and severity.
-        for (const label of result.labels) {
-        console.log(`${label.label} - ${label.confidence} - ${label.severity}`)  // content safety category
-        }
+      // Get category, confidence, and severity.
+      for (const label of result.labels) {
+        console.log(`${label.label} - ${label.confidence} - ${label.severity}`); // content safety category
+      }
     }
     // Get the confidence of the most common labels in relation to the entire audio file
-    for (const [label, confidence] of Object.entries(contentSafetyLabels.summary)) {
-    console.log(`${confidence * 100}% confident that the audio contains ${label}`)
+    for (const [label, confidence] of Object.entries(
+      contentSafetyLabels.summary
+    )) {
+      console.log(
+        `${confidence * 100}% confident that the audio contains ${label}`
+      );
     }
     // Get the confidence of the most common labels in relation to the entire audio file.
-    for (const [label, severity_confidence] of Object.entries(contentSafetyLabels.severity_score_summary)) {
-        console.log(`${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`)
-        console.log(`${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`)
-        console.log(`${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`)
+    for (const [label, severity_confidence] of Object.entries(
+      contentSafetyLabels.severity_score_summary
+    )) {
+      console.log(
+        `${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`
+      );
+      console.log(
+        `${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`
+      );
+      console.log(
+        `${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`
+      );
     }
 
-    break
-  } else if (transcriptionResult.status === 'error') {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
   } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
-
 ```
 
   </Tab>
@@ -258,7 +290,10 @@ while (true) {
   Enable Content Moderation by setting `content_safety` to `true` in the JSON payload.
 
 <Info>
-Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
+  Most of these libraries are included by default, but on .NET Framework and
+  Mono you need to reference the System.Net.Http library and install the
+  [System.Net.Http.Json NuGet
+  package](https://www.nuget.org/packages/System.Net.Http.Json).
 </Info>
 
 ```csharp {53}
@@ -278,16 +313,16 @@ class Program
     static async Task Main(string[] args)
     {
         string baseUrl = "https://api.assemblyai.com";
-        
+
         using (var httpClient = new HttpClient())
         {
-            httpClient.DefaultRequestHeaders.Authorization = 
+            httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("<YOUR_API_KEY>");
 
             string uploadUrl = await UploadFileAsync("./local_file.mp3", httpClient, baseUrl);
-            
+
             var transcript = await CreateTranscriptWithContentSafetyAsync(uploadUrl, httpClient, baseUrl);
-            
+
             Console.WriteLine($"Transcript ID: {transcript.Id}");
             transcript = await WaitForTranscriptToProcessAndAnalyzeContentSafety(transcript, httpClient, baseUrl);
         }
@@ -311,12 +346,12 @@ class Program
 
     static async Task<Transcript> CreateTranscriptWithContentSafetyAsync(string audioUrl, HttpClient httpClient, string baseUrl)
     {
-        var data = new 
-        { 
+        var data = new
+        {
             audio_url = audioUrl,
             content_safety = true
         };
-        
+
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
         using (var response = await httpClient.PostAsync($"{baseUrl}/v2/transcript", content))
@@ -334,7 +369,7 @@ class Program
         {
             var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
             transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-            
+
             switch (transcript.Status)
             {
                 case "completed":
@@ -347,7 +382,7 @@ class Program
                             {
                                 Console.WriteLine(result.Text);
                                 Console.WriteLine($"Timestamp: {result.Timestamp.Start} - {result.Timestamp.End}");
-                                
+
                                 // Get category, confidence, and severity
                                 foreach (var label in result.Labels)
                                 {
@@ -355,7 +390,7 @@ class Program
                                 }
                             }
                         }
-                        
+
                         // Get the confidence of the most common labels
                         if (transcript.ContentSafetyLabels.Summary != null)
                         {
@@ -364,7 +399,7 @@ class Program
                                 Console.WriteLine($"{label.Value * 100}% confident that the audio contains {label.Key}");
                             }
                         }
-                        
+
                         // Get the overall severity
                         if (transcript.ContentSafetyLabels.SeverityScoreSummary != null)
                         {
@@ -376,12 +411,12 @@ class Program
                             }
                         }
                     }
-                    
+
                     return transcript;
-                    
+
                 case "error":
                     throw new Exception($"Transcription failed: {transcript.Error}");
-                    
+
                 default:
                     await Task.Delay(TimeSpan.FromSeconds(3));
                     break;
@@ -393,16 +428,16 @@ class Program
     {
         [JsonPropertyName("id")]
         public string Id { get; set; }
-        
+
         [JsonPropertyName("status")]
         public string Status { get; set; }
-        
+
         [JsonPropertyName("text")]
         public string Text { get; set; }
-        
+
         [JsonPropertyName("content_safety_labels")]
         public ContentSafetyLabels ContentSafetyLabels { get; set; }
-        
+
         [JsonPropertyName("error")]
         public string Error { get; set; }
     }
@@ -411,13 +446,13 @@ class Program
     {
         [JsonPropertyName("status")]
         public string Status { get; set; }
-        
+
         [JsonPropertyName("results")]
         public List<ContentSafetyResult> Results { get; set; }
-        
+
         [JsonPropertyName("summary")]
         public Dictionary<string, double> Summary { get; set; }
-        
+
         [JsonPropertyName("severity_score_summary")]
         public Dictionary<string, SeverityScore> SeverityScoreSummary { get; set; }
     }
@@ -426,16 +461,16 @@ class Program
     {
         [JsonPropertyName("text")]
         public string Text { get; set; }
-        
+
         [JsonPropertyName("timestamp")]
         public TimeRange Timestamp { get; set; }
-        
+
         [JsonPropertyName("labels")]
         public List<Label> Labels { get; set; }
-        
+
         [JsonPropertyName("sentences_idx_start")]
         public int SentencesIdxStart { get; set; }
-        
+
         [JsonPropertyName("sentences_idx_end")]
         public int SentencesIdxEnd { get; set; }
     }
@@ -444,7 +479,7 @@ class Program
     {
         [JsonPropertyName("start")]
         public int Start { get; set; }
-        
+
         [JsonPropertyName("end")]
         public int End { get; set; }
     }
@@ -453,10 +488,10 @@ class Program
     {
         [JsonPropertyName("label")]
         public string LabelName { get; set; }
-        
+
         [JsonPropertyName("confidence")]
         public double Confidence { get; set; }
-        
+
         [JsonPropertyName("severity")]
         public double Severity { get; set; }
     }
@@ -465,15 +500,16 @@ class Program
     {
         [JsonPropertyName("low")]
         public double Low { get; set; }
-        
+
         [JsonPropertyName("medium")]
         public double Medium { get; set; }
-        
+
         [JsonPropertyName("high")]
         public double High { get; set; }
     }
 }
 ```
+
   </Tab>
   <Tab language="ruby" title="Ruby">
   
@@ -629,11 +665,11 @@ while (true) {
 
     if ($transcription_result['status'] === "completed") {
         $content_safety_labels = $transcription_result['content_safety_labels'];
-        
+
         foreach ($content_safety_labels['results'] as $result) {
           echo $result['text'] . "\n";
           echo "Timestamp: {$result['timestamp']['start']} - {$result['timestamp']['end']}\n";
-          
+
           // Get category, confidence, and severity.
           foreach ($result['labels'] as $label) {
             echo "{$label['label']} - {$label['confidence']} - {$label['severity']}\n"; // content safety category
@@ -657,6 +693,7 @@ while (true) {
     }
 }
 ```
+
   </Tab>
 </Tabs>
 
@@ -688,20 +725,14 @@ health_issues - 0.9358 - 0.8906
 46.19% confident that the audio contains high-severity health_issues
 ```
 
-
-
-
-
 ## Adjust the confidence threshold
 
 The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
-
 
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
-
 
 ```python {4}
 # Setting the content safety confidence threshold to 60%.
@@ -715,7 +746,6 @@ config = aai.TranscriptionConfig(
   <Tab language="python" title="Python" default>
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
-
 
 ```python {5}
 # Setting the content safety confidence threshold to 60%.
@@ -731,14 +761,13 @@ data = {
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
 
-
 ```ts {5}
 // Setting the content safety confidence threshold to 60%.
 const params = {
   audio: audioUrl,
   content_safety: true,
-  content_safety_confidence: 60
-}
+  content_safety_confidence: 60,
+};
 ```
 
   </Tab>
@@ -746,14 +775,13 @@ const params = {
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
 
-
 ```ts {5}
 // Setting the content safety confidence threshold to 60%.
 const data = {
   audio_url: uploadUrl,
   content_safety: true,
-  content_safety_confidence: 60
-}
+  content_safety_confidence: 60,
+};
 ```
 
   </Tab>
@@ -761,11 +789,10 @@ const data = {
   
  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
 
-
 ```csharp {6}
 // Setting the content safety confidence threshold to 60%.
-        var data = new 
-        { 
+        var data = new
+        {
             audio_url = audioUrl,
             content_safety = true
             content_safety_confidence = 60
@@ -776,7 +803,6 @@ const data = {
   <Tab language="ruby" title="Ruby">
   
  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
-
 
 ```ruby {5}
 # Setting the content safety confidence threshold to 60%.
@@ -792,7 +818,6 @@ data = {
   
  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
 
-
 ```php {5}
 // Setting the content safety confidence threshold to 60%.
 $data = array(
@@ -801,12 +826,9 @@ $data = array(
     "content_safety_confidence" => 60
 );
 ```
+
   </Tab>
 </Tabs>
-
-
-
-
 
 ## API reference
 
@@ -829,62 +851,54 @@ curl https://api.assemblyai.com/v2/transcript \
 | `content_safety_confidence` | integer | The confidence threshold for content moderation. Values must be between 25 and 100. |
 
 ### Response
+
 <Markdown src="content-moderation-response.mdx" />
 
-| Key | Type | Description |
-| --- | --- | --- |
-| `content_safety_labels` | object | An object containing all results of the Content Moderation model. |
-| `content_safety_labels.status` | string | Is either `success`, or `unavailable` in the rare case that the Content Moderation model failed. |
-| `content_safety_labels.results` | array | An array of objects, one for each section in the audio file, that the Content Moderation file flagged. |
-| `content_safety_labels.results[i].text` | string | The transcript of the i-th section flagged by the Content Moderation model. |
-| `content_safety_labels.results[i].labels` | array | An array of objects, one per sensitive topic, that was detected in the i-th section. |
-| `content_safety_labels.results[i].labels[j].label` | string | The label of the sensitive topic. |
-| `content_safety_labels.results[i].labels[j].confidence` | number | The confidence score for the j-th topic being discussed in the i-th section, from 0 to 1. |
-| `content_safety_labels.results[i].labels[j].severity` | number | How severely the j-th topic is discussed in the i-th section, from 0 to 1. |
-| `content_safety_labels.results[i].sentences_idx_start` | number | The sentence index at which the i-th section begins. |
-| `content_safety_labels.results[i].sentences_idx_end` | number | The sentence index at which the i-th section ends. |
-| `content_safety_labels.results[i].timestamp` | object | Timestamp information for the i-th section. |
-| `content_safety_labels.results[i].timestamp.start` | number | The time, in milliseconds, at which the i-th section begins. |
-| `content_safety_labels.results[i].timestamp.end` | number | The time, in milliseconds, at which the i-th section ends. |
-| `content_safety_labels.summary` | object | A summary of the Content Moderation confidence results for the entire audio file. |
-| `content_safety_labels.summary.topic` | number | A confidence score for the presence of the sensitive topic "topic" across the entire audio file. |
-| `content_safety_labels.severity_score_summary` | object | A summary of the Content Moderation severity results for the entire audio file. |
-| `content_safety_labels.severity_score_summary.topic.[low, medium, high]` | number | A distribution across the values "low", "medium", and "high" for the severity of the presence of "topic" in the audio file. | 
-
+| Key                                                                      | Type   | Description                                                                                                                 |
+| ------------------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `content_safety_labels`                                                  | object | An object containing all results of the Content Moderation model.                                                           |
+| `content_safety_labels.status`                                           | string | Is either `success`, or `unavailable` in the rare case that the Content Moderation model failed.                            |
+| `content_safety_labels.results`                                          | array  | An array of objects, one for each section in the audio file, that the Content Moderation file flagged.                      |
+| `content_safety_labels.results[i].text`                                  | string | The transcript of the i-th section flagged by the Content Moderation model.                                                 |
+| `content_safety_labels.results[i].labels`                                | array  | An array of objects, one per sensitive topic, that was detected in the i-th section.                                        |
+| `content_safety_labels.results[i].labels[j].label`                       | string | The label of the sensitive topic.                                                                                           |
+| `content_safety_labels.results[i].labels[j].confidence`                  | number | The confidence score for the j-th topic being discussed in the i-th section, from 0 to 1.                                   |
+| `content_safety_labels.results[i].labels[j].severity`                    | number | How severely the j-th topic is discussed in the i-th section, from 0 to 1.                                                  |
+| `content_safety_labels.results[i].sentences_idx_start`                   | number | The sentence index at which the i-th section begins.                                                                        |
+| `content_safety_labels.results[i].sentences_idx_end`                     | number | The sentence index at which the i-th section ends.                                                                          |
+| `content_safety_labels.results[i].timestamp`                             | object | Timestamp information for the i-th section.                                                                                 |
+| `content_safety_labels.results[i].timestamp.start`                       | number | The time, in milliseconds, at which the i-th section begins.                                                                |
+| `content_safety_labels.results[i].timestamp.end`                         | number | The time, in milliseconds, at which the i-th section ends.                                                                  |
+| `content_safety_labels.summary`                                          | object | A summary of the Content Moderation confidence results for the entire audio file.                                           |
+| `content_safety_labels.summary.topic`                                    | number | A confidence score for the presence of the sensitive topic "topic" across the entire audio file.                            |
+| `content_safety_labels.severity_score_summary`                           | object | A summary of the Content Moderation severity results for the entire audio file.                                             |
+| `content_safety_labels.severity_score_summary.topic.[low, medium, high]` | number | A distribution across the values "low", "medium", and "high" for the severity of the presence of "topic" in the audio file. |
 
 The response also includes the request parameters used to generate the transcript.
 
-
-
-
-
 ## Supported labels
 
-| Label | Description | Model output | Severity |
-| ----- | ----------- | ------------ | -------- |
-| Accidents | Any man-made incident that happens unexpectedly and results in damage, injury, or death. | `accidents` | Yes |
-| Alcohol | Content that discusses any alcoholic beverage or its consumption. | `alcohol` | Yes |
-| Company Financials | Content that discusses any sensitive company financial information. | `financials` | No |
-| Crime Violence | Content that discusses any type of criminal activity or extreme violence that is criminal in nature. | `crime_violence` | Yes |
-| Drugs | Content that discusses illegal drugs or their usage. | `drugs` | Yes |
-| Gambling | Includes gambling on casino-based games such as poker, slots, etc. as well as sports betting. | `gambling` | Yes |
-| Hate Speech | Content that's a direct attack against people or groups based on their sexual orientation, gender identity, race, religion, ethnicity, national origin, disability, etc. | `hate_speech` | Yes |
-| Health Issues | Content that discusses any medical or health-related problems. | `health_issues` | Yes |
-| Manga | Mangas are comics or graphic novels originating from Japan with some of the more popular series being "Pokemon", "Naruto", "Dragon Ball Z", "One Punch Man", and "Sailor Moon". | `manga` | No |
-| Marijuana | This category includes content that discusses marijuana or its usage. | `marijuana` | Yes |
-| Natural Disasters | Phenomena that happens infrequently and results in damage, injury, or death. Such as hurricanes, tornadoes, earthquakes, volcano eruptions, and firestorms. | `disasters` | Yes |
-| Negative News | News content with a negative sentiment which typically occur in the third person as an unbiased recapping of events. | `negative_news` | No |
-| NSFW (Adult Content) | Content considered "Not Safe for Work" and consists of content that a viewer would not want to be heard/seen in a public environment. | `nsfw` | No |
-| Pornography | Content that discusses any sexual content or material. | `pornography` | Yes |
-| Profanity | Any profanity or cursing. | `profanity` | Yes |
-| Sensitive Social Issues | This category includes content that may be considered insensitive, irresponsible, or harmful to certain groups based on their beliefs, political affiliation, sexual orientation, or gender identity. | `sensitive_social_issues` | No |
-| Terrorism | Includes terrorist acts as well as terrorist groups. Examples include bombings, mass shootings, and ISIS. Note that many texts corresponding to this topic may also be classified into the crime violence topic. | `terrorism` | Yes |
-| Tobacco | Text that discusses tobacco and tobacco usage, including e-cigarettes, nicotine, vaping, and general discussions about smoking. | `tobacco` | Yes |
-| Weapons | Text that discusses any type of weapon including guns, ammunition, shooting, knives, missiles, torpedoes, etc. | `weapons` | Yes |
-
-
-
-
+| Label                   | Description                                                                                                                                                                                                      | Model output              | Severity |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | -------- |
+| Accidents               | Any man-made incident that happens unexpectedly and results in damage, injury, or death.                                                                                                                         | `accidents`               | Yes      |
+| Alcohol                 | Content that discusses any alcoholic beverage or its consumption.                                                                                                                                                | `alcohol`                 | Yes      |
+| Company Financials      | Content that discusses any sensitive company financial information.                                                                                                                                              | `financials`              | No       |
+| Crime Violence          | Content that discusses any type of criminal activity or extreme violence that is criminal in nature.                                                                                                             | `crime_violence`          | Yes      |
+| Drugs                   | Content that discusses illegal drugs or their usage.                                                                                                                                                             | `drugs`                   | Yes      |
+| Gambling                | Includes gambling on casino-based games such as poker, slots, etc. as well as sports betting.                                                                                                                    | `gambling`                | Yes      |
+| Hate Speech             | Content that's a direct attack against people or groups based on their sexual orientation, gender identity, race, religion, ethnicity, national origin, disability, etc.                                         | `hate_speech`             | Yes      |
+| Health Issues           | Content that discusses any medical or health-related problems.                                                                                                                                                   | `health_issues`           | Yes      |
+| Manga                   | Mangas are comics or graphic novels originating from Japan with some of the more popular series being "Pokemon", "Naruto", "Dragon Ball Z", "One Punch Man", and "Sailor Moon".                                  | `manga`                   | No       |
+| Marijuana               | This category includes content that discusses marijuana or its usage.                                                                                                                                            | `marijuana`               | Yes      |
+| Natural Disasters       | Phenomena that happens infrequently and results in damage, injury, or death. Such as hurricanes, tornadoes, earthquakes, volcano eruptions, and firestorms.                                                      | `disasters`               | Yes      |
+| Negative News           | News content with a negative sentiment which typically occur in the third person as an unbiased recapping of events.                                                                                             | `negative_news`           | No       |
+| NSFW (Adult Content)    | Content considered "Not Safe for Work" and consists of content that a viewer would not want to be heard/seen in a public environment.                                                                            | `nsfw`                    | No       |
+| Pornography             | Content that discusses any sexual content or material.                                                                                                                                                           | `pornography`             | Yes      |
+| Profanity               | Any profanity or cursing.                                                                                                                                                                                        | `profanity`               | Yes      |
+| Sensitive Social Issues | This category includes content that may be considered insensitive, irresponsible, or harmful to certain groups based on their beliefs, political affiliation, sexual orientation, or gender identity.            | `sensitive_social_issues` | No       |
+| Terrorism               | Includes terrorist acts as well as terrorist groups. Examples include bombings, mass shootings, and ISIS. Note that many texts corresponding to this topic may also be classified into the crime violence topic. | `terrorism`               | Yes      |
+| Tobacco                 | Text that discusses tobacco and tobacco usage, including e-cigarettes, nicotine, vaping, and general discussions about smoking.                                                                                  | `tobacco`                 | Yes      |
+| Weapons                 | Text that discusses any type of weapon including guns, ammunition, shooting, knives, missiles, torpedoes, etc.                                                                                                   | `weapons`                 | Yes      |
 
 ## Frequently asked questions
 
@@ -917,7 +931,3 @@ The model is designed to process batches of segments in significantly less than 
 If you receive an error message, it may be due to an issue with your request format or parameters. Double-check that your request includes the correct `audio_url` parameter. If you continue to experience issues, you can reach out to AssemblyAI's support team for assistance.
 
   </Accordion>
-
-
-
-

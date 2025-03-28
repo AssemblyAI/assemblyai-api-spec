@@ -1,26 +1,34 @@
 ---
-title: 'Summarization'
-description: 'Generate a single summary of your entire audio file'
+title: "Summarization"
+description: "Generate a single summary of your entire audio file"
 ---
 
+import { LanguageTable } from "../../assets/components/LanguagesTable";
 
-  
-
+<Accordion title="Supported languages">
+  <LanguageTable
+    languages={[
+      { name: "Global English", code: "en" },
+      { name: "Australian English", code: "en_au" },
+      { name: "British English", code: "en_uk" },
+      { name: "US English", code: "en_us" },
+    ]}
+    columns={2}
+  />
+  <br />
+</Accordion>
 
 Distill important information by summarizing your audio files.
 
 The Summarization model generates a summary of the resulting transcript. You can control the style and format of the summary using [Summary models](#summary-models) and [Summary types](#summary-types).
 
 <Warning title="Summarization and Auto Chapters">
-You can only enable one of the Summarization and [Auto Chapters](/docs/audio-intelligence/auto-chapters) models in the same transcription.
+  You can only enable one of the Summarization and [Auto
+  Chapters](/docs/audio-intelligence/auto-chapters) models in the same
+  transcription.
 </Warning>
 
-
-
-
-
 ## Quickstart
-
 
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
@@ -118,31 +126,30 @@ If you specify one of `summary_model` or `summary_type`, then you must specify t
 The following example returns an informative summary in a bulleted list.
 
 ```ts {13-15}
-import { AssemblyAI } from 'assemblyai'
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-  apiKey: '<YOUR_API_KEY>'
-})
+  apiKey: "<YOUR_API_KEY>",
+});
 
 // const audioFile = './local_file.mp3'
-const audioFile =
-  'https://assembly.ai/wildfires.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
 
 const params = {
   audio: audioFile,
   summarization: true,
-  summary_model: 'informative',
-  summary_type: 'bullets'
-}
+  summary_model: "informative",
+  summary_type: "bullets",
+};
 
 const run = async () => {
-  const transcript = await client.transcripts.transcribe(params)
+  const transcript = await client.transcripts.transcribe(params);
 
-  console.log("Transcript ID: ", transcript.id)
-  console.log(transcript.summary)
-}
+  console.log("Transcript ID: ", transcript.id);
+  console.log(transcript.summary);
+};
 
-run()
+run();
 ```
 
   </Tab>
@@ -155,52 +162,51 @@ If you specify one of `summary_model` or `summary_type`, then you must specify t
 The following example returns an informative summary in a bulleted list.
 
 ```ts {19-21}
-import axios from 'axios'
-import fs from 'fs-extra'
+import axios from "axios";
+import fs from "fs-extra";
 
-const baseUrl = 'https://api.assemblyai.com'
+const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
-  authorization: '<YOUR_API_KEY>'
-}
+  authorization: "<YOUR_API_KEY>",
+};
 
-const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
 const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers
-})
-const uploadUrl = uploadResponse.data.upload_url
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
   summarization: true,
-  summary_model: 'informative',
-  summary_type: 'bullets'
-}
+  summary_model: "informative",
+  summary_type: "bullets",
+};
 
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
 
-const transcriptId = response.data.id
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
 while (true) {
   const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers
-  })
-  const transcriptionResult = pollingResponse.data
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
 
-  if (transcriptionResult.status === 'completed') {
-    console.log("Transcript ID: ", transcriptionResult.id)
-    console.log(transcriptionResult.summary)
-    break
-  } else if (transcriptionResult.status === 'error') {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  if (transcriptionResult.status === "completed") {
+    console.log("Transcript ID: ", transcriptionResult.id);
+    console.log(transcriptionResult.summary);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
   } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
-
 ```
 
   </Tab>
@@ -213,9 +219,11 @@ If you specify one of `summary_model` and `summary_type`, then you must specify 
 The following example returns an informative summary in a bulleted list.
 
 <Info>
-Most of these libraries are included by default, but on .NET Framework and Mono you need to reference the System.Net.Http library and install the [System.Net.Http.Json NuGet package](https://www.nuget.org/packages/System.Net.Http.Json).
+  Most of these libraries are included by default, but on .NET Framework and
+  Mono you need to reference the System.Net.Http library and install the
+  [System.Net.Http.Json NuGet
+  package](https://www.nuget.org/packages/System.Net.Http.Json).
 </Info>
-
 
 ```csharp {52-54}
 using System;
@@ -236,13 +244,13 @@ class Program
         {
             httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("<YOUR_API_KEY>");
-                
+
             var uploadUrl = await UploadFileAsync("./my-audio.mp3", httpClient);
-            
+
             var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-            
+
             transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-            
+
             // Print the transcript ID and summary
             Console.WriteLine($"Transcript ID: {transcript.Id}");
             Console.WriteLine(transcript.Summary);
@@ -255,7 +263,7 @@ class Program
         using (var fileContent = new StreamContent(fileStream))
         {
             fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            
+
             using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
             {
                 response.EnsureSuccessStatusCode();
@@ -267,15 +275,15 @@ class Program
 
     static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        var data = new { 
-            audio_url = audioUrl, 
+        var data = new {
+            audio_url = audioUrl,
             summarization = true,
             summary_model = "informative",
             summary_type = "bullets"
         };
-        
+
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-        
+
         using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
             response.EnsureSuccessStatusCode();
@@ -286,12 +294,12 @@ class Program
     static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
     {
         var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-        
+
         while (true)
         {
             var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
             transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-            
+
             if (transcript.Status == "completed")
             {
                 return transcript;
@@ -311,21 +319,22 @@ class Program
     {
         [JsonPropertyName("id")]
         public string Id { get; set; }
-        
+
         [JsonPropertyName("status")]
         public string Status { get; set; }
-        
+
         [JsonPropertyName("text")]
         public string Text { get; set; }
-        
+
         [JsonPropertyName("summary")]
         public string Summary { get; set; }
-        
+
         [JsonPropertyName("error")]
         public string Error { get; set; }
     }
 }
 ```
+
   </Tab>
   <Tab language="ruby" title="Ruby">
   
@@ -387,7 +396,7 @@ while true
   polling_http.use_ssl = true
   polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
   polling_response = polling_http.request(polling_request)
-  
+
   transcription_result = JSON.parse(polling_response.body)
 
   if transcription_result['status'] == 'completed'
@@ -494,12 +503,9 @@ while (true) {
 ```
 
 <Tip title="Custom Summaries Using LeMUR">
-If you want more control of the output format, see how to generate a [Custom summary using LeMUR](/docs/lemur/summarize-audio).
+  If you want more control of the output format, see how to generate a [Custom
+  summary using LeMUR](/docs/lemur/summarize-audio).
 </Tip>
-
-
-
-
 
 ## API reference
 
@@ -533,32 +539,27 @@ curl https://api.assemblyai.com/v2/transcript \
 
 The response also includes the request parameters used to generate the transcript.
 
-
-
-
-
 ### Summary types
 
 The summary type determines both the length and the format of the summary, for example as a bulleted list or a paragraph.
 
-| Value | Description | Example |
-| --------- | ------ | ---------------------------- |
-| `bullets` (default) | A bulleted summary with the most important points. |  - The human brain has nearly tripled in mass in two million years. <br /> - One of the main reasons that our brain got so big is because it got a new part, called the frontal lobe. |
-| `bullets_verbose` | A longer bullet point list summarizing the entire transcription text. | Dan Gilbert is a psychologist and a happiness expert. His talk is recorded live at Ted conference. He explains why the human brain has nearly tripled in size in 2 million years. He also explains the difference between winning the lottery and becoming a paraplegic.\n- In 1994, Pete Best said he's happier than he would have been with the Beatles. In the free choice paradigm, monet prints are ranked from the one they like the most to the one that they don't. People prefer the third one over the fourth one because it's a little better.\n- People synthesize happiness when they change their affective. Hedonic aesthetic to make up your mind and change your mind is the friend of natural happiness. But it's the enemy of synthetic happiness. The psychological immune system works best when we are stuck. This is the difference between dating and marriage. People don't know this about themselves and it can work to their disadvantage.\n- In a photography course at Harvard, 66% of students choose not to take the course where they have the opportunity to change their mind. Adam Smith said that some things are better than others. Dan Gilbert recorded at Ted, 2004 in Monterey, California, 2004. |
-| `gist` | A few words summarizing the entire transcription text. | A big brain |
-| `headline` | A single sentence summarizing the entire transcription text. | The human brain has nearly tripled in mass in two million years. |  
-| `paragraph` | A single paragraph summarizing the entire transcription text. | The human brain has nearly tripled in mass in two million years. It went from the one-and-a-quarter-pound brain of our ancestor, habilis, to the almost three-pound meatloaf everybody here has between their ears. |
+| Value               | Description                                                           | Example                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bullets` (default) | A bulleted summary with the most important points.                    | - The human brain has nearly tripled in mass in two million years. <br /> - One of the main reasons that our brain got so big is because it got a new part, called the frontal lobe.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `bullets_verbose`   | A longer bullet point list summarizing the entire transcription text. | Dan Gilbert is a psychologist and a happiness expert. His talk is recorded live at Ted conference. He explains why the human brain has nearly tripled in size in 2 million years. He also explains the difference between winning the lottery and becoming a paraplegic.\n- In 1994, Pete Best said he's happier than he would have been with the Beatles. In the free choice paradigm, monet prints are ranked from the one they like the most to the one that they don't. People prefer the third one over the fourth one because it's a little better.\n- People synthesize happiness when they change their affective. Hedonic aesthetic to make up your mind and change your mind is the friend of natural happiness. But it's the enemy of synthetic happiness. The psychological immune system works best when we are stuck. This is the difference between dating and marriage. People don't know this about themselves and it can work to their disadvantage.\n- In a photography course at Harvard, 66% of students choose not to take the course where they have the opportunity to change their mind. Adam Smith said that some things are better than others. Dan Gilbert recorded at Ted, 2004 in Monterey, California, 2004. |
+| `gist`              | A few words summarizing the entire transcription text.                | A big brain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `headline`          | A single sentence summarizing the entire transcription text.          | The human brain has nearly tripled in mass in two million years.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `paragraph`         | A single paragraph summarizing the entire transcription text.         | The human brain has nearly tripled in mass in two million years. It went from the one-and-a-quarter-pound brain of our ancestor, habilis, to the almost three-pound meatloaf everybody here has between their ears.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### Summary models
 
 The summary model determines the style and tone of the summary.
 
-| Value | When to use | Supported summary type | Required parameters |
-| --------- | ------ | ---------------------------- | ---------------------------- |
-| `informative` (default) | Best for files with a single speaker, such as presentations or lectures. | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate` and `format_text` set to `true` |
-| `conversational` | Best for any 2-person conversation, such as customer/agent or interview/interviewee calls. | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate`, `format_text`, and `speaker_labels` or `multichannel` set to `true` |
-| `catchy` | Best for creating video, podcast, or media titles. | `headline`, or `gist` | `punctuate` and `format_text` set to `true` |
-
+| Value                   | When to use                                                                                | Supported summary type                                   | Required parameters                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `informative` (default) | Best for files with a single speaker, such as presentations or lectures.                   | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate` and `format_text` set to `true`                                      |
+| `conversational`        | Best for any 2-person conversation, such as customer/agent or interview/interviewee calls. | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate`, `format_text`, and `speaker_labels` or `multichannel` set to `true` |
+| `catchy`                | Best for creating video, podcast, or media titles.                                         | `headline`, or `gist`                                    | `punctuate` and `format_text` set to `true`                                      |
 
 ## Frequently asked questions
 
@@ -573,7 +574,3 @@ The inference speed of the Summary model depends on the desired output length. H
 No. Summarization only generates a single abstractive summary of the entire audio file, and doesn't provide word-level information or speaker labels. If you need word-level information, consider using [Word-level timestamps](/docs/speech-to-text/pre-recorded-audio/word-level-timestamps) and [Speaker Diarization](/docs/speech-to-text/speaker-diarization) instead.
 
   </Accordion>
-
-
-
-
