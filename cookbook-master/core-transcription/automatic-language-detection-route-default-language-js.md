@@ -23,31 +23,31 @@ npm install assemblyai
 Import the `assemblyai` package and set the API key.
 
 ```js
-import { AssemblyAI } from 'assemblyai';
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-    apiKey: 'YOUR_API_KEY' 
+  apiKey: "YOUR_API_KEY",
 });
 ```
 
 Define a `default_language`, which should be set to the [language code](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/supported-languages) that will be used to rerun the transcript if language detection runs with low `language_confidence`.
 
 ```js
-const default_language = 'LANGUAGE_CODE';
+const default_language = "LANGUAGE_CODE";
 ```
 
 Define an `audio_url` that is set to a link to the audio file. Define and set the parameters `audio: audioUrl` and `language_detection: true`. We also need to define our `language_confidence_threshold`. For the purposes of this example, we'll set it to 0.8, representing 80% confidence.
 
-If a transcript ends up with a `language_confidence` below this value, the transcript will error out and will return the transcript using the `default_language`.  
+If a transcript ends up with a `language_confidence` below this value, the transcript will error out and will return the transcript using the `default_language`.
 
 ```js
-const audioUrl = 'https://example.org/audio.mp3';
+const audioUrl = "https://example.org/audio.mp3";
 
 const params = {
-    audio: audioUrl,
-    language_detection: true,
-    language_confidence_threshold: 0.8,
-    // Add any other params
+  audio: audioUrl,
+  language_detection: true,
+  language_confidence_threshold: 0.8,
+  // Add any other params
 };
 ```
 
@@ -57,25 +57,33 @@ NOTE: You will not be charged for the first transcript if there is an error. You
 
 ```js
 const run = async (params) => {
+  const transcript = await client.transcripts.transcribe(params);
 
-    const transcript = await client.transcripts.transcribe(params);
-
-    if (transcript.status === 'error') {
-        if (transcript.error.includes("below the requested confidence threshold value")) {
-            console.log(
-                `${transcript.error}. Running transcript again with language set to '${default_language}'.`
-            );
-            params = {...params, language_detection: false, language_confidence_threshold: null, language_code: default_language};
-            run(params);
-            return;
-        }
-
-        console.log(transcript.error);
-        return;
+  if (transcript.status === "error") {
+    if (
+      transcript.error.includes(
+        "below the requested confidence threshold value"
+      )
+    ) {
+      console.log(
+        `${transcript.error}. Running transcript again with language set to '${default_language}'.`
+      );
+      params = {
+        ...params,
+        language_detection: false,
+        language_confidence_threshold: null,
+        language_code: default_language,
+      };
+      run(params);
+      return;
     }
 
-    console.log(`Transcript ID: ${transcript.id}`);
-    console.log(transcript.text);
+    console.log(transcript.error);
+    return;
+  }
+
+  console.log(`Transcript ID: ${transcript.id}`);
+  console.log(transcript.text);
 };
 
 run(params);
