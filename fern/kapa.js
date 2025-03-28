@@ -71,7 +71,7 @@ window.Kapa(
     rudderanalytics.track("docs_click_search-ask-ai", {
       search_query: question,
     });
-  },
+  }
 );
 
 // track event for kapa modal search result clicking "ask ai" completing
@@ -81,7 +81,7 @@ window.Kapa(
     rudderanalytics.track("docs_completed_search-ask-ai", {
       search_query: question,
     });
-  },
+  }
 );
 
 // track event for kapa modal search result clicked from "ask ai" answer text
@@ -92,7 +92,7 @@ window.Kapa(
       search_query: question,
       clicked_url: href,
     });
-  },
+  }
 );
 
 // track event for kapa modal search result clicked from "ask ai" answer sources
@@ -104,7 +104,7 @@ window.Kapa(
       clicked_url: source.url,
       clicked_title: source.title,
     });
-  },
+  }
 );
 
 function insertKapa() {
@@ -120,21 +120,21 @@ function insertKapa() {
   script.async = true;
   script.setAttribute(
     "data-website-id",
-    "42353092-36d7-42bd-a213-6fd7af0de0cd",
+    "42353092-36d7-42bd-a213-6fd7af0de0cd"
   );
   script.setAttribute("data-project-name", "AssemblyAI");
   script.setAttribute("data-project-color", "#2C4BD4");
   script.setAttribute(
     "data-project-logo",
-    "https://www.assemblyai.com/static/images/logo-blue400x400.jpeg",
+    "https://www.assemblyai.com/static/images/logo-blue400x400.jpeg"
   );
   script.setAttribute(
     "data-modal-override-open-id-search",
-    "fern-search-button",
+    "fern-search-button"
   );
   script.setAttribute(
     "data-search-include-source-names",
-    '["FAQ", "Documentation"]',
+    '["FAQ", "Documentation"]'
   );
   script.setAttribute("data-user-analytics-fingerprint-enabled", true);
   document.head.appendChild(script);

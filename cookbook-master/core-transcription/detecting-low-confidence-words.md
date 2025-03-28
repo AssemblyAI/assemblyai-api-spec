@@ -47,7 +47,7 @@ Next, we will filter the sentences array down to just sentences that contain wor
 const sentencesWithLowConfidenceWords = (sentences, confidenceThreshold) => {
   return sentences.filter((sentence) => {
     const hasLowConfidenceWord = sentence.words.some(
-      (word) => word.confidence < confidenceThreshold,
+      (word) => word.confidence < confidenceThreshold
     );
     return hasLowConfidenceWord;
   });
@@ -55,7 +55,7 @@ const sentencesWithLowConfidenceWords = (sentences, confidenceThreshold) => {
 
 const filteredSentences = sentencesWithLowConfidenceWords(
   sentences,
-  confidenceThreshold,
+  confidenceThreshold
 );
 ```
 

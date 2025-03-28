@@ -78,7 +78,7 @@ const allTranscriptsResponse = await fetch(
     headers: {
       Authorization: "<YOUR_API_KEY>",
     },
-  },
+  }
 );
 const allTranscripts = await allTranscriptsResponse.json();
 console.log(allTranscripts);
@@ -96,7 +96,7 @@ const transcriptResponse = await fetch(
     headers: {
       Authorization: "<YOUR_API_KEY>",
     },
-  },
+  }
 );
 const previousTranscript = await transcriptResponse.json();
 console.log(previousTranscript);

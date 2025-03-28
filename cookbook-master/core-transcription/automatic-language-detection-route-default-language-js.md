@@ -62,11 +62,11 @@ const run = async (params) => {
   if (transcript.status === "error") {
     if (
       transcript.error.includes(
-        "below the requested confidence threshold value",
+        "below the requested confidence threshold value"
       )
     ) {
       console.log(
-        `${transcript.error}. Running transcript again with language set to '${default_language}'.`,
+        `${transcript.error}. Running transcript again with language set to '${default_language}'.`
       );
       params = {
         ...params,

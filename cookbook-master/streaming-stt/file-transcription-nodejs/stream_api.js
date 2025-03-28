@@ -5,7 +5,7 @@ const ASSEMBLY_API_KEY = "YOUR_API_KEY";
 
 if (ASSEMBLY_API_KEY === "YOUR_API_KEY") {
   throw console.error(
-    "Please set your AssemblyAI API key in the ASSEMBLY_API_KEY variable.",
+    "Please set your AssemblyAI API key in the ASSEMBLY_API_KEY variable."
   );
 }
 
@@ -69,7 +69,7 @@ function transcribeFile(filePath) {
     });
 
     console.log(
-      `Got socket close event type=${event.type} code=${event.code} reason="${event.reason}" wasClean=${event.wasClean}`,
+      `Got socket close event type=${event.type} code=${event.code} reason="${event.reason}" wasClean=${event.wasClean}`
     );
   };
 

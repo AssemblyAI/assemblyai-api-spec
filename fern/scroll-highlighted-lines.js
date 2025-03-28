@@ -4,7 +4,7 @@ function scrollHighlightedLines() {
     const viewport = block.querySelector("[data-radix-scroll-area-viewport]");
     if (viewport) {
       const highlightedLines = block.querySelectorAll(
-        ".code-block-line.highlight",
+        ".code-block-line.highlight"
       );
       if (highlightedLines.length > 0) {
         const firstHighlightedLine = highlightedLines[0];
