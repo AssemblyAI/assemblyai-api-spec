@@ -35,9 +35,9 @@ Catching and logging errors to the console is an easy way help you understand wh
 Underneath the line of code where the transcript is created, `const transcript = await client.transcripts.transcribe(params)`, add the following code to catch and log any errors to the terminal:
 
 ```js
- if (transcript.status === 'error') {
-    console.log(transcript.error)
-  }
+if (transcript.status === "error") {
+  console.log(transcript.error);
+}
 ```
 
 ### How to Log the Transcript JSON and Save it in a File
@@ -45,38 +45,41 @@ Underneath the line of code where the transcript is created, `const transcript =
 In order to write data to a file, first import the [fs](https://nodejs.org/api/fs.html) package:
 
 ```js
-import fs from 'fs';
+import fs from "fs";
 ```
 
 If using the error handling code above then add this below it, otherwise add it after the transcript is created, `const transcript = await client.transcripts.transcribe(params)`:
 
 ```js
-  const transcriptJSON = JSON.stringify(transcript, null, "\t");
+const transcriptJSON = JSON.stringify(transcript, null, "\t");
 
-  fs.writeFile('transcript.json', transcriptJSON, (err) => {
-    if (err) throw err;
-  })
+fs.writeFile("transcript.json", transcriptJSON, (err) => {
+  if (err) throw err;
+});
 
-  console.log(transcriptJSON)
-  ```
+console.log(transcriptJSON);
+```
 
 ### How to Log the Transcript ID and Retrieve a Previously Created Transcript
 
 To log the transcript ID for a transcription, after the transcript is created and below any error handling, add the following code:
 
 ```js
-console.log("Transcript ID: ", transcript.id)
+console.log("Transcript ID: ", transcript.id);
 ```
 
 To see a list of all previous transcriptions, use the following code:
 
 ```js
-const allTranscriptsResponse = await fetch("https://api.assemblyai.com/v2/transcript?limit=4", {
-  method: "GET",
-  headers: {
-    "Authorization": "<YOUR_API_KEY>"
+const allTranscriptsResponse = await fetch(
+  "https://api.assemblyai.com/v2/transcript?limit=4",
+  {
+    method: "GET",
+    headers: {
+      Authorization: "<YOUR_API_KEY>",
+    },
   },
-});
+);
 const allTranscripts = await allTranscriptsResponse.json();
 console.log(allTranscripts);
 ```
@@ -86,12 +89,15 @@ There are additional [query parameters](https://www.assemblyai.com/docs/api-refe
 To get a specific transcript, use the following code:
 
 ```js
-const transcriptResponse = await fetch("https://api.assemblyai.com/v2/transcript/transcript_id", {
-  method: "GET",
-  headers: {
-    "Authorization": "<YOUR_API_KEY>"
+const transcriptResponse = await fetch(
+  "https://api.assemblyai.com/v2/transcript/transcript_id",
+  {
+    method: "GET",
+    headers: {
+      Authorization: "<YOUR_API_KEY>",
+    },
   },
-});
+);
 const previousTranscript = await transcriptResponse.json();
 console.log(previousTranscript);
 ```

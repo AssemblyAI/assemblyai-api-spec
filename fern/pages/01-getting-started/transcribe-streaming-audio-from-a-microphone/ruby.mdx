@@ -1,23 +1,17 @@
 ---
-title: 'Transcribe streaming audio from a microphone in Ruby'
-subtitle: 'Learn how to transcribe streaming audio in Ruby.'
+title: "Transcribe streaming audio from a microphone in Ruby"
+subtitle: "Learn how to transcribe streaming audio in Ruby."
 hide-nav-links: true
-description: 'Learn how to transcribe streaming audio in Ruby.'
+description: "Learn how to transcribe streaming audio in Ruby."
 ---
-
-
-
 
 ## Overview
 
 By the end of this tutorial, you'll be able to transcribe audio from your microphone in Ruby.
 
 <Note title="Supported languages">
-Streaming Speech-to-Text is only available for English.
+  Streaming Speech-to-Text is only available for English.
 </Note>
-
-
-
 
 ## Before you begin
 
@@ -69,9 +63,9 @@ def on_open(ws)
     command = "sox -d -t raw -b 16 -c #{CHANNELS} -r #{SAMPLE_RATE} -e signed-integer -L -"
     $sox_process, stdout, stderr, wait_thr = Open3.popen3(command)
     puts "Started audio recording with SoX"
-    
+
     $recording = true
-    
+
     $stdout_thread = Thread.new do
       while $recording && ws.open?
         begin
@@ -100,16 +94,16 @@ def on_message(ws, message)
   begin
     msg = JSON.parse(message)
     msg_type = msg['message_type']
-    
+
     if msg_type == 'SessionBegins'
       session_id = msg['session_id']
       puts "Session ID: #{session_id}"
       return
     end
-    
+
     text = msg['text'] || ''
     return if text.empty?
-    
+
     if msg_type == 'PartialTranscript'
       puts "Partial: #{text}"
     elsif msg_type == 'FinalTranscript'
@@ -135,7 +129,7 @@ end
 def stop_recording
   if $recording
     $recording = false
-    
+
     if $sox_process
       begin
         Process.kill('TERM', $sox_process.pid) rescue nil
@@ -166,10 +160,8 @@ loop do
 end
 ```
 
-
-
-
 ## Step 1: Install dependencies
+
 <Steps>
 
 <Step>
@@ -186,6 +178,7 @@ choco install sox.portable
 # (Linux)
 apt install sox
 ```
+
 </Step>
 
 <Step>
@@ -199,7 +192,6 @@ gem install websocket-client-simple
 </Step>
 
 </Steps>
-
 
 ## Step 2: Configure the API key
 
@@ -220,12 +212,10 @@ API_KEY = "<YOUR_API_KEY>"
 </Step>
 </Steps>
 
-
-
-
 ## Step 3: Connect to the streaming service
 
 In this step, you'll create a websocket connection to the Streaming service and configure it to use your API key.
+
 <Steps>
 <Step>
 
@@ -265,6 +255,7 @@ We recommend the following sample rates:
 - Maximum quality: `48_000` (48 kHz)
 
 If you don't set a sample rate on the real-time transcriber, it defaults to 16 kHz.
+
 </Note>
 
 </Step>
@@ -293,9 +284,6 @@ end
 </Step>
 </Steps>
 
-
-
-
 ## Step 4: Create event handlers & record audio from microphone
 
 <Steps>
@@ -309,9 +297,9 @@ def on_open(ws)
     command = "sox -d -t raw -b 16 -c #{CHANNELS} -r #{SAMPLE_RATE} -e signed-integer -L -"
     $sox_process, stdout, stderr, wait_thr = Open3.popen3(command)
     puts "Started audio recording with SoX"
-    
+
     $recording = true
-    
+
     $stdout_thread = Thread.new do
       while $recording && ws.open?
         begin
@@ -336,12 +324,13 @@ def on_open(ws)
   end
 end
 ```
+
 <Note title="Audio data format">
 
 The SoX arguments configure the format of the audio output.
 The arguments configure the format to a single channel with 16-bit signed integer PCM encoding and 16 kHz sample rate.
 
- If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+If you want to stream data from elsewhere, make sure that your audio data is in the following format:
 
 - Single channel
 - 16-bit signed integer PCM or mu-law encoding
@@ -354,7 +343,6 @@ By default, the Streaming STT service expects PCM16-encoded audio. If you want t
 
 <Step>
 Create functions to handle `onClose` and `onError` events from the real-time service.
-
 
 ```ruby
 def on_error(ws, error)
@@ -380,16 +368,16 @@ def on_message(ws, message)
   begin
     msg = JSON.parse(message)
     msg_type = msg['message_type']
-    
+
     if msg_type == 'SessionBegins'
       session_id = msg['session_id']
       puts "Session ID: #{session_id}"
       return
     end
-    
+
     text = msg['text'] || ''
     return if text.empty?
-    
+
     if msg_type == 'PartialTranscript'
       puts "Partial: #{text}"
     elsif msg_type == 'FinalTranscript'
@@ -403,14 +391,17 @@ def on_message(ws, message)
   end
 end
 ```
+
 <Tip title="End of utterance controls">
-You can [configure the silence threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection) for automatic utterance detection and programmatically [force the end of an utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to immediately get a _Final transcript_.
+  You can [configure the silence
+  threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection)
+  for automatic utterance detection and programmatically [force the end of an
+  utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to
+  immediately get a _Final transcript_.
 </Tip>
 
 </Step>
 </Steps>
-
-
 
 ## Step 5: Disconnect the streaming service
 
@@ -424,7 +415,7 @@ Create the `stop_recording` function to handle disconnections smoothly.
 def stop_recording
   if $recording
     $recording = false
-    
+
     if $sox_process
       begin
         Process.kill('TERM', $sox_process.pid) rescue nil
@@ -438,6 +429,7 @@ def stop_recording
   end
 end
 ```
+
 </Step>
 
 <Step>
@@ -466,7 +458,6 @@ To run the program, use the command `ruby main.rb`.
 </Step>
 </Steps>
 
-
 ## Next steps
 
 To learn more about Streaming Speech-to-Text, see the following resources:
@@ -474,13 +465,6 @@ To learn more about Streaming Speech-to-Text, see the following resources:
 - [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
 - [Streaming STT WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
 
-
-
-
-
 ## Need some help?
 
 If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
-
-
-

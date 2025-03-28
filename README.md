@@ -41,4 +41,3 @@ Run the following command at the root of the folder to spin up a local dev serve
 ```
 fern docs dev
 ```
-

@@ -1,5 +1,5 @@
 ---
-title: 'Terminate Streaming Session After Inactivity'
+title: "Terminate Streaming Session After Inactivity"
 ---
 
 An often-overlooked aspect of implementing AssemblyAI's Streaming Speech-to-Text (STT) service is efficiently terminating transcription sessions. In this cookbook, you will learn how to terminate a Streaming session after any fixed duration of silence.
@@ -101,15 +101,18 @@ aai.settings.api_key = "YOUR_API_KEY"
 ## Handling inactivity
 
 ### Empty transcripts
+
 As long as a session is open, our Streaming STT service will continue sending empty `PartialTranscript`s that look like this:
 
 Message 1:
+
 ```
 {"message_type":"PartialTranscript", "created":"2023-11-10T16:10:22.754985",
 "text":"", ...}
 ```
 
 Message 2:
+
 ```
 {"message_type":"PartialTranscript", "created":"2023-11-10T16:10:25.297511",
 "text":"", ...}
@@ -119,14 +122,11 @@ Thus, we can use empty partial transcripts to assume that the user has stopped s
 
 Note: Other keys in the payload have been omitted for brevity but can be seen [here in our Streaming API Reference. ](https://www.assemblyai.com/docs/api-reference/streaming)
 
-
 ## Implementing Partial Transcript Checks
 
 Let's consider a code example to track if the `PartialTranscript`s have been empty for a duration of time.
 
-
 Define your Streaming functions as per normal.
-
 
 ```python
 def on_open(session_opened: aai.RealtimeSessionOpened):
@@ -144,7 +144,6 @@ Then, define the constant `last_transcript_received = datetime.now()`, and set a
 
 We will use these variables later on.
 
-
 ```python
 last_transcript_received = datetime.now()
 terminated = False
@@ -152,12 +151,11 @@ terminated = False
 ```
 
 Next, define your `on_data` function:
-*   Access the global variable `last_transcript_received`, as well as `terminated`
-*   If the Streaming STT transcriber has been terminated, don't return anything.
-*   If `transcript.text` is empty, check if it has been 5 seconds since the last empty transcript. When `true`, terminate the transcriber.
-*   Else, just print the text in our terminal as per usual, and set the time of the last transcript received to now.
 
-
+- Access the global variable `last_transcript_received`, as well as `terminated`
+- If the Streaming STT transcriber has been terminated, don't return anything.
+- If `transcript.text` is empty, check if it has been 5 seconds since the last empty transcript. When `true`, terminate the transcriber.
+- Else, just print the text in our terminal as per usual, and set the time of the last transcript received to now.
 
 ```python
 def on_data(transcript: aai.RealtimeTranscript):
@@ -186,9 +184,6 @@ Lastly, we define our `on_close` and `terminate_transcription` function. `on_clo
 
 `terminate_transcription` just accesses the global transcriber and closes the session when the function is called by `on_data`.
 
-
-
-
 ```python
 def on_close():
     global terminated
@@ -204,7 +199,6 @@ def terminate_transcription():
 ```
 
 Create your Streaming STT transcriber and start your transcription.
-
 
 ```python
 # Create the Streaming STT transcriber
@@ -227,4 +221,3 @@ transcriber.stream(microphone_stream)
 ```
 
 What you should observe is that transcription works in real-time and automatically terminates after 5 seconds!
-

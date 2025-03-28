@@ -6,7 +6,7 @@
 
 ### Step 2: Obtain the Raw Audio URL from GitHub
 
-1. Navigate to the repository that houses the audio file. 
+1. Navigate to the repository that houses the audio file.
 2. Click on the audio file. On the next page, right-click the "View raw" link and select "copy the link address" from the context menu.
 
 <img width="649" alt="An image of an audio file in a GitHub repository" src="../guide-images/view-raw.png">
@@ -15,7 +15,7 @@ Downloadable file URLs are formatted as `"https://github.com/<github-username>/<
 
 ### Step 3: Add the Audio URL to your Request
 
-``` 
+```
 POST v2/transcript endpoint
 
 {
@@ -23,18 +23,19 @@ POST v2/transcript endpoint
 }
 ```
 
-``` 
+```
 Python SDK
 
 transcript = transcriber.transcribe("https://github.com/user/audio-files/raw/main/audio.mp3")
 ```
 
-``` 
+```
 Typescript SDK
 
 const transcript = await client.transcripts.transcribe("https://github.com/user/audio-files/raw/main/audio.mp3")
 ```
 
 ### **Resources**
+
 [AssemblyAI's Supported File Types](https://www.assemblyai.com/docs/concepts/faq) <br/>
 [Transcribe an Audio File](https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file)

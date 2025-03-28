@@ -13,7 +13,7 @@
       console.error
     ) {
       console.error(
-        "RudderStack JavaScript SDK snippet included more than once."
+        "RudderStack JavaScript SDK snippet included more than once.",
       );
     } else {
       rudderanalytics.snippetExecuted = true;
@@ -42,7 +42,7 @@
           return function () {
             if (Array.isArray(window[identifier])) {
               rudderanalytics.push(
-                [methodName].concat(Array.prototype.slice.call(arguments))
+                [methodName].concat(Array.prototype.slice.call(arguments)),
               );
             } else {
               var _methodName;
@@ -55,7 +55,7 @@
       }
       try {
         new Function(
-          'class Test{field=()=>{};test({prop=[]}={}){return prop?(prop?.property??[...prop]):import("");}}'
+          'class Test{field=()=>{};test({prop=[]}={}){return prop?(prop?.property??[...prop]):import("");}}',
         );
         window.rudderAnalyticsBuildType = "modern";
       } catch (e) {}
@@ -64,7 +64,7 @@
       window.rudderAnalyticsAddScript = function (
         url,
         extraAttributeKey,
-        extraAttributeVal
+        extraAttributeVal,
       ) {
         var scriptTag = document.createElement("script");
         scriptTag.src = url;
@@ -110,12 +110,12 @@
             .concat(window.rudderAnalyticsBuildType, "/")
             .concat(sdkName),
           "data-rsa-write-key",
-          "2hNPzeocLrXEJ6fuVktdhExfmUr"
+          "2hNPzeocLrXEJ6fuVktdhExfmUr",
         );
       };
       if (typeof Promise === "undefined" || typeof globalThis === "undefined") {
         window.rudderAnalyticsAddScript(
-          "https://polyfill-fastly.io/v3/polyfill.min.js?version=3.111.0&features=Symbol%2CPromise&callback=rudderAnalyticsMount"
+          "https://polyfill-fastly.io/v3/polyfill.min.js?version=3.111.0&features=Symbol%2CPromise&callback=rudderAnalyticsMount",
         );
       } else {
         window.rudderAnalyticsMount();
@@ -126,7 +126,7 @@
       rudderanalytics.load(
         "2hNPzeocLrXEJ6fuVktdhExfmUr",
         "https://rs-dp.assemblyai.com",
-        loadOptions
+        loadOptions,
       );
     }
   }
@@ -229,12 +229,12 @@ function trackFeedback(event) {
 function trackFeedbackForm(event) {
   // Get the selected reason (radio button value)
   const selectedReason = event.target.querySelector(
-    'input[type="radio"]:checked'
+    'input[type="radio"]:checked',
   )?.value;
 
   // Get email consent and value
   const emailConsent = event.target.querySelector(
-    'input[type="checkbox"]'
+    'input[type="checkbox"]',
   )?.checked;
   const emailInput = event.target.querySelector('input[type="email"]')?.value;
 

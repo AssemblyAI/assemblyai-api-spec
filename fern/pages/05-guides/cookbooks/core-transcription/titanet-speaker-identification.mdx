@@ -2,11 +2,6 @@
 title: "Setup A Speaker Identification System using Pinecone & Nvidia TitaNet"
 ---
 
-
-
-
-
-
 This guide will demonstrate how to build an advanced speaker recognition and diarization system that you can use to identify speakers across multiple audio files. It will use:
 
 - AssemblyAI for transcription and initial diarization.
@@ -231,7 +226,7 @@ def identify_speakers_from_utterances(transcript, wav_file, min_utterance_length
             utterance["speaker"] in known_speakers[utterance["speaker"]]
         elif utterance["speaker"] in unknown_speakers:
             utterance["speaker"] = unknown_speakers[utterance["speaker"]]["name"]
-    
+
     # Third pass: Match all utterances if requested.
     if match_all_utterances:
         print("Matching all utterances individually...")
@@ -251,7 +246,7 @@ def identify_speakers_from_utterances(transcript, wav_file, min_utterance_length
                 print(f"Speaker change detected: '{utterance['speaker']}' -> '{new_speaker_name}' (Score: {score})")
                 print(f"Utterance: {utterance['text'][:50]}...")
                 utterance["speaker"] = new_speaker_name
-    
+
     return utterances, unknown_speakers
 
 pc.create_index(
@@ -314,8 +309,6 @@ First, you'll need to [sign up for an AssemblyAI account](https://www.assemblyai
 
 Now we'll need to install the necessary libraries and frameworks for this project. Please note that this process can take several minutes to complete.
 
-
-
 ```bash
 pip install -U Cython torch nemo_toolkit ffmpeg pydub pinecone-client assemblyai hydra-core pytorch_lightning huggingface_hub==0.23.5 librosa transformers pandas inflect webdataset sentencepiece youtokentome pyannote-audio editdistance jiwer lhotse datasets
 ```
@@ -323,8 +316,6 @@ pip install -U Cython torch nemo_toolkit ffmpeg pydub pinecone-client assemblyai
 ## Pinecone Setup
 
 In this section, we'll import Pinecone, create a new index for our speaker embeddings, and connect to the index. Please enter your Pinecone API key in the placeholder below.
-
-
 
 ```python
 from pinecone import Pinecone, ServerlessSpec
@@ -350,8 +341,6 @@ index = pc.Index("speaker-embeddings")
 
 Now we'll set up AssemblyAI for transcription and diarization. We'll import the necessary modules and create a function to transcribe our audio files with speaker labels enabled. Please enter your AssemblyAI API key in the cell below.
 
-
-
 ```python
 import assemblyai as aai
 
@@ -369,8 +358,6 @@ def transcribe(file_url):
 ```
 
 We'll also need to create a `download_and_convert_to_wav` helper function. This function allows us to take file URLs, download them, then convert them to WAV format. If the URLs are already in WAV format, then they're just downloaded. The files must be in WAV format to work properly with the TitaNet.
-
-
 
 ```python
 import requests
@@ -454,8 +441,6 @@ def download_and_convert_to_wav(url, output_dir="./content/converted_audio"):
 
 Next we'll import `torch` and `nemo`, then connect to and load [NVIDIA's TitaNet model](https://huggingface.co/nvidia/speakerverification_en_titanet_large). This model allows us to generate speaker embeddings to create speaker fingerprints. It also enables the conversion of utterances into embeddings for comparison with our fingerprints.
 
-
-
 ```python
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
@@ -463,8 +448,6 @@ speaker_model = EncDecSpeakerLabelModel.from_pretrained("nvidia/speakerverificat
 ```
 
 We'll now define an `add_speaker_embedding_to_pinecone` function to add our speaker embeddings to the Pinecone database.
-
-
 
 ```python
 import torch
@@ -506,8 +489,6 @@ def add_speaker_embedding_to_pinecone(speaker_name, speaker_embedding, unique_id
 
 Below we'll use chunks of the speakers' conversations to generate speaker embeddings and add them to our vector database. Later on, we'll show how to take an audio file with speakers not in the vector database and obtain the data required to generate new speaker fingerprints to be uploaded to the Pinecone database.
 
-
-
 ```python
 elon_fingerprint = download_and_convert_to_wav(
     "https://api.assemblyai-solutions.com/storage/v1/object/sign/sam_training_bucket/musk_fingerprinting.wav?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1cmwiOiJzYW1fdHJhaW5pbmdfYnVja2V0L211c2tfZmluZ2VycHJpbnRpbmcud2F2IiwiaWF0IjoxNzAwNDM4OTAwLCJleHAiOjE3MzE5NzQ5MDB9.O3QOJSBqFNb1sg4nurwSFA13xIPHyKuon3UfHcFYit0&t=2023-11-20T00%3A08%3A20.071Z"
@@ -532,8 +513,6 @@ for speaker, audio_file in known_speakers.items():
 
 Now we can query our Pinecone database to ensure that our embeddings were uploaded successfully.
 
-
-
 ```python
 audio_file = download_and_convert_to_wav(
     "https://api.assemblyai-solutions.com/storage/v1/object/sign/sam_training_bucket/musk_fingerprinting.wav?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1cmwiOiJzYW1fdHJhaW5pbmdfYnVja2V0L211c2tfZmluZ2VycHJpbnRpbmcud2F2IiwiaWF0IjoxNzAwNDM4OTAwLCJleHAiOjE3MzE5NzQ5MDB9.O3QOJSBqFNb1sg4nurwSFA13xIPHyKuon3UfHcFYit0&t=2023-11-20T00%3A08%3A20.071Z"
@@ -550,8 +529,6 @@ print(results)
 ### Speaker Identification Function
 
 The `find_closest_speaker` function is a crucial component of our speaker identification system. It compares a given utterance embedding to known speaker embeddings and identifies the closest match.
-
-
 
 ```python
 from sklearn.metrics.pairwise import cosine_similarity
@@ -590,8 +567,6 @@ def find_closest_speaker(utterance_embedding, local_embeddings=None, local_only=
 ### Speaker Identification from Utterances
 
 The `identify_speakers_from_utterances` function is the core of our speaker identification system. It processes a transcript with utterances and identifies speakers, handling both known and unknown voices.
-
-
 
 ```python
 def identify_speakers_from_utterances(transcript, wav_file, min_utterance_length=5000, match_all_utterances=False):
@@ -654,7 +629,7 @@ def identify_speakers_from_utterances(transcript, wav_file, min_utterance_length
             utterance["speaker"] in known_speakers[utterance["speaker"]]
         elif utterance["speaker"] in unknown_speakers:
             utterance["speaker"] = unknown_speakers[utterance["speaker"]]["name"]
-    
+
     # Third pass: Match all utterances if requested.
     if match_all_utterances:
         print("Matching all utterances individually...")
@@ -674,7 +649,7 @@ def identify_speakers_from_utterances(transcript, wav_file, min_utterance_length
                 print(f"Speaker change detected: '{utterance['speaker']}' -> '{new_speaker_name}' (Score: {score})")
                 print(f"Utterance: {utterance['text'][:50]}...")
                 utterance["speaker"] = new_speaker_name
-    
+
     return utterances, unknown_speakers
 ```
 
@@ -685,7 +660,6 @@ To demonstrate the capabilities of our speaker identification and diarization sy
 ### Example 1: Conversation Between Sam Altman and Elon Musk
 
 Our first example is a simple conversation between two well-known figures: Elon Musk and Sam Altman. This example will showcase how our system performs with clear, distinct voices in a controlled setting.
-
 
 ```python
 transcript_obj = transcribe("https://api.assemblyai-solutions.com/storage/v1/object/sign/sam_training_bucket/elon_altman_interview_clipped.wav?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1cmwiOiJzYW1fdHJhaW5pbmdfYnVja2V0L2Vsb25fYWx0bWFuX2ludGVydmlld19jbGlwcGVkLndhdiIsImlhdCI6MTcwMDY5MDU3OSwiZXhwIjoxNzMyMjI2NTc5fQ.4qZHvVRGhNGttfcpcfXDcJkJe_tbkc_2Bvs4i51SNSE&t=2023-11-22T22%3A02%3A59.429Z")

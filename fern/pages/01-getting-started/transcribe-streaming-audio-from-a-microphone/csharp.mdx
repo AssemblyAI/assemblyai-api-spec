@@ -1,23 +1,17 @@
 ---
-title: 'Transcribe streaming audio from a microphone in C#'
-subtitle: 'Learn how to transcribe streaming audio in C#.'
+title: "Transcribe streaming audio from a microphone in C#"
+subtitle: "Learn how to transcribe streaming audio in C#."
 hide-nav-links: true
-description: 'Learn how to transcribe streaming audio in C#.'
+description: "Learn how to transcribe streaming audio in C#."
 ---
-
-
-
 
 ## Overview
 
 By the end of this tutorial, you'll be able to transcribe audio from your microphone in C#.
 
 <Note title="Supported languages">
-Streaming Speech-to-Text is only available for English.
+  Streaming Speech-to-Text is only available for English.
 </Note>
-
-
-
 
 ## Before you begin
 
@@ -47,7 +41,7 @@ class Program
     private static CancellationTokenSource cts;
 
     static async Task Main(string[] args)
-    {        
+    {
         cts = new CancellationTokenSource();
         Console.CancelKeyPress += OnCancelKeyPress;
 
@@ -76,14 +70,14 @@ class Program
     {
         ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", API_KEY);
-        
+
         string url = $"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}";
         await ws.ConnectAsync(new Uri(url), cts.Token);
-                
+
         var receiveTask = ReceiveMessagesAsync();
-        
+
         await CaptureAndSendAudioAsync();
-        
+
         await receiveTask;
     }
 
@@ -97,7 +91,7 @@ class Program
             "--encoding signed-integer",
             "--bits 16",
             "--type wav",
-            "-" 
+            "-"
         });
 
         soxProcess = new Process
@@ -122,7 +116,7 @@ class Program
             while ((bytesRead = await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, cts.Token)) > 0)
             {
                 if (cts.Token.IsCancellationRequested) break;
-                
+
                 if (ws.State == WebSocketState.Open)
                 {
                     await ws.SendAsync(
@@ -146,19 +140,19 @@ class Program
     static async Task ReceiveMessagesAsync()
     {
         var buffer = new byte[4096];
-        
+
         try
         {
             while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
             {
                 var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                
+
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
                     break;
                 }
-                
+
                 string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
                 ProcessMessage(message);
             }
@@ -178,25 +172,25 @@ class Program
         {
             using JsonDocument doc = JsonDocument.Parse(message);
             JsonElement root = doc.RootElement;
-            
+
             if (root.TryGetProperty("message_type", out JsonElement messageTypeElement))
             {
                 string messageType = messageTypeElement.GetString();
-                
+
                 if (messageType == "SessionBegins" && root.TryGetProperty("session_id", out JsonElement sessionIdElement))
                 {
                     string sessionId = sessionIdElement.GetString();
                     Console.WriteLine($"Session ID: {sessionId}");
                     return;
                 }
-                
+
                 if (!root.TryGetProperty("text", out JsonElement textElement))
                     return;
-                    
+
                 string text = textElement.GetString();
                 if (string.IsNullOrWhiteSpace(text))
                     return;
-                
+
                 if (messageType == "PartialTranscript")
                 {
                     Console.Write($"\rPartial: {text}");
@@ -207,8 +201,8 @@ class Program
                 }
                 else if (messageType == "Error")
                 {
-                    string error = root.TryGetProperty("error", out JsonElement errorElement) 
-                        ? errorElement.GetString() 
+                    string error = root.TryGetProperty("error", out JsonElement errorElement)
+                        ? errorElement.GetString()
                         : "Unknown error";
                     Console.WriteLine($"Error from AssemblyAI: {error}");
                 }
@@ -239,7 +233,7 @@ class Program
             if (ws != null && ws.State == WebSocketState.Open)
             {
                 var closeTask = ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                closeTask.Wait(TimeSpan.FromSeconds(2)); 
+                closeTask.Wait(TimeSpan.FromSeconds(2));
                 Console.WriteLine("WebSocket connection closed.");
             }
         }
@@ -250,16 +244,13 @@ class Program
 }
 ```
 
-
-
-
 ## Step 1: Setting up your project
 
 <Steps>
 
 <Step>
 
-Create a new C# console application. 
+Create a new C# console application.
 
 ```bash
 dotnet new console
@@ -295,7 +286,6 @@ sudo apt-get install sox
 </Step>
 </Steps>
 
-
 ## Step 2: Define the program structure and assign your API key
 
 <Steps>
@@ -312,11 +302,13 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 ```
+
 </Step>
 
 <Step>
 
 Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+
 </Step>
 
 <Step>
@@ -342,7 +334,7 @@ Setup the main method to handle the program logic:
 
 ```csharp
 static async Task Main(string[] args)
-    {        
+    {
         cts = new CancellationTokenSource();
         Console.CancelKeyPress += OnCancelKeyPress;
 
@@ -364,10 +356,6 @@ static async Task Main(string[] args)
 </Step>
 </Steps>
 
-
-
-
-
 ## Step 3: Record audio from the microphone
 
 In this step, you'll setup microphone recording using SoX.
@@ -388,7 +376,7 @@ static async Task CaptureAndSendAudioAsync()
             "--encoding signed-integer",
             "--bits 16",
             "--type wav",
-            "-" 
+            "-"
         });
 
         soxProcess = new Process
@@ -413,7 +401,7 @@ static async Task CaptureAndSendAudioAsync()
             while ((bytesRead = await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, cts.Token)) > 0)
             {
                 if (cts.Token.IsCancellationRequested) break;
-                
+
                 if (ws.State == WebSocketState.Open)
                 {
                     await ws.SendAsync(
@@ -440,7 +428,7 @@ static async Task CaptureAndSendAudioAsync()
 The SoX arguments configure the format of the audio output.
 The arguments configure the format to a single channel with 16-bit signed integer PCM encoding and 16 kHz sample rate.
 
- If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+If you want to stream data from elsewhere, make sure that your audio data is in the following format:
 
 - Single channel
 - 16-bit signed integer PCM or mu-law encoding
@@ -451,9 +439,6 @@ By default, the Streaming STT service expects PCM16-encoded audio. If you want t
 
 </Step>
 </Steps>
-
-
-
 
 ## Step 4: Setup the websocket connection to the Streaming service
 
@@ -469,14 +454,14 @@ static async Task ConnectAndTranscribe()
     {
         ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", API_KEY);
-        
+
         string url = $"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}";
         await ws.ConnectAsync(new Uri(url), cts.Token);
-                
+
         var receiveTask = ReceiveMessagesAsync();
-        
+
         await CaptureAndSendAudioAsync();
-        
+
         await receiveTask;
     }
 ```
@@ -492,6 +477,7 @@ We recommend the following sample rates:
 - Maximum quality: `48_000` (48 kHz)
 
 If you don't set a sample rate on the real-time transcriber, it defaults to 16 kHz.
+
 </Note>
 
 </Step>
@@ -504,19 +490,19 @@ Create a `ReceiveMessagesAsync` method to handle the message receiving:
 static async Task ReceiveMessagesAsync()
     {
         var buffer = new byte[4096];
-        
+
         try
         {
             while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
             {
                 var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                
+
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
                     break;
                 }
-                
+
                 string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
                 ProcessMessage(message);
             }
@@ -530,6 +516,7 @@ static async Task ReceiveMessagesAsync()
         }
     }
 ```
+
 </Step>
 <Step>
 
@@ -547,25 +534,25 @@ static void ProcessMessage(string message)
         {
             using JsonDocument doc = JsonDocument.Parse(message);
             JsonElement root = doc.RootElement;
-            
+
             if (root.TryGetProperty("message_type", out JsonElement messageTypeElement))
             {
                 string messageType = messageTypeElement.GetString();
-                
+
                 if (messageType == "SessionBegins" && root.TryGetProperty("session_id", out JsonElement sessionIdElement))
                 {
                     string sessionId = sessionIdElement.GetString();
                     Console.WriteLine($"Session ID: {sessionId}");
                     return;
                 }
-                
+
                 if (!root.TryGetProperty("text", out JsonElement textElement))
                     return;
-                    
+
                 string text = textElement.GetString();
                 if (string.IsNullOrWhiteSpace(text))
                     return;
-                
+
                 if (messageType == "PartialTranscript")
                 {
                     Console.Write($"\rPartial: {text}");
@@ -576,8 +563,8 @@ static void ProcessMessage(string message)
                 }
                 else if (messageType == "Error")
                 {
-                    string error = root.TryGetProperty("error", out JsonElement errorElement) 
-                        ? errorElement.GetString() 
+                    string error = root.TryGetProperty("error", out JsonElement errorElement)
+                        ? errorElement.GetString()
                         : "Unknown error";
                     Console.WriteLine($"Error from AssemblyAI: {error}");
                 }
@@ -591,7 +578,11 @@ static void ProcessMessage(string message)
 ```
 
 <Tip title="End of utterance controls">
-You can [configure the silence threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection) for automatic utterance detection and programmatically [force the end of an utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to immediately get a _Final transcript_.
+  You can [configure the silence
+  threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection)
+  for automatic utterance detection and programmatically [force the end of an
+  utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to
+  immediately get a _Final transcript_.
 </Tip>
 
 </Step>
@@ -619,6 +610,7 @@ static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
 <Step>
 
 Setup the cleanup logic:
+
 ```csharp
 static void Cleanup()
     {
@@ -639,7 +631,7 @@ static void Cleanup()
             if (ws != null && ws.State == WebSocketState.Open)
             {
                 var closeTask = ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                closeTask.Wait(TimeSpan.FromSeconds(2)); 
+                closeTask.Wait(TimeSpan.FromSeconds(2));
                 Console.WriteLine("WebSocket connection closed.");
             }
         }
@@ -654,7 +646,6 @@ static void Cleanup()
 
 To run the program, first run `dotnet build` and then `dotnet run`.
 
-
 ## Next steps
 
 To learn more about Streaming Speech-to-Text, see the following resources:
@@ -662,11 +653,6 @@ To learn more about Streaming Speech-to-Text, see the following resources:
 - [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
 - [Streaming STT WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
 
-
-
-
-
 ## Need some help?
 
 If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
-

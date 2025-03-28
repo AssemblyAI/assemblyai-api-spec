@@ -1,30 +1,18 @@
 ---
-title: 'Using real-time streaming'
+title: "Using real-time streaming"
 hide-nav-links: true
-description: 'Transcribe live audio with Streaming Speech-to-Text'
+description: "Transcribe live audio with Streaming Speech-to-Text"
 ---
 
-
-
-
-  
 AssemblyAI's Streaming Speech-to-Text (STT) service allows you to transcribe live audio streams with high accuracy and low latency. By streaming your audio data to our secure WebSocket API, you can receive transcripts back within a few hundred milliseconds, and our system continues to revise these transcripts with greater accuracy over time as more context arrives.
 
 In this guide, you'll learn how to establish a WebSocket connection, send audio data, and receive partial and final transcription results. For more information about the expected audio format, see [Audio Requirements](#audio-requirements).
-
-  
-
-
 
 ## Get started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard. Please note that this feature is available for paid accounts only. If you're on the free plan, you'll need to upgrade.
 
 The entire source code of this guide can be viewed [here](https://github.com/AssemblyAI-Community/docs-snippets/tree/main/real-time).
-
-
-
-
 
 ## Step-by-step instructions
 
@@ -84,7 +72,7 @@ pip install "assemblyai[extras]"
 
 
 
-from threading 
+from threading
 
 
 YOUR_API_KEY = "<YOUR_API_KEY>"
@@ -156,7 +144,6 @@ ws.run_forever()
 
 </Step>
 <Step>
-
 
 <Tabs>
  <Tab language="python-sdk" title="Python SDK">
@@ -331,7 +318,6 @@ def on_open(ws):
 </Step>
 <Step>
 
-
 <Tabs>
  <Tab language="python-sdk" title="Python SDK">
 
@@ -412,10 +398,6 @@ def on_close(ws):
 </Step>
 </Steps>
 
-
-
-
-
 ## Audio Requirements
 
 The raw audio data must comply with a strict encoding format. This is because we don't do any transcoding to your data, we send it directly to the model for transcription to reduce latency. The encoding of your audio must be in:
@@ -426,7 +408,8 @@ The raw audio data must comply with a strict encoding format. This is because we
 - 100 to 2000 milliseconds of audio per message
 
 <Tip>
-Audio segments with a duration between 100 ms and 450 ms produce the best results in transcription accuracy.
+  Audio segments with a duration between 100 ms and 450 ms produce the best
+  results in transcription accuracy.
 </Tip>
 
 ### Specifying the encoding
@@ -441,10 +424,6 @@ wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000?encoding=pcm_mulaw
 | --------------------- | -------------------------------- |
 | `pcm_s16le` (Default) | PCM signed 16-bit little-endian. |
 | `pcm_mulaw`           | PCM Mu-law.                      |
-
-
-
-
 
 ## Request Types
 
@@ -506,10 +485,6 @@ When you've completed your session, clients should send a JSON message with the 
 
 After requesting session termination, the server will send the remaining transcript messages, followed by a [SessionTerminated message](#session-terminated).
 
-
-
-
-
 ## Response Types
 
 These are the types of responses that can be received from the WebSocket API.
@@ -569,10 +544,6 @@ Your client receives a `SessionTerminated` message with the following JSON data:
 | -------------- | --------------------- | ---------------------------------- |
 | `message_type` | `"SessionTerminated"` | Describes the type of the message. |
 
-
-
-
-
 ## Closing and Status Codes
 
 The WebSocket specification provides [standard errors](https://github.com/Luka967/websocket-close-codes).
@@ -599,10 +570,6 @@ Our API provides application-level WebSocket errors for well-known scenarios:
 | reconnected                                  | `4103`      | "This session has been reconnected. This WebSocket is no longer valid"                                                                           |
 | word boost parameter parsing failed          | `4104`      | "Could not parse word boost parameter"                                                                                                           |
 
-
-
-
-
 ## Quotas and Limits
 
 The following limits are imposed to ensure performance and service quality.
@@ -612,17 +579,13 @@ The following limits are imposed to ensure performance and service quality.
 - **Session Uniqueness** - Only one WebSocket per session.
 - **Audio Sampling Rate Limit** - Customers must send data in near real-time. If a client sends data faster than 1 second of audio per second for longer than 1 minute, we'll terminate the session.
 
-
-
-
-
 ## Adding Custom Vocabulary
 
 Developers can also add up to 2500 characters of custom vocabulary to their real-time session by adding the optional query parameter `word_boost` in the URL. The parameter should map to a JSON encoded list of strings as shown in this Python example:
 
 ```python
 
-from urllib.parse 
+from urllib.parse
 
 sample_rate = 16000
 word_boost = ["foo", "bar"]
@@ -631,16 +594,12 @@ params = {"sample_rate": sample_rate, "word_boost": json.dumps(word_boost)}
 url = f"wss://api.assemblyai.com/v2/realtime/ws?{urlencode(params)}"
 ```
 
-
-
-
-
 ## Creating Temporary Authentication Tokens
 
 If you need to authenticate on the client, you can avoid exposing your API key by using temporary authentication tokens. Temporary tokens have a one-time use restriction. To generate a temporary token, send a `POST` request to `https://api.assemblyai.com/v2/realtime/token`. Use the `expires_in` parameter to specify how long the token should be valid for, in seconds.
 
 <Note>
-The `expires_in` parameter must have a value between 60 and 360000 seconds.
+  The `expires_in` parameter must have a value between 60 and 360000 seconds.
 </Note>
 
 ```curl
@@ -662,17 +621,14 @@ In response you'll receive the following JSON output:
 A developer can now use this temporary token in the browser to authenticate a new WebSocket session with the following endpoint `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token={New Temp Token}`. For example:
 
 ```javascript
-let socket
-const token = 'b2e3c6c71d450589b2f4f0bb1ac4efd2d5e55b1f926e552e02fc0cc070eaedbd'
+let socket;
+const token =
+  "b2e3c6c71d450589b2f4f0bb1ac4efd2d5e55b1f926e552e02fc0cc070eaedbd";
 
 socket = new WebSocket(
-  `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`
-)
+  `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`,
+);
 ```
-
-
-
-
 
 ## Conclusion
 
@@ -683,6 +639,3 @@ Streaming Speech-to-Text is a powerful feature with even more powerful possibili
 - [Connect to the Streaming Speech-to-Text API using a PyAudio stream](https://www.assemblyai.com/blog/real-time-speech-recognition-with-python/)
 
 You can also find an example of using Express.js for Streaming Speech-to-Text on [GitHub](https://github.com/AssemblyAI/realtime-transcription-browser-js-example).
-
-
-
