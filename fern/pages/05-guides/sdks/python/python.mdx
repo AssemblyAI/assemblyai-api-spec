@@ -1,0 +1,133 @@
+---
+title: "Python SDK Reference"
+---
+
+## Installation
+
+```bash title="pip"
+pip install -U assemblyai
+```
+
+## How the SDK handles Default Configurations
+
+### Defining Defaults
+
+When no `TranscriptionConfig` is being passed to the `Transcriber` or its methods, it will use a default instance of a `TranscriptionConfig`.
+
+If you would like to re-use the same `TranscriptionConfig` for all your transcriptions,
+you can set it on the `Transcriber` directly:
+
+```python
+config = aai.TranscriptionConfig(punctuate=False, format_text=False)
+
+transcriber = aai.Transcriber(config=config)
+
+# will use the same config for all `.transcribe*(...)` operations
+transcriber.transcribe("https://example.org/audio.wav")
+```
+
+### Overriding Defaults
+
+You can override the default configuration later via the `.config` property of the `Transcriber`:
+
+```python
+transcriber = aai.Transcriber()
+
+# override the `Transcriber`'s config with a new config
+transcriber.config = aai.TranscriptionConfig(punctuate=False, format_text=False)
+```
+
+In case you want to override the `Transcriber`'s configuration for a specific operation with a different one, you can do so via the `config` parameter of a `.transcribe*(...)` method:
+
+```python
+config = aai.TranscriptionConfig(punctuate=False, format_text=False)
+# set a default configuration
+transcriber = aai.Transcriber(config=config)
+
+transcriber.transcribe(
+    "https://example.com/audio.mp3",
+    # overrides the above configuration on the `Transcriber` with the following
+    config=aai.TranscriptionConfig(dual_channel=True, disfluencies=True)
+)
+```
+
+## Synchronous vs Asynchronous
+
+Currently, the SDK provides two ways to transcribe audio files.
+
+The synchronous approach halts the application's flow until the transcription has been completed.
+
+The asynchronous approach allows the application to continue running while the transcription is being processed. The caller receives a [`concurrent.futures.Future`](https://docs.python.org/3/library/concurrent.futures.html) object which can be used to check the status of the transcription at a later time.
+
+You can identify those two approaches by the `_async` suffix in the `Transcriber`'s method name (e.g. `transcribe` vs `transcribe_async`).
+
+## Getting the HTTP status code
+
+There are two ways of accessing the HTTP status code:
+
+- All custom AssemblyAI Error classes have a `status_code` attribute.
+- The latest HTTP response is stored in `aai.Client.get_default().latest_response` after every API call. This approach works also if no Exception is thrown.
+
+```python
+transcriber = aai.Transcriber()
+
+# Option 1: Catch the error
+try:
+    transcript = transcriber.submit("./example.mp3")
+except aai.AssemblyAIError as e:
+    print(e.status_code)
+
+# Option 2: Access the latest response through the client
+client = aai.Client.get_default()
+
+try:
+    transcript = transcriber.submit("./example.mp3")
+except:
+    print(client.last_response)
+    print(client.last_response.status_code)
+```
+
+## Polling Intervals
+
+By default we poll the `Transcript`'s status each `3s`. In case you would like to adjust that interval:
+
+```python
+import assemblyai as aai
+
+aai.settings.polling_interval = 1.0
+```
+
+## Retrieving Existing Transcripts
+
+### Retrieving a Single Transcript
+
+If you previously created a transcript, you can use its ID to retrieve it later.
+
+```python
+import assemblyai as aai
+
+transcript = aai.Transcript.get_by_id("<TRANSCRIPT_ID>")
+
+print(transcript.id)
+print(transcript.text)
+```
+
+### Retrieving Multiple Transcripts as a Group
+
+You can also retrieve multiple existing transcripts and combine them into a single `TranscriptGroup` object. This allows you to perform operations on the transcript group as a single unit, such as querying the combined transcripts with LeMUR.
+
+```python
+import assemblyai as aai
+
+transcript_group = aai.TranscriptGroup.get_by_ids(["<TRANSCRIPT_ID_1>", "<TRANSCRIPT_ID_2>"])
+
+summary = transcript_group.lemur.summarize(context="Customers asking for cars", answer_format="TLDR")
+
+print(summary)
+```
+
+### Retrieving Transcripts Asynchronously
+
+Both `Transcript.get_by_id` and `TranscriptGroup.get_by_ids` have asynchronous counterparts, `Transcript.get_by_id_async` and `TranscriptGroup.get_by_ids_async`, respectively. These functions immediately return a `Future` object, rather than blocking until the transcript(s) are retrieved.
+
+See the above section on [Synchronous vs Asynchronous](#synchronous-vs-asynchronous) for more information.

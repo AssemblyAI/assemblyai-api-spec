@@ -1,0 +1,256 @@
+---
+title: "C# SDK Reference"
+---
+
+# LeMUR
+
+## Summarize your audio data
+
+```csharp
+using AssemblyAI;
+using AssemblyAI.Lemur;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// You can use a local file:
+/*
+var transcript = await client.Transcripts.TranscribeAsync(
+    new FileInfo("./example.mp3")
+);
+*/
+
+// Or use a publicly-accessible URL:
+const string audioUrl = "https://assembly.ai/sports_injuries.mp3";
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = audioUrl
+});
+
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = "Provide a brief summary of the transcript.",
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet
+};
+
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+
+Console.WriteLine(response.Response);
+```
+
+If you run the code above, you'll see the following output:
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+## Ask questions about your audio data
+
+**Q&A with the task endpoint**
+
+To ask question about your audio data, define a prompt with your questions and call `client.Lemur.TaskAsync()`. Use the `TranscriptIds` parameter to send one or more transcripts as additional context for the model.
+
+```csharp {13-14,16-22}
+using AssemblyAI;
+using AssemblyAI.Lemur;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+// Step 1: Transcribe an audio file. For local files see our Getting Started guides.
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/sports_injuries.mp3"
+});
+
+// Step 2: Define a prompt with your question(s).
+const string prompt = "What is a runner's knee?";
+
+// Step 3: Apply LeMUR.
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet
+};
+
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+
+Console.WriteLine(response.Response);
+```
+
+#**Example output**
+
+```plain
+Based on the transcript, runner's knee is a condition characterized
+by pain behind or around the kneecap. It is caused by overuse,
+muscle imbalance and inadequate stretching. Symptoms include pain
+under or around the kneecap and pain when walking.
+```
+
+**Q&A with the question-answer endpoint**
+
+The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
+
+To use it, define a list of `LemurQuestion` objects. For each question, you can define additional `Context` and specify either a `AnswerFormat` or a list of `AnswerOptions`. Additionally, you can define an overall `Context`.
+
+```csharp {12-32}
+using AssemblyAI;
+using AssemblyAI.Lemur;
+using AssemblyAI.Transcripts;
+
+var client = new AssemblyAIClient("<YOUR_API_KEY>");
+
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/meeting.mp4"
+});
+
+var lemurTaskParams = new LemurQuestionAnswerParams
+{
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet,
+    Context = "A GitLab meeting to discuss logistic",
+    Questions =
+    [
+        new LemurQuestion
+        {
+            Question = "What are the top level KPIs for engineering?",
+            Context = "KPI stands for key performance indicator",
+            AnswerFormat = "short sentence"
+        },
+        new LemurQuestion
+        {
+            Question = "How many days has it been since the data team has gotten updated metrics?",
+            Context = "KPI stands for key performance indicator",
+            AnswerOptions = ["1", "2", "3", "4", "5", "6", "7", "more than 7"]
+        }
+    ]
+};
+
+var response = await client.Lemur.QuestionAnswerAsync(lemurTaskParams);
+
+foreach (var qa in response.Response)
+{
+    Console.WriteLine($"Question: {qa.Question}");
+    Console.WriteLine($"Answer: {qa.Answer}");
+}
+```
+
+For the full API reference, as well as the supported models and FAQs, refer to the [full LeMUR Q&A guide](/docs/lemur/ask-questions).
+
+## Change the model type
+
+LeMUR features the following LLMs:
+
+- Claude 3.5 Sonnet
+- Claude 3 Opus
+- Claude 3 Haiku
+- Claude 3 Sonnet
+
+You can switch the model by specifying the `final_model` parameter.
+
+```csharp {5}
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [transcript.Id],
+    FinalModel = LemurModel.AnthropicClaude3_5_Sonnet
+};
+```
+
+| Model                 | SDK Parameter                          | Description                                                                                                                                                                                                                                          |
+| --------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Claude 3.5 Sonnet** | `LemurModel.AnthropicClaude3_5_Sonnet` | Claude 3.5 Sonnet is the most intelligent model to date, outperforming Claude 3 Opus on a wide range of evaluations, with the speed and cost of Claude 3 Sonnet. This uses Anthropic's Claude 3.5 Sonnet model version `claude-3-5-sonnet-20240620`. |
+| **Claude 3.0 Opus**   | `LemurModel.AnthropicClaude3_Opus`     | Claude 3 Opus is good at handling complex analysis, longer tasks with many steps, and higher-order math and coding tasks.                                                                                                                            |
+| **Claude 3.0 Haiku**  | `LemurModel.AnthropicClaude3_Haiku`    | Claude 3 Haiku is the fastest model that can execute lightweight actions.                                                                                                                                                                            |
+| **Claude 3.0 Sonnet** | `LemurModel.AnthropicClaude3_Sonnet`   | Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks.                                                                                                                         |
+
+You can find more information on pricing for each model <a href="https://www.assemblyai.com/pricing" target="_blank">here</a>.
+
+## Change the maximum output size
+
+You can change the maximum output size in tokens by specifying the `MaxOutputSize` parameter. Up to 4000 tokens are allowed.
+
+```csharp {5}
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [transcript.Id],
+    MaxOutputSize = 1000
+};
+```
+
+## Change the temperature
+
+You can change the temperature by specifying the `temperature` parameter, ranging from 0.0 to 1.0.
+
+Higher values result in answers that are more creative, lower values are more conservative.
+
+```csharp {5}
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [transcript.Id],
+    Temperature = 0.7f
+};
+```
+
+## Send customized input
+
+You can submit custom text inputs to LeMUR without transcript IDs. This allows you to customize the input, for example, you could include the speaker labels for the LLM.
+
+To submit custom text input, use the `InputText` parameter instead of `TranscriptIds`.
+
+```csharp {15}
+var transcript = await client.Transcripts.TranscribeAsync(new TranscriptParams
+{
+    AudioUrl = "https://assembly.ai/sports_injuries.mp3",
+    SpeakerLabels = true
+});
+
+var textWithSpeakerLabels = string.Join(
+    "",
+    transcript.Utterances!.Select(utterance => $"Speaker {utterance.Speaker}:\n{utterance.Text}\n")
+);
+
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    InputText = textWithSpeakerLabels
+};
+
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+```
+
+## Submit multiple transcripts
+
+LeMUR can easily ingest multiple transcripts in a single API call.
+
+You can feed in up to a maximum of 100 files or 100 hours, whichever is lower.
+
+```csharp {4}
+var lemurTaskParams = new LemurTaskParams
+{
+    Prompt = prompt,
+    TranscriptIds = [id1, id2, id3]
+};
+```
+
+## Delete LeMUR request data
+
+You can delete the data for a previously submitted LeMUR request.
+
+Response data from the LLM, as well as any context provided in the original request will be removed.
+
+```csharp {3}
+var response = await client.Lemur.TaskAsync(lemurTaskParams);
+
+var deletionResponse = await client.Lemur.PurgeRequestDataAsync(response.RequestId);
+```

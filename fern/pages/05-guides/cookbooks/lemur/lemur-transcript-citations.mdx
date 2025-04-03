@@ -1,0 +1,407 @@
+---
+title: "Generate Transcript Citations using LeMUR"
+---
+
+This guide will walk through the process of generating transcript citations using OpenAI embeddings and the LeMUR API.
+
+## Overview
+
+Extracting exact quotes from transcripts can be a difficult task for Large Language Models, which makes it challenging to cite sources or identify timestamps for generative text.
+
+Embeddings are powerful representations of text that capture its semantic and contextual meaning. By leveraging embeddings, we can transform raw text data, such as transcripts, into dense numerical vectors that encode its underlying information. These embeddings enable us to perform sophisticated tasks such as similarity comparison and contextual searching.
+
+In this guide, we demonstrate how to utilize OpenAI embeddings to retrieve transcript citations to corroborate the results from the LeMUR API. LeMUR is proficient at providing the 'what' & 'why' and now embeddings will be able to provide the 'where' & 'when'.
+
+We'll walk through 3 use cases for this including verification of sources for specific answers, timestamping of action items, and generation of customer quotes.
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard. You will also need an [OpenAI API token](https://platform.openai.com/docs/quickstart).
+
+LeMUR features are currently only available to paid users. See [pricing](https://www.assemblyai.com/pricing) for more details.
+
+## Instructions
+
+Install the libraries required for the transcription and embedding creation.
+
+```bash
+pip install numpy sklearn openai assemblyai tiktoken
+```
+
+### Submitting a File for Transcription
+
+```python
+import assemblyai as aai
+aai.settings.api_key = "YOUR_API_KEY"
+transcriber = aai.Transcriber()
+
+def transcribe(urls):
+    return transcriber.transcribe_group(urls)
+```
+
+### Create Transcript Embeddings
+
+We are using the text-embedding-ada-002 model to generate our embeddings.
+
+The pricing for this model is $0.0001 / 1k tokens which equates to roughly 0.0015 to embed one hour of audio.
+
+```python
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
+import openai
+
+# Set up OpenAI API key
+openai.api_key = "YOUR_OPENAI_TOKEN"
+
+def embed_block(block_text):
+    # Embed the block of text using OpenAI embeddings
+    embedding = openai.Embedding.create(
+        input=block_text,
+        model='text-embedding-ada-002',
+    ).to_dict()['data'][0]['embedding']
+
+    # Store the embedding with the timestamp in the dictionary
+    return embedding
+
+def find_relevant_matches(embedded_blocks, new_block_text, k=3):
+    matches = []
+    # Embed the new block of text using OpenAI embeddings
+    new_embedding = embed_block(new_block_text)
+
+    # Prepare the embeddings for the KNN search
+    embeddings = np.array(list(embedded_blocks.values()))
+    metadata = list(embedded_blocks.keys())
+
+    # Perform KNN search to find the most relevant matches
+    knn = NearestNeighbors(n_neighbors=k)
+    knn.fit(embeddings)
+    distances, indices = knn.kneighbors([new_embedding])
+
+    # Print the relevant matches
+    # print(f"Relevant Matches for '{new_block_text}':")
+    for distance, index in zip(distances[0], indices[0]):
+        result_metadata = metadata[index]
+        # print(f"Timestamp: {timestamp}, Similarity: {1-distance:.4f}")
+        # print(f"Block Text: {embedded_blocks[timestamp]}")
+        # print()
+        matches.append({
+            'timestamp': result_metadata[0],
+            'transcript_id': result_metadata[1],
+            'text': result_metadata[2],
+            'confidence': 1-distance
+        })
+    return matches
+```
+
+```python
+def create_transcripts_embeddings(transcripts, granularity='paragraph'):
+    # Dictionary to store embeddings with timestamps
+    embeddings = {}
+    total_tokens_embedded = 0
+
+    for transcript in transcripts:
+        if granularity == 'sentence':
+            sentences = transcript.get_sentences()
+            for sentence in sentences:
+                # print(sentence.start, sentence.end)
+                # print(sentence.text)
+                total_tokens_embedded += num_tokens_from_string(sentence.text, 'r50k_base')
+
+                embeddings[(sentence.start, transcript.id, sentence.text)] = embed_block(sentence.text)
+        else:
+            paragraphs = transcript.get_paragraphs()
+            for paragraph in paragraphs:
+                # print(paragraph.start, paragraph.end)
+                # print(paragraph.text, '\n')
+                total_tokens_embedded += num_tokens_from_string(paragraph.text, 'r50k_base')
+
+                embeddings[(paragraph.start, transcript.id, paragraph.text)] = embed_block(paragraph.text)
+
+    print(total_tokens_embedded, 'TOKENS EMBEDDED')
+    print('COST OF EMBEDDINGS: $', (total_tokens_embedded / 1000)*0.0001)
+    print()
+    return embeddings
+```
+
+```python
+import tiktoken
+
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+```
+
+## Examples
+
+### Cite Answers to Specific Questions
+
+Cite your sources to specific answers returned from the LeMUR Q&A API.
+
+```python
+questions = [
+    aai.LemurQuestion(question="how does calcium relate to adheren junctions?", context='', answer_format="")
+]
+```
+
+```python
+import json, datetime
+
+def get_citations(lemur_output):
+    matches = find_relevant_matches(embeddings, lemur_output)
+
+    print('CITATIONS:')
+    for index, m in enumerate(matches):
+        print('#{}'.format(index+1))
+        print('QUOTE: "{}"'.format(m['text']))
+        print('TRANSCRIPT ID:', m['transcript_id'])
+        print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['timestamp']/1000)))
+        print('CONFIDENCE SCORE:', m['confidence'])
+        print()
+```
+
+```python
+transcripts = transcribe([
+    '', # TODO ADD URLS
+])
+
+embeddings = create_transcripts_embeddings(transcripts)
+
+qa_results = transcripts.lemur.question(questions).response
+
+print(f"Question: {qa_results[0].question}")
+print(f"Answer: {qa_results[0].answer}")
+print()
+get_citations(qa_results[0].question + ' ' + qa_results[0].answer)
+```
+
+Example output:
+
+```
+Question: how does calcium relate to adheren junctions?
+Answer: Adheren junctions are calcium dependent, meaning that if calcium is removed, the cells will fall apart as the junctions disassemble.
+
+CITATIONS:
+#1
+QUOTE: "If you were to put in some kind of calcium chelator like EDTA that removed the calcium from the media or the extracellular fluid in these cells, these cells would actually fall apart and these junctions would fall apart. On the cytoplasmic side, you have a number of linker proteins. Again, they've been named in this diagram, catinin Vinculin and Alpha Actinin are involved, and again, they link up to the actin filaments."
+TRANSCRIPT ID: 6yb0ijyfl0-14c4-4bc1-96f2-ff029bb7e630
+START TIMESTAMP: 0:16:57.786000
+CONFIDENCE SCORE: 0.5054862317894155
+
+#2
+QUOTE: "If you have two cells that are attached to one another and they're undergoing physical forces, what keeps them from coming apart is these adhering junctions. There are forces you can imagine in your intestine that would rub against the epithelia as material passes through. And these adhering junctions keep those epithelia from coming apart and exposing the connected tissue below. Gap junctions are found in most cells and their real function is actually as a pore or channel that lies between two adjacent cells. And these allow for small molecules to pass ions to pass through and they're controlled pores."
+TRANSCRIPT ID: 6yb0ijyfl0-14c4-4bc1-96f2-ff029bb7e630
+START TIMESTAMP: 0:08:28.270000
+CONFIDENCE SCORE: 0.4346457600791962
+
+#3
+QUOTE: "And we take a look at a schematic showing the intracellular surface of one cell and the intracellular surface of another. Here are the plasma membranes of one and cell two, and then the space in between. The space is about 20. Unlike the cludence junction, there is a space, and that space contains transmembrane proteins called caherons, which match up with their homolog on the adjacent cell, and they hold the two cells together. These adherence junctions are calcium dependent."
+TRANSCRIPT ID: 6yb0ijyfl0-14c4-4bc1-96f2-ff029bb7e630
+START TIMESTAMP: 0:16:23.290000
+CONFIDENCE SCORE: 0.4293010412511604
+```
+
+### Provide References to Multiple Transcripts
+
+When analyzing multiple transcripts, it can be helpful to have references to know which transcript the answer came from.
+
+```python
+questions = [
+    aai.LemurQuestion(question="Identify pain points discussed across all user interviews", context='', answer_format="""
+    [
+        "pain point 1",
+        "pain point 2",
+        "pain point 3"
+    ]
+    """)
+]
+```
+
+```python
+import json, datetime
+
+def get_examples(lemur_output):
+    matches = find_relevant_matches(embeddings, lemur_output, k=5)
+
+    print('EXAMPLES:')
+    for index, m in enumerate(matches):
+        print('#{}'.format(index+1))
+        print('QUOTE: "{}"'.format(m['text']))
+        print('TRANSCRIPT ID:', m['transcript_id'])
+        print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['timestamp']/1000)))
+        print('CONFIDENCE SCORE:', m['confidence'])
+        print()
+    return matches
+```
+
+```python
+transcripts = transcribe([
+    '', # TODO ADD URLS
+])
+
+embeddings = create_transcripts_embeddings(transcripts, granularity='sentence')
+
+qa_results = transcripts.lemur.question(questions).response
+
+print(f"Question: {qa_results[0].question}")
+print(f"Answer: {qa_results[0].answer}")
+print()
+
+pain_point_array = json.loads(qa_results[0].answer.strip())
+for pp in pain_point_array:
+    print('Pain Point:', pp)
+    get_examples(pp)
+```
+
+Example output:
+
+```
+Question: Identify pain points discussed across all user interviews
+Answer: [
+"Communication challenges due to the remote nature of the team",
+"Lack of alignment across different tools and preferences",
+"Losing key documents and data points when employees leave the company"
+]
+
+Pain Point: Communication challenges due to the remote nature of the team
+EXAMPLES:
+#1
+QUOTE: "And so sometimes that comes with its communication challenges and people working in different time zones."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:03:03.930000
+CONFIDENCE SCORE: 0.5171660164618275
+
+#2
+QUOTE: "We are remote, so virtual whiteboard."
+TRANSCRIPT ID: 6ybb50tnns-785d-4361-ad15-b0ef5db075e6
+START TIMESTAMP: 0:04:11.792000
+CONFIDENCE SCORE: 0.44395501749808775
+
+#3
+QUOTE: "So I think that has been some of the larger challenges with our team."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:04:19.364000
+CONFIDENCE SCORE: 0.43930383535763384
+
+#4
+QUOTE: "No, I think that I would sum it up in a way that I would say just essentially that I had already mentioned that communication and one single spot for us to collaborate and communicate in is already a challenge."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:25:35.388000
+CONFIDENCE SCORE: 0.43763248883808603
+
+#5
+QUOTE: "How would you collaborate with your team?"
+TRANSCRIPT ID: 6ybb50cj8c-877e-4314-9547-3e1450cf08f7
+START TIMESTAMP: 0:20:20.196000
+CONFIDENCE SCORE: 0.4267756277366459
+
+Pain Point: Lack of alignment across different tools and preferences
+EXAMPLES:
+#1
+QUOTE: "What creates a challenge is that there are people that are more proficient or more comfortable working within certain apps than others are."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:03:39.838000
+CONFIDENCE SCORE: 0.42358740588333854
+
+#2
+QUOTE: "Again, I think it's between tools that we use all the way to just the different time zones in everyone's schedule that sometimes it causes a delay in projects getting done or slow up or bottlenecks."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:03:11.950000
+CONFIDENCE SCORE: 0.4154978400007534
+
+#3
+QUOTE: "And so if we're working all from one tool, I think it's more clear because I don't think people also revert back to their Google Drive often."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:24:56.418000
+CONFIDENCE SCORE: 0.3742980144030581
+
+#4
+QUOTE: "Some people are communicating with a preference of slack first, while others are email first."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:04:14.762000
+CONFIDENCE SCORE: 0.3704920121143226
+
+#5
+QUOTE: "And so sometimes that comes with its communication challenges and people working in different time zones."
+TRANSCRIPT ID: 6ybb50o8da-9dda-429b-b576-3b61c98a4fc3
+START TIMESTAMP: 0:03:03.930000
+CONFIDENCE SCORE: 0.3631327779909689
+```
+
+### Identify Timestamps For Action Items
+
+Quickly jump to the part of the meeting where the action item was discussed.
+
+```python
+action_item_answer_format="""[{
+    "action_item":<action item>,
+    "assignee":<assignee>,
+    "quote":"<leave blank>",
+    "timestamp":"<leave blank>"
+    }]
+"""
+
+action_item_context = ''
+```
+
+```python
+import json, datetime
+
+def timestamp_action_items(action_items_array):
+
+    for action_item in action_items_array:
+        matches = find_relevant_matches(embeddings, action_item['action_item'], k=1)
+        for index, m in enumerate(matches):
+            action_item['quote'] = m['text']
+            action_item['timestamp'] = m['timestamp']
+    return action_items_array
+```
+
+```python
+transcripts = transcribe([
+    '', # TODO add file URLs here
+])
+
+# TODO: choose granularity either sentence or paragraph
+embeddings = create_transcripts_embeddings(transcripts, 'paragraph')
+
+action_item_results = transcripts.lemur.action_items(
+    context=action_item_context,
+    answer_format=action_item_answer_format).response
+
+# Replace preamble in LeMUR response
+action_item_results = action_item_results.replace('Here are action items based on the transcript:', '')
+
+action_item_json_array = json.loads(action_item_results.strip())
+action_item_json_array = timestamp_action_items(action_item_json_array)
+print(json.dumps(action_item_json_array, indent=4))
+```
+
+Example output:
+
+```
+552 TOKENS EMBEDDED
+COST OF EMBEDDINGS: $ 5.520000000000001e-05
+
+[
+    {
+        "action_item": "Schedule a follow up call with Daniel to continue the conversation.",
+        "assignee": "Rich",
+        "quote": "I tell you what. I'll let you jump on that call. No sweat at all. I understand. I'll drop you a mail and we'll find a time to talk next week.",
+        "timestamp": 237070
+    },
+    {
+        "action_item": "Send an email to Daniel with availability for a call next week.",
+        "assignee": "Rich",
+        "quote": "I tell you what. I'll let you jump on that call. No sweat at all. I understand. I'll drop you a mail and we'll find a time to talk next week.",
+        "timestamp": 237070
+    },
+    {
+        "action_item": "Review financials and metrics for Avail to prepare for the follow up call.",
+        "assignee": "Rich",
+        "quote": "We are in the health and wellness space, so our space heated up extremely fast, and I found myself working 40 hours in one job and the other. So I had to make a decision. And I think there's a little bit more potential and upside with avail. Great. And so you've seen just an increased demand for your product then, over the past six weeks?",
+        "timestamp": 138816
+    }
+]
+```

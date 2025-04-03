@@ -1,0 +1,119 @@
+---
+title: "Pass Context from Previous LeMUR Requests"
+---
+
+This guide will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to track previous LeMUR responses and pass them as additional context for future requests to build out ability to ask "follow up" questions.
+
+<Tip>
+  {" "}
+  We recommend using [Claude 3
+  Haiku](https://www.assemblyai.com/docs/lemur/customize-parameters) to reduce
+  costs, as this can use a lot of tokens.{" "}
+</Tip>
+
+## Quickstart
+
+```python
+import assemblyai
+
+assemblyai.settings.api_key = "YOUR_API_KEY"
+transcriber = assemblyai.Transcriber()
+
+transcript = transcriber.transcribe("https://storage.googleapis.com/aai-web-samples/5_common_sports_injuries.mp3") # You can also replace this with the path to a local file
+
+# Define the initial prompt.
+initial_prompt = input("Enter the initial prompt: ")
+
+# Apply LeMUR.
+result = transcript.lemur.task(initial_prompt)
+
+# Store result in a list.
+results_list = [result.response]
+
+print(result.response)
+
+while True:
+    user_prompt = input("Enter the next prompt (or type 'end' to stop): ")
+
+    if user_prompt.lower() == 'end':
+        print("Ending the conversation.")
+        break
+
+    context = " ".join(results_list)
+    next_prompt = f"{user_prompt} (Context: {context})"
+
+    next_result = transcript.lemur.task(next_prompt, final_model=assemblyai.LemurModel.claude3_5_sonnet)
+
+    results_list.append(next_result.response)
+
+    print(next_result.response)
+```
+
+## Getting Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://www.assemblyai.com/dashboard/signup/) for an AssemblyAI account and get your API key from your [dashboard](https://www.assemblyai.com/app/account).
+
+First, let's install the AssemblyAI SDK.
+
+```bash
+pip install -U assemblyai
+```
+
+Then we'll import the SDK and set our AssemblyAI API key.
+
+```python
+import assemblyai
+
+assemblyai.settings.api_key = "API_KEY_HERE"
+```
+
+Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use.
+
+```python
+transcriber = assemblyai.Transcriber()
+
+transcript = transcriber.transcribe("https://storage.googleapis.com/aai-web-samples/5_common_sports_injuries.mp3")
+```
+
+Then we define the initial LeMUR prompt for the Task endpoint and store the first response in a list. These list values will be recalled and added to subsequent LeMUR prompts.
+
+```python
+# Step 2: Define the initial prompt.
+initial_prompt = input("Enter the initial prompt: ")
+
+# Step 3: Apply LeMUR.
+result = transcript.lemur.task(initial_prompt)
+
+# Step 4: Store result in a list.
+results_list = [result.response]
+
+print(result.response)
+```
+
+After the intitial prompt, the code will continuously prompt the user for new prompts until they decide to stop. Stop at any time by typing 'end'. Each response is collected in the `results_list` and added as context to the next user prompt. This enables an ability to recall past responses and allow follow up questions.
+
+```python
+while True:
+    user_prompt = input("Enter the next prompt (or type 'end' to stop): ")
+
+    if user_prompt.lower() == 'end':
+        print("Ending the conversation.")
+        break
+
+    context = " ".join(results_list)
+    next_prompt = f"{user_prompt} (Context: {context})"
+
+    next_result = transcript.lemur.task(next_prompt, final_model=assemblyai.LemurModel.claude3_5_sonnet)
+
+    results_list.append(next_result.response)
+
+    print(next_result.response)
+```
+
+To see these results with and without the context provided from past responses, here is a comparison table.
+
+| Prompt number |                                                Prompt                                                 |                                                                                                                                                                                                                                                                                  With Context                                                                                                                                                                                                                                                                                  |                                                                                                                                                      Without Context                                                                                                                                                       |
+| :-----------: | :---------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+|       1       | create a brief story and character called Jenna using one of the injuries described in the transcript |                                                                                                                                       Here is a brief story about a character named Jenna who suffers from a sprained ankle: Jenna loved playing soccer more than anything. She had been on her high school's varsity team since freshman year and was now a senior. Jenna hoped to play soccer in college next year on a scholarship. …                                                                                                                                       |             Here is a brief story about a character named Jenna who suffers from a sprained ankle: Jenna loved playing soccer more than anything. She had been on her high school's varsity team since freshman year and was now a senior. Jenna hoped to play soccer in college next year on a scholarship. …             |
+|       2       |                                 tell me about jenna's comeback story                                  |                     Here is a possible comeback story for Jenna after suffering a sprained ankle: Jenna was heartbroken when she got the news that her badly sprained ankle would keep her out for the rest of the soccer season. All her dreams of playing college soccer felt like they were slipping away. But Jenna was determined not to give up. She diligently went to physical therapy sessions and did rehab exercises at home. Even though she couldn't be on the field with her team, Jenna supported them from the sidelines at every game. …                      | Unfortunately there is no mention of a person named Jenna or a comeback story in the provided transcripts. The transcripts discuss various sports injuries like runner's knee, sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. There are no details provided about anyone named Jenna or a comeback story. |
+|       3       |                                             Who is Jenna?                                             | Based on the provided context, Jenna is a high school student who loves playing soccer and hopes to play in college on a scholarship. She suffered a badly sprained ankle during a rivalry game which kept her out for the rest of the season, jeopardizing her college soccer dreams. However, she worked hard in rehab and physical therapy to come back stronger the next season, eventually earning several college scholarship offers and committing to play soccer at her dream school. The injury ended up only being a temporary setback in Jenna achieving her goals. |                                   Based on the transcripts, there is no mention of anyone named Jenna. The transcripts discuss various sports injuries like runner's knee, sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. No individuals are named in the transcripts.                                    |

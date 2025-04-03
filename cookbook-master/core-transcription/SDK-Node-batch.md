@@ -8,7 +8,8 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
 
 ## Step-by-Step Instructions
 
-Set up your application folder structure by adding an audio folder which will house the files you would like to transcribe, a transcripts folder which will house your completed transcriptions, and a new `.js` file in the root of the project. Your file structure should look like this:  
+Set up your application folder structure by adding an audio folder which will house the files you would like to transcribe, a transcripts folder which will house your completed transcriptions, and a new `.js` file in the root of the project. Your file structure should look like this:
+
 ```
 BatchApp
 ├───audio
@@ -31,10 +32,11 @@ const client = new AssemblyAI({
 ```
 
 Declare the variables `audioFolder`, `files`, `filePathArr`, and `transcriptsFolder`.
-* `audioFolder` will be the relative path to the folder containing your audio files.
-* `files` will read the files in the audio folder, and return them in an array.
-* `filePathArr` will join the file names with the audio folder name to create the relative path to each individual file.
-* `transcriptsFolder` will be the relative path to the folder containing your transcription files.
+
+- `audioFolder` will be the relative path to the folder containing your audio files.
+- `files` will read the files in the audio folder, and return them in an array.
+- `filePathArr` will join the file names with the audio folder name to create the relative path to each individual file.
+- `transcriptsFolder` will be the relative path to the folder containing your transcription files.
 
 ```
 const audioFolder = './audio';
@@ -61,12 +63,12 @@ Next, we will create an async function that will call the `getTranscript` functi
 ```
 const processFile = async (file) => {
   const getFileName = file.split('audio/'); //Separate the folder name and file name into substrings
-  const fileName = getFileName[1]; //Grab the 2nd substring which is the file name 
+  const fileName = getFileName[1]; //Grab the 2nd substring which is the file name
   const filePath = path.join(transcriptsFolder, `${fileName}.txt`); //Relative path for transcription text files.
 
   const transcript = await getTranscript(file); //Request the transcript
   const text = transcript.text; //Grab transcription text from the JSON response
- 
+
   //Write the transcription text to a text file
   return new Promise((resolve, reject) => {
     fs.writeFile(filePath, text, err => {
@@ -85,10 +87,12 @@ const processFile = async (file) => {
 ```
 
 Next, we will create the run function. This function will:
-* Create an array of unresolved promises with each promise requesting a transcript.
-* Use `Promise.all` to iterate over the array of unresolved promises.
+
+- Create an array of unresolved promises with each promise requesting a transcript.
+- Use `Promise.all` to iterate over the array of unresolved promises.
 
 Then we'll call the run function
+
 ```
 const run = async () => {
   const unresolvedPromises = filePathArr.map(processFile);
@@ -130,7 +134,7 @@ const processFile = async (file) => {
 
   const transcript = await getTranscript(file);
   const text = transcript.text
- 
+
   return new Promise((resolve, reject) => {
     fs.writeFile(filePath, text, err => {
       if (err) {

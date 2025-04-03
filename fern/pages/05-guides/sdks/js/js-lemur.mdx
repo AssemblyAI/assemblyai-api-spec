@@ -1,0 +1,247 @@
+---
+title: "JavaScript SDK Reference"
+---
+
+# LeMUR
+
+## Summarize your audio data
+
+```ts
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// You can use a local filepath:
+// const audioFile = "./example.mp3"
+
+// Or use a publicly-accessible URL:
+const audioFile = "https://assembly.ai/sports_injuries.mp3";
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe({ audio: audioFile });
+
+  const prompt = "Provide a brief summary of the transcript.";
+
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcript.id],
+    prompt,
+    final_model: "anthropic/claude-3-5-sonnet",
+  });
+
+  console.log(response);
+};
+
+run();
+```
+
+If you run the code above, you'll see the following output:
+
+```plain
+The transcript describes several common sports injuries - runner's knee,
+sprained ankle, meniscus tear, rotator cuff tear, and ACL tear. It provides
+definitions, causes, and symptoms for each injury. The transcript seems to be
+narrating sports footage and describing injuries as they occur to the athletes.
+Overall, it provides an overview of these common sports injuries that can result
+from overuse or sudden trauma during athletic activities
+```
+
+## Ask questions about your audio data
+
+**Q&A with the task endpoint**
+
+To ask question about your audio data, define a prompt with your questions and call `client.lemur.task()`. Use the `transcript_ids` parameter to send one or more transcripts as additional context for the model.
+
+```ts {14-15,17-22}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const run = async () => {
+  // Step 1: Transcribe an audio file.
+  //const audioFile = './local_file.mp3'
+  const audioFile = "https://assembly.ai/sports_injuries.mp3";
+  const transcript = await client.transcripts.transcribe({ audio: audioFile });
+
+  // Step 2: Define a prompt with your question(s).
+  const prompt = "What is a runner's knee?";
+
+  // Step 3: Apply LeMUR.
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcript.id],
+    prompt,
+    final_model: "anthropic/claude-3-5-sonnet",
+  });
+
+  console.log(response);
+};
+
+run();
+```
+
+#**Example output**
+
+```plain
+Based on the transcript, runner's knee is a condition characterized
+by pain behind or around the kneecap. It is caused by overuse,
+muscle imbalance and inadequate stretching. Symptoms include pain
+under or around the kneecap and pain when walking.
+```
+
+**Q&A with the question-answer endpoint**
+
+The [LeMUR Question & Answer function](https://www.assemblyai.com/docs/api-reference/lemur/question-answer) requires no prompt engineering and facilitates more deterministic and structured outputs. See the code examples below for more information on how to use this endpoint.
+
+To use it, define a list of `questions`. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`. Additionally, you can define an overall `context`.
+
+```ts {12-23,25-30}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioUrl = "https://assembly.ai/meeting.mp4";
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe({ audio: audioUrl });
+
+  const questions = [
+    {
+      question: "What are the top level KPIs for engineering?",
+      context: "KPI stands for key performance indicator",
+      answer_format: "short sentence",
+    },
+    {
+      question:
+        "How many days has it been since the data team has gotten updated metrics?",
+      answer_options: ["1", "2", "3", "4", "5", "6", "7", "more than 7"],
+    },
+  ];
+
+  const { response: qas } = await client.lemur.questionAnswer({
+    transcript_ids: [transcript.id],
+    final_model: "anthropic/claude-3-5-sonnet",
+    context: "A GitLab meeting to discuss logistics",
+    questions: questions,
+  });
+
+  for (const { question, answer } of qas) {
+    console.log("Question", question);
+    console.log("Answer", answer);
+  }
+};
+
+run();
+```
+
+For the full API reference, as well as the supported models and FAQs, refer to the [full LeMUR Q&A guide](/docs/lemur/ask-questions).
+
+## Change the model type
+
+LeMUR features the following LLMs:
+
+- Claude 3.5 Sonnet
+- Claude 3 Opus
+- Claude 3 Haiku
+- Claude 3 Sonnet
+
+You can switch the model by specifying the `final_model` parameter.
+
+```ts {4}
+const { response } = await client.lemur.task({
+  transcript_ids: [transcript.id],
+  prompt,
+  final_model: "anthropic/claude-3-5-sonnet",
+});
+```
+
+| Model                 | SDK Parameter                   | Description                                                                                                                                                                                                                                          |
+| --------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Claude 3.5 Sonnet** | `'anthropic/claude-3-5-sonnet'` | Claude 3.5 Sonnet is the most intelligent model to date, outperforming Claude 3 Opus on a wide range of evaluations, with the speed and cost of Claude 3 Sonnet. This uses Anthropic's Claude 3.5 Sonnet model version `claude-3-5-sonnet-20240620`. |
+| **Claude 3.0 Opus**   | `'anthropic/claude-3-opus'`     | Claude 3 Opus is good at handling complex analysis, longer tasks with many steps, and higher-order math and coding tasks.                                                                                                                            |
+| **Claude 3.0 Haiku**  | `'anthropic/claude-3-haiku'`    | Claude 3 Haiku is the fastest model that can execute lightweight actions.                                                                                                                                                                            |
+| **Claude 3.0 Sonnet** | `'anthropic/claude-3-sonnet'`   | Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks.                                                                                                                         |
+
+You can find more information on pricing for each model <a href="https://www.assemblyai.com/pricing" target="_blank">here</a>.
+
+## Change the maximum output size
+
+You can change the maximum output size in tokens by specifying the `max_output_size` parameter. Up to 4000 tokens are allowed.
+
+```ts {4}
+const { response } = await client.lemur.task({
+  transcript_ids: [transcript.id],
+  prompt,
+  max_output_size: 1000,
+});
+```
+
+## Change the temperature
+
+You can change the temperature by specifying the `temperature` parameter, ranging from 0.0 to 1.0.
+
+Higher values result in answers that are more creative, lower values are more conservative.
+
+```ts {4}
+const { response } = await client.lemur.task({
+  transcript_ids: [transcript.id],
+  prompt,
+  temperature: 0.7,
+});
+```
+
+## Send customized input
+
+You can submit custom text inputs to LeMUR without transcript IDs. This allows you to customize the input, for example, you could include the speaker labels for the LLM.
+
+To submit custom text input, use the `input_text` parameter instead of `transcript_ids`.
+
+```ts {14}
+const params = {
+  audio: audioUrl,
+  speaker_labels: true,
+};
+const transcript = await client.transcripts.transcribe(params);
+
+const textWithSpeakerLabels = "";
+for (let utterance of transcript.utterances!) {
+  textWithSpeakerLabels += `Speaker ${utterance.speaker}:\n${utterance.text}\n`;
+}
+
+const { response } = await client.lemur.task({
+  prompt: prompt,
+  input_text: textWithSpeakerLabels,
+});
+```
+
+## Submit multiple transcripts
+
+LeMUR can easily ingest multiple transcripts in a single API call.
+
+You can feed in up to a maximum of 100 files or 100 hours, whichever is lower.
+
+```ts {2}
+const { response } = await client.lemur.task({
+  transcript_ids: [id1, id2, id3],
+  prompt: "Provide a summary of these customer calls.",
+});
+```
+
+## Delete LeMUR request data
+
+You can delete the data for a previously submitted LeMUR request.
+
+Response data from the LLM, as well as any context provided in the original request will be removed.
+
+```ts {6}
+const { response, request_id } = await client.lemur.task({
+  transcript_ids: [transcript.id],
+  prompt,
+});
+
+const deletionResponse = await client.lemur.purgeRequestData(request_id);
+```

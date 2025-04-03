@@ -1,0 +1,379 @@
+---
+title: "Pre-recorded audio"
+description: "Transcribe a pre-recorded audio file"
+---
+
+Our Speech-to-Text model enables you to transcribe pre-recorded audio into written text.
+
+On top of the transcription, you can enable other features and models, such as [Speaker Diarization](/docs/speech-to-text/speaker-diarization), by adding additional parameters to the same transcription request.
+
+<Tip title="Choose model class">
+  Choose between [_Best_ and
+  _Nano_](/docs/speech-to-text/pre-recorded-audio/select-the-speech-model-with-best-and-nano)
+  based on the cost and performance tradeoffs best suited for your application.
+</Tip>
+
+# Quickstart
+
+The following example transcribes an audio file from a local file.
+
+<CodeBlocks>
+
+```python title="Python SDK" maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "./local_file.mp3"
+# audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig()
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print(transcript.text)
+```
+
+```python title="Python" maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+```
+
+```ts title="TypeScript SDK" maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "./local_file.mp3";
+// const audioFile =
+//   'https://assembly.ai/wildfires.mp3'
+
+const params = {
+  audio: audioFile,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.text);
+};
+
+run();
+```
+
+```ts title="TypeScript" maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+```csharp title="C#" maxLines=15
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+
+public class Transcript
+{
+    public string Id { get; set; }
+    public string Status { get; set; }
+    public string Text { get; set; }
+    public string Error { get; set; }
+}
+
+async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+{
+    using (var fileStream = File.OpenRead(filePath))
+    using (var fileContent = new StreamContent(fileStream))
+    {
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+        {
+            response.EnsureSuccessStatusCode();
+            var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+            return jsonDoc.RootElement.GetProperty("upload_url").GetString();
+        }
+    }
+}
+
+async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
+{
+    var data = new { audio_url = audioUrl };
+    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    {
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<Transcript>();
+    }
+}
+
+async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+{
+    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+    while (true)
+    {
+        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+        switch (transcript.Status)
+        {
+            case "queued" or "processing":
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                break;
+            case "completed":
+                return transcript;
+            case "error":
+                throw new Exception($"Transcription failed: {transcript.Error}");
+            default:
+                throw new Exception("This code should not be reachable.");
+        }
+    }
+}
+
+// Main execution
+using (var httpClient = new HttpClient())
+{
+    httpClient.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+
+    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
+    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+    Console.WriteLine(transcript.Text);
+}
+```
+
+```ruby title="Ruby" maxLines=15
+require 'net/http'
+require 'json'
+
+base_url = 'https://api.assemblyai.com'
+
+headers = {
+  'authorization' => '<YOUR_API_KEY>',
+  'content-type' => 'application/json'
+}
+
+path = "./my-audio.mp3"
+uri = URI("#{base_url}/v2/upload")
+request = Net::HTTP::Post.new(uri, headers)
+request.body = File.read(path)
+
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+upload_response = http.request(request)
+upload_url = JSON.parse(upload_response.body)["upload_url"]
+
+data = {
+    "audio_url" => upload_url # You can also use a URL to an audio or video file on the web
+}
+
+uri = URI.parse("#{base_url}/v2/transcript")
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true
+
+request = Net::HTTP::Post.new(uri.request_uri, headers)
+request.body = data.to_json
+
+response = http.request(request)
+response_body = JSON.parse(response.body)
+
+unless response.is_a?(Net::HTTPSuccess)
+  raise "API request failed with status #{response.code}: #{response.body}"
+end
+
+transcript_id = response_body['id']
+puts "Transcript ID: #{transcript_id}"
+
+polling_endpoint = URI.parse("#{base_url}/v2/transcript/#{transcript_id}")
+
+while true
+  polling_http = Net::HTTP.new(polling_endpoint.host, polling_endpoint.port)
+  polling_http.use_ssl = true
+  polling_request = Net::HTTP::Get.new(polling_endpoint.request_uri, headers)
+  polling_response = polling_http.request(polling_request)
+
+  transcription_result = JSON.parse(polling_response.body)
+
+  if transcription_result['status'] == 'completed'
+    puts "Transcription text: #{transcription_result['text']}"
+    break
+  elsif transcription_result['status'] == 'error'
+    raise "Transcription failed: #{transcription_result['error']}"
+  else
+    puts 'Waiting for transcription to complete...'
+    sleep(3)
+  end
+end
+```
+
+```php title="PHP" maxLines=15
+<?php
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$base_url = "https://api.assemblyai.com";
+
+$headers = array(
+    "authorization: <YOUR_API_KEY>",
+    "content-type: application/json"
+);
+
+$path = "./my-audio.mp3";
+
+$ch = curl_init();
+
+curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/upload");
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+$response = curl_exec($ch);
+$response_data = json_decode($response, true);
+$upload_url = $response_data["upload_url"];
+
+curl_close($ch);
+
+$data = array(
+    "audio_url" => $upload_url // You can also use a URL to an audio or video file on the web
+);
+
+$url = $base_url . "/v2/transcript";
+$curl = curl_init($url);
+
+curl_setopt($curl, CURLOPT_POST, true);
+curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($curl);
+
+$response = json_decode($response, true);
+
+curl_close($curl);
+
+$transcript_id = $response['id'];
+echo "Transcript ID: $transcript_id\n";
+
+$polling_endpoint = $base_url . "/v2/transcript/" . $transcript_id;
+
+while (true) {
+    $polling_response = curl_init($polling_endpoint);
+
+    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
+
+    $transcription_result = json_decode(curl_exec($polling_response), true);
+
+    if ($transcription_result['status'] === "completed") {
+        echo $transcription_result['text'];
+        break;
+    } else if ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3);
+    }
+}
+```
+
+</CodeBlocks>
+# Example output
+
+```plain maxLines=15
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And...
+```
+
+# API reference
+
+You can find the API reference [here](/docs/api-reference/transcripts/submit).

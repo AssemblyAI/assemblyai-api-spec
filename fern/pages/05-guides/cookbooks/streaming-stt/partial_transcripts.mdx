@@ -1,0 +1,215 @@
+---
+title: "Capture Complete Sentences as Partial Transcriptions with Streaming Speech-To-Text"
+---
+
+To effectively use AssemblyAI's Streaming Speech-to-Text (STT) API for partial transcripts, particularly in scenarios where final transcripts (which include punctuation and casing) are not required, you need to understand how partial transcripts work and how to handle them in your application. Here’s a guide to help you get started.
+
+## Quickstart
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+
+
+def on_open(session_opened: aai.RealtimeSessionOpened):
+  "This function is called when the connection has been established."
+
+  print("Session ID:", session_opened.session_id)
+
+def on_data(transcript: aai.RealtimeTranscript):
+  "This function is called when a new transcript has been received."
+
+  global partial_transcript
+
+  if not transcript.text:
+    return
+
+  if isinstance(transcript, aai.RealtimeFinalTranscript):
+    partial_transcript = ""
+  elif partial_transcript == transcript.text:
+    print(transcript.text, end="\r\n")
+  else:
+    partial_transcript = transcript.text
+
+def on_error(error: aai.RealtimeError):
+  "This function is called when the connection has been closed."
+
+  print("An error occured:", error)
+
+def on_close():
+  "This function is called when the connection has been closed."
+
+  print("Closing Session")
+
+
+# Create the Real-Time transcriber
+transcriber = aai.RealtimeTranscriber(
+  on_data=on_data,
+  on_error=on_error,
+  sample_rate=44_100,
+  on_open=on_open, # optional
+  on_close=on_close, # optional
+)
+
+
+partial_transcript = ""
+# Start the connection
+transcriber.connect()
+
+# Open a microphone stream
+microphone_stream = aai.extras.MicrophoneStream()
+
+# Press CTRL+C to abort
+transcriber.stream(microphone_stream)
+
+transcriber.close()
+```
+
+## Step-by-step guide
+
+First, install AssemblyAI's Python SDK.
+
+```bash
+pip install "assemblyai[all]"
+```
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can sign up for a free account and get your API key from your dashboard. Please note that this feature is available for paid accounts only. If you're on the free plan, you'll need to upgrade.
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR-API-KEY"
+```
+
+## Understanding Partial Transcripts
+
+#### What are Partial Transcripts?
+
+Partial transcripts are incomplete and ongoing transcriptions of an audio stream. They provide a near real-time text representation of spoken words before the entire speech is finished.
+
+They are useful in scenarios where immediate text feedback is more important than the complete accuracy or formatting of the final transcript.
+
+#### Example Use Cases where Partial Transcripts suffice
+
+- Chat bots processed using LLMs
+- Voice Command Recognition
+- Real-time Translations
+
+#### What do Partial Transcripts look like?
+
+For a sentence such as "What is the capital of New Zealand", these are the messages you would receive from our API.
+
+Message 1:
+
+```
+{"message_type":"PartialTranscript", "created":"2023-11-10T16:10:22.754985",
+"text":"what is the", ...}
+```
+
+Message 2:
+
+```
+{"message_type":"PartialTranscript", "created":"2023-11-10T16:10:23.297511",
+"text":"what is the capital of", ...}
+```
+
+Message 3:
+
+```
+{"message_type":"PartialTranscript", "created":"2023-11-10T16:10:24.113527",
+"text":"what is the capital of new zealand", ...}
+```
+
+Message 4 (Notice how the text is the exact same as in Message 3!):
+
+```
+{"message_type":"PartialTranscript", "created":"2023-11-10T16:10:24.67045",
+"text":"what is the capital of new zealand", ...}
+```
+
+Message 5:
+
+```
+{"message_type":"FinalTranscript", "created":"2023-11-10T16:10:24.9708",
+"text":"What is the capital of New Zealand?", ...}
+```
+
+Notice that after the text in Messages 3 and 4 are the exact same, a Final Transcript is triggered. Instead, we can programmatically check if the text in a given Message matches the text from a previous Message, and then use that to deduce that the transcript is complete.
+
+Note: Other keys in the payload have been omitted for brevity but can be seen [here in our Streaming API Reference. ](https://www.assemblyai.com/docs/api-reference/streaming)
+
+## Implementing Partial Transcript Checks
+
+Let's consider a code example to check if the partial transcript received from AssemblyAI matches the previous partial transcript.
+
+Define your Streaming functions as per normal.
+
+```python
+def on_open(session_opened: aai.RealtimeSessionOpened):
+  "This function is called when the connection has been established."
+
+  print("Session ID:", session_opened.session_id)
+
+def on_error(error: aai.RealtimeError):
+  "This function is called when the connection has been closed."
+
+  print("An error occured:", error)
+
+def on_close():
+  "This function is called when the connection has been closed."
+
+  print("Closing Session")
+```
+
+Then, define an empty string for `partial_transcript`. In on_data(), we will do 3 things:
+
+- Access the global string `partial_transcript`
+- If the data received is a Final Transcript, reset `partial_transcript`.
+- Else, if the `transcript.text` matches the previous `partial_transcript`, print it to our terminal
+- Otherwise, set `partial_transcript` to be the Partial Transcript received from AssemblyAI.
+
+```python
+partial_transcript = ''
+
+def on_data(transcript: aai.RealtimeTranscript):
+  "This function is called when a new transcript has been received."
+
+  global partial_transcript
+
+  if not transcript.text:
+    return
+
+  if isinstance(transcript, aai.RealtimeFinalTranscript):
+    partial_transcript = ""
+  elif partial_transcript == transcript.text:
+    print(transcript.text, end="\r\n")
+  else:
+    partial_transcript = transcript.text
+```
+
+Create your Streaming transcriber and start your transcription.
+
+```python
+# Create the Streaming transcriber
+transcriber = aai.RealtimeTranscriber(
+  on_data=on_data,
+  on_error=on_error,
+  sample_rate=44_100,
+  on_open=on_open, # optional
+  on_close=on_close, # optional
+)
+
+# Start the connection
+transcriber.connect()
+
+# Open a microphone stream
+microphone_stream = aai.extras.MicrophoneStream()
+
+# Press CTRL+C to abort
+transcriber.stream(microphone_stream)
+
+transcriber.close()
+```
+
+What you should observe is that partial transcripts are printed to the terminal within 500ms of being spoken. By following these guidelines and understanding how to handle Partial Transcripts, you can effectively integrate AssemblyAI's Streaming STT into your application for scenarios where immediate text feedback is crucial, even without the finesse of Final Transcripts.

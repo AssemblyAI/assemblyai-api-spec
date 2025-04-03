@@ -1,0 +1,92 @@
+---
+title: "Identify Speaker Names From the Transcript Using LeMUR"
+---
+
+In this guide, you'll learn how to use AssemblyAI's API to transcribe audio, identify speakers, and infer their names using LeMUR. We'll walk through the process of configuring the transcriber, submitting a transcript to LeMUR with speaker labels, and generating a mapping of speaker names from the transcript.
+
+This workflow will enable you to have speaker labels with the speaker's name in your transcripts instead of `Speaker A/B`.
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Python](https://www.python.org/) installed.
+- An upgraded [AssemblyAI account](https://www.assemblyai.com/dashboard/signup).
+
+```bash
+pip install assemblyai
+```
+
+Import the `assemblyai` and `re` packages and set your API key:
+
+```python
+import assemblyai as aai
+import re
+
+aai.settings.api_key = "YOUR-API-KEY"
+```
+
+Define a `Transcriber`, a `TranscriptionConfig` with `speaker_labels` set to `True`. Then, create a transcript.
+
+```python
+transcriber = aai.Transcriber()
+
+audio_url = (
+    "https://www.listennotes.com/e/p/accd617c94a24787b2e0800f264b7a5e/"
+)
+
+config = aai.TranscriptionConfig(speaker_labels=True)
+transcript = transcriber.transcribe(audio_url, config)
+```
+
+Process the transcript with speaker labels:
+
+```python
+text_with_speaker_labels = ""
+
+for utt in transcript.utterances:
+    text_with_speaker_labels += f"Speaker {utt.speaker}:\n{utt.text}\n"
+```
+
+Count the unique speakers, then create a `LemurQuestion` for each speaker. Lastly, ask LeMUR the questions, specifying `text_with_speaker_labels` as the `input_text`.
+
+```python
+# Count the number of unique speaker labels
+unique_speakers = set(utterance.speaker for utterance in transcript.utterances)
+
+questions = []
+for speaker in unique_speakers:
+    questions.append(
+        aai.LemurQuestion(
+        question=f"Who is speaker {speaker}?",
+        answer_format="<First Name> <Last Name (if applicable)>")
+
+    )
+
+result = aai.Lemur().question(
+    questions,
+    input_text=text_with_speaker_labels,
+    final_model=aai.LemurModel.claude3_5_sonnet,
+    context="Your task is to infer the speaker's name from the speaker-labelled transcript"
+)
+```
+
+Map the speaker alphabets to their names from LeMUR:
+
+```python
+speaker_mapping = {}
+
+for qa_response in result.response:
+    pattern = r"Who is speaker (\w)\?"
+    match = re.search(pattern, qa_response.question)
+    if match and match.group(1) not in speaker_mapping.keys():
+        speaker_mapping.update({match.group(1): qa_response.answer})
+```
+
+Print the Transcript with Speaker Names:
+
+```python
+for utterance in transcript.utterances[:10]:
+   speaker_name = speaker_mapping[utterance.speaker]
+   print(f"{speaker_name}: {utterance.text[:50]}...")
+```

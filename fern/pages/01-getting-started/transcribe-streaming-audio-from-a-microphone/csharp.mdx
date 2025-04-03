@@ -1,189 +1,469 @@
 ---
-title: 'Transcribe streaming audio from a microphone in C#'
-subtitle: 'Learn how to transcribe streaming audio in C#.'
+title: "Transcribe streaming audio from a microphone in C#"
+subtitle: "Learn how to transcribe streaming audio in C#."
 hide-nav-links: true
-description: 'Learn how to transcribe streaming audio in C#.'
+description: "Learn how to transcribe streaming audio in C#."
 ---
-
-
-
 
 ## Overview
 
 By the end of this tutorial, you'll be able to transcribe audio from your microphone in C#.
 
 <Note title="Supported languages">
-Streaming Speech-to-Text is only available for English.
+  Streaming Speech-to-Text is only available for English.
 </Note>
-
-
-
 
 ## Before you begin
 
 To complete this tutorial, you need:
 
-- [.NET 8](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) (earlier versions will work too with minor adjustments)
+- [.NET 9](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) (earlier versions will work too with minor adjustments)
 - An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with credit card set up.
 
 Here's the full sample code for what you'll build in this tutorial:
 
 ```csharp
+using System;
 using System.Diagnostics;
+using System.Net.WebSockets;
 using System.Runtime.InteropServices;
-using AssemblyAI.Realtime;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
-// Set up the cancellation token, so we can stop the program with Ctrl+C
-var cts = new CancellationTokenSource();
-var ct = cts.Token;
-Console.CancelKeyPress += (sender, e) => cts.Cancel();
-
-// Set up the realtime transcriber
-const int sampleRate = 16_000;
-await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
+class Program
 {
-    ApiKey = "<YOUR_API_KEY>",
-    SampleRate = sampleRate
-});
+    private const string API_KEY = "<YOUR_API_KEY>";
+    private const int SAMPLE_RATE = 16000;
+    private static Process soxProcess;
+    private static ClientWebSocket ws;
+    private static CancellationTokenSource cts;
 
-transcriber.SessionBegins.Subscribe(message => Console.WriteLine(
-    $"Session begins: \n- Session ID: {message.SessionId}\n- Expires at: {message.ExpiresAt}"
-));
-transcriber.PartialTranscriptReceived.Subscribe(transcript =>
-{
-    // don't do anything if nothing was said
-    if (string.IsNullOrEmpty(transcript.Text)) return;
-    Console.WriteLine($"Partial: {transcript.Text}");
-});
-transcriber.FinalTranscriptReceived.Subscribe(transcript =>
-{
-    Console.WriteLine($"Final: {transcript.Text}");
-});
-transcriber.ErrorReceived.Subscribe(error => Console.WriteLine($"Real-time error: {error.Error}"));
-transcriber.Closed.Subscribe(closeEvent =>
-    Console.WriteLine("Real-time connection closed: {0} - {1}",
-        closeEvent.Code,
-        closeEvent.Reason
-    )
-);
-
-Console.WriteLine("Connecting to real-time transcript service");
-
-await transcriber.ConnectAsync().ConfigureAwait(false);
-
-Console.WriteLine("Starting recording");
-
-var soxArguments = string.Join(' ', [
-    // --default-device doesn't work on Windows
-    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "-t waveaudio default" : "--default-device",
-    "--no-show-progress",
-    $"--rate {sampleRate}",
-    "--channels 1",
-    "--encoding signed-integer",
-    "--bits 16",
-    "--type wav",
-    "-" // pipe
-]);
-using var soxProcess = new Process
-{
-    StartInfo = new ProcessStartInfo
+    static async Task Main(string[] args)
     {
-        FileName = "sox",
-        Arguments = soxArguments,
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
+        cts = new CancellationTokenSource();
+        Console.CancelKeyPress += OnCancelKeyPress;
+
+        try
+        {
+            await ConnectAndTranscribe();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup();
+        }
     }
-};
 
-soxProcess.Start();
-var soxOutputStream = soxProcess.StandardOutput.BaseStream;
-var buffer = new byte[4096];
-while (await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, ct) > 0)
-{
-    if (ct.IsCancellationRequested) break;
-    await transcriber.SendAudioAsync(buffer);
+    static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+    {
+        e.Cancel = true;
+        Console.WriteLine("\nStopping transcription...");
+        cts.Cancel();
+    }
+
+    static async Task ConnectAndTranscribe()
+    {
+        ws = new ClientWebSocket();
+        ws.Options.SetRequestHeader("Authorization", API_KEY);
+
+        string url = $"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}";
+        await ws.ConnectAsync(new Uri(url), cts.Token);
+
+        var receiveTask = ReceiveMessagesAsync();
+
+        await CaptureAndSendAudioAsync();
+
+        await receiveTask;
+    }
+
+    static async Task CaptureAndSendAudioAsync()
+    {
+        var soxArguments = string.Join(' ', new[] {
+            "-d",
+            "--no-show-progress",
+            $"--rate {SAMPLE_RATE}",
+            "--channels 1",
+            "--encoding signed-integer",
+            "--bits 16",
+            "--type wav",
+            "-"
+        });
+
+        soxProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "sox",
+                Arguments = soxArguments,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        try
+        {
+            soxProcess.Start();
+            var soxOutputStream = soxProcess.StandardOutput.BaseStream;
+            var buffer = new byte[4096];
+            int bytesRead;
+
+            while ((bytesRead = await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, cts.Token)) > 0)
+            {
+                if (cts.Token.IsCancellationRequested) break;
+
+                if (ws.State == WebSocketState.Open)
+                {
+                    await ws.SendAsync(
+                        new ArraySegment<byte>(buffer, 0, bytesRead),
+                        WebSocketMessageType.Binary,
+                        true,
+                        cts.Token
+                    );
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error capturing audio: {ex.Message}");
+        }
+    }
+
+    static async Task ReceiveMessagesAsync()
+    {
+        var buffer = new byte[4096];
+
+        try
+        {
+            while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
+            {
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
+                    break;
+                }
+
+                string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                ProcessMessage(message);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error receiving messages: {ex.Message}");
+        }
+    }
+
+    static void ProcessMessage(string message)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(message);
+            JsonElement root = doc.RootElement;
+
+            if (root.TryGetProperty("message_type", out JsonElement messageTypeElement))
+            {
+                string messageType = messageTypeElement.GetString();
+
+                if (messageType == "SessionBegins" && root.TryGetProperty("session_id", out JsonElement sessionIdElement))
+                {
+                    string sessionId = sessionIdElement.GetString();
+                    Console.WriteLine($"Session ID: {sessionId}");
+                    return;
+                }
+
+                if (!root.TryGetProperty("text", out JsonElement textElement))
+                    return;
+
+                string text = textElement.GetString();
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
+
+                if (messageType == "PartialTranscript")
+                {
+                    Console.Write($"\rPartial: {text}");
+                }
+                else if (messageType == "FinalTranscript")
+                {
+                    Console.WriteLine($"\nFinal: {text}");
+                }
+                else if (messageType == "Error")
+                {
+                    string error = root.TryGetProperty("error", out JsonElement errorElement)
+                        ? errorElement.GetString()
+                        : "Unknown error";
+                    Console.WriteLine($"Error from AssemblyAI: {error}");
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Error parsing message: {ex.Message}");
+        }
+    }
+
+    static void Cleanup()
+    {
+        try
+        {
+            if (soxProcess != null && !soxProcess.HasExited)
+            {
+                soxProcess.Kill();
+                Console.WriteLine("Recording stopped.");
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (ws != null && ws.State == WebSocketState.Open)
+            {
+                var closeTask = ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                closeTask.Wait(TimeSpan.FromSeconds(2));
+                Console.WriteLine("WebSocket connection closed.");
+            }
+        }
+        catch
+        {
+        }
+    }
 }
-
-soxProcess.Kill();
-await transcriber.CloseAsync();
 ```
 
+## Step 1: Setting up your project
 
+<Steps>
 
+<Step>
 
-## Step 1: Set up a cancellation token
-
-Set up a cancellation token so you can gracefully stop the application.
-
-```csharp
-using System.Diagnostics;
-using AssemblyAI.Realtime;
-
-// Set up the cancellation token, so we can stop the program with Ctrl+C
-var cts = new CancellationTokenSource();
-var ct = cts.Token;
-Console.CancelKeyPress += (sender, e) => cts.Cancel();
-```
-
-The cancellation token will be cancelled when you press `Ctrl+C`.
-
-
-
-
-## Step 2: Install the AssemblyAI C# .NET SDK
-
-Add the [AssemblyAI NuGet package](https://www.nuget.org/packages/AssemblyAI) to your project:
-
-<Tabs groupId="dotnet-dependency">
-<Tab title=".NET CLI">
+Create a new C# console application.
 
 ```bash
-dotnet add package AssemblyAI
+dotnet new console
+```
+
+</Step>
+<Step>
+Install [SoX](http://sox.sourceforge.net/), a cross-platform audio library, to record audio from your microphone.
+
+<Tabs groupId="os">
+
+<Tab title="macOS">
+
+```bash
+brew install sox
 ```
 
 </Tab>
-<Tab title="Package Manager">
+<Tab title="Windows">
 
-```PowerShell
-Install-Package AssemblyAI
-```
+[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
 
 </Tab>
-<Tab title="PackageReference">
+<Tab title="Linux">
 
-```xml
-<PackageReference Include="AssemblyAI" Version="ASSEMBLYAI_SDK_VERSION" />
+```bash
+sudo apt-get install sox
 ```
 
 </Tab>
 </Tabs>
 
+</Step>
+</Steps>
 
+## Step 2: Define the program structure and assign your API key
 
+<Steps>
+<Step>
+Add the following using directives:
 
-## Step 3: Create a real-time transcriber
+```csharp
+using System;
+using System.Diagnostics;
+using System.Net.WebSockets;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+```
 
-In this step, you'll create a real-time transcriber and configure it to use your API key.
+</Step>
+
+<Step>
+
+Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+
+</Step>
+
+<Step>
+
+Define the program structure and assign your API key:
+
+```csharp
+class Program
+{
+    private const string API_KEY = "<YOUR_API_KEY>";
+    private const int SAMPLE_RATE = 16000;
+    private static Process soxProcess;
+    private static ClientWebSocket ws;
+    private static CancellationTokenSource cts;
+}
+```
+
+</Step>
+
+<Step>
+
+Setup the main method to handle the program logic:
+
+```csharp
+static async Task Main(string[] args)
+    {
+        cts = new CancellationTokenSource();
+        Console.CancelKeyPress += OnCancelKeyPress;
+
+        try
+        {
+            await ConnectAndTranscribe();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup();
+        }
+    }
+```
+
+</Step>
+</Steps>
+
+## Step 3: Record audio from the microphone
+
+In this step, you'll setup microphone recording using SoX.
+
 <Steps>
 <Step>
 
-Browse to <a href="https://www.assemblyai.com/app/account" target="_blank">Account</a>, and then click the text under **Your API key** to copy it.
-
-</Step>
-<Step>
-
-Create a `RealtimeTranscriber` with your API key and a sample rate of 16 kHz.
-Replace `YOUR_API_KEY` with your copied API key.
+Create a `CaptureAndSendAudioAsync` method to handle the microphone recording and audio streaming:
 
 ```csharp
-// Set up the realtime transcriber
-const int sampleRate = 16_000;
-await using var transcriber = new RealtimeTranscriber(new RealtimeTranscriberOptions
-{
-    ApiKey = "<YOUR_API_KEY>",
-    SampleRate = sampleRate
-});
+static async Task CaptureAndSendAudioAsync()
+    {
+        var soxArguments = string.Join(' ', new[] {
+            "-d",
+            "--no-show-progress",
+            $"--rate {SAMPLE_RATE}",
+            "--channels 1",
+            "--encoding signed-integer",
+            "--bits 16",
+            "--type wav",
+            "-"
+        });
+
+        soxProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "sox",
+                Arguments = soxArguments,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        try
+        {
+            soxProcess.Start();
+            var soxOutputStream = soxProcess.StandardOutput.BaseStream;
+            var buffer = new byte[4096];
+            int bytesRead;
+
+            while ((bytesRead = await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, cts.Token)) > 0)
+            {
+                if (cts.Token.IsCancellationRequested) break;
+
+                if (ws.State == WebSocketState.Open)
+                {
+                    await ws.SendAsync(
+                        new ArraySegment<byte>(buffer, 0, bytesRead),
+                        WebSocketMessageType.Binary,
+                        true,
+                        cts.Token
+                    );
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error capturing audio: {ex.Message}");
+        }
+    }
+```
+
+<Note title="Audio data format">
+
+The SoX arguments configure the format of the audio output.
+The arguments configure the format to a single channel with 16-bit signed integer PCM encoding and 16 kHz sample rate.
+
+If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+
+- Single channel
+- 16-bit signed integer PCM or mu-law encoding
+
+By default, the Streaming STT service expects PCM16-encoded audio. If you want to use mu-law encoding, see [Specifying the encoding](/docs/speech-to-text/streaming#specify-the-encoding).
+
+</Note>
+
+</Step>
+</Steps>
+
+## Step 4: Setup the WebSocket connection to the Streaming service
+
+Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) to stream audio to AssemblyAI. This requires first establishing a connection to the API.
+
+<Steps>
+<Step>
+
+Create a `ConnectAndTranscribe` method to handle the connection and transcription:
+
+```csharp
+static async Task ConnectAndTranscribe()
+    {
+        ws = new ClientWebSocket();
+        ws.Options.SetRequestHeader("Authorization", API_KEY);
+
+        string url = $"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}";
+        await ws.ConnectAsync(new Uri(url), cts.Token);
+
+        var receiveTask = ReceiveMessagesAsync();
+
+        await CaptureAndSendAudioAsync();
+
+        await receiveTask;
+    }
 ```
 
 <Note title="Sample rate">
@@ -197,177 +477,174 @@ We recommend the following sample rates:
 - Maximum quality: `48_000` (48 kHz)
 
 If you don't set a sample rate on the real-time transcriber, it defaults to 16 kHz.
+
 </Note>
+
+</Step>
+
+<Step>
+
+Create a `ReceiveMessagesAsync` method to handle the message receiving:
+
+```csharp
+static async Task ReceiveMessagesAsync()
+    {
+        var buffer = new byte[4096];
+
+        try
+        {
+            while (ws.State == WebSocketState.Open && !cts.Token.IsCancellationRequested)
+            {
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
+                    break;
+                }
+
+                string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                ProcessMessage(message);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error receiving messages: {ex.Message}");
+        }
+    }
+```
 
 </Step>
 <Step>
 
-Subscribe to the different transcriber events and log the event parameters.
-
-```csharp
-transcriber.SessionBegins.Subscribe(message => Console.WriteLine(
-    $"Session begins: \n- Session ID: {message.SessionId}\n- Expires at: {message.ExpiresAt}"
-));
-transcriber.PartialTranscriptReceived.Subscribe(transcript =>
-{
-    // don't do anything if nothing was said
-    if (string.IsNullOrEmpty(transcript.Text)) return;
-    Console.WriteLine($"Partial: {transcript.Text}");
-});
-transcriber.FinalTranscriptReceived.Subscribe(transcript =>
-{
-    Console.WriteLine($"Final: {transcript.Text}");
-});
-transcriber.ErrorReceived.Subscribe(error => Console.WriteLine($"Real-time error: {error.Error}"));
-transcriber.Closed.Subscribe(closeEvent =>
-    Console.WriteLine("Real-time connection closed: {0} - {1}",
-        closeEvent.Code,
-        closeEvent.Reason
-    )
-);
-```
+Create a `ProcessMessage` method to handle the message processing:
 
 The real-time transcriber returns two types of transcripts: _partial_ and _final_.
 
 - _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
 - _Final transcripts_ are returned when the service detects a pause in speech.
 
+```csharp
+static void ProcessMessage(string message)
+    {
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(message);
+            JsonElement root = doc.RootElement;
+
+            if (root.TryGetProperty("message_type", out JsonElement messageTypeElement))
+            {
+                string messageType = messageTypeElement.GetString();
+
+                if (messageType == "SessionBegins" && root.TryGetProperty("session_id", out JsonElement sessionIdElement))
+                {
+                    string sessionId = sessionIdElement.GetString();
+                    Console.WriteLine($"Session ID: {sessionId}");
+                    return;
+                }
+
+                if (!root.TryGetProperty("text", out JsonElement textElement))
+                    return;
+
+                string text = textElement.GetString();
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
+
+                if (messageType == "PartialTranscript")
+                {
+                    Console.Write($"\rPartial: {text}");
+                }
+                else if (messageType == "FinalTranscript")
+                {
+                    Console.WriteLine($"\nFinal: {text}");
+                }
+                else if (messageType == "Error")
+                {
+                    string error = root.TryGetProperty("error", out JsonElement errorElement)
+                        ? errorElement.GetString()
+                        : "Unknown error";
+                    Console.WriteLine($"Error from AssemblyAI: {error}");
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Error parsing message: {ex.Message}");
+        }
+    }
+```
+
 <Tip title="End of utterance controls">
-You can [configure the silence threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection) for automatic utterance detection and programmatically [force the end of an utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to immediately get a _Final transcript_.
+  You can [configure the silence
+  threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection)
+  for automatic utterance detection and programmatically [force the end of an
+  utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to
+  immediately get a _Final transcript_.
 </Tip>
 
 </Step>
 </Steps>
 
+## Step 5: Disconnect the streaming service
 
-
-
-## Step 4: Connect the streaming service
-
-Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) to stream audio to AssemblyAI. This requires first establishing a connection to the API.
-
-```csharp
-Console.WriteLine("Connecting to real-time transcript service");
-await transcriber.ConnectAsync();
-```
-
-
-
-
-## Step 5: Record audio from microphone
-
-In this step, you'll use [SoX](http://sox.sourceforge.net/), a cross-platform audio library, to record audio from your microphone.
+In this step, you'll setup the disconnect logic.
 
 <Steps>
 <Step>
 
-Install SoX on your machine.
-
-<Tabs groupId="os">
-
-<Tab  title="macOS">
-
-```bash
-brew install sox
-```
-
-</Tab>
-<Tab title="Windows">
-
-[Download the SoX binaries](https://sourceforge.net/projects/sox/files/latest/download) and add the sox executable to your PATH.
-
-</Tab>
-<Tab title="Linux">
-
-```bash
-apt-get install sox libsox-fmt-all
-```
-
-</Tab>
-
-</Tabs>
-
-</Step>
-<Step>
-
-To run the SoX process and pipe the audio data to the process output, add the following code:
+Handle key press events to disconnect the streaming service:
 
 ```csharp
-Console.WriteLine("Starting recording");
-
-var soxArguments = string.Join(' ', [
-    // --default-device doesn't work on Windows
-    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "-t waveaudio default" : "--default-device",
-    "--no-show-progress",
-    $"--rate {sampleRate}",
-    "--channels 1",
-    "--encoding signed-integer",
-    "--bits 16",
-    "--type wav",
-    "-" // pipe
-]);
-using var soxProcess = new Process
-{
-    StartInfo = new ProcessStartInfo
+static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
     {
-        FileName = "sox",
-        Arguments = soxArguments,
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
+        e.Cancel = true;
+        Console.WriteLine("\nStopping transcription...");
+        cts.Cancel();
     }
-};
-
-soxProcess.Start();
 ```
-
-<Note title="Audio data format">
-
-The SoX arguments configure the format of the audio output.
-The arguments configure the format to a single channel with 16-bit signed integer PCM encoding and 16 kHz sample rate.
-
- If you want to stream data from elsewhere, make sure that your audio data is in the following format:
-
-- Single channel
-- 16-bit signed integer PCM or mu-law encoding
-
-By default, the Streaming STT service expects PCM16-encoded audio. If you want to use mu-law encoding, see [Specifying the encoding](/docs/speech-to-text/streaming#specify-the-encoding).
-
-</Note>
 
 </Step>
 <Step>
 
-Read the audio data from the SoX process output and send it to the real-time transcriber.
+Setup the cleanup logic:
 
 ```csharp
-var soxOutputStream = soxProcess.StandardOutput.BaseStream;
-var buffer = new byte[4096];
-while (await soxOutputStream.ReadAsync(buffer, 0, buffer.Length, ct) > 0)
-{
-    if (ct.IsCancellationRequested) break;
-    await transcriber.SendAudioAsync(buffer);
-}
+static void Cleanup()
+    {
+        try
+        {
+            if (soxProcess != null && !soxProcess.HasExited)
+            {
+                soxProcess.Kill();
+                Console.WriteLine("Recording stopped.");
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (ws != null && ws.State == WebSocketState.Open)
+            {
+                var closeTask = ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                closeTask.Wait(TimeSpan.FromSeconds(2));
+                Console.WriteLine("WebSocket connection closed.");
+            }
+        }
+        catch
+        {
+        }
+    }
 ```
 
 </Step>
 </Steps>
 
-
-
-
-## Step 6: Disconnect the real-time service
-
-When you are done, stop the recording, and disconnect the transcriber to close the connection.
-
-```csharp
-soxProcess.Kill();
-await transcriber.CloseAsync();
-```
-
-
-
-
+To run the program, first run `dotnet build` and then `dotnet run`.
 
 ## Next steps
 
@@ -376,13 +653,6 @@ To learn more about Streaming Speech-to-Text, see the following resources:
 - [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
 - [Streaming STT WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
 
-
-
-
-
 ## Need some help?
 
 If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
-
-
-

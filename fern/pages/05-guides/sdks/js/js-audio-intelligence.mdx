@@ -1,0 +1,647 @@
+---
+title: "JavaScript SDK Reference"
+---
+
+# Audio Intelligence
+
+## Auto Chapters
+
+The Auto Chapters model summarizes audio data over time into chapters. Chapters makes it easy for users to navigate and find specific information.
+
+Each chapter contains the following:
+
+- Summary
+- One-line gist
+- Headline
+- Start and end timestamps
+
+<Warning title="Auto Chapters and Summarization">
+  You can only enable one of the Auto Chapters and
+  [Summarization](/docs/audio-intelligence/summarization) models in the same
+  transcription.
+</Warning>
+
+**Quickstart**
+
+Enable Auto Chapters by setting `auto_chapters` to `true` in the transcription config. `punctuate` must be enabled to use Auto Chapters (`punctuate` is enabled by default).
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  auto_chapters: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const chapter of transcript.chapters!) {
+    console.log(`${chapter.start}-${chapter.end}: ${chapter.headline}`);
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+250-28840: Smoke from hundreds of wildfires in Canada is triggering air quality alerts across US
+29610-280340: High particulate matter in wildfire smoke can lead to serious health problems
+```
+
+<Tip title="Auto Chapters Using LeMUR">
+  Check out this cookbook [Creating Chapter
+  Summaries](/docs/guides/input-text-chapters) for an example of how to leverage
+  LeMUR's custom text input parameter for chapter summaries.
+</Tip>
+
+For the full API reference, see the [API reference section on the Auto Chapters page](/docs/audio-intelligence/auto-chapters#api-reference).
+
+## Content Moderation
+
+The Content Moderation model lets you detect inappropriate content in audio files to ensure that your content is safe for all audiences.
+
+The model pinpoints sensitive discussions in spoken data and their severity.
+
+**Quickstart**
+
+Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  content_safety: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  const contentSafetyLabels = transcript.content_safety_labels!;
+
+  // Get the parts of the transcript which were flagged as sensitive
+  for (const result of contentSafetyLabels.results) {
+    console.log(result.text);
+    console.log(
+      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
+    );
+    // Get category, confidence, and severity
+    for (const label of result.labels) {
+      console.log(`${label.label} - ${label.confidence} - ${label.severity}`);
+    }
+    console.log();
+  }
+
+  // Get the confidence of the most common labels in relation to the entire audio file
+  for (const [label, confidence] of Object.entries(
+    contentSafetyLabels.summary
+  )) {
+    console.log(
+      `${confidence * 100}% confident that the audio contains ${label}`
+    );
+  }
+
+  console.log();
+
+  // Get the overall severity of the most common labels in relation to the entire audio file
+  for (const [label, severity_confidence] of Object.entries(
+    contentSafetyLabels.severity_score_summary
+  )) {
+    console.log(
+      `${
+        severity_confidence.low * 100
+      }% confident that the audio contains low-severity ${label}`
+    );
+    console.log(
+      `${
+        severity_confidence.medium * 100
+      }% confident that the audio contains medium-severity ${label}`
+    );
+    console.log(
+      `${
+        severity_confidence.high * 100
+      }% confident that the audio contains high-severity ${label}`
+    );
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+disasters - 0.8141 - 0.4014
+
+So what is it about the conditions right now that have caused this round of wildfires to...
+Timestamp: 29290 - 56190
+disasters - 0.9217 - 0.5665
+
+So what is it in this haze that makes it harmful? And I'm assuming it is...
+Timestamp: 56340 - 88034
+health_issues - 0.9358 - 0.8906
+
+...
+
+99.42% confident that the audio contains disasters
+92.70% confident that the audio contains health_issues
+
+57.43% confident that the audio contains low-severity disasters
+42.56% confident that the audio contains mid-severity disasters
+0.0% confident that the audio contains high-severity disasters
+23.57% confident that the audio contains low-severity health_issues
+30.22% confident that the audio contains mid-severity health_issues
+46.19% confident that the audio contains high-severity health_issues
+```
+
+**Adjust the confidence threshold**
+
+The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
+
+To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+```ts {4}
+// Setting the content safety confidence threshold to 60%.
+const params = {
+  audio: audioUrl,
+  content_safety: true,
+  content_safety_confidence: 60,
+};
+```
+
+For the full API reference, as well as the supported labels and FAQs, refer to the [full Content Moderation page](/docs/audio-intelligence/content-moderation).
+
+## Entity Detection
+
+The Entity Detection model lets you automatically identify and categorize key information in transcribed audio content.
+
+Here are a few examples of what you can detect:
+
+- Names of people
+- Organizations
+- Addresses
+- Phone numbers
+- Medical data
+- Social security numbers
+
+For the full list of entities that you can detect, see [Supported entities](/docs/audio-intelligence/entity-detection#supported-entities).
+
+<Tip title="Supported languages">
+  Entity Detection is available in multiple languages. See [Supported
+  languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+</Tip>
+
+**Quickstart**
+
+Enable Entity Detection by setting `entity_detection` to `true` in the transcription config.
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  entity_detection: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const entity of transcript.entities!) {
+    console.log(entity.text);
+    console.log(entity.entity_type);
+    console.log(`Timestamp: ${entity.start} - ${entity.end}\n`);
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Canada
+location
+Timestamp: 2548 - 3130
+
+the US
+location
+Timestamp: 5498 - 6350
+
+...
+```
+
+For the full API reference, as well as the supported entities and FAQs, refer to the [full Entity Detection page](/docs/audio-intelligence/entity-detection).
+
+## Key Phrases
+
+The Key Phrases model identifies significant words and phrases in your transcript and lets you extract the most important concepts or highlights from your audio or video file.
+
+**Quickstart**
+
+Enable Key Phrases by setting `auto_highlights` to `true` in the transcription config.
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  auto_highlights: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const result of transcript.auto_highlights_result!.results) {
+    const timestamps = result.timestamps
+      .map(({ start, end }) => `[Timestamp(start=${start}, end=${end})]`)
+      .join(", ");
+    console.log(
+      `Highlight: ${result.text}, Count: ${result.count}, Rank ${result.rank}, Timestamps: ${timestamps}`
+    );
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Highlight: air quality alerts, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=3978, end=5114)]
+Highlight: wide ranging air quality consequences, Count: 1, Rank: 0.08, Timestamps: [Timestamp(start=235388, end=238838)]
+Highlight: more fires, Count: 1, Rank: 0.07, Timestamps: [Timestamp(start=184716, end=185186)]
+...
+```
+
+For the full API reference and FAQs, refer to the [full Key Phrases page](/docs/audio-intelligence/key-phrases).
+
+## PII Redaction
+
+The PII Redaction model lets you minimize sensitive information about individuals by automatically identifying and removing it from your transcript.
+
+Personal Identifiable Information (PII) is any information that can be used to identify a person, such as a name, email address, or phone number.
+
+When you enable the PII Redaction model, your transcript will look like this:
+
+- With `hash` substitution: `Hi, my name is ####!`
+- With `entity_name` substitution: `Hi, my name is [PERSON_NAME]!`
+
+You can also [Create redacted audio files](/docs/audio-intelligence/pii-redaction#create-redacted-audio-files) to replace sensitive information with a beeping sound.
+
+<Tip title="Supported languages">
+  PII Redaction is available in multiple languages. See [Supported
+  languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
+</Tip>
+
+<Warning title="Redacted properties">
+  PII only redacts words in the `text` property. Properties from other features
+  may still include PII, such as `entities` from [Entity
+  Detection](/docs/audio-intelligence/entity-detection) or `summary` from
+  [Summarization](/docs/audio-intelligence/summarization).
+</Warning>
+
+**Quickstart**
+
+Enable PII Redaction by setting `redact_pii` to `true` in the transcription
+config.
+
+Use `redact_pii_policies` to specify the information you want to
+redact. For the full list of policies, see [PII policies](/docs/audio-intelligence/pii-redaction#pii-policies).
+
+```ts {13-15}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params: TranscribeParams = {
+  audio: audioFile,
+  redact_pii: true,
+  redact_pii_policies: ["person_name", "organization", "occupation"],
+  redact_pii_sub: "hash",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.text);
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts
+throughout the US. Skylines from Maine to Maryland to Minnesota are gray and
+smoggy. And in some places, the air quality warnings include the warning to stay
+inside. We wanted to better understand what's happening here and why, so we
+called ##### #######, an ######### ######### in the ########## ## #############
+###### ### ########### at ##### ####### ##########. Good morning, #########.
+Good morning. So what is it about the conditions right now that have caused this
+round of wildfires to affect so many people so far away? Well, there's a couple
+of things. The season has been pretty dry already, and then the fact that we're
+getting hit in the US. Is because there's a couple of weather systems that ...
+```
+
+**Create redacted audio files**
+
+In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out.
+
+To create a redacted version of the audio file, set `redact_pii_audio` to
+`true` in the transcription config. Use `redact_pii_audio_quality` to specify
+the quality of the redacted audio file.
+
+```ts {5-6}
+const params: TranscribeParams = {
+  audio: audioUrl,
+  redact_pii: true,
+  redact_pii_policies: ["person_name", "organization", "occupation"],
+  redact_pii_audio: true,
+  redact_pii_audio_quality: "wav", // Optional. Defaults to "mp3".
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  const { status, redacted_audio_url } = await client.transcripts.redactedAudio(
+    transcript.id
+  );
+
+  console.log(`Status: ${status}, Redacted audio URL: ${redacted_audio_url}`);
+};
+
+run();
+```
+
+You can also retrieve the redacted audio file itself using `redactedAudioFile()`.
+The following code writes the redacted audio file to a local file, using `writeFile()` from Node.js.
+
+```typescript
+import fs from "fs/promises";
+
+...
+
+const audioFile = await client.transcripts.redactedAudioFile(transcript.id);
+await fs.writeFile('./redacted-audio.wav', audioFile.body!, 'binary');
+```
+
+<Note title="Supported languages">
+
+You can only create redacted audio files for transcriptions in English and Spanish.
+
+</Note>
+
+<Warning title="Maximum audio file size">
+  You can only create redacted versions of audio files if the original file is
+  smaller than 1 GB.
+</Warning>
+
+**Example output**
+
+```plain
+https://s3.us-west-2.amazonaws.com/api.assembly.ai.usw2/redacted-audio/ac06721c-d1ea-41a7-95f7-a9463421e6b1.mp3?AWSAccessKeyId=...
+```
+
+For the full API reference, as well as the supported policies and FAQs, refer to the [full PII Redaction page](/docs/audio-intelligence/pii-redaction).
+
+## Sentiment Analysis
+
+The Sentiment Analysis model detects the sentiment of each spoken sentence in the transcript text. Use Sentiment Analysis to get a detailed analysis of the positive, negative, or neutral sentiment conveyed in the audio, along with a confidence score for each result.
+
+**Quickstart**
+
+Enable Sentiment Analysis by setting `sentiment_analysis` to `true` in the transcription config.
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  sentiment_analysis: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const result of transcript.sentiment_analysis_results!) {
+    console.log(result.text);
+    console.log(result.sentiment);
+    console.log(result.confidence);
+    console.log(`Timestamp: ${result.start} - ${result.end}`);
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US.
+SentimentType.negative
+0.8181032538414001
+Timestamp: 250 - 6350
+...
+```
+
+<Tip title="Sentiment Analysis Using LeMUR">
+  Check out this cookbook [LeMUR for Customer Call Sentiment
+  Analysis](/docs/guides/call-sentiment-analysis) for an example of how to
+  leverage LeMUR's QA feature for sentiment analysis.
+</Tip>
+
+**Add speaker labels to sentiments**
+
+To add speaker labels to each sentiment analysis result, using [Speaker Diarization](/docs/speech-to-text/speaker-diarization), enable `speaker_labels` in the transcription config.
+
+Each sentiment result will then have a `speaker` field that contains the speaker label.
+
+```ts {4}
+const params = {
+  audio: audioUrl,
+  sentiment_analysis: true,
+  speaker_labels: true,
+};
+
+// ...
+
+for (const result of transcript.sentiment_analysis_results!) {
+  console.log(result.speaker);
+}
+```
+
+For the full API reference and FAQs, refer to the [full Sentiment Analysis page](/docs/audio-intelligence/sentiment-analysis).
+
+## Summarization
+
+Distill important information by summarizing your audio files.
+
+The Summarization model generates a summary of the resulting transcript. You can control the style and format of the summary using [Summary models](/docs/audio-intelligence/summarization#summary-models) and [Summary types](/docs/audio-intelligence/summarization#summary-types).
+
+<Warning title="Summarization and Auto Chapters">
+  You can only enable one of the Summarization and [Auto
+  Chapters](/docs/audio-intelligence/auto-chapters) models in the same
+  transcription.
+</Warning>
+
+**Quickstart**
+
+Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+
+If you specify one of `summary_model` and `summary_type`, then you must specify the other.
+
+The following example returns an informative summary in a bulleted list.
+
+```ts {13-15}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  summarization: true,
+  summary_model: "informative",
+  summary_type: "bullets",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.summary);
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+- Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. In some places, the air quality warnings include the warning to stay inside.
+- Air pollution levels in Baltimore are considered unhealthy. Exposure to high levels can lead to a host of health problems. With climate change, we are seeing more wildfires. Will we be seeing more of these kinds of wide ranging air quality consequences?
+```
+
+<Tip title="Custom Summaries Using LeMUR">
+  If you want more control of the output format, see how to generate a [Custom
+  summary using LeMUR](/docs/lemur/summarize-audio).
+</Tip>
+
+For the full API reference, as well as the supported summary models/types and FAQs, refer to the [full Summarization page](/docs/audio-intelligence/summarization).
+
+## Topic Detection
+
+The Topic Detection model lets you identify different topics in the transcript. The model uses the [IAB Content Taxonomy](https://airtable.com/shr7KNXOtvfhTTS4i/tblqVLDb7YSsCMXo4?backgroundColor=purple&viewControls=on), a standardized language for content description which consists of 698 comprehensive topics.
+
+**Quickstart**
+
+Enable Topic Detection by setting `iab_categories` to `true` in the transcription config.
+
+```ts {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  iab_categories: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  // Get the parts of the transcript that were tagged with topics
+  for (const result of transcript.iab_categories_result!.results) {
+    console.log(result.text);
+    console.log(
+      `Timestamp: ${result.timestamp?.start} - ${result.timestamp?.end}`
+    );
+    for (const label of result.labels!) {
+      console.log(`${label.label} (${label.relevance})`);
+    }
+  }
+
+  // Get a summary of all topics in the transcript
+  for (const [topic, relevance] of Object.entries(
+    transcript.iab_categories_result!.summary
+  )) {
+    console.log(`Audio is ${relevance * 100} relevant to ${topic}`);
+  }
+};
+
+run();
+```
+
+**Example output**
+
+```plain
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines...
+Timestamp: 250 - 28920
+Home&Garden>IndoorEnvironmentalQuality (0.9881)
+NewsAndPolitics>Weather (0.5561)
+MedicalHealth>DiseasesAndConditions>LungAndRespiratoryHealth (0.0042)
+...
+Audio is 100.0% relevant to NewsAndPolitics>Weather
+Audio is 93.78% relevant to Home&Garden>IndoorEnvironmentalQuality
+...
+```
+
+<Tip title="Topic Detection Using LeMUR">
+  Check out this cookbook [Custom Topic Tags](/docs/guides/custom-topic-tags)
+  for an example of how to leverage LeMUR for custom topic detection.
+</Tip>
+
+For the full API reference, as well as the full list of supported topics and FAQs, refer to the [full Topic Detection page](/docs/audio-intelligence/topic-detection).
