@@ -126,7 +126,7 @@ function insertKapa() {
   script.setAttribute("data-project-color", "#2C4BD4");
   script.setAttribute(
     "data-project-logo",
-    "https://www.assemblyai.com/static/images/logo-blue400x400.jpeg"
+    "https://cdn.prod.website-files.com/67a08d9d7d19f8fb63692894/67e119e514062170f3dbaad6_aai-icon-256x256.png"
   );
   script.setAttribute(
     "data-modal-override-open-id-search",
