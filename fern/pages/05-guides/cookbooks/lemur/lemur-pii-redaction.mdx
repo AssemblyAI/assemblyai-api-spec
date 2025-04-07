@@ -1,0 +1,175 @@
+---
+title: "Redact PII from Text Using LeMUR"
+---
+
+This guide will show you how to use AssemblyAI's LeMUR framework to redact personally identifiable information (PII) from text.
+
+## Quickstart
+
+```python
+import assemblyai as aai
+import json
+import os
+
+aai.settings.api_key = 'YOUR API KEY'
+
+def generate_ner(transcript_text):
+    prompt = '''
+    You will be given a transcript of a conversation or text. Your task is to generate named entities from the given transcript text.
+
+    Please identify and extract the following named entities from the transcript:
+
+    1. Person names
+    2. Organization names
+    3. Email addresses
+    4. Phone numbers
+    5. Full addresses
+
+    When extracting these entities, make sure to return the exact spelling and formatting as they appear in the transcript. Do not modify or standardize the entities in any way.
+
+    Present your results in a JSON format with a single field named "named_entities". This field should contain an array of strings, where each string is a named entity you've identified. For example:
+    {
+      "named_entities": ["John Doe", "Acme Corp", "john.doe@example.com", "123-456-7890", "123 Main St, Anytown, USA 12345"]
+    }
+
+    Important: Do not include any other information, explanations, or text in your response. Your output should consist solely of the JSON object containing the named entities.
+
+    If you do not find any named entities of a particular type, simply return a empty array for the "named_entities" field.
+    '''
+
+    response = aai.Lemur().task(
+        prompt=prompt,
+        input_text=transcript_text,
+        max_output_size=4000,
+        temperature=0.0,
+        final_model=aai.LemurModel.claude3_5_sonnet
+    ).response
+
+    try:
+      res_json = json.loads(response)
+    except:
+      res_json = {'named_entities': []}
+
+    named_entities = res_json.get('named_entities', [])
+
+    return named_entities
+
+transcriber = aai.Transcriber(config=aai.TranscriptionConfig(language_code='en'))
+transcript = transcriber.transcribe('YOUR_AUDIO_URL')
+
+redacted_transcript = ''
+
+for sentence in transcript.get_sentences():
+  generated_entities = generate_ner(sentence.text)
+
+  redacted_sentence = sentence.text
+
+  for entity in generated_entities:
+    redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
+
+  redacted_transcript += redacted_sentence + ' '
+  print(redacted_sentence)
+
+print('Full redacted transcript:')
+print(redacted_transcript)
+```
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
+
+For information about LeMUR pricing, see our [pricing page](https://www.assemblyai.com/pricing).
+
+## Step-by-Step Instructions
+
+Install the SDK.
+
+```python
+pip install assemblyai
+```
+
+Import the `assemblyai` package and set your API key.
+
+```python
+import assemblyai as aai
+import json
+import os
+
+aai.settings.api_key = 'YOUR API KEY'
+```
+
+Define a function `generate_ner` that uses LeMUR to identify named entities (person names, organizations, emails, phone numbers, addresses) in a given text.
+
+```python
+def generate_ner(transcript_text):
+    prompt = '''
+    You will be given a transcript of a conversation or text. Your task is to generate named entities from the given transcript text.
+
+    Please identify and extract the following named entities from the transcript:
+
+    1. Person names
+    2. Organization names
+    3. Email addresses
+    4. Phone numbers
+    5. Full addresses
+
+    When extracting these entities, make sure to return the exact spelling and formatting as they appear in the transcript. Do not modify or standardize the entities in any way.
+
+    Present your results in a JSON format with a single field named "named_entities". This field should contain an array of strings, where each string is a named entity you've identified. For example:
+    {
+      "named_entities": ["John Doe", "Acme Corp", "john.doe@example.com", "123-456-7890", "123 Main St, Anytown, USA 12345"]
+    }
+
+    Important: Do not include any other information, explanations, or text in your response. Your output should consist solely of the JSON object containing the named entities.
+
+    If you do not find any named entities of a particular type, simply return a empty array for the "named_entities" field.
+    '''
+
+    response = aai.Lemur().task(
+        prompt=prompt,
+        input_text=transcript_text,
+        max_output_size=4000,
+        temperature=0.0,
+        final_model=aai.LemurModel.claude3_5_sonnet
+    ).response
+
+    try:
+      res_json = json.loads(response)
+    except:
+      res_json = {'named_entities': []}
+
+    named_entities = res_json.get('named_entities', [])
+
+    return named_entities
+```
+
+Transcribe an audio file using the AssemblyAI Transcriber.
+
+```python
+transcriber = aai.Transcriber(config=aai.TranscriptionConfig(language_code='en'))
+transcript = transcriber.transcribe('YOUR_AUDIO_URL')
+```
+
+Iterate through each sentence in the transcript, identify named entities using `generate_ner`, and replace them with # characters.
+
+```python
+redacted_transcript = ''
+
+for sentence in transcript.get_sentences():
+  generated_entities = generate_ner(sentence.text)
+
+  redacted_sentence = sentence.text
+
+  for entity in generated_entities:
+    redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
+
+  redacted_transcript += redacted_sentence + ' '
+  print(redacted_sentence)
+```
+
+Print the redacted transcript.
+
+```python
+print('Full redacted transcript:')
+print(redacted_transcript)
+```
