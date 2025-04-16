@@ -2,7 +2,7 @@
 title: "How to get started using Slam-1"
 subtitle: "Learn how to transcribe using Slam-1."
 hide-nav-links: true
-description: "Learn how to transcribe using Slam-1."
+description: "Learn how to transcribe prerecorded audio using Slam-1."
 ---
 
 ## Overview
@@ -25,9 +25,9 @@ A beta version of Slam-1 is currently live in Production so you will make reques
     headers = {"authorization": "<YOUR_API_KEY>"}
 
     data = {
-              "audio_url": "https://assembly.ai/sports_injuries.mp3",
-              "speech_model": "slam-1"
-          }
+        "audio_url": "https://assembly.ai/sports_injuries.mp3",
+        "speech_model": "slam-1"
+    }
 
     response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
@@ -99,9 +99,16 @@ A beta version of Slam-1 is currently live in Production so you will make reques
   more information on transcribing local files.
 </Note>
 
-## Contextual prompting of words and phrases
 
-To improve the transcription accuracy, you can leverage Slam-1's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file. When you prompt words and phrases, Slam-1's contextual understanding helps the model better recognize related terminology and concepts, enhancing transcription quality for the entire content, not just the specified terms. Prompt the model with up to 1000 unique keywords. These keywords can be individual words or phrases of up to six words.
+## Fine-tuning Slam-1
+
+What truly sets Slam-1 apart is its ability to be customized for specific industries and use cases with minimal effort. Rather than spending months developing custom models or implementing complex post-processing rules, Slam-1 offers two distinct customization approaches that give you unprecedented control over your transcription results.
+
+One approach is to prompt the model with key termininology in the form of a list of words and phrases. The other approach is to prompt the model with contextual information about the audio in your file. Continue reading for more information on these two approaches.
+
+### Contextual prompting of words and phrases
+
+One way to improve transcription accuracy is to leverage Slam-1's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file. Slam-1 goes far beyond traditional "custom vocabulary" or "word boost" features found in other speech recognition providers. Rather than simply increasing the likelihood of detecting specific words, Slam-1's multi-modal architecture actually understands the semantic meaning and context of the terminology you provide, enhancing transcription quality not just of the exact terms you specify, but also related terminology, variations, and contextually similar phrases. Prompt the model with up to 1000 unique keywords. These keywords can be individual words or phrases of up to six words.
 
 <Note title="Keyword count limits">
 While we support up to 1000 Word Boost keywords, actual capacity may be lower due to internal tokenization and implementation constraints.
@@ -110,17 +117,17 @@ Key points to remember:
 - Capitalization affects capacity (uppercase tokens consume more than lowercase)
 - Longer words consume more capacity than shorter words
 
-For optimal results, use shorter tokens when possible and be mindful of your total token count when approaching the keyword limit.
+For optimal results, use shorter phrases when possible and be mindful of your total token count when approaching the keyword limit.
 
 </Note>
 
-A common use case for these contextual prompts is to leverage known context about the call and provide it with the transcription. This might look like:
+A common use case for these contextual prompts is to leverage known context about the audio to create a list of key words and phrases. Here are some examples of items to consider when creating the list of key words or phrases for different industries:
 
 - Virtual Sales/Support Call: Product terminology, company names, people names, locations, amounts
 - Medical: Condition names, prescription names, doctor names, patient names, diagnostic terms
 - Legal: Cases, law firms, people involved in the case
 
-To prompt the model with words or phrases, include the `word_boost` parameter in your request as shown in the code example below. Words and phrases should be formatted in the way that you would like to see them returned in your transcripts.
+To prompt the model with words or phrases, include the `keyterms_prompt` parameter in your request as shown in the code example below. Words and phrases should be formatted in the way that you would like to see them returned in your transcripts.
 
 <Tabs groupId="language">
   <Tab language="python" title="Python" default>
@@ -134,7 +141,7 @@ To prompt the model with words or phrases, include the `word_boost` parameter in
     data = {
               "audio_url": "https://assembly.ai/sports_injuries.mp3",
               "speech_model": "slam-1",
-              "word_boost": ["foo", "bar", "baz"]
+              "keyterms_prompt": ["foo", "bar", "baz"]
           }
 
     response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
@@ -172,7 +179,7 @@ To prompt the model with words or phrases, include the `word_boost` parameter in
       const data = {
         audio_url: 'https://assembly.ai/sports_injuries.mp3',
         speech_model: 'slam-1',
-        word_boost: ['foo', 'bar', 'baz']
+        keyterms_prompt: ['foo', 'bar', 'baz']
       }
 
       const url = `${baseUrl}/v2/transcript`
@@ -200,6 +207,138 @@ To prompt the model with words or phrases, include the `word_boost` parameter in
 
   </Tab>
 </Tabs>
+
+Here are some examples of what a list of key words and phrases might look like for some specific industries:
+<Tabs>
+  <Tab title="Medical consultation" language="python">
+  ```
+    "keyterms_prompt": [
+        "differential diagnosis", "myocardial infarction", "hypertension", "Wellbutrin XL 150mg", "lumbar radiculopathy", "bilateral paresthesia", "metastatic adenocarcinoma", "idiopathic thrombocytopenic purpura"
+    ]
+  ```
+  </Tab>
+  <Tab title="Professional therapy session" language="python">
+  ```
+    "keyterms_prompt": [
+        "cognitive behavioral therapy", "major depressive disorder", "generalized anxiety disorder", "ADHD", "trauma-informed care", "Lexapro 10mg", "psychosocial assessment", "therapeutic alliance"
+    ]
+  ```
+  </Tab>
+  <Tab title="Veterinary exam language="python">
+  ```
+    "keyterms_prompt": [
+        "Caslick's procedure", "otitis media", "degenerative myelopathy", "feline immunodeficiency virus", "cruciate ligament tear", "Rimadyl 75mg", "subcutaneous fluid therapy", "tarsorrhaphy"
+    ]
+  ```
+  </Tab>
+</Tabs>
+
+### Contextual prompting with natural language
+
+Another way to improve transcription accuracy is to leverage Slam-1's contextual understanding capabilities by prompting the model with a description of your audio in plain English. This allows the model to understand the broader context of your audio file and make more intelligent transcription decisions. You can provide up to 1,500 words of contextual information, giving the model rich background knowledge about the content, participants, domain, and purpose of the audio.
+
+A common use case for these contextual prompts is to leverage known context about the call and provide it with the transcription. This might look like:
+
+- Legal Deposition: "This is a deposition in the case of Smith v. Acme Corporation, a product liability lawsuit involving an alleged defect in the XJ-5000 power tool that resulted in severe lacerations to the plaintiff's right hand. The deposition will involve questioning of Dr. Elizabeth Chen, an orthopedic surgeon who treated the plaintiff's injuries."
+- Veterinary Consultation: "This is a veterinary consultation about a dog with hip dysplasia."
+- Medical Consultation: "This is a medical consultation between Dr. Jones, a pulmonologist, and Dan Rayman who is being evaluated for recurring pneumonia."
+
+To prompt the model with contextual language, include the `prompt` parameter in your request as shown in the code example below..
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+    ```python
+    import requests
+    import time
+
+    base_url = "https://api.assemblyai.com"
+    headers = {"authorization": "<YOUR_API_KEY>"}
+
+    data = {
+              "audio_url": "https://assembly.ai/sports_injuries.mp3",
+              "speech_model": "slam-1",
+              "prompt": "This is a shareholder meeting for the ACME Corporation to discuss Q3 financial results and expectations for Q4 and beyond."
+          }
+
+    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code}, Response: {response.text}")
+        response.raise_for_status()
+
+    transcript_response = response.json()
+    transcript_id = transcript_response["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print(transcript["text"])
+            break
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+    ```
+
+  </Tab>
+  <Tab language="typescript" title="Typescript">
+    ```ts
+      import axios from 'axios'
+
+      const baseUrl = 'https://api.assemblyai.com'
+
+      const headers = {
+        authorization: '<YOUR_API_KEY>'
+      }
+
+      const data = {
+        audio_url: 'https://assembly.ai/sports_injuries.mp3',
+        speech_model: 'slam-1',
+        prompt: 'This is a shareholder meeting for the ACME Corporation to discuss Q3 financial results and expectations for Q4 and beyond.'
+      }
+
+      const url = `${baseUrl}/v2/transcript`
+      const response = await axios.post(url, data, { headers: headers })
+
+      const transcriptId = response.data.id
+      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+      while (true) {
+        const pollingResponse = await axios.get(pollingEndpoint, {
+          headers: headers
+        })
+        const transcriptionResult = pollingResponse.data
+
+        if (transcriptionResult.status === 'completed') {
+          console.log(transcriptionResult.text)
+          break
+        } else if (transcriptionResult.status === 'error') {
+          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+        }
+      }
+    ```
+
+  </Tab>
+</Tabs>
+
+<Warning>
+Contextual prompting via the `prompt` features is currently experimental and is in an early form of release so your milage may vary when using this parameter.
+
+Please email our Support team at support@assemblyai.com if you would like help iterating on the description you are using in the `prompt` field.
+</Warning>
+
+### Should I use `keyterms_prompt` or `prompt`?
+
+Prompting with the `keyterms_prompt` parameter is a good option when you have a specific terminology or vocabulary that you would like to fine-tune the model with. `keyterms_prompt` works best with specific use cases where specific words and phrases can be identified.
+
+Prompting with the `prompt`parameter is a good option when you know the context of the audio, perhaps derived from some metadata, but exact terminology may be too broad or numerous to capture in a list. `prompt` works best when you would rather pass a high level description than specific words or phrases.
+
+<Note>
+The `keyterms_prompt` and `prompt` parameters cannot both be used in the same request.
+</Note>
 
 ## Feedback
 
