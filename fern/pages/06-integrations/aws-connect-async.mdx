@@ -6,7 +6,8 @@ This guide walks through the process of setting up a transcription pipeline for 
 
 ### Get Started
 
-Before we begin, make sure you have: 
+Before we begin, make sure you have:
+
 - An AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
 - An AWS account.
 - An [Amazon Connect instance](https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-instances.html).
@@ -35,64 +36,71 @@ from urllib.parse import unquote_plus
 import logging
 
 # Configure logging
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Configuration settings
+
 # See config parameters here: https://www.assemblyai.com/docs/api-reference/transcripts/submit
+
 ASSEMBLYAI_CONFIG = {
-   # 'language_code': 'en_us',
-   # 'multichannel': True,
-   # 'redact_pii': True,
+
+# 'language_code': 'en_us',
+
+# 'multichannel': True,
+
+# 'redact_pii': True,
+
 }
 
 # Initialize AWS services
+
 s3_client = boto3.client('s3')
 
 def get_presigned_url(bucket, key, expiration=3600):
-   """Generate a presigned URL for the S3 object"""
+"""Generate a presigned URL for the S3 object"""
 
-   logger.info({
-       "message": "Generating presigned URL",
-       "bucket": bucket,
-       "key": key,
-       "expiration": expiration
-   })
+logger.info({
+"message": "Generating presigned URL",
+"bucket": bucket,
+"key": key,
+"expiration": expiration
+})
 
-   s3_client_with_config = boto3.client(
-       's3',
-       config=boto3.session.Config(signature_version='s3v4')
-   )
-  
-   return s3_client_with_config.generate_presigned_url(
-       'get_object',
-       Params={'Bucket': bucket, 'Key': key},
-       ExpiresIn=expiration
-   )
+s3_client_with_config = boto3.client(
+'s3',
+config=boto3.session.Config(signature_version='s3v4')
+)
+
+return s3_client_with_config.generate_presigned_url(
+'get_object',
+Params={'Bucket': bucket, 'Key': key},
+ExpiresIn=expiration
+)
 
 def delete_transcript_from_assemblyai(transcript_id, api_key):
-   """
-   Delete transcript data from AssemblyAI's database using their DELETE endpoint.
-  
-   Args:
-       transcript_id (str): The AssemblyAI transcript ID to delete
-       api_key (str): The AssemblyAI API key
-      
-   Returns:
-       bool: True if deletion was successful, False otherwise
-   """
-   headers = {
-       "authorization": api_key,
-       "content-type": "application/json"
-   }
-  
-   conn = http.client.HTTPSConnection("api.assemblyai.com")
-  
-   try:
-       # Send DELETE request to AssemblyAI API
-       conn.request("DELETE", f"/v2/transcript/{transcript_id}", headers=headers)
-       response = conn.getresponse()
-      
+"""
+Delete transcript data from AssemblyAI's database using their DELETE endpoint.
+
+Args:
+transcript_id (str): The AssemblyAI transcript ID to delete
+api_key (str): The AssemblyAI API key
+
+Returns:
+bool: True if deletion was successful, False otherwise
+"""
+headers = {
+"authorization": api_key,
+"content-type": "application/json"
+}
+
+conn = http.client.HTTPSConnection("api.assemblyai.com")
+
+try: # Send DELETE request to AssemblyAI API
+conn.request("DELETE", f"/v2/transcript/{transcript_id}", headers=headers)
+response = conn.getresponse()
+
        # Check if deletion was successful (HTTP 200)
        if response.status == 200:
            response_data = json.loads(response.read().decode())
@@ -102,46 +110,50 @@ def delete_transcript_from_assemblyai(transcript_id, api_key):
            error_message = response.read().decode()
            logger.error(f"Failed to delete transcript {transcript_id}: HTTP {response.status} - {error_message}")
            return False
-          
-   except Exception as e:
-       logger.info(f"Error deleting transcript {transcript_id}: {str(e)}")
-       return False
-   finally:
-       conn.close()
+
+except Exception as e:
+logger.info(f"Error deleting transcript {transcript_id}: {str(e)}")
+return False
+finally:
+conn.close()
 
 def transcribe_audio(audio_url, api_key):
-   """Transcribe audio using AssemblyAI API with http.client"""
-   logger.info({"message": "Starting audio transcription"})
+"""Transcribe audio using AssemblyAI API with http.client"""
+logger.info({"message": "Starting audio transcription"})
 
-   headers = {
-       "authorization": api_key,
-       "content-type": "application/json"
-   }
-  
-   conn = http.client.HTTPSConnection("api.assemblyai.com")
-  
-   # Submit the audio file for transcription with config parameters
-   request_data = {"audio_url": audio_url}
-   # Add all configuration settings
-   request_data.update(ASSEMBLYAI_CONFIG)
-  
-   json_data = json.dumps(request_data)
-   conn.request("POST", "/v2/transcript", json_data, headers)
-   response = conn.getresponse()
-  
-   if response.status != 200:
-       raise Exception(f"Failed to submit audio for transcription: {response.read().decode()}")
-  
-   response_data = json.loads(response.read().decode())
-   transcript_id = response_data['id']
-   logger.info({"message": "Audio submitted for transcription", "transcript_id": transcript_id})
-  
-   # Poll for transcription completion
-   while True:
-       conn = http.client.HTTPSConnection("api.assemblyai.com")
-       conn.request("GET", f"/v2/transcript/{transcript_id}", headers=headers)
-       polling_response = conn.getresponse()
-       polling_data = json.loads(polling_response.read().decode())
+headers = {
+"authorization": api_key,
+"content-type": "application/json"
+}
+
+conn = http.client.HTTPSConnection("api.assemblyai.com")
+
+# Submit the audio file for transcription with config parameters
+
+request_data = {"audio_url": audio_url}
+
+# Add all configuration settings
+
+request_data.update(ASSEMBLYAI_CONFIG)
+
+json_data = json.dumps(request_data)
+conn.request("POST", "/v2/transcript", json_data, headers)
+response = conn.getresponse()
+
+if response.status != 200:
+raise Exception(f"Failed to submit audio for transcription: {response.read().decode()}")
+
+response_data = json.loads(response.read().decode())
+transcript_id = response_data['id']
+logger.info({"message": "Audio submitted for transcription", "transcript_id": transcript_id})
+
+# Poll for transcription completion
+
+while True:
+conn = http.client.HTTPSConnection("api.assemblyai.com")
+conn.request("GET", f"/v2/transcript/{transcript_id}", headers=headers)
+polling_response = conn.getresponse()
+polling_data = json.loads(polling_response.read().decode())
 
        if polling_data['status'] == 'completed':
            conn.close()
@@ -150,36 +162,35 @@ def transcribe_audio(audio_url, api_key):
        elif polling_data['status'] == 'error':
            conn.close()
            raise Exception(f"Transcription failed: {polling_data['error']}")
-      
+
        conn.close()
        time.sleep(3)
 
 def lambda_handler(event, context):
-   """Lambda function to handle S3 events and process audio files"""
-   try:
-       # Get the AssemblyAI API key from environment variables
-       api_key = os.environ.get('ASSEMBLYAI_API_KEY')
-       if not api_key:
-           raise ValueError("ASSEMBLYAI_API_KEY environment variable is not set")
+"""Lambda function to handle S3 events and process audio files"""
+try: # Get the AssemblyAI API key from environment variables
+api_key = os.environ.get('ASSEMBLYAI_API_KEY')
+if not api_key:
+raise ValueError("ASSEMBLYAI_API_KEY environment variable is not set")
 
        # Process each record in the S3 event
        for record in event.get('Records', []):
            # Get the S3 bucket and key
            bucket = record['s3']['bucket']['name']
            key = unquote_plus(record['s3']['object']['key'])
-          
+
            # Generate a presigned URL for the audio file
            audio_url = get_presigned_url(bucket, key)
-          
+
            # Get the full transcript JSON from AssemblyAI
            transcript_data = transcribe_audio(audio_url, api_key)
-          
+
            # Prepare the transcript key - maintaining path structure but changing directory and extension
            transcript_key = key.replace('/CallRecordings/', '/AssemblyAITranscripts/', 1).replace('.wav', '.json')
-          
+
            # Convert the JSON data to a string
            transcript_json_str = json.dumps(transcript_data, indent=2)
-          
+
            # Upload the transcript JSON to the same bucket but in transcripts directory
            s3_client.put_object(
                Bucket=bucket,  # Use the same bucket
@@ -188,7 +199,7 @@ def lambda_handler(event, context):
                ContentType='application/json'
            )
            logger.info({"message": "Transcript uploaded to transcript bucket successfully.", "key": transcript_key})
-          
+
            # Uncomment the following line to delete transcript data from AssemblyAI after saving to S3
            # https://www.assemblyai.com/docs/api-reference/transcripts/delete
            # delete_transcript_from_assemblyai(transcript_data['id'], api_key)
@@ -201,16 +212,17 @@ def lambda_handler(event, context):
            })
        }
 
-   except Exception as e:
-       print(f"Error: {str(e)}")
-       return {
-           "statusCode": 500,
-           "body": json.dumps({
-               "message": "Error processing audio file(s)",
-               "error": str(e)
-           })
-       }
-```
+except Exception as e:
+print(f"Error: {str(e)}")
+return {
+"statusCode": 500,
+"body": json.dumps({
+"message": "Error processing audio file(s)",
+"error": str(e)
+})
+}
+
+````
   </Step>
   <Step>
     At the top of the lambda function, you can edit the config to enable features for your transcripts. To see all available parameters, check out our [API reference](https://www.assemblyai.com/docs/api-reference/transcripts/submit).
@@ -220,13 +232,17 @@ ASSEMBLYAI_CONFIG = {
    # 'multichannel': True,
    # 'redact_pii': True,
 }
-```
+````
 
-<Tip> 
-If you would like to delete transcripts from AssemblyAI after completion, you can uncomment line **166** to enable the `delete_transcript_from_assemblyai` function. This ensures the transcript data is only saved on your S3 database and not stored on AssemblyAI's database.
+<Tip>
+  If you would like to delete transcripts from AssemblyAI after completion, you
+  can uncomment line **166** to enable the `delete_transcript_from_assemblyai`
+  function. This ensures the transcript data is only saved on your S3 database
+  and not stored on AssemblyAI's database.
 </Tip>
 
 Once you have finished editing the lambda function, click **Deploy** to save your changes.
+
   </Step>
   <Step> 
 On the same page, navigate to the **Configuration** section, under **General configuration** adjust the timeout to 15min 0sec and click **Save**. The processing times for transcription will be a lot shorter, but this ensures plenty of time for the function to complete.
@@ -256,6 +272,7 @@ You can see in our example, we place the block right at the entry of the call fl
 <img src="../../assets/img/integrations/AWS-Connect/AWSConnectStep9.png" />
 
 After connecting this block, click the 3 vertical dots in the top right of the block and select **Edit settings**. Scroll down to the **Enable recording and analytics** subsection and expand the **Voice** section. Then select `On` and select `Agent and customer` (or whoever you'd like to record). Then click **Save**, click **Save** again in the top right and then click **Publish** to publish the flow.
+
 <img src="../../assets/img/integrations/AWS-Connect/AWSConnectStep10.png" />
 
 With this new flow published, you should now receive recordings for your Amazon Connect calls that utilize that flow, and you should now receive AssemblyAI transcripts for those recordings!
@@ -265,7 +282,8 @@ The Amazon Connect Call Recordings are saved in the S3 bucket with this naming c
 **/connect/\{instance-name\}/CallRecordings/\{YYYY\}/\{MM\}/\{DD\}/\{contact-id\}_\{YYYYMMDDThh:mm\}_UTC.wav**
 
 The AssemblyAI Transcripts will be saved in the S3 bucket with this naming convention:
-**/connect/\{instance-name\}/AssemblyAITranscripts/\{YYYY\}/\{MM\}/\{DD\}/\{contact-id\}_\{YYYYMMDDThh:mm\}_UTC.json**
+**/connect/\{instance-name\}/AssemblyAITranscripts/\{YYYY\}/\{MM\}/\{DD\}/\{contact-id\}\_\{YYYYMMDDThh:mm\}\_UTC.json**
+
 </Info>
   </Step>
   <Step>
