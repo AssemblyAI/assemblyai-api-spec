@@ -28,33 +28,32 @@ Here's the full sample code for what you'll build in this tutorial:
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 ```typescript
 import { Readable } from 'stream'
-import { AssemblyAI, RealtimeTranscript } from 'assemblyai'
-import { SoxRecording } from './sox.js'
+import { AssemblyAI } from 'assemblyai'
+import recorder from 'node-record-lpcm16'
 
 const run = async () => {
+
   const client = new AssemblyAI({
     apiKey: '<YOUR_API_KEY>'
   })
-
-  const SAMPLE_RATE = 16_000
-
+  
   const transcriber = client.realtime.transcriber({
-    sampleRate: SAMPLE_RATE
+    sampleRate: 16_000
   })
 
   transcriber.on('open', ({ sessionId }) => {
     console.log(`Session opened with ID: ${sessionId}`)
   })
 
-  transcriber.on('error', (error: Error) => {
+  transcriber.on('error', (error) => {
     console.error('Error:', error)
   })
 
-  transcriber.on('close', (code: number, reason: string) => {
+  transcriber.on('close', (code, reason) =>
     console.log('Session closed:', code, reason)
-  })
+  )
 
-  transcriber.on('transcript', (transcript: RealtimeTranscript) => {
+  transcriber.on('transcript', (transcript) => {
     if (!transcript.text) {
       return
     }
@@ -66,29 +65,33 @@ const run = async () => {
     }
   })
 
-  console.log('Connecting to real-time transcript service')
-  await transcriber.connect()
+  try {
+    console.log('Connecting to real-time transcript service')
+    await transcriber.connect()
 
-  console.log('Starting recording')
-  const recording = new SoxRecording({
-    channels: 1,
-    sampleRate: SAMPLE_RATE,
-    audioType: 'wav' // Linear PCM
-  })
+    console.log('Starting recording')
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: 'wav' // Linear PCM
+    })
 
-  recording.stream().pipeTo(transcriber.stream())
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream())
 
-  // Stop recording and close connection using Ctrl-C.
-  process.on('SIGINT', async () => {
-    console.log()
-    console.log('Stopping recording')
-    recording.stop()
+    // Stop recording and close connection using Ctrl-C.
+    process.on('SIGINT', async function () {
+      console.log()
+      console.log('Stopping recording')
+      recording.stop()
 
-    console.log('Closing real-time transcript connection')
-    await transcriber.close()
+      console.log('Closing real-time transcript connection')
+      await transcriber.close()
 
-    process.exit()
-  })
+      process.exit()
+    })
+  } catch (error) {
+    console.error(error)
+  }
 }
 
 run()
@@ -199,17 +202,29 @@ process.on('SIGINT', async function () {
 </Tab>
 </Tabs>
 
-## Step 1: Install dependencies
+## Step 1: Install dependencies and import packages
 
 <Tabs groupId="language">
 
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-Run `npm init` to create an NPM package, and then install the AssemblyAI package via NPM:
+<Steps>
+  <Step>
+    Run `npm init` to create an NPM package, and then install the necessary packages via NPM:
+    ```bash
+    npm install assemblyai node-record-lpcm16
+    ```
+  </Step>
+  <Step>
+    Create a file called `main.ts` and import the packages at the top of your file:
+    ```typescript
+    import { Readable } from 'stream'
+    import { AssemblyAI } from 'assemblyai'
+    import recorder from 'node-record-lpcm16'
+    ```
+  </Step>
+</Steps>
 
-```bash
-npm install assemblyai
-```
 
 </Tab>
 
@@ -231,21 +246,31 @@ In this step, you'll create an SDK client and configure it to use your API key.
 <Steps>
 <Step>
 
-Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+  In your file, define an async function.
 
+  ```typescript
+  const run = async () => {
+
+  }
+  ```
+
+
+</Step>
+<Step>
+  Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
 </Step>
 <Step>
 <Tabs groupId="language">
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-Configure the SDK to use your API key. Create a file called `main.ts` and add the below code, replacing `YOUR_API_KEY` with your copied API key.
+In you async function, create an SDK client and configure the client to use your API key by replacing `YOUR_API_KEY` with your copied API key.
 
 ```ts
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+}
 ```
 
 </Tab>
@@ -272,14 +297,12 @@ const API_KEY = "<YOUR_API_KEY>";
 <Tabs groupId="language">
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-Create a new streaming service from the AssemblyAI client. If you don't set a sample rate, it defaults to 16 kHz.
+Create a new streaming service from the AssemblyAI client and add it to your async function. If you don't set a sample rate, it defaults to 16 kHz.
 
 ```typescript
-const SAMPLE_RATE = 16_000;
-
 const transcriber = client.realtime.transcriber({
-  sampleRate: SAMPLE_RATE,
-});
+  sampleRate: 16_000
+})
 ```
 
 </Tab>
@@ -323,23 +346,23 @@ We recommend the following sample rates:
 </Step>
 <Step>
 
-Create functions to handle events from the real-time service.
+Add the following event handlers to your async function. 
 
 <Tabs groupId="language">
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
 ```typescript
-transcriber.on("open", ({ sessionId }) => {
-  console.log(`Session opened with ID: ${sessionId}`);
-});
+transcriber.on('open', ({ sessionId }) => {
+  console.log(`Session opened with ID: ${sessionId}`)
+})
 
-transcriber.on("error", (error: Error) => {
-  console.error("Error:", error);
-});
+transcriber.on('error', (error) => {
+  console.error('Error:', error)
+})
 
-transcriber.on("close", (code: number, reason: string) => {
-  console.log("Session closed:", code, reason);
-});
+transcriber.on('close', (code, reason) =>
+  console.log('Session closed:', code, reason)
+)
 ```
 
 </Tab>
@@ -379,7 +402,7 @@ function onClose(ws: WebSocket, code: number, reason: string | Buffer) {
 </Step>
 <Step>
 
-Create another function to handle transcripts. The real-time transcriber returns two types of transcripts: _partial_ and _final_.
+Create another event handler to handle incoming transcripts. The real-time transcriber returns two types of transcripts: _partial_ and _final_.
 
 - _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
 - _Final transcripts_ are returned when the service detects a pause in speech.
@@ -396,17 +419,17 @@ Create another function to handle transcripts. The real-time transcriber returns
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
 ```typescript
-transcriber.on("transcript", (transcript: RealtimeTranscript) => {
-  if (!transcript.text) {
-    return;
-  }
+  transcriber.on('transcript', (transcript) => {
+    if (!transcript.text) {
+      return
+    }
 
-  if (transcript.message_type === "PartialTranscript") {
-    console.log("Partial:", transcript.text);
-  } else {
-    console.log("Final:", transcript.text);
-  }
-});
+    if (transcript.message_type === 'PartialTranscript') {
+      console.log('Partial:', transcript.text)
+    } else {
+      console.log('Final:', transcript.text)
+    }
+  })
 ```
 
 <Tip>
@@ -462,7 +485,12 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
 ```typescript
-await transcriber.connect();
+try {
+  console.log('Connecting to real-time transcript service')
+  await transcriber.connect()
+} catch (error) {
+  console.error(error)
+}
 ```
 
 </Tab>
@@ -481,60 +509,24 @@ The WebSocket connection is already established in step 3.
 
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-In this step, you'll use [SoX](http://sox.sourceforge.net/), a cross-platform audio library, to record audio from your microphone.
-
 <Steps>
+
 <Step>
 
-Install SoX on your machine.
-
-<Tabs groupId="os">
-
-<Tab title="macOS">
-
-```bash
-brew install sox
-```
-
-</Tab>
-<Tab title="Windows">
-
-[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
-
-</Tab>
-<Tab title="Linux">
-
-```bash
-apt-get install sox libsox-fmt-all
-```
-
-</Tab>
-
-</Tabs>
-
-</Step>
-<Step>
-
-Download the [sox.ts](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.ts) (or [sox.js](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.js)) script to the root of your project, and
-
-The `SoxRecording` class lets you interact with SoX more easily.
-
-</Step>
-<Step>
-
-Create a new microphone stream. The `sampleRate` needs to be the same value as the real-time service settings.
+Create a new microphone stream after the transcriber connects. The `sampleRate` needs to be the same value as the real-time service settings.
 
 ```typescript
-const recording = new SoxRecording({
+console.log('Starting recording')
+const recording = recorder.record({
   channels: 1,
-  sampleRate: SAMPLE_RATE,
-  audioType: "wav",
-});
+  sampleRate: 16_000,
+  audioType: 'wav' // Linear PCM
+})
 ```
 
 <Note title="Audio data format">
 
-The `SoxRecording` formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+The `recorder` formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
 
 - Single channel
 - 16-bit signed integer PCM or mu-law encoding
@@ -549,12 +541,12 @@ By default, the Streaming STT service expects PCM16-encoded audio. If you want t
 Pipe the recording stream to the real-time stream to send the audio for transcription.
 
 ```typescript
-recording.stream().pipeTo(transcriber.stream());
+Readable.toWeb(recording.stream()).pipeTo(transcriber.stream())
 ```
 
 <Note title="Send audio buffers">
 
-If you don't use streams, you can also send buffers of audio data using `transcriber.sendAudio(buffer)`.
+  If you don't use streams, you can also send buffers of audio data using `transcriber.sendAudio(buffer)`.
 
 </Note>
 
@@ -568,35 +560,7 @@ If you don't use streams, you can also send buffers of audio data using `transcr
 In this step, you'll use [node-record-lpcm16](https://www.npmjs.com/package/node-record-lpcm16), a Node.js library, to record audio from your microphone.
 
 <Steps>
-<Step>
 
-First, install SoX on your machine.
-
-<Tabs groupId="os">
-
-<Tab title="macOS">
-
-```bash
-brew install sox
-```
-
-</Tab>
-<Tab title="Windows">
-
-[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
-
-</Tab>
-<Tab title="Linux">
-
-```bash
-apt-get install sox libsox-fmt-all
-```
-
-</Tab>
-
-</Tabs>
-
-</Step>
 <Step>
 
 Install the `node-record-lpcm16` package.
