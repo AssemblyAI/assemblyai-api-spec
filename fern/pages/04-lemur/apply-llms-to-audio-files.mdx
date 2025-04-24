@@ -109,54 +109,54 @@ print(result.json()["response"])
 import { AssemblyAI } from 'assemblyai'
 
 const client = new AssemblyAI({
-apiKey: '<YOUR_API_KEY>'
+  apiKey: '<YOUR_API_KEY>'
 })
 
 // You can use a local filepath:
 // const audioFile = "./example.mp3"
 
 // Or use a publicly-accessible URL:
-const audioFile =
-'https://assembly.ai/sports_injuries.mp3'
+const audioFile = 'https://assembly.ai/sports_injuries.mp3'
 
 const run = async () => {
-const transcript = await client.transcripts.transcribe({ audio: audioFile })
+  const transcript = await client.transcripts.transcribe({ audio: audioFile })
 
-const prompt = 'Provide a brief summary of the transcript.'
+  const prompt = 'Provide a brief summary of the transcript.'
 
-const { response } = await client.lemur.task({
-  transcript_ids: [transcript.id],
-  prompt,
-  final_model: 'anthropic/claude-3-5-sonnet'
-})
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcript.id],
+    prompt,
+    final_model: 'anthropic/claude-3-5-sonnet'
+  })
 
-console.log(response)
+  console.log(response)
 }
 
 run()
 ````
 
-  </Tab>
-  <Tab language="typescript" title="TypeScript">
-  ```typescript
+</Tab>
+<Tab language="typescript" title="TypeScript">
+```typescript
 import axios from 'axios';
 import fs from 'fs-extra';
 
 const base_url = "https://api.assemblyai.com";
 
 const headers = {
-authorization: "<YOUR_API_KEY>"
+  authorization: "<YOUR_API_KEY>"
 };
 
 const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
-const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-headers
+  const audioData = await fs.readFile(path)
+  const uploadResponse = await axios.post(`${base_url}/v2/upload`, audioData, {
+  headers
 })
+
 const uploadUrl = uploadResponse.data.upload_url
 
 const data = {
-audio_url: uploadUrl // You can also use a URL of an audio or video file on the web
+  audio_url: uploadUrl // You can also use a URL of an audio or video file on the web
 }
 
 const response = await axios.post(base_url + "/v2/transcript", data, { headers });
@@ -165,29 +165,29 @@ const transcript_id = response.data.id;
 const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
 
 while (true) {
-const transcript = (await axios.get(polling_endpoint, { headers })).data;
+  const transcript = (await axios.get(polling_endpoint, { headers })).data;
 
-    if (transcript.status === "completed") {
-      break;
-    }
-    else if (transcript.status === "error") {
-      throw new Error(`Transcription failed: ${transcript.error}`);
-    }
-    else {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
+  if (transcript.status === "completed") {
+    break;
+  }
+  else if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  }
+  else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
 
 const prompt = "Provide a brief summary of the transcript.";
 
 const lemur_data = {
-prompt: prompt,
-transcript_ids: [transcript_id],
-final_model: "anthropic/claude-3-5-sonnet"
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  final_model: "anthropic/claude-3-5-sonnet"
 };
 
 const result = await axios.post(base_url + "/lemur/v3/generate/task", lemur_data, { headers });
 console.log(result.data.response);
-
 ````
 </Tab>
 
