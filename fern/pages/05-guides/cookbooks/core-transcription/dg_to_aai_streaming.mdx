@@ -16,81 +16,134 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
     <Tab language="dg" title="Deepgram">
 
     ```python
-    import pyaudio
-    import websocket
-    import json
-    import threading
-    import time
+    import json, threading, time, websocket, pyaudio, signal
     from urllib.parse import urlencode
 
     DG_KEY = "YOUR_DG_API_KEY"        
 
-    params = dict(
-        model="nova-3",
-        encoding="linear16",
-        sample_rate="16000",
-        channels="1",
-        punctuate="true",        
-        interim_results="true"   
-    )
+    PARAMS = {
+        "model": "nova-3",
+        "encoding": "linear16",
+        "sample_rate": "16000",
+        "channels": "1",
+        "punctuate": "true",
+        "interim_results": "true",
+    }
 
-    EP = f"wss://api.deepgram.com/v1/listen?{urlencode(params)}"
+    EP = f"wss://api.deepgram.com/v1/listen?{urlencode(PARAMS)}"
 
-    FRAMES = 800                                     
-    p = pyaudio.PyAudio()
-    stream = p.open(format=pyaudio.paInt16,
-                    channels=1,
-                    rate=16000,
-                    input=True,
-                    frames_per_buffer=FRAMES)
+    FRAMES      = 800           
+    CHANNELS    = 1
+    FORMAT      = pyaudio.paInt16
+    SAMPLE_RATE = int(PARAMS["sample_rate"])
 
-    stop = threading.Event()
+    audio = stream = ws_app = None
+    audio_thread = ws_thread = None
+    stop_event = threading.Event()
 
-    # ---------- WebSocket callbacks ----------
+    # ── WebSocket callbacks ───────────────────────────────────────────────
     def on_open(ws):
         def mic_loop():
-            while not stop.is_set():
+            while not stop_event.is_set():
                 ws.send(stream.read(FRAMES, exception_on_overflow=False),
                         websocket.ABNF.OPCODE_BINARY)
-        threading.Thread(target=mic_loop, daemon=True).start()
+        global audio_thread
+        audio_thread = threading.Thread(target=mic_loop, daemon=True)
+        audio_thread.start()
 
     def on_message(ws, msg):
+        global final_metadata
         d = json.loads(msg)
         if d.get("type") == "Results":
             txt = d["channel"]["alternatives"][0]["transcript"]
             if d["is_final"]:
-                print(" " * 80, end="\r")          
+                print(" " * 80, end="\r")
                 print(txt)
             else:
                 print(txt, end="\r")
+        elif d.get("type") == "Metadata":
+            final_metadata = d  # save the metadata for later
 
-    def on_close(*_): stop.set()
+    def on_error(ws, error):
+        print(f"\nWebSocket error: {error}")
+        stop_event.set()
 
-    ws = websocket.WebSocketApp(
-        EP,
-        header={"Authorization": f"Token {DG_KEY}"},  
-        on_open=on_open,
-        on_message=on_message,
-        on_close=on_close
-    )
-    threading.Thread(target=ws.run_forever, daemon=True).start()
+    def on_close(ws, *args):
+        stop_event.set()
+        if final_metadata:
+            print("\nFinal Metadata from Deepgram:")
+            print(json.dumps(final_metadata, indent=2))
+        else:
+            print("\nNo metadata received before close.")
 
-    try:
-        while not stop.is_set():
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        stop.set(); ws.close()
-        stream.stop_stream(); stream.close(); p.terminate()
+
+        def graceful_shutdown(signum, frame):
+            print("\nCtrl+C received → shutting down …")
+            stop_event.set()
+
+            # Send CloseStream before closing WebSocket
+            if ws_app and ws_app.sock and ws_app.sock.connected:
+                try:
+                    ws_app.send(json.dumps({"type": "CloseStream"}))
+                    time.sleep(0.5)  # Allow time for final metadata to come through
+                except Exception as e:
+                    print("Error sending CloseStream:", e)
+                ws_app.close()
+
+            if ws_thread and ws_thread.is_alive():
+                ws_thread.join(timeout=2.0)
+
+    signal.signal(signal.SIGINT, graceful_shutdown)
+
+    def run():
+        global audio, stream, ws_app, ws_thread
+
+        # 1. open microphone
+        audio = pyaudio.PyAudio()
+        try:
+            stream = audio.open(format=FORMAT, channels=CHANNELS,
+                                rate=SAMPLE_RATE, input=True,
+                                frames_per_buffer=FRAMES)
+            print("Microphone stream opened. Press Ctrl+C to stop.")
+        except Exception as e:
+            print(f"Error opening mic: {e}")
+            audio.terminate()
+            return
+
+        # 2. create WebSocket
+        ws_app = websocket.WebSocketApp(
+            EP,
+            header={"Authorization": f"Token {DG_KEY}"},
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+
+        # 3. start WS thread (only once!)
+        ws_thread = threading.Thread(target=ws_app.run_forever, daemon=True)
+        ws_thread.start()
+
+        # 4. block main thread until WS thread ends
+        ws_thread.join()
+
+        # 5. cleanup
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+    if __name__ == "__main__":
+        run()
     ```
     </Tab>
     <Tab language="aai" title="AssemblyAI">
 
     ```python
-    import pyaudio
-    import websocket
-    import json
-    import threading
-    import time
+    import json, threading, time, websocket, pyaudio
     from urllib.parse import urlencode
     from datetime import datetime
 
@@ -301,12 +354,6 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
     </Tab>
 </Tabs>
 
-Here are helpful things to know about our streaming model:
-
-- `"formatted_finals": True` gives you punctuation + casing only on Final messages.
-- Message types are explicit: `"Partial"`, `"Final"`, `"Begin"`, `"Termination"`. No need to check is_final.
-- Send `{"type":"Terminate"}` (JSON) if you’d like a graceful close; otherwise just close the socket.
-
 
 ## Authentication
 
@@ -314,11 +361,7 @@ Here are helpful things to know about our streaming model:
     <Tab language="dg" title="Deepgram">
 
     ```python
-    import pyaudio
-    import websocket
-    import json
-    import threading
-    import time
+    import json, threading, time, websocket, pyaudio, signal
     from urllib.parse import urlencode
 
     DG_KEY = "YOUR_DG_API_KEY"  
@@ -327,11 +370,7 @@ Here are helpful things to know about our streaming model:
     <Tab language="aai" title="AssemblyAI">
 
         ```python
-        import pyaudio
-        import websocket
-        import json
-        import threading
-        import time
+        import json, threading, time, websocket, pyaudio
         from urllib.parse import urlencode
         from datetime import datetime
 
@@ -353,26 +392,25 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
 <Tabs groupId="language">
     <Tab language="dg" title="Deepgram">
         ```python
-        params = dict(
-            model="nova-3",
-            encoding="linear16",
-            sample_rate="16000",
-            channels="1",
-            punctuate="true",        
-            interim_results="true"   
-        )
+        PARAMS = {
+            "model": "nova-3",
+            "encoding": "linear16",
+            "sample_rate": "16000",
+            "channels": "1",
+            "punctuate": "true",
+            "interim_results": "true",
+        }
 
-        EP = f"wss://api.deepgram.com/v1/listen?{urlencode(params)}"
+        EP = f"wss://api.deepgram.com/v1/listen?{urlencode(PARAMS)}"
 
-        FRAMES = 800                                     
-        p = pyaudio.PyAudio()
-        stream = p.open(format=pyaudio.paInt16,
-                        channels=1,
-                        rate=16000,
-                        input=True,
-                        frames_per_buffer=FRAMES)
-
-        stop = threading.Event()
+        FRAMES = 800          
+        CHANNELS = 1
+        FORMAT = pyaudio.paInt16
+        SAMPLE_RATE = int(PARAMS["sample_rate"])
+        
+        audio = stream = ws_app = None
+        audio_thread = ws_thread = None
+        stop_event = threading.Event()
         ```
     </Tab>
     <Tab language="aai" title="AssemblyAI">
@@ -402,25 +440,31 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
     </Tab>
 </Tabs>
 
-| Step | Deepgram code | AssemblyAI code |
-|------|---------------|-----------------|
-| **1. Build the query-string** | `params = {model, encoding, sample_rate, …}` then `urlencode(params)` | `CONNECTION_PARAMS = {sample_rate, encoding, formatted_finals}` then `urlencode(CONNECTION_PARAMS)` |
-| **2. Assemble the WebSocket URL** | `wss://api.deepgram.com/v1/listen?…` → includes model name, asks for punctuation (`punctuate=true`) and interim results | `wss://streaming.assemblyai.com/v3/ws?…` → no model param (one live model), asks for formatted **finals** only |
-| **3. Choose audio-chunk size** | `FRAMES = 800` (50 ms @ 16 kHz) | `FRAMES_PER_BUFFER = 800` (same size, different variable name) |
-| **4. Open the microphone** | Creates a `PyAudio` instance (`p`), opens a mono 16-kHz PCM stream, returns a `stream` object | Same, but stores references in higher-scope vars (`audio`, `stream`, `FORMAT`, `CHANNELS`) so other functions can access/close them cleanly |
-| **5. Create a cancellation flag** | `stop = threading.Event()` – used to stop audio loop and shut down the WS | `stop_event = threading.Event()` – same purpose, slightly clearer name |
+Here are helpful things to know about connecting our streaming model:
 
-## Adding Features
+One universal model – no model param needed. 
+- Just hit `wss://streaming.assemblyai.com/v3/ws`. The live endpoint always uses our latest, best-performing model, so you can drop Deepgram’s `model="nova-3"` line entirely.
+
+formatted_finals=True ≈ Deepgram’s punctuate=true
+- When the flag is set to `True`, every Final message arrives with smart punctuation & casing.
+- Set it to `False` (or omit it) to get raw lowercase text—useful if you do your own formatting.
+
+Partials are always on like Deepgram’s `interim_results=true` 
+- AssemblyAI streams Partial updates (interim results) automatically. There’s no switch to toggle. Expect fast, token-level updates that refine until each Final is emitted.
+
+## Opening the WebSocket
 
 <Tabs groupId="language">
     <Tab language="dg" title="Deepgram">
         ```python
         def on_open(ws):
             def mic_loop():
-                while not stop.is_set():
+                while not stop_event.is_set():
                     ws.send(stream.read(FRAMES, exception_on_overflow=False),
                             websocket.ABNF.OPCODE_BINARY)
-            threading.Thread(target=mic_loop, daemon=True).start()
+            global audio_thread
+            audio_thread = threading.Thread(target=mic_loop, daemon=True)
+            audio_thread.start()
         ```
     </Tab>
     <Tab language="aai" title="AssemblyAI">
@@ -453,19 +497,27 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
     ```
     </Tab>
 </Tabs>
+<Note>
+    Tip: Adding error-handling and log lines (as in the AssemblyAI snippet) lets you see exactly when the socket opens, audio starts, or a read fails—catching issues early saving time debugging silent failures..
+</Note>
+
+## Receiving messsages from the WebSocket
 
 <Tabs groupId="language">
     <Tab language="dg" title="Deepgram">
         ```python
         def on_message(ws, msg):
+            global final_metadata
             d = json.loads(msg)
             if d.get("type") == "Results":
                 txt = d["channel"]["alternatives"][0]["transcript"]
                 if d["is_final"]:
-                    print(" " * 80, end="\r")          
+                    print(" " * 80, end="\r")
                     print(txt)
                 else:
                     print(txt, end="\r")
+            elif d.get("type") == "Metadata":
+                final_metadata = d  # save the metadata for later
         ```
     </Tab>
     <Tab language="aai" title="AssemblyAI">
@@ -514,10 +566,49 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
     </Tab>
 </Tabs>
 
+Helpful things to know about AssemblyAI’s message payloads:
+
+- Clear message types – Instead of checking `is_final`, you’ll receive explicit `"Begin"`, `"Partial"`, `"Final"`, and `"Termination"` events, making your logic simpler and more readable.
+
+- Session metadata up-front – The first `"Begin"` message delivers a `session_id` and expiry timestamp. You can log or surface these for tracing or billing.
+
+- Formatted vs. raw finals – `"Final"` objects include a boolean formatted. When you set `formatted_finals=true`, punctuation/casing appears in the `Final Transctript`, so you can toggle display styles on the fly.
+
+## Handling Errors 
 <Tabs groupId="language">
     <Tab language="dg" title="Deepgram">
         ```python
-        def on_close(*_): stop.set()
+        def on_error(ws, error):
+            print(f"\nWebSocket error: {error}")
+            stop_event.set()
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+    ```python
+    def on_error(ws, error):
+        """Called when a WebSocket error occurs."""
+        print(f'\nWebSocket Error: {error}')
+
+        # Attempt to signal stop on error
+        stop_event.set()
+            ```
+    </Tab>
+</Tabs>
+
+Capture and log any errors emitted by the WebSocket connection to streamline troubleshooting and maintain smooth operation.
+
+## Closing the WebSocket
+<Tabs groupId="language">
+    <Tab language="dg" title="Deepgram">
+        ```python
+        def on_close(ws, *args):
+            stop_event.set()
+            if final_metadata:
+                print("\nFinal Metadata from Deepgram:")
+                print(json.dumps(final_metadata, indent=2))
+            else:
+                print("\nNo metadata received before close.")
         ```
     </Tab>
     <Tab language="aai" title="AssemblyAI">
@@ -546,101 +637,111 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
     </Tab>
 </Tabs>
 
+## Open the microphone stream and create a WebSocket
+    <Tabs groupId="language">
+        <Tab language="dg" title="Deepgram">
+            ```python
+            global audio, stream, ws_app, ws_thread
+
+            # 1. open microphone
+            audio = pyaudio.PyAudio()
+            try:
+                stream = audio.open(format=FORMAT, channels=CHANNELS,
+                                    rate=SAMPLE_RATE, input=True,
+                                    frames_per_buffer=FRAMES)
+                print("Microphone stream opened. Press Ctrl+C to stop.")
+            except Exception as e:
+                print(f"Error opening mic: {e}")
+                audio.terminate()
+                return
+
+            # 2. create WebSocket
+            ws_app = websocket.WebSocketApp(
+                EP,
+                header={"Authorization": f"Token {DG_KEY}"},
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close,
+            )
+
+            ws_thread = threading.Thread(target=ws_app.run_forever, daemon=True)
+            ws_thread.start()
+            ws_thread.join()
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+    ```python
+      global audio, stream, ws_app
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return # Exit if microphone cannot be opened
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={'Authorization': YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+    ```
+    </Tab>
+</Tabs>
+
+Helpful things to know about AssemblyAI’s WebSocket Closure:
+
+Connection diagnostics on tap
+- If the socket closes unexpectedly, AssemblyAI supplies both a status code and a reason message (close_status_code, close_msg), so you know immediately whether the server timed out, refused auth, or encountered another error.
+
+Metadata arrives at session start, not at close
+- Deepgram sends its final metadata only when the socket closes. AssemblyAI delivers session info up front in the initial "Begin" message, so you can log IDs and expiry times right away.
+
+
 <Tabs groupId="language">
     <Tab language="dg" title="Deepgram">
         ```python
-        ws = websocket.WebSocketApp(
-            EP,
-            header={"Authorization": f"Token {DG_KEY}"},  
-            on_open=on_open,
-            on_message=on_message,
-            on_close=on_close
-        )
-        threading.Thread(target=ws.run_forever, daemon=True).start()
+        def graceful_shutdown(signum, frame):
+            print("\nCtrl+C received → shutting down …")
+            stop_event.set()
 
-        try:
-            while not stop.is_set():
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            stop.set(); ws.close()
-            stream.stop_stream(); stream.close(); p.terminate()
-                ```
-            </Tab>
-            <Tab language="aai" title="AssemblyAI">
-    ```python
-    def run():
-        global audio, stream, ws_app
-
-        # Initialize PyAudio
-        audio = pyaudio.PyAudio()
-
-        # Open microphone stream
-        try:
-            stream = audio.open(
-                input=True,
-                frames_per_buffer=FRAMES_PER_BUFFER,
-                channels=CHANNELS,
-                format=FORMAT,
-                rate=SAMPLE_RATE
-            )
-            print("Microphone stream opened successfully.")
-            print("Speak into your microphone. Press Ctrl+C to stop.")
-        except Exception as e:
-            print(f"Error opening microphone stream: {e}")
-            if audio:
-                audio.terminate()
-            return # Exit if microphone cannot be opened
-
-        # Create WebSocketApp
-        ws_app = websocket.WebSocketApp(
-            API_ENDPOINT,
-            header={'Authorization': YOUR_API_KEY},
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-
-        # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
-        ws_thread = threading.Thread(target=ws_app.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
-
-        try:
-            # Keep main thread alive until interrupted
-            while ws_thread.is_alive():
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nCtrl+C received. Stopping...")
-            stop_event.set() # Signal audio thread to stop
-
-            # Send termination message to the server
+            # Send CloseStream before closing WebSocket
             if ws_app and ws_app.sock and ws_app.sock.connected:
                 try:
-                    terminate_message = {"type": "Terminate"}
-                    print(f"Sending termination message: {json.dumps(terminate_message)}")
-                    ws_app.send(json.dumps(terminate_message))
-                    # Give a moment for messages to process before forceful close
-                    time.sleep(0.5)
+                    ws_app.send(json.dumps({"type": "CloseStream"}))
+                    time.sleep(0.5)  # Allow time for final metadata to come through
                 except Exception as e:
-                    print(f"Error sending termination message: {e}")
-
-            # Close the WebSocket connection (will trigger on_close)
-            if ws_app:
+                    print("Error sending CloseStream:", e)
                 ws_app.close()
 
-            # Wait for WebSocket thread to finish
-            ws_thread.join(timeout=2.0)
+            if ws_thread and ws_thread.is_alive():
+                ws_thread.join(timeout=2.0)
 
-        except Exception as e:
-            print(f"\nAn unexpected error occurred: {e}")
-            stop_event.set()
-            if ws_app:
-                ws_app.close()
-            ws_thread.join(timeout=2.0)
+        signal.signal(signal.SIGINT, graceful_shutdown)
 
-        finally:
-            # Final cleanup (already handled in on_close, but good as a fallback)
+        def run():
+            # Open microphone and create WebSocket
+
+            # cleanup
             if stream and stream.is_active():
                 stream.stop_stream()
             if stream:
@@ -648,18 +749,65 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
             if audio:
                 audio.terminate()
             print("Cleanup complete. Exiting.")
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+    ```python
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set() # Signal audio thread to stop
 
-    if __name__ == "__main__":
-        run()
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
     ```
     </Tab>
 </Tabs>
 
-| Concern | Deepgram | AssemblyAI |
-|---------|----------|------------|
-| WS URL | `…/v1/listen?...` | `…/v3/ws?...` |
-| Auth header | `Token <key>` | `<key>` |
-| Partial updates | `"type":"Results", is_final=false` | `"type":"Partial"` |
-| Final updates | `is_final=true` | `"type":"Final"` |
-| Punctuation | `punctuate=true` | `formatted_finals=true` |
-| Encoding param | `linear16` | `pcm_s16le` (same bits, different name) |
+Helpful things to know about AssemblyAI’s shutdown:
+
+JSON Payload difference
+- When closing the stream with AssemblyAI, your JSON payload will have be `{"type: "Terminate" }` instead of `{"type: "CloseStream" }`
+
+Server handles idle timeouts
+- If you forget to send Terminate, AssemblyAI will close the socket after an idle window of 1 minute.
+
+No metadata race condition
+- Because AssemblyAI already gave you session info at "Begin" and doesn’t append extra data at shutdown, you don’t have to sleep (time.sleep(0.5)) to wait for “final metadata” before closing—making the exit faster and less error-prone.
+
+
