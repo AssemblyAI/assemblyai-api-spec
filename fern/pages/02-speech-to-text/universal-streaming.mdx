@@ -16,8 +16,11 @@ To run this quickstart you will need:
 - A valid API key
 
 To run the quickstart:
+
 <Tabs>
+
 <Tab title="Python" language="python" default>
+
 <Steps>
     <Step>
     Create a new Python file (for example, `main.py`) and paste the code provided below inside.
@@ -38,8 +41,11 @@ To run the quickstart:
     </Step>
 
 </Steps>
+
 </Tab>
+
 <Tab title="JavaScript" language="javascript">
+
 <Steps>
     <Step>
     Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
@@ -62,6 +68,7 @@ To run the quickstart:
 </Steps>
 </Tab>
 </Tabs>
+
 <Tabs>
 <Tab title="Python" language="python">
 
@@ -144,7 +151,7 @@ def on_message(ws, message):
         elif msg_type == 'Final':
             text = data.get('text', '')
             is_formatted = data.get('formatted', False)
-            
+
             if text:
                 print(' ' * 80, end='\r', flush=True)
                 if not is_formatted:
@@ -277,19 +284,19 @@ def run():
 
 if __name__ == "__main__":
     run()
-
 ```
 
 <Accordion title='Authenticate With A Temporary Token'>
+
 ```python {6-12}
 def generate_temp_token(api_key, expires_in_seconds=60):
     """Generate a temporary authentication token that expires after the specified time."""
     import requests
     from urllib.parse import urlencode
-    
+
     url = "https://streaming.assemblyai.com/v3/token"
     response = requests.get(
-        f"{url}?{urlencode({'expires_in_seconds': expires_in_seconds})}", 
+        f"{url}?{urlencode({'expires_in_seconds': expires_in_seconds})}",
         headers={"Authorization": api_key}
     )
     data = response.json()
@@ -299,16 +306,17 @@ def generate_temp_token(api_key, expires_in_seconds=60):
 # temp_token = generate_temp_token(YOUR_API_KEY)
 # Then use temp_token instead of YOUR_API_KEY for authentication
 ```
+
 </Accordion>
 
-
 </Tab>
+
 <Tab title="JavaScript" language="javascript">
 
 ```javascript
-const WebSocket = require('ws');
-const mic = require('mic');
-const querystring = require('querystring');
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
 
 // --- Configuration ---
 const YOUR_API_KEY = "<YOUR-API-KEY>"; // Replace with your actual API key
@@ -333,7 +341,7 @@ let stopRequested = false;
 
 // --- Helper functions ---
 function clearLine() {
-  process.stdout.write('\r' + ' '.repeat(80) + '\r');
+  process.stdout.write("\r" + " ".repeat(80) + "\r");
 }
 
 function formatTimestamp(timestamp) {
@@ -343,52 +351,53 @@ function formatTimestamp(timestamp) {
 // --- Main function ---
 function run() {
   console.log("Starting AssemblyAI real-time transcription...");
-  
+
   // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
-      'Authorization': YOUR_API_KEY
-    }
+      Authorization: YOUR_API_KEY,
+    },
   });
 
   // Setup WebSocket event handlers
-  ws.on('open', () => {
+  ws.on("open", () => {
     console.log("WebSocket connection opened.");
     console.log(`Connected to: ${API_ENDPOINT}`);
-    
+
     // Start the microphone
     startMicrophone();
   });
 
-  ws.on('message', (message) => {
+  ws.on("message", (message) => {
     try {
       const data = JSON.parse(message);
       const msgType = data.type;
 
-      if (msgType === 'Begin') {
+      if (msgType === "Begin") {
         const sessionId = data.id;
         const expiresAt = data.expires_at;
-        console.log(`\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`);
-      }
-      else if (msgType === 'Partial') {
-        const text = data.text || '';
+        console.log(
+          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
+        );
+      } else if (msgType === "Partial") {
+        const text = data.text || "";
         if (text) {
           process.stdout.write(`\r${text}`);
         }
-      }
-      else if (msgType === 'Final') {
+      } else if (msgType === "Final") {
         if (CONNECTION_PARAMS.formatted_finals === data.formatted) {
-          const text = data.text || '';
+          const text = data.text || "";
           if (text) {
             clearLine();
             console.log(text);
           }
         }
-      }
-      else if (msgType === 'Termination') {
+      } else if (msgType === "Termination") {
         const audioDuration = data.audio_duration_seconds;
         const sessionDuration = data.session_duration_seconds;
-        console.log(`\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`);
+        console.log(
+          `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+        );
       }
     } catch (error) {
       console.error(`\nError handling message: ${error}`);
@@ -396,12 +405,12 @@ function run() {
     }
   });
 
-  ws.on('error', (error) => {
+  ws.on("error", (error) => {
     console.error(`\nWebSocket Error: ${error}`);
     cleanup();
   });
 
-  ws.on('close', (code, reason) => {
+  ws.on("close", (code, reason) => {
     console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
     cleanup();
   });
@@ -416,18 +425,18 @@ function startMicrophone() {
       rate: SAMPLE_RATE.toString(),
       channels: CHANNELS.toString(),
       debug: false,
-      exitOnSilence: 6  // This won't actually exit, just a parameter for mic
+      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
     });
 
     micInputStream = micInstance.getAudioStream();
-    
-    micInputStream.on('data', (data) => {
+
+    micInputStream.on("data", (data) => {
       if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
         ws.send(data);
       }
     });
 
-    micInputStream.on('error', (err) => {
+    micInputStream.on("error", (err) => {
       console.error(`Microphone Error: ${err}`);
       cleanup();
     });
@@ -443,7 +452,7 @@ function startMicrophone() {
 
 function cleanup() {
   stopRequested = true;
-  
+
   // Stop microphone if it's running
   if (micInstance) {
     try {
@@ -460,10 +469,12 @@ function cleanup() {
       // Send termination message if possible
       if (ws.readyState === WebSocket.OPEN) {
         const terminateMessage = { type: "Terminate" };
-        console.log(`Sending termination message: ${JSON.stringify(terminateMessage)}`);
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
         ws.send(JSON.stringify(terminateMessage));
       }
-      
+
       // Close the connection
       ws.close();
     } catch (error) {
@@ -477,14 +488,14 @@ function cleanup() {
 
 function setupTerminationHandlers() {
   // Handle Ctrl+C and other termination signals
-  process.on('SIGINT', () => {
+  process.on("SIGINT", () => {
     console.log("\nCtrl+C received. Stopping...");
     cleanup();
     // Give time for cleanup before exiting
     setTimeout(() => process.exit(0), 1000);
   });
 
-  process.on('SIGTERM', () => {
+  process.on("SIGTERM", () => {
     console.log("\nTermination signal received. Stopping...");
     cleanup();
     // Give time for cleanup before exiting
@@ -492,7 +503,7 @@ function setupTerminationHandlers() {
   });
 
   // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
+  process.on("uncaughtException", (error) => {
     console.error(`\nUncaught exception: ${error}`);
     cleanup();
     // Give time for cleanup before exiting
@@ -503,32 +514,42 @@ function setupTerminationHandlers() {
 // Start the application
 run();
 ```
+
 <Accordion title='Authenticate With A Temporary Token'>
+
 ```js {6-13}
 async function generateTempToken(apiKey, expiresInSeconds = 60) {
   // Generate a temporary authentication token that expires after the specified time.
   const url = new URL("https://streaming.assemblyai.com/v3/token");
-  url.search = new URLSearchParams({ expires_in_seconds: expiresInSeconds }).toString();
-  
+  url.search = new URLSearchParams({
+    expires_in_seconds: expiresInSeconds,
+  }).toString();
+
   const response = await fetch(url, {
     headers: {
-      "Authorization": apiKey
-    }
+      Authorization: apiKey,
+    },
   });
-  
+
   const data = await response.json();
-  return data.token;}
+  return data.token;
+}
 
 // Example usage:
 // const tempToken = generateTempToken(YOUR_API_KEY)
 // Then use tempToken instead of YOUR_API_KEY for authentication
 ```
+
 </Accordion>
 
 </Tab>
 </Tabs>
 
-## Early Access Considerations
+## Core concepts
+
+[Universal-Streaming API: Message Sequence Breakdown](/docs/speech-to-text/universal-streaming-messages-guide)
+
+## Early access considerations
 
 ### Recommendations
 
@@ -576,7 +597,6 @@ These are issues currently known to exist in the API and being worked on by our 
 <ParamField path="endpoint_silence_threshold_ms" type="int" default={"700"}>
   The endpoint silence threshold in milliseconds.
 </ParamField>
-
 
 ### Audio requirements
 
