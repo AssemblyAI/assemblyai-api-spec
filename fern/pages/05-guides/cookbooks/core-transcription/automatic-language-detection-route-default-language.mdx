@@ -4,43 +4,52 @@ title: "Route to Default Language if Language Confidence is Low"
 
 This guide will show you how to use AssemblyAI's API to resubmit a request using a default language if the Automatic Language Detection's `language_confidence` is below a certain threshold.
 
-## Get Started
+## Getting started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
-## Step-by-Step Instructions
+## Step-by-step instructions
 
 Install the SDK:
 
 <CodeBlocks>
-  ```js npm install assemblyai ``` ```python pip install assemblyai ```
+
+```js
+npm install assemblyai
+```
+
+```python
+pip install assemblyai
+```
+
 </CodeBlocks>
 
 Import the `assemblyai` package and set the API key.
 
 <CodeBlocks>
+
 ```js
-import { AssemblyAI } from 'assemblyai';
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-apiKey: 'YOUR_API_KEY'
+  apiKey: "YOUR_API_KEY",
 });
-
-````
+```
 
 ```python
 import assemblyai as aai
 
 aai.settings.api_key = "YOUR_API_KEY"
-````
+```
 
 </CodeBlocks>
 
 Define a `default_language`, which should be set to the [language code](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/supported-languages) that will be used to rerun the transcript if language detection runs with low `language_confidence`.
 
 <CodeBlocks>
+
 ```js
-const default_language = 'LANGUAGE_CODE';
+const default_language = "LANGUAGE_CODE";
 ```
 
 ```python
@@ -54,24 +63,24 @@ Define an `audio_url` that is set to a link to the audio file. Define and set th
 If a transcript ends up with a `language_confidence` below this value, the transcript will error out and will return the transcript using the `default_language`.
 
 <CodeBlocks>
+
 ```js
-const audioUrl = 'https://example.org/audio.mp3';
+const audioUrl = "https://example.org/audio.mp3";
 
 const params = {
-audio: audioUrl,
-language_detection: true,
-language_confidence_threshold: 0.8,
-// Add any other params
+  audio: audioUrl,
+  language_detection: true,
+  language_confidence_threshold: 0.8,
+  // Add any other params
 };
-
-````
+```
 
 ```python
 transcriber = aai.Transcriber()
 audio_url = ("https://example.org/audio.mp3")
 config = aai.TranscriptionConfig(language_detection=True, language_confidence_threshold=0.8)
 transcript = transcriber.transcribe(audio_url, config)
-````
+```
 
 </CodeBlocks>
 
@@ -96,38 +105,47 @@ When rerunning with the default language, the configuration is updated to:
 - Set `language_code` to the `default_language`
 
 <Note>
-  You will not be charged for the first transcript if there is an error. You
-  will only be charged for the transcript that processes successfully.
+
+You will not be charged for the first transcript if there is an error. You
+will only be charged for the transcript that processes successfully.
+
 </Note>
 
 <CodeBlocks>
+
 ```js
 const run = async (params) => {
+  const transcript = await client.transcripts.transcribe(params);
 
-    const transcript = await client.transcripts.transcribe(params);
-
-    if (transcript.status === 'error') {
-        if (transcript.error.includes("below the requested confidence threshold value")) {
-            console.log(
-                `${transcript.error}. Running transcript again with language set to '${default_language}'.`
-            );
-            params = {...params, language_detection: false, language_confidence_threshold: null, language_code: default_language};
-            run(params);
-            return;
-        }
-
-        console.log(transcript.error);
-        return;
+  if (transcript.status === "error") {
+    if (
+      transcript.error.includes(
+        "below the requested confidence threshold value"
+      )
+    ) {
+      console.log(
+        `${transcript.error}. Running transcript again with language set to '${default_language}'.`
+      );
+      params = {
+        ...params,
+        language_detection: false,
+        language_confidence_threshold: null,
+        language_code: default_language,
+      };
+      run(params);
+      return;
     }
 
-    console.log(`Transcript ID: ${transcript.id}`);
-    console.log(transcript.text);
+    console.log(transcript.error);
+    return;
+  }
 
+  console.log(`Transcript ID: ${transcript.id}`);
+  console.log(transcript.text);
 };
 
 run(params);
-
-````
+```
 
 ```python
 if transcript.error:
@@ -142,6 +160,6 @@ if transcript.error:
 else:
     print(f"Transcript ID: {transcript.id}")
     print(transcript.text)
-````
+```
 
 </CodeBlocks>

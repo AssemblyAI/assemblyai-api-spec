@@ -1,0 +1,696 @@
+---
+title: "Universal-Streaming Early Access Guide"
+hide-nav-links: true
+description: "Transcribe live audio with Streaming Speech-to-Text"
+---
+
+<Note title="Universal-Streaming Early Access">
+  This is an early access version of the Streaming API. It is subject to change.
+</Note>
+
+## Quickstart
+
+To run this quickstart you will need:
+
+- Python or JavaScript installed
+- A valid API key
+
+To run the quickstart:
+<Tabs>
+<Tab title="Python" language="python" default>
+<Steps>
+    <Step>
+    Create a new Python file (for example, `main.py`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 10.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    pip install websocket-client pyaudio
+    ```
+
+    </Step>
+    <Step>
+    Run with `python main.py`
+    </Step>
+
+</Steps>
+</Tab>
+<Tab title="JavaScript" language="javascript">
+<Steps>
+    <Step>
+    Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 10.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    npm install ws mic
+    ```
+
+    </Step>
+    <Step>
+    Run with `node main.js`
+    </Step>
+
+</Steps>
+</Tab>
+</Tabs>
+<Tabs>
+<Tab title="Python" language="python">
+
+```python
+import pyaudio
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
+
+# --- Configuration ---
+YOUR_API_KEY = "<YOUR-API-KEY>" # Replace with your actual API key
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "encoding": "pcm_s16le",
+    "formatted_finals": True, # Request formatted final transcripts
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 800 # 50ms of audio (0.05s \* 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event() # To signal the audio thread to stop
+
+# --- WebSocket Event Handlers ---
+
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
+
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f'Error streaming audio: {e}')
+                # If stream read fails, likely means it's closed, stop the loop
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True # Allow main thread to exit even if this thread is running
+    audio_thread.start()
+
+def on_message(ws, message):
+    """Called when a message is received from the server."""
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == 'Begin':
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+
+        elif msg_type == 'Partial':
+            text = data.get('text', '')
+            if text:
+                print(text, end='\r', flush=True)
+
+        elif msg_type == 'Final':
+            text = data.get('text', '')
+            is_formatted = data.get('formatted', False)
+            
+            if text:
+                print(' ' * 80, end='\r', flush=True)
+                if not is_formatted:
+                    print(text, end='\r', flush=True)
+                else:
+                    print(text, end='\r\n', flush=True)
+            # You can also access other fields like 'words', 'confidence', etc.
+            # print(f"Final Transcript received: {data}") # Uncomment for full details
+
+        elif msg_type == 'Termination':
+            audio_duration = data.get('audio_duration_seconds')
+            session_duration = data.get('session_duration_seconds')
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+
+    except json.JSONDecodeError:
+        print(f"\nReceived non-JSON message: {message}")
+    except Exception as e:
+        print(f'\nError handling message: {e}')
+        print(f"Message data: {message}") # Print raw message on error
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f'\nWebSocket Error: {error}')
+
+    # Attempt to signal stop on error
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f'\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}')
+
+    # Ensure audio resources are released
+    global stream, audio
+    stop_event.set() # Signal audio thread just in case it's still running
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+         audio_thread.join(timeout=1.0)
+
+# --- Main Execution ---
+
+def run():
+    global audio, stream, ws_app
+
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return # Exit if microphone cannot be opened
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={'Authorization': YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set() # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+if __name__ == "__main__":
+    run()
+
+```
+
+<Accordion title='Authenticate With A Temporary Token'>
+```python {6-12}
+def generate_temp_token(api_key, expires_in_seconds=60):
+    """Generate a temporary authentication token that expires after the specified time."""
+    import requests
+    from urllib.parse import urlencode
+    
+    url = "https://streaming.assemblyai.com/v3/token"
+    response = requests.get(
+        f"{url}?{urlencode({'expires_in_seconds': expires_in_seconds})}", 
+        headers={"Authorization": api_key}
+    )
+    data = response.json()
+    return data.get("token")
+
+# Example usage:
+# temp_token = generate_temp_token(YOUR_API_KEY)
+# Then use temp_token instead of YOUR_API_KEY for authentication
+```
+</Accordion>
+
+
+</Tab>
+<Tab title="JavaScript" language="javascript">
+
+```javascript
+const WebSocket = require('ws');
+const mic = require('mic');
+const querystring = require('querystring');
+
+// --- Configuration ---
+const YOUR_API_KEY = "<YOUR-API-KEY>"; // Replace with your actual API key
+
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  formatted_finals: true, // Request formatted final transcripts
+};
+
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+// Audio Configuration
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+// Global variables
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+
+// --- Helper functions ---
+function clearLine() {
+  process.stdout.write('\r' + ' '.repeat(80) + '\r');
+}
+
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
+}
+
+// --- Main function ---
+function run() {
+  console.log("Starting AssemblyAI real-time transcription...");
+  
+  // Initialize WebSocket connection
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      'Authorization': YOUR_API_KEY
+    }
+  });
+
+  // Setup WebSocket event handlers
+  ws.on('open', () => {
+    console.log("WebSocket connection opened.");
+    console.log(`Connected to: ${API_ENDPOINT}`);
+    
+    // Start the microphone
+    startMicrophone();
+  });
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === 'Begin') {
+        const sessionId = data.id;
+        const expiresAt = data.expires_at;
+        console.log(`\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`);
+      }
+      else if (msgType === 'Partial') {
+        const text = data.text || '';
+        if (text) {
+          process.stdout.write(`\r${text}`);
+        }
+      }
+      else if (msgType === 'Final') {
+        if (CONNECTION_PARAMS.formatted_finals === data.formatted) {
+          const text = data.text || '';
+          if (text) {
+            clearLine();
+            console.log(text);
+          }
+        }
+      }
+      else if (msgType === 'Termination') {
+        const audioDuration = data.audio_duration_seconds;
+        const sessionDuration = data.session_duration_seconds;
+        console.log(`\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`);
+      }
+    } catch (error) {
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error(`\nWebSocket Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on('close', (code, reason) => {
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
+    cleanup();
+  });
+
+  // Handle process termination
+  setupTerminationHandlers();
+}
+
+function startMicrophone() {
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6  // This won't actually exit, just a parameter for mic
+    });
+
+    micInputStream = micInstance.getAudioStream();
+    
+    micInputStream.on('data', (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on('error', (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
+}
+
+function cleanup() {
+  stopRequested = true;
+  
+  // Stop microphone if it's running
+  if (micInstance) {
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
+    micInstance = null;
+  }
+
+  // Close WebSocket connection if it's open
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      // Send termination message if possible
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(`Sending termination message: ${JSON.stringify(terminateMessage)}`);
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      
+      // Close the connection
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
+  }
+
+  console.log("Cleanup complete.");
+}
+
+function setupTerminationHandlers() {
+  // Handle Ctrl+C and other termination signals
+  process.on('SIGINT', () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
+run();
+```
+<Accordion title='Authenticate With A Temporary Token'>
+```js {6-13}
+async function generateTempToken(apiKey, expiresInSeconds = 60) {
+  // Generate a temporary authentication token that expires after the specified time.
+  const url = new URL("https://streaming.assemblyai.com/v3/token");
+  url.search = new URLSearchParams({ expires_in_seconds: expiresInSeconds }).toString();
+  
+  const response = await fetch(url, {
+    headers: {
+      "Authorization": apiKey
+    }
+  });
+  
+  const data = await response.json();
+  return data.token;}
+
+// Example usage:
+// const tempToken = generateTempToken(YOUR_API_KEY)
+// Then use tempToken instead of YOUR_API_KEY for authentication
+```
+</Accordion>
+
+</Tab>
+</Tabs>
+
+## Early Access Considerations
+
+### Recommendations
+
+- Use an audio chunk size of 50ms. Larger chunk sizes are workable, but may result in latency fluctuations
+- Use a sample rate of 16 kHz and encoding of pcm_s16le. 8 kHz or 48 kHz are workable, but may result in latency fluctuations or increased latency
+- Do not exceed your alloted session concurrency, otherwise experienced latency will not be representative of latency at launch
+
+<Note>
+
+This is an early access version of the model. Development is ongoing to reduce latency variability.
+
+</Note>
+
+### Known Issues
+
+These are issues currently known to exist in the API and being worked on by our team:
+
+- Brief utterances will not endpoint and remain as partial transcripts
+- Partial transcripts may start with sub-words
+- Subsequent partials may contain the same text content
+- Transcript confidence scores may currently be unstable
+- The session `Begin` message's `expires_at` field returns current epoch time
+- Partial and final transcripts may return unexpected word-level timestamps
+
+## Reference
+
+### Connection parameters
+
+<ParamField path="sample_Rate" type="int" required={true}>
+  The sample rate of the audio stream.
+</ParamField>
+
+<ParamField path="encoding" type="string" required={true}>
+  The encoding of the audio stream.
+</ParamField>
+
+<ParamField path="formatted_finals" type="boolean" default={"False"}>
+  Whether to return formatted final transcripts.
+</ParamField>
+
+<ParamField path="unformatted_finals" type="boolean" default={"True"}>
+  Whether to return unformatted final transcripts.
+</ParamField>
+
+<ParamField path="endpoint_silence_threshold_ms" type="int" default={"700"}>
+  The endpoint silence threshold in milliseconds.
+</ParamField>
+
+
+### Audio requirements
+
+The audio format must conform to the following requirements:
+
+- PCM16 or Mu-law encoding (See Specify the encoding)
+- A sample rate that matches the value of the `sample_rate` parameter
+- Single-channel
+- 50 milliseconds of audio per message (recommended)
+
+### Message types
+
+You send:
+
+<AccordionGroup>
+<Accordion title="Audio data">
+
+```json
+"UklGRtjIAABXQVZFZ"
+```
+
+</Accordion>
+
+<Accordion title="Endpointing config">
+```json
+{"type": "EndpointSilenceThreshold", "value_ms": 700}
+```
+</Accordion>
+
+<Accordion title="Session termination">
+```json
+{"type": "Terminate"}
+```
+</Accordion>
+
+</AccordionGroup>
+
+You receive:
+
+<AccordionGroup>
+
+  <Accordion title="Session Begin">
+
+    ```json
+    {
+        "type": "Begin",
+        "id": "cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f",
+        "expires_at": 1745483367
+    }
+    ```
+
+  </Accordion>
+  <Accordion title="Partial Transcript">
+    ```json
+    {
+        "confidence": 0.9656018614768982,
+        "endpoint_confidence": 0.00015928121865727007,
+        "order": 11,
+        "start": 880,
+        "end": 960,
+        "text": "hello",
+        "words":
+        [
+            {
+                "start": 960,
+                "end": 960,
+                "confidence": 0.9656018614768982,
+                "text": "hello"
+            }
+        ],
+        "type": "Partial"
+    }
+    ```
+  </Accordion>
+  <Accordion title="Final Transcript">
+    ```json
+    {
+        "confidence": 0.9826867580413818,
+        "endpoint_confidence": 0.11108475923538208,
+        "order": 24,
+        "start": 960,
+        "end": 2000,
+        "text": "hello everybody",
+        "words":
+        [
+            {
+                "start": 960,
+                "end": 960,
+                "confidence": 0.9656018614768982,
+                "text": "hello"
+            },
+            {
+                "start": 1440,
+                "end": 1440,
+                "confidence": 0.9997717142105103,
+                "text": "everybody"
+            }
+        ],
+        "type": "Final",
+        "formatted": False
+    }
+    ```
+  </Accordion>
+  <Accordion title="Session Termination">
+    ```json
+    {
+        "type": "Termination",
+        "audio_duration_seconds": 2000,
+        "session_duration_seconds": 2000
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Feedback
+
+We welcome your feedback on our Universal-Streaming model during this early access period. Share your thoughts by emailing our Support team at support@assemblyai.com.

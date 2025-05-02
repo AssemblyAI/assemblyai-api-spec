@@ -14,7 +14,7 @@ By the end of this tutorial, you'll be able to use LeMUR to summarize an audio f
 Here's the full sample code for what you'll build in this tutorial:
 
 <Tabs groupId="language">
-  <Tab language="python-sdk" title="Python SDK" default>
+<Tab language="python-sdk" title="Python SDK" default>
 
 ```python
 import assemblyai as aai
@@ -28,49 +28,44 @@ transcriber = aai.Transcriber()
 
 # Or use a publicly-accessible URL:
 audio_file = (
-    "https://assembly.ai/sports_injuries.mp3"
+  "https://assembly.ai/sports_injuries.mp3"
 )
 transcript = transcriber.transcribe(audio_file)
 
 prompt = "Provide a brief summary of the transcript."
 
 result = transcript.lemur.task(
-    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+  prompt, final_model=aai.LemurModel.claude3_7_sonnet_202502199
 )
 
 print(result.response)
 ```
 
-  </Tab>
-  <Tab language="python" title="Python">
-  ```python
-  import requests
-  import time
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+import time
 
 base_url = "https://api.assemblyai.com"
 
 headers = {
-"authorization": "<YOUR_API_KEY>"
+  "authorization": "<YOUR_API_KEY>"
 }
 
 # You can use a local filepath:
-
 # with open("./my-audio.mp3", "rb") as f:
-
 # response = requests.post(base_url + "/v2/upload",
-
 # headers=headers,
-
 # data=f)
-
 # upload_url = response.json()["upload_url"]
-
 # Or use a publicly-accessible URL:
 
 upload_url = "https://assembly.ai/sports_injuries.mp3"
 
 data = {
-"audio_url": upload_url
+  "audio_url": upload_url
 }
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
@@ -81,117 +76,123 @@ polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 while True:
 transcript = requests.get(polling_endpoint, headers=headers).json()
 
-    if transcript["status"] == "completed":
-      break
+  if transcript["status"] == "completed":
+    break
 
-    elif transcript["status"] == "error":
-      raise RuntimeError(f"Transcription failed: {transcript['error']}")
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
 
-    else:
-      time.sleep(3)
+  else:
+    time.sleep(3)
 
 prompt = "Provide a brief summary of the transcript."
 
 lemur_data = {
-"prompt": prompt,
-"transcript_ids": [transcript_id],
-"final_model": "anthropic/claude-3-5-sonnet",
+  "prompt": prompt,
+  "transcript_ids": [transcript_id],
+  "final_model": "anthropic/claude-3-7-sonnet-20250219",
 }
 
 result = requests.post(base_url + "/lemur/v3/generate/task", headers=headers, json=lemur_data)
 print(result.json()["response"])
+```
 
-````
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK">
 
 ```ts
-import { AssemblyAI } from 'assemblyai'
+import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-apiKey: '<YOUR_API_KEY>'
-})
+  apiKey: "<YOUR_API_KEY>",
+});
 
 // You can use a local filepath:
 // const audioFile = "./example.mp3"
 
 // Or use a publicly-accessible URL:
-const audioFile =
-'https://assembly.ai/sports_injuries.mp3'
+const audioFile = "https://assembly.ai/sports_injuries.mp3";
 
 const run = async () => {
-const transcript = await client.transcripts.transcribe({ audio: audioFile })
+  const transcript = await client.transcripts.transcribe({ audio: audioFile });
 
-const prompt = 'Provide a brief summary of the transcript.'
+  const prompt = "Provide a brief summary of the transcript.";
 
-const { response } = await client.lemur.task({
-  transcript_ids: [transcript.id],
-  prompt,
-  final_model: 'anthropic/claude-3-5-sonnet'
-})
+  const { response } = await client.lemur.task({
+    transcript_ids: [transcript.id],
+    prompt,
+    final_model: "anthropic/claude-3-7-sonnet-20250219",
+  });
 
-console.log(response)
-}
+  console.log(response);
+};
 
-run()
-````
+run();
+```
 
-  </Tab>
-  <Tab language="typescript" title="TypeScript">
-  ```typescript
-import axios from 'axios';
-import fs from 'fs-extra';
+</Tab>
+<Tab language="typescript" title="TypeScript">
+
+```typescript
+import axios from "axios";
+import fs from "fs-extra";
 
 const base_url = "https://api.assemblyai.com";
 
 const headers = {
-authorization: "<YOUR_API_KEY>"
+  authorization: "<YOUR_API_KEY>",
 };
 
-const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
-const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-headers
-})
-const uploadUrl = uploadResponse.data.upload_url
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${base_url}/v2/upload`, audioData, {
+  headers,
+});
+
+const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
-audio_url: uploadUrl // You can also use a URL of an audio or video file on the web
-}
+  audio_url: uploadUrl, // You can also use a URL of an audio or video file on the web
+};
 
-const response = await axios.post(base_url + "/v2/transcript", data, { headers });
+const response = await axios.post(base_url + "/v2/transcript", data, {
+  headers,
+});
 
 const transcript_id = response.data.id;
 const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
 
 while (true) {
-const transcript = (await axios.get(polling_endpoint, { headers })).data;
+  const transcript = (await axios.get(polling_endpoint, { headers })).data;
 
-    if (transcript.status === "completed") {
-      break;
-    }
-    else if (transcript.status === "error") {
-      throw new Error(`Transcription failed: ${transcript.error}`);
-    }
-    else {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
+  if (transcript.status === "completed") {
+    break;
+  } else if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
 
 const prompt = "Provide a brief summary of the transcript.";
 
 const lemur_data = {
-prompt: prompt,
-transcript_ids: [transcript_id],
-final_model: "anthropic/claude-3-5-sonnet"
+  prompt: prompt,
+  transcript_ids: [transcript_id],
+  final_model: "anthropic/claude-3-7-sonnet-20250219",
 };
 
-const result = await axios.post(base_url + "/lemur/v3/generate/task", lemur_data, { headers });
+const result = await axios.post(
+  base_url + "/lemur/v3/generate/task",
+  lemur_data,
+  { headers }
+);
 console.log(result.data.response);
+```
 
-````
 </Tab>
-
 <Tab language="csharp" title="C#">
+
 ```csharp
 using System;
 using System.IO;
@@ -292,7 +293,7 @@ private static async Task<LemurResponse> GenerateTaskAsync(string prompt, List<s
  {
      transcript_ids = transcriptIds,
      prompt,
-     final_model = "anthropic/claude-3-5-sonnet"
+     final_model = "anthropic/claude-3-7-sonnet-20250219"
  };
 
  var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
@@ -318,7 +319,7 @@ using (var httpClient = new HttpClient())
 
  Console.WriteLine(lemurResponse.Response);
 }
-````
+```
 
 </Tab>
 <Tab language="ruby" title="Ruby">
@@ -371,7 +372,7 @@ prompt = "Provide a brief summary of the transcript."
 lemur_uri = URI("#{base_url}/lemur/v3/generate/task")
 lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
 lemur_request.body = {
-  final_model: "anthropic/claude-3-5-sonnet",
+  final_model: "anthropic/claude-3-7-sonnet-20250219",
   prompt: prompt,
   transcript_ids: [transcript_id]
 }.to_json
@@ -445,7 +446,7 @@ curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => $headers,
     CURLOPT_POSTFIELDS => json_encode([
-        'final_model' => 'anthropic/claude-3-5-sonnet',
+        'final_model' => 'anthropic/claude-3-7-sonnet-20250219',
         'prompt' => $prompt,
         'transcript_ids' => [$transcript_id]
     ])
@@ -484,6 +485,7 @@ To complete this tutorial, you need:
 <Tabs groupId="language">
 
 <Tab language="python-sdk" title="Python SDK" default>
+
 Install the package via pip:
 
 ```bash
@@ -561,7 +563,7 @@ transcriber = aai.Transcriber()
 
 # Or use a publicly-accessible URL:
 audio_file = (
-    "https://assembly.ai/sports_injuries.mp3"
+  "https://assembly.ai/sports_injuries.mp3"
 )
 
 transcript = transcriber.transcribe(audio_file)
@@ -577,23 +579,17 @@ import time
 
 base_url = "https://api.assemblyai.com"
 
-headers = {
-  "authorization": "<YOUR_API_KEY>"
-}
+headers = {"authorization": "<YOUR_API_KEY>"}
 
 # You can use a local filepath:
 # with open("./my-audio.mp3", "rb") as f:
-# response = requests.post(base_url + "/v2/upload",
-#                         headers=headers,
-#                         data=f)
-# upload_url = response.json()["upload_url"]
+#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#     upload_url = response.json()["upload_url"]
 
 # Or use a publicly-accessible URL:
 upload_url = "https://assembly.ai/sports_injuries.mp3"
 
-data = {
-  "audio_url": upload_url
-}
+data = {"audio_url": upload_url}
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
@@ -601,16 +597,16 @@ transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
 while True:
-  transcript = requests.get(polling_endpoint, headers=headers).json()
+    transcript = requests.get(polling_endpoint, headers=headers).json()
 
-  if transcript["status"] == "completed":
-    break
+    if transcript["status"] == "completed":
+        break
 
-  elif transcript["status"] == "error":
-    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
 
-  else:
-    time.sleep(3)
+    else:
+        time.sleep(3)
 ```
 
 </Tab>
@@ -1037,7 +1033,7 @@ Create a custom task with LeMUR, using the transcript and prompt as input. The f
 
 ```python
 result = transcript.lemur.task(
-    prompt, final_model=aai.LemurModel.claude3_5_sonnet
+    prompt, final_model=aai.LemurModel.claude3_7_sonnet_202502199
 )
 ```
 
@@ -1051,7 +1047,7 @@ Create a custom LeMUR task request, using the transcript and prompt as input. Th
 lemur_data = {
   "prompt": prompt,
   "transcript_ids": [transcript_id],
-  "final_model": "anthropic/claude-3-5-sonnet",
+  "final_model": "anthropic/claude-3-7-sonnet-20250219",
 }
 
 result = requests.post(base_url + "/lemur/v3/generate/task", headers=headers, json=lemur_data)
@@ -1067,7 +1063,7 @@ Create a custom task with LeMUR, using the transcript and prompt as input. The f
 const { response } = await client.lemur.task({
   transcript_ids: [transcript.id],
   prompt,
-  final_model: "anthropic/claude-3-5-sonnet",
+  final_model: "anthropic/claude-3-7-sonnet-20250219",
 });
 ```
 
@@ -1080,7 +1076,7 @@ Create a custom LeMUR task request, using the transcript and prompt as input. Th
 const lemur_data = {
   prompt: prompt,
   transcript_ids: [transcript_id],
-  final_model: "anthropic/claude-3-5-sonnet",
+  final_model: "anthropic/claude-3-7-sonnet-20250219",
 };
 
 const result = await axios.post(
@@ -1122,7 +1118,7 @@ private static async Task<LemurResponse> GenerateTaskAsync(string prompt, List<s
    {
        transcript_ids = transcriptIds,
        prompt,
-       final_model = "anthropic/claude-3-5-sonnet"
+       final_model = "anthropic/claude-3-7-sonnet-20250219"
    };
    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
@@ -1145,7 +1141,7 @@ Create a custom LeMUR task request, using the transcript and prompt as input. Th
 lemur_uri = URI("#{base_url}/lemur/v3/generate/task")
 lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
 lemur_request.body = {
-  final_model: "anthropic/claude-3-5-sonnet",
+  final_model: "anthropic/claude-3-7-sonnet-20250219",
   prompt: prompt,
   transcript_ids: [transcript_id]
 }.to_json
@@ -1167,7 +1163,7 @@ curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => $headers,
     CURLOPT_POSTFIELDS => json_encode([
-        'final_model' => 'anthropic/claude-3-5-sonnet',
+        'final_model' => 'anthropic/claude-3-7-sonnet-20250219',
         'prompt' => $prompt,
         'transcript_ids' => [$transcript_id]
     ])

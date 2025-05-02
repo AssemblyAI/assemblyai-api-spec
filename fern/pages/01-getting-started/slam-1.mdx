@@ -1,208 +1,221 @@
 ---
-title: "How to get started using Slam-1"
-subtitle: "Learn how to transcribe using Slam-1."
+title: "Introducing Slam-1"
+subtitle: "Learn how to transcribe pre-recorded audio using Slam-1."
 hide-nav-links: true
-description: "Learn how to transcribe using Slam-1."
+description: "Learn how to transcribe prerecorded audio using Slam-1."
 ---
 
 ## Overview
 
-Slam-1 represents a fundamental shift in speech recognition technology. By combining LLM architecture with our best-in-class ASR encoders, we've created the world's first Speech Language Model optimized explicitly for speech-to-text tasks.
+Slam-1 is our new Speech Language Model that combines LLM architecture with ASR encoders for superior speech-to-text transcription. This model delivers unprecedented accuracy through its understanding of context and semantic meaning. Check out our [Slam-1 blog post](https://www.assemblyai.com/blog/slam-1-public-beta) to learn more about this new model!
 
-This innovative approach moves beyond traditional speech recognition to deliver LLM-powered transcription with unprecedented accuracy and capabilities.
+<Info>Slam-1 is currently only supported for English.</Info>
 
-## How to get started
+## Quick Start
 
-A beta version of Slam-1 is currently live in Production so you will make requests to the `https://api.assemblyai.com/v2/transcript` endpoint using your current API key similar to how you currently use the API. The only change you need to make is to include the `speech_model` parameter with a value of `"slam-1"` as shown in the code examples below.
+Slam-1 is available in beta through our standard API endpoint. To use it:
+
+1. Make requests to https://api.assemblyai.com/v2/transcript with your API key
+2. Add the `speech_model` parameter with value "slam-1"
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-    ```python
-    import requests
-    import time
+<Tab language="python" title="Python" default>
 
-    base_url = "https://api.assemblyai.com"
-    headers = {"authorization": "<YOUR_API_KEY>"}
+```python
+import requests
+import time
 
-    data = {
-              "audio_url": "https://assembly.ai/sports_injuries.mp3",
-              "speech_model": "slam-1"
-          }
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+data = {
+    "audio_url": "https://assembly.ai/sports_injuries.mp3",
+    "speech_model": "slam-1"
+}
 
-    if response.status_code != 200:
-        print(f"Error: {response.status_code}, Response: {response.text}")
-        response.raise_for_status()
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
-    transcript_response = response.json()
-    transcript_id = transcript_response["id"]
-    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
 
-    while True:
-        transcript = requests.get(polling_endpoint, headers=headers).json()
-        if transcript["status"] == "completed":
-            print(transcript["text"])
-            break
-        elif transcript["status"] == "error":
-            raise RuntimeError(f"Transcription failed: {transcript['error']}")
-        else:
-            time.sleep(3)
-    ```
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
 
-  </Tab>
-  <Tab language="typescript" title="Typescript">
-    ```ts
-      import axios from 'axios'
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
 
-      const baseUrl = 'https://api.assemblyai.com'
+</Tab>
+<Tab language="typescript" title="Typescript">
 
-      const headers = {
-        authorization: '<YOUR_API_KEY>'
-      }
+```ts
+import axios from "axios";
 
-      const data = {
-        audio_url: 'https://assembly.ai/sports_injuries.mp3',
-        speech_model: 'slam-1'
-      }
+const baseUrl = "https://api.assemblyai.com";
 
-      const url = `${baseUrl}/v2/transcript`
-      const response = await axios.post(url, data, { headers: headers })
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
 
-      const transcriptId = response.data.id
-      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const data = {
+  audio_url: "https://assembly.ai/sports_injuries.mp3",
+  speech_model: "slam-1",
+};
 
-      while (true) {
-        const pollingResponse = await axios.get(pollingEndpoint, {
-          headers: headers
-        })
-        const transcriptionResult = pollingResponse.data
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
 
-        if (transcriptionResult.status === 'completed') {
-          console.log(transcriptionResult.text)
-          break
-        } else if (transcriptionResult.status === 'error') {
-          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-        }
-      }
-    ```
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
-  </Tab>
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
 </Tabs>
 
 <Note title="Local audio files">
-  The above code example shows how to transcribe a file that is available via
-  URL. If you would like to work with local files see our [API
-  Reference](https://www.assemblyai.com/docs/api-reference/files/upload) for
-  more information on transcribing local files.
+
+The above code example shows how to transcribe a file that is available via URL. If you would like to work with local files, see our [API Reference](https://www.assemblyai.com/docs/api-reference/files/upload) for more information on transcribing local files.
+
 </Note>
 
-## Contextual prompting of words and phrases
+## Fine-tuning Slam-1
 
-To improve the transcription accuracy, you can leverage Slam-1's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file. When you prompt words and phrases, Slam-1's contextual understanding helps the model better recognize related terminology and concepts, enhancing transcription quality for the entire content, not just the specified terms. Prompt the model with up to 1000 unique keywords. These keywords can be individual words or phrases of up to six words.
+Improve transcription accuracy by leveraging Slam-1's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file.
+
+Rather than simply increasing the likelihood of detecting specific words, Slam-1's multi-modal architecture actually understands the semantic meaning and context of the terminology you provide, enhancing transcription quality not just of the exact terms you specify, but also related terminology, variations, and contextually similar phrases.
+
+Provide up to 1000 domain-specific words or phrases (maximum 6 words per phrase) that may appear in your audio using the optional `keyterms_prompt` parameter:
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assembly.ai/sports_injuries.mp3",
+    "speech_model": "slam-1",
+    "keyterms_prompt": ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="typescript" title="Typescript">
+
+```ts
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assembly.ai/sports_injuries.mp3",
+  speech_model: "slam-1",
+  keyterms_prompt: [
+    "differential diagnosis",
+    "hypertension",
+    "Wellbutrin XL 150mg",
+  ],
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
 
 <Note title="Keyword count limits">
-While we support up to 1000 Word Boost keywords, actual capacity may be lower due to internal tokenization and implementation constraints.
+
+While we support up to 1000 key words and phrases, actual capacity may be lower due to internal tokenization and implementation constraints.
+
 Key points to remember:
+
 - Each word in a multi-word phrase counts towards the 1000 keyword limit
 - Capitalization affects capacity (uppercase tokens consume more than lowercase)
 - Longer words consume more capacity than shorter words
 
-For optimal results, use shorter tokens when possible and be mindful of your total token count when approaching the keyword limit.
+For optimal results, use shorter phrases when possible and be mindful of your total token count when approaching the keyword limit.
 
 </Note>
 
-A common use case for these contextual prompts is to leverage known context about the call and provide it with the transcription. This might look like:
+Here is an example of what a `keyterms_prompt` list might look like for a transcription of a professional therapy session for a patient named Jane Doe, who is being treated for anxiety and depression:
 
-- Virtual Sales/Support Call: Product terminology, company names, people names, locations, amounts
-- Medical: Condition names, prescription names, doctor names, patient names, diagnostic terms
-- Legal: Cases, law firms, people involved in the case
-
-To prompt the model with words or phrases, include the `word_boost` parameter in your request as shown in the code example below. Words and phrases should be formatted in the way that you would like to see them returned in your transcripts.
-
-<Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-    ```python
-    import requests
-    import time
-
-    base_url = "https://api.assemblyai.com"
-    headers = {"authorization": "<YOUR_API_KEY>"}
-
-    data = {
-              "audio_url": "https://assembly.ai/sports_injuries.mp3",
-              "speech_model": "slam-1",
-              "word_boost": ["foo", "bar", "baz"]
-          }
-
-    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-    if response.status_code != 200:
-        print(f"Error: {response.status_code}, Response: {response.text}")
-        response.raise_for_status()
-
-    transcript_response = response.json()
-    transcript_id = transcript_response["id"]
-    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-    while True:
-        transcript = requests.get(polling_endpoint, headers=headers).json()
-        if transcript["status"] == "completed":
-            print(transcript["text"])
-            break
-        elif transcript["status"] == "error":
-            raise RuntimeError(f"Transcription failed: {transcript['error']}")
-        else:
-            time.sleep(3)
-    ```
-
-  </Tab>
-  <Tab language="typescript" title="Typescript">
-    ```ts
-      import axios from 'axios'
-
-      const baseUrl = 'https://api.assemblyai.com'
-
-      const headers = {
-        authorization: '<YOUR_API_KEY>'
-      }
-
-      const data = {
-        audio_url: 'https://assembly.ai/sports_injuries.mp3',
-        speech_model: 'slam-1',
-        word_boost: ['foo', 'bar', 'baz']
-      }
-
-      const url = `${baseUrl}/v2/transcript`
-      const response = await axios.post(url, data, { headers: headers })
-
-      const transcriptId = response.data.id
-      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
-
-      while (true) {
-        const pollingResponse = await axios.get(pollingEndpoint, {
-          headers: headers
-        })
-        const transcriptionResult = pollingResponse.data
-
-        if (transcriptionResult.status === 'completed') {
-          console.log(transcriptionResult.text)
-          break
-        } else if (transcriptionResult.status === 'error') {
-          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-        }
-      }
-    ```
-
-  </Tab>
-</Tabs>
+```txt wordWrap
+["Jane Doe", "cognitive behavioral therapy", "major depressive disorder", "generalized anxiety disorder", "ADHD", "trauma-informed care", "Lexapro 10mg", "psychosocial assessment", "therapeutic alliance", "emotional dysregulation", "GAD-7", "PHQ-9", "Citalopram 20mg", "Lorazepam 2mg"]
+```
 
 ## Feedback
 
-We would appreciate any feedback that you have as you test this groundbreaking technology. Your insights will be invaluable in shaping the future of Slam-1 before its public release.
-
-If you have a shared Slack channel with us, please share any feedback there directly in real-time. Otherwise, feel free to email any feedback to our Support team at support@assemblyai.com.
+We welcome your feedback on Slam-1 during this beta period. Share your thoughts by emailing our Support team at support@assemblyai.com.
