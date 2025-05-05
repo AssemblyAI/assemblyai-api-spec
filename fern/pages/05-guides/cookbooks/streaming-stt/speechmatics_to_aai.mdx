@@ -1,0 +1,718 @@
+---
+title: "Migration guide: Speechmatics (streaming) to AssemblyAI"
+---
+
+This guide walks through the process of migrating from Speechmatics to AssemblyAI.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
+
+## Side-By-Side Code Comparison
+
+Below is a side-by-side comparison of a basic snippet to transcribe streaming audio by Speechmatics and AssemblyAI using Python:
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+```python
+import pyaudio
+import websocket
+import json
+from threading import Thread
+import time
+
+API_KEY = "<YOUR_API_KEY>"
+
+def on_open(ws):
+    print("WebSocket connection established")
+    
+    # Send StartRecognition message
+    start_message = {
+        "message": "StartRecognition",
+        "audio_format": {
+            "type": "raw",
+            "encoding": "pcm_f32le",
+            "sample_rate": SAMPLE_RATE
+        },
+        "transcription_config": {
+            "language": "en",
+            "enable_partials": True,
+            "max_delay": 2.0
+        }
+    }
+    ws.send(json.dumps(start_message))
+
+def on_message(ws, message):
+    global audio_seq_no
+    
+    try:
+        msg = json.loads(message)
+        message_type = msg.get('message')
+        
+        # Handle RecognitionStarted - start streaming audio
+        if message_type == "RecognitionStarted":
+            session_id = msg.get('id')
+            print(f"Recognition started, session ID: {session_id}")
+            
+            def stream_audio():
+                global audio_seq_no
+                while True:
+                    try:
+                        audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                        ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                        audio_seq_no += 1
+                    except Exception as e:
+                        print(f'\nError streaming audio: {e}')
+                        break
+
+            audio_thread = Thread(target=stream_audio, daemon=True)
+            audio_thread.start()
+            
+        # Handle partial transcripts
+        elif message_type == "AddPartialTranscript":
+            transcript = msg.get('metadata', {}).get('transcript', '')
+            if transcript:
+                print(transcript, end='\r')
+                
+        # Handle final transcripts
+        elif message_type == "AddTranscript":
+            transcript = msg.get('metadata', {}).get('transcript', '')
+            if transcript:
+                print(transcript, end='\r\n')
+                
+        # Handle end of transcript
+        elif message_type == "EndOfTranscript":
+            print("\nTranscription complete")
+            ws.close()
+            
+        # Handle errors
+        elif message_type == "Error":
+            error_type = msg.get('type')
+            reason = msg.get('reason')
+            print(f'\nError: {error_type} - {reason}')
+            
+    except Exception as e:
+        print(f'\nError handling message: {e}')
+
+def on_error(ws, error):
+    print(f'\nError: {error}')
+
+def on_close(ws, close_status_code, close_msg):
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+    print('\nDisconnected')
+
+FRAMES_PER_BUFFER = 1024
+audio_seq_no = 0  # Track number of audio chunks sent
+
+# Get default input device (can alter to specify specific device)
+audio = pyaudio.PyAudio()
+default_device = audio.get_default_input_device_info()
+DEVICE_INDEX = default_device['index']
+SAMPLE_RATE = int(audio.get_device_info_by_index(DEVICE_INDEX)['defaultSampleRate'])
+
+print(f"Using microphone: {default_device['name']}")
+
+stream = audio.open(
+    format=pyaudio.paFloat32,  # Speechmatics uses float32 format
+    channels=1,
+    rate=SAMPLE_RATE,
+    input=True,
+    frames_per_buffer=FRAMES_PER_BUFFER,
+    input_device_index=DEVICE_INDEX
+)
+
+ws = websocket.WebSocketApp(
+    "wss://eu2.rt.speechmatics.com/v2/en",
+    header={"Authorization": f"Bearer {API_KEY}"},  # Speechmatics uses Bearer token
+    on_message=on_message,
+    on_open=on_open,
+    on_error=on_error,
+    on_close=on_close
+)
+
+print("Starting transcription (type Ctrl-C to stop):")
+try:
+    ws_thread = Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
+    ws_thread.daemon = True
+    ws_thread.start()
+    
+    # Wait for keyboard interrupt
+    while True:
+        time.sleep(0.1)
+        
+except KeyboardInterrupt:
+    print("\nKeyboard interrupt detected")
+    
+    # Send EndOfStream message
+    end_message = {
+        "message": "EndOfStream",
+        "last_seq_no": audio_seq_no
+    }
+    ws.send(json.dumps(end_message))
+    time.sleep(1)  # Wait briefly for server to process
+    
+except Exception as e:
+    print(f'\nError: {e}')
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+import pyaudio
+import websocket
+import json
+from threading import Thread
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+
+def on_open(ws):
+    def stream_audio():
+        while True:
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f'\nError streaming audio: {e}')
+                break
+
+    audio_thread = Thread(target=stream_audio, daemon=True)
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        msg = json.loads(message)
+        msg_type = msg.get('message_type')
+
+        if msg_type == 'SessionBegins':
+            session_id = msg.get('session_id')
+            print("Session ID:", session_id)
+            return
+
+        text = msg.get('text', '')
+        if not text:
+            return
+
+        if msg_type == 'PartialTranscript':
+            print(text, end='\r')
+        elif msg_type == 'FinalTranscript':
+            print(text, end='\r\n')
+        elif msg_type == 'error':
+            print(f'\nError: {msg.get("error", "Unknown error")}')
+    except Exception as e:
+        print(f'\nError handling message: {e}')
+
+def on_error(ws, error):
+    print(f'\nError: {error}')
+
+def on_close(ws, status, msg):
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+    print('\nDisconnected')
+
+FRAMES_PER_BUFFER = 3200  # 200ms of audio (0.2s * 16000Hz)
+SAMPLE_RATE = 16000       # 16kHz sample rate
+CHANNELS = 1              # Mono audio
+FORMAT = pyaudio.paInt16  # 16-bit audio
+
+audio = pyaudio.PyAudio()
+stream = audio.open(
+    input=True,
+    frames_per_buffer=FRAMES_PER_BUFFER,
+    channels=CHANNELS,
+    format=FORMAT,
+    rate=SAMPLE_RATE
+)
+
+ws = websocket.WebSocketApp(
+    f'wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}',
+    header={'Authorization': YOUR_API_KEY},
+    on_message=on_message,
+    on_open=on_open,
+    on_error=on_error,
+    on_close=on_close
+)
+
+try:
+    ws.run_forever()
+except Exception as e:
+    print(f'\nError: {e}')
+```
+</Tab>
+</Tabs>
+
+## Step 1: Install dependencies
+
+<Steps>
+<Step>
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+
+Install the required Python packages:
+
+```bash
+pip install pyaudio websocket-client
+```
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+
+Install the required Python packages:
+
+```bash
+pip install pyaudio websocket-client
+```
+</Tab>
+</Tabs>
+
+</Step>
+</Steps>
+
+## Step 2: Configure the API key
+
+In this step, you'll configure your API key to authenticate your requests.
+
+<Steps>
+<Step>
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+  Browse to <a href="https://portal.speechmatics.com/settings/api-keys" target="_blank">API Keys</a> in your account settings, and then copy your API key.
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+  Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+</Tab>
+</Tabs>
+</Step>
+<Step>
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+
+Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key. 
+
+```python
+import pyaudio
+import websocket
+import json
+from threading import Thread
+import time
+
+API_KEY = "<YOUR_API_KEY>"
+```
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+
+Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key.
+
+```python
+import pyaudio
+import websocket
+import json
+from threading import Thread
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+```
+</Tab>
+</Tabs> 
+</Step>
+</Steps>
+
+## Step 3: Set up audio configuration
+
+<Steps>
+<Step>
+
+Configure the audio settings for your microphone stream:
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+```python
+import pyaudio
+
+FRAMES_PER_BUFFER = 1024
+audio_seq_no = 0  # Track number of audio chunks sent
+
+# Get default input device (can alter to specify specific device)
+audio = pyaudio.PyAudio()
+default_device = audio.get_default_input_device_info()
+DEVICE_INDEX = default_device['index']
+SAMPLE_RATE = int(audio.get_device_info_by_index(DEVICE_INDEX)['defaultSampleRate'])
+
+print(f"Using microphone: {default_device['name']}")
+
+stream = audio.open(
+    format=pyaudio.paFloat32,  # Speechmatics uses float32 format
+    channels=1,
+    rate=SAMPLE_RATE,
+    input=True,
+    frames_per_buffer=FRAMES_PER_BUFFER,
+    input_device_index=DEVICE_INDEX
+)
+```
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+```python
+import pyaudio
+
+FRAMES_PER_BUFFER = 3200  # 200ms of audio (0.2s * 16000Hz)
+SAMPLE_RATE = 16000       # 16kHz sample rate
+CHANNELS = 1              # Mono audio
+FORMAT = pyaudio.paInt16  # 16-bit audio
+
+audio = pyaudio.PyAudio()
+stream = audio.open(
+    input=True,
+    frames_per_buffer=FRAMES_PER_BUFFER,
+    channels=CHANNELS,
+    format=FORMAT,
+    rate=SAMPLE_RATE
+)
+```
+
+</Tab>
+</Tabs>
+
+<Note title="Audio data format">
+
+If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+
+- Single channel
+- 16-bit signed integer PCM or mu-law encoding
+- A sample rate that matches the value of the supplied sample_rate parameter
+- 100 to 2000 milliseconds of audio per message
+
+By default, transcriptions expect PCM16-encoded audio. If you want to use mu-law encoding, see [Specifying the encoding](/docs/speech-to-text/streaming#specify-the-encoding).
+
+</Note>
+
+</Step>
+</Steps>
+
+## Step 4: Create event handlers
+
+In this step, you’ll set up callback functions that handle the different events.
+
+<Steps>
+<Step>
+
+Create functions to handle the events from the real-time service.
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+```python
+import json
+
+def on_open(ws):
+    print("WebSocket connection established")
+    
+    # Send StartRecognition message
+    start_message = {
+        "message": "StartRecognition",
+        "audio_format": {
+            "type": "raw",
+            "encoding": "pcm_f32le",
+            "sample_rate": SAMPLE_RATE
+        },
+        "transcription_config": {
+            "language": "en",
+            "enable_partials": True,
+            "max_delay": 2.0
+        }
+    }
+    ws.send(json.dumps(start_message))
+
+def on_error(ws, error):
+    print(f'\nError: {error}')
+
+def on_close(ws, close_status_code, close_msg):
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+    print('\nDisconnected')
+```
+</Tab>
+
+<Tab language="aai" title="AssemblyAI">
+```python
+from threading import Thread
+
+def on_open(ws):
+    def stream_audio():
+        while True:
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f'\nError streaming audio: {e}')
+                break
+
+    audio_thread = Thread(target=stream_audio, daemon=True)
+    audio_thread.start()
+
+def on_error(ws, error):
+    print(f'\nError: {error}')
+
+def on_close(ws, status, msg):
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+    print('\nDisconnected')
+```
+
+</Tab>
+</Tabs>
+
+</Step>
+
+<Step>
+
+Create another function to handle transcripts. The real-time transcriber returns two types of transcripts: _Final transcripts_ and _Partial transcripts_.
+
+- _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
+- _Final transcripts_ are returned after a moment of silence.
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+```python
+import json
+from threading import Thread
+
+def on_message(ws, message):
+    global audio_seq_no
+    
+    try:
+        msg = json.loads(message)
+        message_type = msg.get('message')
+        
+        # Handle RecognitionStarted - start streaming audio
+        if message_type == "RecognitionStarted":
+            session_id = msg.get('id')
+            print(f"Recognition started, session ID: {session_id}")
+            
+            def stream_audio():
+                global audio_seq_no
+                while True:
+                    try:
+                        audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                        ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                        audio_seq_no += 1
+                    except Exception as e:
+                        print(f'\nError streaming audio: {e}')
+                        break
+
+            audio_thread = Thread(target=stream_audio, daemon=True)
+            audio_thread.start()
+            
+        # Handle partial transcripts
+        elif message_type == "AddPartialTranscript":
+            transcript = msg.get('metadata', {}).get('transcript', '')
+            if transcript:
+                print(transcript, end='\r')
+                
+        # Handle final transcripts
+        elif message_type == "AddTranscript":
+            transcript = msg.get('metadata', {}).get('transcript', '')
+            if transcript:
+                print(transcript, end='\r\n')
+                
+        # Handle end of transcript
+        elif message_type == "EndOfTranscript":
+            print("\nTranscription complete")
+            ws.close()
+            
+        # Handle errors
+        elif message_type == "Error":
+            error_type = msg.get('type')
+            reason = msg.get('reason')
+            print(f'\nError: {error_type} - {reason}')
+            
+    except Exception as e:
+        print(f'\nError handling message: {e}')
+```
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+```python
+import json
+
+def on_message(ws, message):
+    try:
+        msg = json.loads(message)
+        msg_type = msg.get('message_type')
+        if msg_type == 'SessionBegins':
+            session_id = msg.get('session_id')
+            print("Session ID:", session_id)
+            return
+        text = msg.get('text', '')
+        if not text:
+            return
+        if msg_type == 'PartialTranscript':
+            print(text, end='\r')
+        elif msg_type == 'FinalTranscript':
+            # Add new line after final transcript.
+            print(text, end='\r\n')
+        elif msg_type == 'error':
+            print(f'\nError: {msg.get("error", "Unknown error")}')
+    except Exception as e:
+        print(f'\nError handling message: {e}')
+```
+<Tip title="End of utterance controls">
+  You can [configure the silence
+  threshold](/docs/speech-to-text/streaming#configure-the-threshold-for-automatic-utterance-detection)
+  for automatic utterance detection and programmatically [force the end of an
+  utterance](/docs/speech-to-text/streaming#manually-end-current-utterance) to
+  immediately get a _Final transcript_.
+</Tip>
+</Tab>
+</Tabs>
+
+
+</Step>
+
+</Steps>
+
+## Step 5: Connect and start transcription
+
+<Steps>
+<Step>
+
+Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) to stream audio to AssemblyAI. This requires first establishing a connection to the API.
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+Create a WebSocket connection to the Realtime service:
+```python
+ws = websocket.WebSocketApp(
+    "wss://eu2.rt.speechmatics.com/v2/en",
+    header={"Authorization": f"Bearer {API_KEY}"},  # Speechmatics uses Bearer token
+    on_message=on_message,
+    on_open=on_open,
+    on_error=on_error,
+    on_close=on_close
+)
+```
+
+Then, start the WebSocket connection to start transcribing audio:
+
+```python
+print("Starting transcription (type Ctrl-C to stop):")
+try:
+    ws_thread = Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
+    ws_thread.daemon = True
+    ws_thread.start()
+    
+    # Wait for keyboard interrupt
+    while True:
+        time.sleep(0.1)
+        
+except KeyboardInterrupt:
+    print("\nKeyboard interrupt detected")
+    
+    # Send EndOfStream message
+    end_message = {
+        "message": "EndOfStream",
+        "last_seq_no": audio_seq_no
+    }
+    ws.send(json.dumps(end_message))
+    time.sleep(1)  # Wait briefly for server to process
+    
+except Exception as e:
+    print(f'\nError: {e}')
+```
+
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+
+Create a WebSocket connection to the Realtime service:
+
+```python
+import websocket
+
+ws = websocket.WebSocketApp(
+    f'wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}',
+    header={'Authorization': YOUR_API_KEY},
+    on_message=on_message,
+    on_open=on_open,
+    on_error=on_error,
+    on_close=on_close
+)
+```
+
+Then, start the WebSocket connection to start transcribing audio:
+
+```python
+try:
+    ws.run_forever() # Press Ctrl+C to stop
+except Exception as e:
+    print(f'\nError: {e}')
+```
+
+</Tab>
+</Tabs>
+
+<Note title="Sample rate">
+
+The `sample_rate` is the number of audio samples per second, measured in hertz (Hz). Higher sample rates result in higher quality audio, which may lead to better transcripts, but also more data being sent over the network.
+
+We recommend the following sample rates:
+
+- Minimum quality: `8_000` (8 kHz)
+- Medium quality: `16_000` (16 kHz)
+- Maximum quality: `48_000` (48 kHz)
+
+</Note>
+
+</Step>
+</Steps>
+
+## Step 6: Close the connection
+
+<Steps>
+<Step>
+
+Close the WebSocket connection when you’re done:
+
+<Tabs groupId="language">
+<Tab language="speechmatics" title="Speechmatics">
+
+```python
+ws.close()
+```
+
+</Tab>
+<Tab language="aai" title="AssemblyAI">
+
+
+```python
+ws.close()
+```
+
+</Tab>
+</Tabs>
+
+The connection will also close automatically when you press Ctrl+C. In both cases, the `on_close` handler will clean up the audio resources.
+
+</Step>
+</Steps>
+
+## Key differences
+{/* TODO! */}
+- Once a Websocket connection is established, the AssemblyAI and Speechmatics messages sent by the Server and Client differ.
+One key difference is X in the open. Speechmatics does X, while AssemblyAI does Y.
+[Speechmatics Message Handling](https://docs.speechmatics.com/rt-api-ref#message-handling)
+
+## Next steps
+
+To learn more about Streaming Speech-to-Text, see the following resources:
+
+**AssemblyAI**
+- [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
+- [WebSocket API reference](https://assemblyai.com/docs/api-reference/streaming)
+
+**Speechmatics**
+- [Using Microphone Input](https://docs.speechmatics.com/tutorials/using-mic)
+- [Real-Time API Reference](https://docs.speechmatics.com/rt-api-ref)
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
