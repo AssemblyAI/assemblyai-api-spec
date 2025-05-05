@@ -374,8 +374,6 @@ end
 
 ```php title="PHP" highlight={76} maxLines=15
 <?php
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $base_url = "https://api.assemblyai.com";
 
@@ -384,77 +382,101 @@ $headers = array(
     "content-type: application/json"
 );
 
-$path = "./my-audio.mp3";
+$path = "./audio.mp3";
+if (!file_exists($path)) {
+    throw new Exception("Audio file not found at $path");
+}
 
+// Upload the audio file
 $ch = curl_init();
-
-curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/upload");
+curl_setopt($ch, CURLOPT_URL, "$base_url/v2/upload");
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
 $response = curl_exec($ch);
-$response_data = json_decode($response, true);
-$upload_url = $response_data["upload_url"];
-
-curl_close($ch);
-
-$data = array(
-    "audio_url" => $upload_url // You can also use a URL to an audio or video file on the web
-);
-
-$url = $base_url . "/v2/transcript";
-$curl = curl_init($url);
-
-curl_setopt($curl, CURLOPT_POST, true);
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-$response = curl_exec($curl);
-
-$response = json_decode($response, true);
-
-curl_close($curl);
-
-$transcript_id = $response['id'];
-echo "Transcript ID: $transcript_id\n";
-
-$polling_endpoint = $base_url . "/v2/transcript/" . $transcript_id;
-
-while (true) {
-    $polling_response = curl_init($polling_endpoint);
-
-    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
-
-    $transcription_result = json_decode(curl_exec($polling_response), true);
-
-    if ($transcription_result['status'] === "completed") {
-        echo $transcription_result['text'];
-        break;
-    } else if ($transcription_result['status'] === "error") {
-        throw new Exception("Transcription failed: " . $transcription_result['error']);
-    } else {
-        sleep(3);
-    }
+if (curl_errno($ch)) {
+    throw new Exception("Upload cURL error: " . curl_error($ch));
 }
 
-$words = ['foo', 'bar', 'foo bar', '42'];
+$response_data = json_decode($response, true);
+if (!isset($response_data['upload_url'])) {
+    throw new Exception("Upload failed: " . $response);
+}
+$upload_url = $response_data["upload_url"];
+curl_close($ch);
 
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/transcript/" . $transcript_id . "/word-search?words=" . implode(',', $words));
+// Start transcription
+$data = array("audio_url" => $upload_url);
+$ch = curl_init("$base_url/v2/transcript");
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $response = curl_exec($ch);
-$response_data = json_decode($response, true);
+if (curl_errno($ch)) {
+    throw new Exception("Transcription start cURL error: " . curl_error($ch));
+}
 
+$response_data = json_decode($response, true);
+if (!isset($response_data['id'])) {
+    throw new Exception("Failed to create transcription: " . $response);
+}
+
+$transcript_id = $response_data['id'];
+echo "Transcript ID: $transcript_id\n";
 curl_close($ch);
 
-foreach ($response_data['matches'] as $match) {
-    echo "Found '" . $match['text'] . "' " . $match['count'] . " times in the transcript\n";
+// Poll for completion
+$polling_endpoint = "$base_url/v2/transcript/$transcript_id";
+while (true) {
+    $ch = curl_init($polling_endpoint);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    $polling_response = curl_exec($ch);
+    if (curl_errno($ch)) {
+        throw new Exception("Polling cURL error: " . curl_error($ch));
+    }
+
+    $transcription_result = json_decode($polling_response, true);
+    curl_close($ch);
+
+    if ($transcription_result['status'] === "completed") {
+        echo "Transcription complete:\n" . $transcription_result['text'] . "\n";
+        break;
+    } elseif ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3); // Wait and poll again
+    }
+}
+
+// Optional: Word search
+$words = ['foo', 'bar', 'foo bar', '42'];
+$encoded_words = array_map('urlencode', $words);
+$word_query = implode(',', $encoded_words);
+
+$ch = curl_init("$base_url/v2/transcript/$transcript_id/word-search?words=$word_query");
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($ch);
+if (curl_errno($ch)) {
+    throw new Exception("Word search cURL error: " . curl_error($ch));
+}
+
+$response_data = json_decode($response, true);
+curl_close($ch);
+
+if (!isset($response_data['matches'])) {
+    echo "No matches found or error in word search response:\n" . json_encode($response_data) . "\n";
+} else {
+    foreach ($response_data['matches'] as $match) {
+        echo "Found '" . $match['text'] . "' " . $match['count'] . " times in the transcript\n";
+    }
 }
 ```
 
