@@ -1,0 +1,772 @@
+---
+title: "Streaming Migration guide: Gladia to AssemblyAI"
+---
+
+This guide walks through the process of migrating from Gladia's to AssemblyAI's Streaming Websocket.
+
+## Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app/api-keys).
+
+## Side-By-Side Code Comparison
+
+Below is a side-by-side comparison of a basic snippet to transcribe live audio by Gladia and AssemblyAI using a microphone:
+
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+
+    ```python
+    import asyncio
+    import base64
+    import json
+    import signal
+    from datetime import time
+    import pyaudio
+    import requests
+    from websockets.asyncio.client import connect
+    from websockets.exceptions import ConnectionClosedOK
+
+    # Constants
+    GLADIA_API_KEY = "<YOUR_GLADIA_API_KEY>"
+    GLADIA_API_URL = "https://api.gladia.io"
+
+    # Audio configuration
+    CHANNELS = 1
+    FORMAT = pyaudio.paInt16
+    FRAMES_PER_BUFFER = 3200
+    SAMPLE_RATE = 16_000
+
+    async def main():
+        # Initialize the session
+        config = {
+            "encoding": "wav/pcm",
+            "sample_rate": SAMPLE_RATE,
+            "bit_depth": 16,
+            "channels": CHANNELS,
+            "language_config": {
+                "languages": ["en"],
+            },
+        }
+        
+        # Start the live session
+        response = requests.post(
+            f"{GLADIA_API_URL}/v2/live",
+            headers={"X-Gladia-Key": GLADIA_API_KEY},
+            json=config,
+            timeout=3,
+        )
+        
+        if not response.ok:
+            print(f"{response.status_code}: {response.text or response.reason}")
+            exit(response.status_code)
+        
+        session_data = response.json()
+        
+        # Connect to the websocket
+        async with connect(session_data["url"]) as websocket:
+            print("\n################ Begin session ################\n")
+            
+            # Handle Ctrl+C to stop recording
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(
+                signal.SIGINT,
+                lambda: loop.create_task(stop_recording(websocket)),
+            )
+            
+            # Create tasks for sending audio and receiving transcripts
+            send_audio_task = asyncio.create_task(send_audio(websocket))
+            receive_transcript_task = asyncio.create_task(receive_transcript(websocket))
+            
+            await asyncio.wait([send_audio_task, receive_transcript_task])
+
+    async def stop_recording(websocket):
+        print(">>>>> Ending the recording…")
+        await websocket.send(json.dumps({"type": "stop_recording"}))
+        await asyncio.sleep(0)
+
+    async def send_audio(websocket):
+        # Initialize PyAudio
+        p = pyaudio.PyAudio()
+        
+        # Open audio stream
+        stream = p.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=SAMPLE_RATE,
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+        )
+        
+        # Send audio chunks
+        while True:
+            data = stream.read(FRAMES_PER_BUFFER)
+            data = base64.b64encode(data).decode("utf-8")
+            json_data = json.dumps({"type": "audio_chunk", "data": {"chunk": str(data)}})
+            try:
+                await websocket.send(json_data)
+                await asyncio.sleep(0.1)  # Send audio every 100ms
+            except ConnectionClosedOK:
+                return
+
+    async def receive_transcript(websocket):
+        # Process incoming messages
+        async for message in websocket:
+            content = json.loads(message)
+            
+            # Print transcripts
+            if content["type"] == "transcript" and content["data"]["is_final"]:
+                text = content["data"]["utterance"]["text"].strip()
+                print(f"Final: {text}")
+                
+            # Print final results
+            if content["type"] == "post_final_transcript":
+                print("\n################ End of session ################\n")
+                print(json.dumps(content, indent=2, ensure_ascii=False))
+
+    if __name__ == "__main__":
+        asyncio.run(main())
+    ```
+
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+    ```python
+    import pyaudio
+    import websocket
+    import json
+    import threading
+    import time
+    from urllib.parse import urlencode
+    from datetime import datetime
+
+    # --- Configuration ---
+    YOUR_API_KEY = "<YOUR-API-KEY>" # Replace with your actual API key
+
+    CONNECTION_PARAMS = {
+        "sample_rate": 16000,
+        "encoding": "pcm_s16le",
+        "formatted_finals": True, # Request formatted final transcripts
+    }
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+    # Audio Configuration
+    FRAMES_PER_BUFFER = 800 # 50ms of audio (0.05s \* 16000Hz)
+    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+    CHANNELS = 1
+    FORMAT = pyaudio.paInt16
+
+    # Global variables for audio stream and websocket
+    audio = None
+    stream = None
+    ws_app = None
+    audio_thread = None
+    stop_event = threading.Event() # To signal the audio thread to stop
+
+    # --- WebSocket Event Handlers ---
+
+    def on_open(ws):
+        """Called when the WebSocket connection is established."""
+        print("WebSocket connection opened.")
+        print(f"Connected to: {API_ENDPOINT}")
+
+        # Start sending audio data in a separate thread
+        def stream_audio():
+            global stream
+            print("Starting audio streaming...")
+            while not stop_event.is_set():
+                try:
+                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    # Send audio data as binary message
+                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    print(f'Error streaming audio: {e}')
+                    # If stream read fails, likely means it's closed, stop the loop
+                    break
+            print("Audio streaming stopped.")
+
+        global audio_thread
+        audio_thread = threading.Thread(target=stream_audio)
+        audio_thread.daemon = True # Allow main thread to exit even if this thread is running
+        audio_thread.start()
+
+    def on_message(ws, message):
+        """Called when a message is received from the server."""
+        try:
+            data = json.loads(message)
+            msg_type = data.get('type')
+
+            if msg_type == 'Begin':
+                session_id = data.get('id')
+                expires_at = data.get('expires_at')
+                print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+
+            elif msg_type == 'Partial':
+                text = data.get('text', '')
+                if text:
+                    print(text, end='\r', flush=True)
+
+            elif msg_type == 'Final':
+                text = data.get('text', '')
+                is_formatted = data.get('formatted', False)
+                
+                if text:
+                    print(' ' * 80, end='\r', flush=True)
+                    if not is_formatted:
+                        print(text, end='\r', flush=True)
+                    else:
+                        print(text, end='\r\n', flush=True)
+                # You can also access other fields like 'words', 'confidence', etc.
+                # print(f"Final Transcript received: {data}") # Uncomment for full details
+
+            elif msg_type == 'Termination':
+                audio_duration = data.get('audio_duration_seconds')
+                session_duration = data.get('session_duration_seconds')
+                print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+
+        except json.JSONDecodeError:
+            print(f"\nReceived non-JSON message: {message}")
+        except Exception as e:
+            print(f'\nError handling message: {e}')
+            print(f"Message data: {message}") # Print raw message on error
+
+    def on_error(ws, error):
+        """Called when a WebSocket error occurs."""
+        print(f'\nWebSocket Error: {error}')
+
+        # Attempt to signal stop on error
+        stop_event.set()
+
+    def on_close(ws, close_status_code, close_msg):
+        """Called when the WebSocket connection is closed."""
+        print(f'\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}')
+
+        # Ensure audio resources are released
+        global stream, audio
+        stop_event.set() # Signal audio thread just in case it's still running
+
+        if stream:
+            if stream.is_active():
+                stream.stop_stream()
+            stream.close()
+            stream = None
+        if audio:
+            audio.terminate()
+            audio = None
+        # Try to join the audio thread to ensure clean exit
+        if audio_thread and audio_thread.is_alive():
+            audio_thread.join(timeout=1.0)
+
+    # --- Main Execution ---
+
+    def run():
+        global audio, stream, ws_app
+
+        # Initialize PyAudio
+        audio = pyaudio.PyAudio()
+
+        # Open microphone stream
+        try:
+            stream = audio.open(
+                input=True,
+                frames_per_buffer=FRAMES_PER_BUFFER,
+                channels=CHANNELS,
+                format=FORMAT,
+                rate=SAMPLE_RATE
+            )
+            print("Microphone stream opened successfully.")
+            print("Speak into your microphone. Press Ctrl+C to stop.")
+        except Exception as e:
+            print(f"Error opening microphone stream: {e}")
+            if audio:
+                audio.terminate()
+            return # Exit if microphone cannot be opened
+
+        # Create WebSocketApp
+        ws_app = websocket.WebSocketApp(
+            API_ENDPOINT,
+            header={'Authorization': YOUR_API_KEY},
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+
+        # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+        ws_thread = threading.Thread(target=ws_app.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+
+        try:
+            # Keep main thread alive until interrupted
+            while ws_thread.is_alive():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\nCtrl+C received. Stopping...")
+            stop_event.set() # Signal audio thread to stop
+
+            # Send termination message to the server
+            if ws_app and ws_app.sock and ws_app.sock.connected:
+                try:
+                    terminate_message = {"type": "Terminate"}
+                    print(f"Sending termination message: {json.dumps(terminate_message)}")
+                    ws_app.send(json.dumps(terminate_message))
+                    # Give a moment for messages to process before forceful close
+                    time.sleep(0.5)
+                except Exception as e:
+                    print(f"Error sending termination message: {e}")
+
+            # Close the WebSocket connection (will trigger on_close)
+            if ws_app:
+                ws_app.close()
+
+            # Wait for WebSocket thread to finish
+            ws_thread.join(timeout=2.0)
+
+        except Exception as e:
+            print(f"\nAn unexpected error occurred: {e}")
+            stop_event.set()
+            if ws_app:
+                ws_app.close()
+            ws_thread.join(timeout=2.0)
+
+        finally:
+            # Final cleanup (already handled in on_close, but good as a fallback)
+            if stream and stream.is_active():
+                stream.stop_stream()
+            if stream:
+                stream.close()
+            if audio:
+                audio.terminate()
+            print("Cleanup complete. Exiting.")
+
+    if __name__ == "__main__":
+        run()
+
+    ```
+
+    </Tab>
+</Tabs>
+
+## Authentication
+
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+
+    ```python
+    import asyncio
+    import base64
+    import json
+    import signal
+    from datetime import time
+    import pyaudio
+    import requests
+    from websockets.asyncio.client import connect
+    from websockets.exceptions import ConnectionClosedOK
+
+    GLADIA_API_KEY = "fee8d14b-57b6-4288-8e6d-52f050bc930a"
+    ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+        ```python
+        import pyaudio
+        import websocket
+        import json
+        import threading
+        import time
+        from urllib.parse import urlencode
+        from datetime import datetime
+        
+
+        YOUR_API_KEY = "<YOUR-API-KEY>"  
+        ```
+    </Tab>
+</Tabs>
+
+<Note title="Protect Your API Key">
+    For improved security, store your API key as an environment variable.
+</Note>
+
+## Connection Parameters & Microphone Setup
+
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+        ```python
+        GLADIA_API_URL = "https://api.gladia.io"
+
+        CHANNELS = 1
+        FORMAT = pyaudio.paInt16
+        FRAMES_PER_BUFFER = 3200
+        SAMPLE_RATE = 16_000
+
+        config = {
+            "encoding": "wav/pcm",
+            "sample_rate": SAMPLE_RATE,
+            "bit_depth": 16,
+            "channels": CHANNELS,
+            "language_config": {
+                "languages": ["en"]
+            },
+        }
+        ```
+    </Tab>
+
+    <Tab language="aai" title="AssemblyAI">
+
+        ```python
+        CONNECTION_PARAMS = {
+            "sample_rate": 16000,
+            "encoding": "pcm_s16le",
+            "formatted_finals": True, # Request formatted final transcripts
+        }
+        API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+        API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+        # Audio Configuration
+        FRAMES_PER_BUFFER = 800 # 50ms of audio (0.05s \* 16000Hz)
+        SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+        CHANNELS = 1
+        FORMAT = pyaudio.paInt16
+
+        # Global variables for audio stream and websocket
+        audio = None
+        stream = None
+        ws_app = None
+        audio_thread = None
+        stop_event = threading.Event() # To signal the audio thread to stop
+        ```
+    </Tab>
+</Tabs>
+
+Helpful information about our streaming model:
+
+- **One Universal Model** - Just connect to `wss://streaming.assemblyai.com/v3/ws`. The live endpoint always uses our latest, best-performing model.
+
+- **Formatted Finals** - When `formatted_finals` is set to `True`, every Final message arrives with smart punctuation & casing. Set it to `False` (or omit it) to get raw lowercase text—useful if you do your own formatting.
+
+- **Partial Transcripts** - AssemblyAI streams Partial updates (interim results) automatically. There’s no switch to toggle. Expect fast, token-level updates that refine until each Final is emitted.
+
+## Open Microphone Stream & Create WebSocket
+    <Tabs groupId="language">
+        <Tab language="gladia" title="Gladia">
+            ```python
+
+            # Start the live session
+            response = requests.post(
+                f"{GLADIA_API_URL}/v2/live",
+                headers={"X-Gladia-Key": GLADIA_API_KEY},
+                json=config,
+                timeout=3,
+            )
+            
+            if not response.ok:
+                print(f"{response.status_code}: {response.text or response.reason}")
+                exit(response.status_code)
+            
+            session_data = response.json()
+
+            async def send_audio(websocket):
+                # Initialize PyAudio
+                p = pyaudio.PyAudio()
+                
+                # Open audio stream
+                stream = p.open(
+                    format=FORMAT,
+                    channels=CHANNELS,
+                    rate=SAMPLE_RATE,
+                    input=True,
+                    frames_per_buffer=FRAMES_PER_BUFFER,
+                )
+                
+                # Send audio chunks
+                while True:
+                    data = stream.read(FRAMES_PER_BUFFER)
+                    data = base64.b64encode(data).decode("utf-8")
+                    json_data = json.dumps({"type": "audio_chunk", "data": {"chunk": str(data)}})
+                    try:
+                        await websocket.send(json_data)
+                        await asyncio.sleep(0.1)  # Send audio every 100ms
+                    except ConnectionClosedOK:
+                        return
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+    ```python
+      global audio, stream, ws_app
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return # Exit if microphone cannot be opened
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={'Authorization': YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+    ```
+    <Note title="Websocket Error Handling">
+        Capture and log any errors emitted by the WebSocket connection to streamline troubleshooting and maintain smooth operation.
+        ```python
+        def on_error(ws, error):
+            """Called when a WebSocket error occurs."""
+            print(f'\nWebSocket Error: {error}')
+            # Attempt to signal stop on error
+            stop_event.set()
+        ```
+    </Note>
+    </Tab>
+</Tabs>
+
+## Open WebSocket
+
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+        ```python
+        # Connect to Websocket
+        async with connect(session_data["url"]) as websocket:
+            print("\n################ Begin session ################\n")
+            
+            # Create tasks for sending audio and receiving transcripts
+            send_audio_task = asyncio.create_task(send_audio(websocket))
+            receive_transcript_task = asyncio.create_task(receive_transcript(websocket))
+            
+            await asyncio.wait([send_audio_task, receive_transcript_task])
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+    ```python
+    def on_open(ws):
+        """Called when the WebSocket connection is established."""
+        print("WebSocket connection opened.")
+        print(f"Connected to: {API_ENDPOINT}")
+
+        # Start sending audio data in a separate thread
+        def stream_audio():
+            global stream
+            print("Starting audio streaming...")
+            while not stop_event.is_set():
+                try:
+                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    # Send audio data as binary message
+                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    print(f'Error streaming audio: {e}')
+                    # If stream read fails, likely means it's closed, stop the loop
+                    break
+            print("Audio streaming stopped.")
+
+        global audio_thread
+        audio_thread = threading.Thread(target=stream_audio)
+        audio_thread.daemon = True # Allow main thread to exit even if this thread is running
+        audio_thread.start()
+    ```
+    </Tab>
+</Tabs>
+
+## Receive Messsages from WebSocket
+
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+        ```python
+        async def receive_transcript(websocket):
+            # Process incoming messages
+            async for message in websocket:
+                content = json.loads(message)
+                
+                # Print transcripts
+                if content["type"] == "transcript" and content["data"]["is_final"]:
+                    text = content["data"]["utterance"]["text"].strip()
+                    print(f"Final: {text}")
+                    
+                # Print final results
+                if content["type"] == "post_final_transcript":
+                    print("\n################ End of session ################\n")
+                    print(json.dumps(content, indent=2, ensure_ascii=False))
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+    ```python
+    def on_message(ws, message):
+        """Called when a message is received from the server."""
+        try:
+            data = json.loads(message)
+            msg_type = data.get('type')
+
+            if msg_type == 'Begin':
+                session_id = data.get('id')
+                expires_at = data.get('expires_at')
+                print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+
+            elif msg_type == 'Partial':
+                text = data.get('text', '')
+                if text:
+                    print(text, end='\r', flush=True)
+
+            elif msg_type == 'Final':
+                text = data.get('text', '')
+                is_formatted = data.get('formatted', False)
+
+                if text:
+                    print(' ' * 80, end='\r', flush=True)
+                    if not is_formatted:
+                        print(text, end='\r', flush=True)
+                    else:
+                        print(text, end='\r\n', flush=True)
+                # You can also access other fields like 'words', 'confidence', etc.
+                # print(f"Final Transcript received: {data}") # Uncomment for full details
+
+            elif msg_type == 'Termination':
+                audio_duration = data.get('audio_duration_seconds')
+                session_duration = data.get('session_duration_seconds')
+                print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+
+        except json.JSONDecodeError:
+            print(f"\nReceived non-JSON message: {message}")
+        except Exception as e:
+            print(f'\nError handling message: {e}')
+            print(f"Message data: {message}") # Print raw message on error
+    ```
+    </Tab>
+</Tabs>
+
+Helpful information about AssemblyAI’s message payloads:
+
+- **Clear Message Types** – Instead of checking `is_final`, you’ll receive explicit `"Begin"`, `"Partial"`, `"Final"`, and `"Termination"` events, making your logic simpler and more readable.
+
+- **Session Metadata Up-Front** – The first `"Begin"` message delivers a `session_id` and expiry timestamp so you can immediately log or surface these for tracing or billing.
+
+- **Formatted vs. Raw Finals** – `"Final"` objects include a boolean `formatted_finals`. When you set `formatted_finals` to `True`, punctuation/casing appears in the Final Transctript, so you can toggle display styles on the fly.
+
+## Close the WebSocket
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+        ```python
+        async def stop_recording(websocket):
+            print(">>>>> Ending the recording…")
+            await websocket.send(json.dumps({"type": "stop_recording"}))
+            await asyncio.sleep(0)
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+
+    ```python
+    def on_close(ws, close_status_code, close_msg):
+        """Called when the WebSocket connection is closed."""
+        print(f'\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}')
+
+        # Ensure audio resources are released
+        global stream, audio
+        stop_event.set() # Signal audio thread just in case it's still running
+
+        if stream:
+            if stream.is_active():
+                stream.stop_stream()
+            stream.close()
+            stream = None
+        if audio:
+            audio.terminate()
+            audio = None
+        # Try to join the audio thread to ensure clean exit
+        if audio_thread and audio_thread.is_alive():
+            audio_thread.join(timeout=1.0)
+        ```
+    </Tab>
+</Tabs>
+
+Helpful information about AssemblyAI’s WebSocket Closure:
+
+- **Connection Diagnostics** - If the socket closes unexpectedly, AssemblyAI supplies both a status code and a reason message (close_status_code, close_msg), so you know immediately whether the server timed out, refused authentication, or encountered a different error.
+
+## Session Shutdown
+<Tabs groupId="language">
+    <Tab language="gladia" title="Gladia">
+        ```python
+        async with connect(session_data["url"]) as websocket:
+            ...
+            # Handle Ctrl+C to stop recording
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(
+                signal.SIGINT,
+                lambda: loop.create_task(stop_recording(websocket)),
+            )
+        ```
+    </Tab>
+    <Tab language="aai" title="AssemblyAI">
+    ```python
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set() # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+    ```
+    </Tab>
+</Tabs>
+
+Helpful information to know about AssemblyAI’s shutdown:
+
+- **JSON Payload Difference** - When closing the stream with AssemblyAI, your JSON payload will be `{"type": "Terminate" }` instead of `{"type": ""stop_recording"" }`.
+
+- **Server Handles Idle Timeouts** - If you forget to send `Terminate`, AssemblyAI will close the socket after an idle window of one minute.
+
+- **No Metadata Race Condition** - AssemblyAI provides session info at "Begin" and doesn’t append extra data at shutdown, making the exit faster and less error-prone.
