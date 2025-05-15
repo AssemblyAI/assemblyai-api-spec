@@ -1,0 +1,100 @@
+---
+title: "Transform Chinese Audio into Simplified or Traditional Text"
+---
+
+When transcribing Chinese audio, our models produce output that mixes both Simplified and Traditional Chinese characters. This happens because our models are typically trained on diverse datasets containing a mix of both writing systems.
+
+This guide demonstrates a practical workaround for this using OpenCC, an open-source Chinese conversion tool. We'll show you how to implement a post-processing step that can normalize your transcription output to either consistent Simplified Chinese or Traditional Chinese, depending on your needs.
+
+While this guide uses Python, OpenCC is available across multiple programming languages.
+
+# Quickstart
+
+```
+import assemblyai as aai
+import opencc
+
+aai.settings.api_key = "<YOUR-API-KEY>"
+
+audio_file = "https://assembly.ai/chinese-interview.mp4"
+
+config = aai.TranscriptionConfig(language_code="zh")
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+# t2s.json converts traditional characters to simplified
+# use s2t.json to convert from simplified to traditional
+converter = opencc.OpenCC('t2s.json')
+
+simplified_transcript = converter.convert(transcript.text)
+
+print(simplified_transcript)
+```
+
+# Step-by-step instructions
+
+First, install the required packages:
+
+1. AssemblyAI SDK
+2. OpenCC
+
+```bash
+pip install -U assemblyai opencc
+```
+
+Import the necessary libraries and configure your API credentials:
+
+```python
+import assemblyai as aai
+import opencc
+
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Specify your audio source and create a configuration for Chinese language transcription. Then submit your transcription request.
+
+```python
+audio_file = "https://assembly.ai/chinese-interview.mp4"
+
+config = aai.TranscriptionConfig(language_code="zh")
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+```
+
+Implement error handling to catch any transcription failures:
+
+```python
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+```
+
+Apply script conversion using OpenCC with the appropriate configuration:
+
+```python
+# Script conversion options:
+# - 't2s.json': Traditional to Simplified
+# - 's2t.json': Simplified to Traditional
+
+# Create converter object with desired direction
+converter = opencc.OpenCC('t2s.json') # For Traditional to Simplified
+
+# Convert the transcript text
+simplified_transcript = converter.convert(transcript.text)
+```
+
+Output or save your converted transcript:
+
+```python
+print(simplified_transcript)
+
+# Optionally save to file
+with open("converted_transcript.txt", "w", encoding="utf-8") as f:
+    f.write(converted_transcript)
+```
+
+## Conclusion
+
+This guide demonstrates how to solve the common challenge of mixed Chinese script systems in transcription outputs. By combining AssemblyAI's powerful speech recognition capabilities with OpenCC's script conversion tools, you can create a reliable pipeline for producing consistently formatted Chinese text from audio sources.
