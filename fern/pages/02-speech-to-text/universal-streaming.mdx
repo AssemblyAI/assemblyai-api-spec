@@ -571,7 +571,6 @@ These are issues currently known to exist in the API and being worked on by our 
 - Partial transcripts may start with sub-words
 - Subsequent partials may contain the same text content
 - Transcript confidence scores may currently be unstable
-- The session `Begin` message's `expires_at` field returns current epoch time
 - Partial and final transcripts may return unexpected word-level timestamps
 
 ## Voice Agents
@@ -590,18 +589,23 @@ In the current iteration of our streaming model, "Partial transcripts" are **imm
 ```
 
 This is followed by a Final Transcript:
+
 ```json
 → hello my name is zack (unformatted)
 → Hello my name is Zack. (formatted)
 ```
 
 <Note>
-To optimise for latency, we recommend using the unformatted Final Transcript as it's received more quickly than the formatted version. However, this creates a tradeoff as you won't receive punctuation and proper casing. Choose based on whether speed or formatting is more important for your application.
+  To optimise for latency, we recommend using the unformatted Final Transcript
+  as it's received more quickly than the formatted version. However, this
+  creates a tradeoff as you won't receive punctuation and proper casing. Choose
+  based on whether speed or formatting is more important for your application.
 </Note>
 
 ### Implementation strategy
 
 Since our Partial Transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here's how to handle the data flow:
+
 1. When you receive a Final Transcript but your Voice Agent hasn't detected end of turn, save this data in a variable (let's call it `running_transcript`).
 2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
 3. Clear the `running_transcript` after sending and be sure to ignore the Final Transcript that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
@@ -619,11 +623,11 @@ What you send to the voice agent should look like:
 → hello my name is son
 → hello my name is sonny (final – added to running_transcript)
 
-→ I 
+→ I
 → I work at
 → I work at assembly ai (final – added to running_transcript)
 
-→ how 
+→ how
 → how can
 → how can I help
 → how can I help you today (latest partial, final not yet received)
@@ -631,14 +635,16 @@ What you send to the voice agent should look like:
 <END_OF_TURN_DETECTED>
 "hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
 
-<running_transcript cleared>  
+<running_transcript cleared>
 <final for latest_partial not added to running_transcript>
 ```
 
 Utilizing our Partial Transcripts in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
 
 <Note>
-When using the latest Partial Transcript, ignore the subsequent Final Transcript for that segment to avoid sending duplicate information to the voice agent.
+  When using the latest Partial Transcript, ignore the subsequent Final
+  Transcript for that segment to avoid sending duplicate information to the
+  voice agent.
 </Note>
 
 ## Reference
@@ -688,15 +694,19 @@ You send:
 </Accordion>
 
 <Accordion title="Endpointing config">
+
 ```json
-{"type": "EndpointSilenceThreshold", "value_ms": 700}
+{ "type": "EndpointSilenceThreshold", "value_ms": 700 }
 ```
+
 </Accordion>
 
 <Accordion title="Session termination">
+
 ```json
-{"type": "Terminate"}
+{ "type": "Terminate" }
 ```
+
 </Accordion>
 
 </AccordionGroup>
@@ -704,7 +714,6 @@ You send:
 You receive:
 
 <AccordionGroup>
-
   <Accordion title="Session Begin">
 
     ```json
@@ -716,58 +725,63 @@ You receive:
     ```
 
   </Accordion>
-  <Accordion title="Partial Transcript">
+  <Accordion title="Turn">
+
     ```json
     {
-        "confidence": 0.9656018614768982,
-        "endpoint_confidence": 0.00015928121865727007,
-        "order": 11,
-        "start": 880,
-        "end": 960,
-        "text": "hello",
-        "words":
-        [
-            {
-                "start": 960,
-                "end": 960,
-                "confidence": 0.9656018614768982,
-                "text": "hello"
-            }
-        ],
-        "type": "Partial"
+      "turn_order": 0,
+      "turn_is_formatted": true,
+      "end_of_turn": true,
+      "transcript": "Hi, my name is Sonny.",
+      "end_of_turn_confidence": 0.8095446228981018,
+      "words":
+      [
+          {
+              "start": 1440,
+              "end": 1520,
+              "text": "Hi,",
+              "confidence": 0.9967870712280273,
+              "word_is_final": true
+          },
+          {
+              "start": 1600,
+              "end": 1680,
+              "text": "my",
+              "confidence": 0.999546468257904,
+              "word_is_final": true
+          },
+          {
+              "start": 1600,
+              "end": 1680,
+              "text": "name",
+              "confidence": 0.9597182273864746,
+              "word_is_final": true
+          },
+          {
+              "start": 1680,
+              "end": 1760,
+              "text": "is",
+              "confidence": 0.8261497616767883,
+              "word_is_final": true
+          },
+          {
+              "start": 2320,
+              "end": 3040,
+              "text": "Sonny.",
+              "confidence": 0.5737350583076477,
+              "word_is_final": true
+          }
+      ],
+      "type": "Turn"
     }
     ```
+
+    For the full breakdown of the message sequence for a turn, see the [Message sequence breakdown guide](/docs/speech-to-text/universal-streaming-messages-guide).
+
   </Accordion>
-  <Accordion title="Final Transcript">
-    ```json
-    {
-        "confidence": 0.9826867580413818,
-        "endpoint_confidence": 0.11108475923538208,
-        "order": 24,
-        "start": 960,
-        "end": 2000,
-        "text": "hello everybody",
-        "words":
-        [
-            {
-                "start": 960,
-                "end": 960,
-                "confidence": 0.9656018614768982,
-                "text": "hello"
-            },
-            {
-                "start": 1440,
-                "end": 1440,
-                "confidence": 0.9997717142105103,
-                "text": "everybody"
-            }
-        ],
-        "type": "Final",
-        "formatted": False
-    }
-    ```
-  </Accordion>
+
   <Accordion title="Session Termination">
+
     ```json
     {
         "type": "Termination",
@@ -775,6 +789,7 @@ You receive:
         "session_duration_seconds": 2000
     }
     ```
+
   </Accordion>
 </AccordionGroup>
 
