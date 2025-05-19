@@ -533,7 +533,37 @@ async function generateTempToken(apiKey, expiresInSeconds = 60) {
 
 ## Core concepts
 
-[Universal-Streaming API: Message Sequence Breakdown](/docs/speech-to-text/universal-streaming-messages-guide)
+The core concept of the new streaming API is the **Turn** object, which replaces the previous concepts of "partial" and "final" transcripts.
+
+```json
+{
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": false,
+  "transcript": "modern medicine is amazing",
+  "end_of_turn_confidence": 0.7,
+  "words": [
+    { "text": "modern", "word_is_final": true, ... },
+    { "text": "medicine", "word_is_final": true, ... },
+    { "text": "is", "word_is_final": true, ... },
+    { "text": "amazing", "word_is_final": false, ... }
+  ]
+}
+```
+
+- `turn_order`: Integer that increments with each new utterance
+- `turn_is_formatted`: Boolean indicating if this is a formatted version (with punctuation, capitalization)
+- `end_of_turn`: Boolean indicating if this is the end of the current turn
+- `transcript`: String containing only finalized words
+- `end_of_turn_confidence`: Double (0-1) representing confidence that user has completed their turn
+- `words`: List of word objects with individual metadata
+
+Each word in the `words` array includes:
+- `text`: The word text
+- `word_is_final`: Boolean indicating if the word is finalized
+- `start`: Timestamp for word start
+- `end`: Timestamp for word end
+- `confidence`: Confidence score for the word
 
 ## Early access considerations
 
@@ -558,80 +588,6 @@ These are issues currently known to exist in the API and being worked on by our 
 - Subsequent partials may contain the same text content
 - Transcript confidence scores may currently be unstable
 - Partial and final transcripts may return unexpected word-level timestamps
-
-## Voice Agents
-
-### Optimizing for ultra-low latency
-
-In the current iteration of our streaming model, "Partial transcripts" are **immutable**, unchanging outputs. They are delivered in the following format:
-
-```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is zac
-→ hello my name is zack
-```
-
-This is followed by a Final Transcript:
-
-```json
-→ hello my name is zack (unformatted)
-→ Hello my name is Zack. (formatted)
-```
-
-<Note>
-  To optimise for latency, we recommend using the unformatted Final Transcript
-  as it's received more quickly than the formatted version. However, this
-  creates a tradeoff as you won't receive punctuation and proper casing. Choose
-  based on whether speed or formatting is more important for your application.
-</Note>
-
-### Implementation strategy
-
-Since our Partial Transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here's how to handle the data flow:
-
-1. When you receive a Final Transcript but your Voice Agent hasn't detected end of turn, save this data in a variable (let's call it `running_transcript`).
-2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
-3. Clear the `running_transcript` after sending and be sure to ignore the Final Transcript that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
-
-What you send to the voice agent should look like:
-`running_transcript` + ' ' + `latest_partial`
-
-#### Example flow
-
-```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is son
-→ hello my name is sonny (final – added to running_transcript)
-
-→ I
-→ I work at
-→ I work at assembly ai (final – added to running_transcript)
-
-→ how
-→ how can
-→ how can I help
-→ how can I help you today (latest partial, final not yet received)
-
-<END_OF_TURN_DETECTED>
-"hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
-
-<running_transcript cleared>
-<final for latest_partial not added to running_transcript>
-```
-
-Utilizing our Partial Transcripts in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
-
-<Note>
-  When using the latest Partial Transcript, ignore the subsequent Final
-  Transcript for that segment to avoid sending duplicate information to the
-  voice agent.
-</Note>
 
 ## Reference
 
