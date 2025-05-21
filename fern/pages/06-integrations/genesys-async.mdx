@@ -4,6 +4,9 @@ title: "Transcribe Genesys Cloud Recordings with AssemblyAI"
 
 This guide walks through the process of setting up a transcription pipeline to send audio data from Genesys Cloud to AssemblyAI.
 
+To accomplish this, we'll stream audio through Genesys's [AudioHook Monitor](https://appfoundry.genesys.com/filter/genesyscloud/listing/a3ff6a99-d866-4734-ab7a-16cff2e4308c) integration to a WebSocket server.
+Upon call completion, the server will process this audio into a wav file and send it to AssemblyAI's Speech-to-text API for [pre-recorded audio](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio) transcription.
+
 You can find all the necessary code for this guide [here](https://github.com/gsharp-aai/genesys-async-guide).
 
 ## Architecture Overview
@@ -97,27 +100,43 @@ In the top navbar, make sure to click **Save** and then click **Publish** to hav
 <Steps>
 <Step>
 
-In the Genesys Cloud Admin section, navigate to the [Phones page](https://apps.usw2.pure.cloud/directory/#/admin/telephony/phone-management/phones) under the Telephony section. Create a new phone and assign the User from your organization that you selected for the **Transfer to User** step in the previous section.
+In the Genesys Cloud Admin section, navigate to the [Phones page](https://apps.usw2.pure.cloud/directory/#/admin/telephony/phone-management/phones) under the **Telephony section** and click **Add** to create a new phone. For **Person**, assign the User from your organization that you selected for the **Transfer to User** step in the previous section.
+<img src="../../assets/img/integrations/genesys/async/create_phone.png" />
+<img src="../../assets/img/integrations/genesys/async/assign_phone.png" />
+
 
 </Step>
 <Step>
 
-Navigate to the [Number Management](https://apps.usw2.pure.cloud/directory/#/admin/telecom/numbers/numbers) page under the Genesys Cloud Voice section and select **Purchase Numbers**. Create a new phone number.
+Navigate to the [Number Management](https://apps.usw2.pure.cloud/directory/#/admin/telecom/numbers/numbers) page under the **Genesys Cloud Voice** section and select **Purchase Numbers**.
+Enter an area code and click **Search**. Select a phone number from the list and click **Complete Purchase**.
+
+<img src="../../assets/img/integrations/genesys/async/purchase_numbers.png" />
+<img src="../../assets/img/integrations/genesys/async/purchase_numbers_search.png" />
 
 </Step>
 <Step>
 
-Navigate to the [Call Routing](https://apps.usw2.pure.cloud/directory/#/admin/routing/ivrs) page under the Routing section and select **Add**. Under **What call flow should be used?** select your flow. For **Inbound Numbers**, type the number you purchased in the above step.
+Navigate to the [Call Routing](https://apps.usw2.pure.cloud/directory/#/admin/routing/ivrs) page under the **Routing** section and select **Add**. Under **What call flow should be used?** select your flow. For **Inbound Numbers**, type the number you purchased in the above step. Then click **Create**.
+
+<img src="../../assets/img/integrations/genesys/async/add_route.png" />
+<img src="../../assets/img/integrations/genesys/async/create_route.png" />
 
 </Step>
 <Step>
 
-Under the Telephony section, navigate to the [Trunks](https://apps.usw2.pure.cloud/directory/#/admin/telephony/trunks/external) page. Create a new external trunk. Under Caller ID, the **Caller Address** will be an E.164 number and the phone number you created. 
+Under the **Telephony** section, navigate to the [External Trunks](https://apps.usw2.pure.cloud/directory/#/admin/telephony/trunks/external) page. Click **Create New**. Under **Caller ID**, the **Caller Address** will be an E.164 number and the phone number you created. 
+
+<img src="../../assets/img/integrations/genesys/async/add_trunk.png" />
+<img src="../../assets/img/integrations/genesys/async/name_trunk.png" />
 
 </Step>
 <Step>
 
-Under SIP Access Control, select **Allow All** (*note: this is only for development and testing purposes, please specify actual IPs in production*). Under the **Media** section, make sure you select **Record calls on this trunk**. Then save your trunk (it may take a few moments for your trunk to be ready.)
+Under **SIP Access Control**, select **Allow All** (*note: this is only for development and testing purposes, please specify actual IPs in production*). Under the **Media** section, make sure you select **Record calls on this trunk**. Then click **Save External Trunk** (it may take a few moments for your trunk to be ready).
+
+<img src="../../assets/img/integrations/genesys/async/sip_access.png" />
+<img src="../../assets/img/integrations/genesys/async/recording.png" />
 
 </Step>
 </Steps>
@@ -128,7 +147,7 @@ After our Genesys call ends, store the audio file in S3.
 <Steps>
 <Step>
 
-Click **Create bucket**. Give your bucket a name like `your-audiohook-bucket`. Scroll down to click **Create bucket**.
+Click **Create bucket**. Give your bucket a name like `your-audiohook-bucket`. Scroll down and click **Create bucket**.
 
 <img src="../../assets/img/integrations/genesys/async/audiohook_s3_bucket.png" />
 
@@ -524,10 +543,14 @@ On the left side panel, click **Environment variables**. Click **Edit**. Add an 
 
 Now, navigate to the [IAM](https://us-east-1.console.aws.amazon.com/iam/) services page. On the left side panel under **Access Management**, click **Roles** and search for your Lambda function's role (its structure should look like `<function_name>-<role_id>`). Click the role and then in the **Permissions policies** section click the dropdown for **Add permissions** and then select **Attach policies.**
 
+<img src="../../assets/img/integrations/genesys/async/attach_policies.png" />
+
 </Step>
 <Step>
 
 From this page, find the policies named `AmazonS3FullAccess` and `CloudWatchEventsFullAccess`. Click **Add permissions** for both.
+
+<img src="../../assets/img/integrations/genesys/async/adding_permissions.png" />
 
 <Note>
 `CloudWatchEventsFullAccess` is optional, but helpful for debugging purposes. Once your Lambda runs, it should output all logs to [CloudWatch](https://us-east-1.console.aws.amazon.com/cloudwatch) under a Log group `/aws/lambda/<your-lambda-fn>`
@@ -536,17 +559,23 @@ From this page, find the policies named `AmazonS3FullAccess` and `CloudWatchEven
 </Step>
 <Step>
 
-Now, navigate to the [S3](https://us-east-1.console.aws.amazon.com/s3) services page and click into the general purpose bucket where your Genesys recordings are stored. Browse to the **Properties** tab and then scroll down to **Event notifications**. Click **Create event notification**. Give the event a name and then in the **Prefix** section enter `calls/` (or whatever `S3_KEY_PREFIX` is set to), and in the **Suffix** section enter `.wav`. This will ensure the event is triggered once our `wav` file has been uploaded.
+Now, navigate to the [S3](https://us-east-1.console.aws.amazon.com/s3) services page and click into the general purpose bucket where your Genesys recordings are stored. Browse to the **Properties** tab and then scroll down to **Event notifications**. Click **Create event notification**.
+
+<img src="../../assets/img/integrations/genesys/async/create_event_notif.png" />
 
 </Step>
 <Step>
 
-In the **Event types** section, select **All object create events**.
+Give the event a name and then in the **Prefix** section enter `calls/` (or whatever `S3_KEY_PREFIX` is set to), and in the **Suffix** section enter `.wav`. This will ensure the event is triggered once our `wav` file has been uploaded. In the **Event types** section, select **All object create events**.
+
+<img src="../../assets/img/integrations/genesys/async/creation_of_event.png" />
 
 </Step>
 <Step>
 
 Scroll down to the **Destination** section, set the destination as **Lambda function** and then select the Lambda function we created in [Step 6](https://www.assemblyai.com/docs/integrations/genesys-cloud#step-2-4). Then click **Save changes**.
+
+<img src="../../assets/img/integrations/genesys/async/adding_to_lambda.png" />
 
 </Step>
 </Steps>
@@ -578,7 +607,7 @@ Processed 146KB of audio data so far
 </Step>
 <Step>
 
-Once you end the call, you should see the following logs:
+Once the call has ended, you should see the following server logs:
 
 ```bash
 {
