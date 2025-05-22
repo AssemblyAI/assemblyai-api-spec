@@ -243,7 +243,7 @@ for (const paragraph of paragraphs) {
 }
 ```
 
-```csharp title="C#" highlight={84-91} maxLines=15
+```csharp title="C#" highlight={123-131} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -276,81 +276,104 @@ public class ParagraphsResponse
     public Paragraph[] Paragraphs { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var localFilePath = "audio.mp3"; // replace with your audio file name
+
+            Console.WriteLine("Uploading file...");
+            var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
+
+            Console.WriteLine("Creating transcript...");
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+
+            Console.WriteLine("Waiting for transcription...");
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine("Fetching paragraphs...");
+            var paragraphs = await GetParagraphsAsync(transcript.Id, httpClient);
+
+            Console.WriteLine();
+            Console.WriteLine("=== Paragraphs ===");
+            foreach (var paragraph in paragraphs)
+            {
+                Console.WriteLine(paragraph.Text);
+                Console.WriteLine();
+            }
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-async Task<Paragraph[]> GetParagraphsAsync(string transcriptId, HttpClient httpClient)
-{
-    var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/paragraphs";
-    var response = await httpClient.GetAsync(url);
-    response.EnsureSuccessStatusCode();
-    var result = await response.Content.ReadFromJsonAsync<ParagraphsResponse>();
-    return result.Paragraphs;
-}
-
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
-
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-
-    var paragraphs = await GetParagraphsAsync(transcript.Id, httpClient);
-    foreach (var paragraph in paragraphs)
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
     {
-        Console.WriteLine(paragraph.Text);
-        Console.WriteLine();
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    Console.WriteLine($"Status: {transcript.Status}... waiting...");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
+
+    static async Task<Paragraph[]> GetParagraphsAsync(string transcriptId, HttpClient httpClient)
+    {
+        var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/paragraphs";
+        var response = await httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<ParagraphsResponse>();
+        return result.Paragraphs;
     }
 }
 ```
@@ -666,7 +689,7 @@ for (const sentence of sentences) {
 }
 ```
 
-```csharp title="C#" highlight={84-91} maxLines=15
+```csharp title="C#" highlight={123-131} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -699,81 +722,104 @@ public class SentencesResponse
     public Sentence[] Sentences { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var localFilePath = "audio.mp3"; // replace if needed
+
+            Console.WriteLine("Uploading file...");
+            var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
+
+            Console.WriteLine("Creating transcript...");
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+
+            Console.WriteLine("Waiting for transcription...");
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine("Fetching sentences...");
+            var sentences = await GetSentencesAsync(transcript.Id, httpClient);
+
+            Console.WriteLine();
+            Console.WriteLine("=== Sentences ===");
+            foreach (var sentence in sentences)
+            {
+                Console.WriteLine(sentence.Text);
+                Console.WriteLine();
+            }
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-async Task<Sentence[]> GetSentencesAsync(string transcriptId, HttpClient httpClient)
-{
-    var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/sentences";
-    var response = await httpClient.GetAsync(url);
-    response.EnsureSuccessStatusCode();
-    var result = await response.Content.ReadFromJsonAsync<SentencesResponse>();
-    return result.Sentences;
-}
-
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
-
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-
-    var sentences = await GetSentencesAsync(transcript.Id, httpClient);
-    foreach (var sentence in sentences)
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
     {
-        Console.WriteLine(sentence.Text);
-        Console.WriteLine();
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    Console.WriteLine($"Status: {transcript.Status}... waiting...");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
+
+    static async Task<Sentence[]> GetSentencesAsync(string transcriptId, HttpClient httpClient)
+    {
+        var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/sentences";
+        var response = await httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<SentencesResponse>();
+        return result.Sentences;
     }
 }
 ```
