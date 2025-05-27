@@ -124,11 +124,11 @@ def on_open(ws):
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                
+
                 # Store audio data for WAV recording
                 with recording_lock:
                     recorded_frames.append(audio_data)
-                
+
                 # Send audio data as binary message
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
@@ -182,10 +182,10 @@ def on_error(ws, error):
 def on_close(ws, close_status_code, close_msg):
     """Called when the WebSocket connection is closed."""
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    
+
     # Save recorded audio to WAV file
     save_wav_file()
-    
+
     # Ensure audio resources are released
     global stream, audio
     stop_event.set()  # Signal audio thread just in case it's still running
@@ -208,24 +208,24 @@ def save_wav_file():
     if not recorded_frames:
         print("No audio data recorded.")
         return
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"recorded_audio_{timestamp}.wav"
-    
+
     try:
         with wave.open(filename, 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(2)  # 16-bit = 2 bytes
             wf.setframerate(SAMPLE_RATE)
-            
+
             # Write all recorded frames
             with recording_lock:
                 wf.writeframes(b''.join(recorded_frames))
-        
+
         print(f"Audio saved to: {filename}")
         print(f"Duration: {len(recorded_frames) * FRAMES_PER_BUFFER / SAMPLE_RATE:.2f} seconds")
-        
+
     except Exception as e:
         print(f"Error saving WAV file: {e}")
 
@@ -384,26 +384,26 @@ function formatTimestamp(timestamp) {
 
 function createWavHeader(sampleRate, channels, dataLength) {
   const buffer = Buffer.alloc(44);
-  
+
   // RIFF header
-  buffer.write('RIFF', 0);
+  buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + dataLength, 4);
-  buffer.write('WAVE', 8);
-  
+  buffer.write("WAVE", 8);
+
   // fmt chunk
-  buffer.write('fmt ', 12);
+  buffer.write("fmt ", 12);
   buffer.writeUInt32LE(16, 16); // fmt chunk size
-  buffer.writeUInt16LE(1, 20);  // PCM format
+  buffer.writeUInt16LE(1, 20); // PCM format
   buffer.writeUInt16LE(channels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
   buffer.writeUInt16LE(channels * 2, 32); // block align
   buffer.writeUInt16LE(16, 34); // bits per sample
-  
+
   // data chunk
-  buffer.write('data', 36);
+  buffer.write("data", 36);
   buffer.writeUInt32LE(dataLength, 40);
-  
+
   return buffer;
 }
 
@@ -412,26 +412,27 @@ function saveWavFile() {
     console.log("No audio data recorded.");
     return;
   }
-  
+
   // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `recorded_audio_${timestamp}.wav`;
-  
+
   try {
     // Combine all recorded frames
     const audioData = Buffer.concat(recordedFrames);
     const dataLength = audioData.length;
-    
+
     // Create WAV header
     const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
-    
+
     // Write WAV file
     const wavFile = Buffer.concat([wavHeader, audioData]);
     fs.writeFileSync(filename, wavFile);
-    
+
     console.log(`Audio saved to: ${filename}`);
-    console.log(`Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`);
-    
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
   } catch (error) {
     console.error(`Error saving WAV file: ${error}`);
   }
@@ -520,7 +521,7 @@ function startMicrophone() {
       if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
         // Store audio data for WAV recording
         recordedFrames.push(Buffer.from(data));
-        
+
         // Send audio data to WebSocket
         ws.send(data);
       }
@@ -666,6 +667,7 @@ The core concept of the new streaming API is the **Turn** object, which replaces
 - `words`: List of word objects with individual metadata
 
 Each word in the `words` array includes:
+
 - `text`: The word text
 - `word_is_final`: Boolean indicating if the word is finalized
 - `start`: Timestamp for word start
@@ -701,45 +703,54 @@ These are issues currently known to exist in the API and being worked on by our 
 
 AssemblyAI's end-of-turn detection functionality is integrated into our Streaming STT model, leveraging both acoustic and semantic features, and is coupled with a traditional silence-based heuristic approach. Both mechanisms work jointly and either can trigger end-of-turn detection throughout the audio stream. This joint approach significantly enhances the speed and accuracy of end-of-turn detection while allowing this functionality to fall back to the traditional method when the model makes a misprediction.
 
-<Note>End-of-turn and end-of-utterances refer to the same thing and may be used interchangeably in these docs.</Note>
+<Note>
+  End-of-turn and end-of-utterances refer to the same thing and may be used
+  interchangeably in these docs.
+</Note>
 
 ### Model-based detection
 
 Triggers when **all** conditions are met:
 
 #### EOT token predicted
-* Model predicts semantic end-of-turn with a probability greater than `end_of_turn_confidence_threshold`
-* Default: 0.5 (user configurable)
+
+- Model predicts semantic end-of-turn with a probability greater than `end_of_turn_confidence_threshold`
+- Default: 0.5 (user configurable)
 
 #### Minimum silence duration has passed
-* After the last non-silence word token, `min_end_of_turn_silence_when_confident` milliseconds must pass
-* Default: 400ms (user configurable)
+
+- After the last non-silence word token, `min_end_of_turn_silence_when_confident` milliseconds must pass
+- Default: 400ms (user configurable)
 
 #### Minimum speech duration spoken
-* The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-* Set to 80 ms (internal)
+
+- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
+- Set to 80 ms (internal)
 
 #### Word finalized
-* Last word in `turn.words` has been finalized
-* Internal configuration
+
+- Last word in `turn.words` has been finalized
+- Internal configuration
 
 ### Silence-based detection
 
 Triggers when **all** conditions are met:
 
 #### Minimum speech duration spoken
-* The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-* Set to 80 ms (internal)
+
+- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
+- Set to 80 ms (internal)
 
 #### Maximum silence duration has passed
-* After the last non-silence word token, `max_turn_silence` milliseconds must pass
-* Default: 2400ms (user configurable)
+
+- After the last non-silence word token, `max_turn_silence` milliseconds must pass
+- Default: 2400ms (user configurable)
 
 ### Important notes
 
-* Silence-based detection can override model-based detection even with high EOT confidence thresholds
-* Word finalization always takes precedence — endpointing won't occur until the last word is finalized
-* We define end-of-turn detection as the process of detecting the end of sustained speech activity, often called end-pointing in the Voice Agents context
+- Silence-based detection can override model-based detection even with high EOT confidence thresholds
+- Word finalization always takes precedence — endpointing won't occur until the last word is finalized
+- We define end-of-turn detection as the process of detecting the end of sustained speech activity, often called end-pointing in the Voice Agents context
 
 ## Voice Agents
 
@@ -828,9 +839,10 @@ Utilizing our Partial Transcripts in this manner will allow you to achieve the f
 </ParamField>
 
 <ParamField path="formatted_finals" type="boolean" default={"False"}>
-  Whether to return formatted final transcripts. 
+  Whether to return formatted final transcripts.
   <Note>
-    If enabled, formatted final transcripts will be emitted shortly following an end-of-turn detection.
+    If enabled, formatted final transcripts will be emitted shortly following an
+    end-of-turn detection.
   </Note>
 </ParamField>
 
@@ -881,7 +893,11 @@ You send:
 <Accordion title="Endpointing config">
 
 ```json
-{ "type": "UpdateConfiguration", "word_finalization_max_wait_time": 5, "end_of_turn_confidence_threshold": 0.1 }
+{
+  "type": "UpdateConfiguration",
+  "word_finalization_max_wait_time": 5,
+  "end_of_turn_confidence_threshold": 0.1
+}
 ```
 
 </Accordion>
