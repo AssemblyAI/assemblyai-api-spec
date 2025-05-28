@@ -1,0 +1,382 @@
+asyncapi: 2.6.0
+defaultContentType: application/json
+id: http://assemblyai.com/asyncapi
+
+info:
+  title: AssemblyAI Streaming Speech-to-Text API
+  description: AssemblyAI Streaming Speech-to-Text API
+  license:
+    name: MIT License
+  version: 1.1.2
+  contact:
+    name: API Support
+    email: support@assemblyai.com
+    url: https://www.assemblyai.com/docs/
+
+servers:
+  API:
+    url: wss://api.assemblyai.com
+    protocol: wss
+    description: AssemblyAI API
+    security:
+      - ApiKey: []
+      - Token: []
+
+tags:
+  # This tag is used as the Fern package name for the channel and messages, even tho the tag is not linked to anything.
+  # x-fern-group-sdk-name also doesn't work on channels and messages.
+  # Hence, it has to be "realtime" and can't be "streaming" until these gaps in Fern are fixed.
+  - name: realtime-v2
+    description: Streaming Speech-to-Text
+    externalDocs:
+      url: https://www.assemblyai.com/docs/speech-to-text/universal-streaming
+
+channels:
+  /v3/ws:
+    bindings:
+      ws:
+        headers:
+          type: object
+          properties:
+            Authorization:
+              description: Authenticate using your AssemblyAI API key
+              type: string
+        query:
+          type: object
+          required: [sample_rate, encoding]
+          properties:
+            sample_rate:
+              description: The sample rate of the streamed audio
+              type: integer
+              examples:
+                - 16000
+            encoding:
+              description: The encoding of the audio stream
+              type: string
+              enum: [pcm_s16le, pcm_mulaw]
+              examples:
+                - pcm_s16le
+            token:
+              description: |
+                Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)
+              type: string
+              format: password
+              examples:
+                - eyJhbGciOiJIUzI1...
+            formatted_finals:
+              description: Whether to return formatted final transcripts
+              type: boolean
+              default: false
+            word_finalization_max_wait_time:
+              description: The max amount of time in milliseconds to wait for a word to be finalized
+              type: integer
+              default: 160
+            end_of_turn_confidence_threshold:
+              description: The confidence threshold to use when determining if the end of a turn has been reached
+              type: number
+              format: float
+              default: 0.4
+            min_end_of_turn_silence_when_confident:
+              description: The minimum amount of silence required to detect end of turn when confident
+              type: integer
+              default: 480
+            max_turn_silence:
+              description: The maximum amount of silence allowed in a turn before end of turn is triggered
+              type: integer
+              default: 700
+    publish:
+      description: Send messages to the WebSocket
+      operationId: sendMessage
+      message:
+        oneOf:
+          - $ref: "#/components/messages/SendAudio"
+          - $ref: "#/components/messages/UpdateConfiguration"
+          - $ref: "#/components/messages/Terminate"
+
+    subscribe:
+      description: Receive messages from the WebSocket
+      operationId: receiveMessage
+      message:
+        oneOf:
+          - $ref: "#/components/messages/Begin"
+          - $ref: "#/components/messages/Turn"
+          - $ref: "#/components/messages/Termination"
+          - $ref: "#/components/messages/RealtimeError"
+
+components:
+  messages:
+    SendAudio:
+      messageId: sendAudio
+      summary: Send audio
+      payload:
+        $ref: "#/components/schemas/AudioData"
+    UpdateConfiguration:
+      messageId: updateConfiguration
+      summary: Update configuration during streaming
+      payload:
+        $ref: "#/components/schemas/UpdateConfiguration"
+    Terminate:
+      messageId: terminate
+      summary: Terminate session
+      payload:
+        $ref: "#/components/schemas/Terminate"
+    Begin:
+      messageId: Begin
+      summary: Session start
+      payload:
+        $ref: "#/components/schemas/Begin"
+    Turn:
+      messageId: Turn
+      summary: Turn transcript with word-level metadata
+      description: |
+        Contains the transcript for a turn with detailed word-level information.
+        Replaces the previous PartialTranscript and FinalTranscript messages.
+      payload:
+        $ref: "#/components/schemas/Turn"
+    Termination:
+      messageId: Termination
+      summary: Session terminated
+      payload:
+        $ref: "#/components/schemas/Termination"
+    RealtimeError:
+      messageId: RealtimeError
+      summary: Error message
+      payload:
+        $ref: "#/components/schemas/RealtimeError"
+
+  schemas:
+    RealtimeBaseMessage:
+      type: object
+      x-fern-sdk-group-name: realtime
+      required:
+        - type
+      properties:
+        type:
+          description: Describes the type of the message
+          $ref: "#/components/schemas/MessageType"
+    RealtimeMessage:
+      x-fern-sdk-group-name: realtime
+      oneOf:
+        - $ref: "#/components/schemas/Begin"
+        - $ref: "#/components/schemas/Turn"
+        - $ref: "#/components/schemas/Termination"
+        - $ref: "#/components/schemas/RealtimeError"
+    RealtimeError:
+      summary: Error message
+      type: object
+      x-fern-sdk-group-name: realtime
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+      examples:
+        - { "error": "Client sent audio too fast" }
+    MessageType:
+      type: string
+      x-fern-sdk-group-name: realtime
+      enum: [Begin, Turn, Termination]
+    AudioData:
+      type: string
+      format: byte
+      description: |
+        Binary audio data encoded in base64.
+        The audio must be in the format specified by the `encoding` parameter.
+      x-fern-sdk-group-name: realtime
+      examples:
+        - UklGRtjIAABXQVZFZ
+    UpdateConfiguration:
+      type: object
+      x-fern-sdk-group-name: realtime
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          const: UpdateConfiguration
+        word_finalization_max_wait_time:
+          description: The max amount of time in milliseconds to wait for a word to be finalized
+          type: integer
+        end_of_turn_confidence_threshold:
+          description: The confidence threshold to use when determining if the end of a turn has been reached
+          type: number
+          format: float
+      examples:
+        - type: UpdateConfiguration
+          word_finalization_max_wait_time: 5
+          end_of_turn_confidence_threshold: 0.1
+    Terminate:
+      type: object
+      x-fern-sdk-group-name: realtime
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          const: Terminate
+      examples:
+        - { "type": "Terminate" }
+    Begin:
+      summary: Session start
+      type: object
+      x-fern-sdk-group-name: realtime
+      allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - expires_at
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique session ID
+            expires_at:
+              type: integer
+              description: Unix timestamp when the session expires
+      examples:
+        - type: Begin
+          id: cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f
+          expires_at: 1745483367
+    Turn:
+      summary: Turn transcript with word-level metadata
+      type: object
+      x-fern-sdk-group-name: realtime
+      allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
+        - type: object
+          additionalProperties: false
+          required:
+            - turn_order
+            - turn_is_formatted
+            - end_of_turn
+            - transcript
+            - end_of_turn_confidence
+            - words
+          properties:
+            turn_order:
+              type: integer
+              description: Integer that increments with each new utterance
+            turn_is_formatted:
+              type: boolean
+              description: Boolean indicating if this is a formatted version (with punctuation, capitalization)
+            end_of_turn:
+              type: boolean
+              description: Boolean indicating if this is the end of the current turn
+            transcript:
+              type: string
+              description: String containing only finalized words
+            end_of_turn_confidence:
+              type: number
+              format: double
+              description: Double (0-1) representing confidence that user has completed their turn
+            words:
+              type: array
+              description: List of word objects with individual metadata
+              items:
+                $ref: "#/components/schemas/Word"
+      examples:
+        - type: Turn
+          turn_order: 0
+          turn_is_formatted: true
+          end_of_turn: true
+          transcript: "Hi, my name is Sonny."
+          end_of_turn_confidence: 0.8095446228981018
+          words:
+            - start: 1440
+              end: 1520
+              text: "Hi,"
+              confidence: 0.9967870712280273
+              word_is_final: true
+            - start: 1600
+              end: 1680
+              text: "my"
+              confidence: 0.999546468257904
+              word_is_final: true
+            - start: 1600
+              end: 1680
+              text: "name"
+              confidence: 0.9597182273864746
+              word_is_final: true
+            - start: 1680
+              end: 1760
+              text: "is"
+              confidence: 0.8261497616767883
+              word_is_final: true
+            - start: 2320
+              end: 3040
+              text: "Sonny."
+              confidence: 0.5737350583076477
+              word_is_final: true
+    Termination:
+      summary: Session terminated
+      type: object
+      x-fern-sdk-group-name: realtime
+      allOf:
+        - $ref: "#/components/schemas/RealtimeBaseMessage"
+        - type: object
+          additionalProperties: false
+          required:
+            - audio_duration_seconds
+            - session_duration_seconds
+          properties:
+            audio_duration_seconds:
+              type: number
+              description: Total audio duration in seconds
+            session_duration_seconds:
+              type: number
+              description: Total session duration in seconds
+      examples:
+        - type: Termination
+          audio_duration_seconds: 2000
+          session_duration_seconds: 2000
+    Word:
+      type: object
+      x-fern-sdk-group-name: realtime
+      required:
+        - start
+        - end
+        - confidence
+        - text
+        - word_is_final
+      properties:
+        start:
+          type: integer
+          format: int64
+          description: Start time of the word in milliseconds
+        end:
+          type: integer
+          format: int64
+          description: End time of the word in milliseconds
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: The confidence score of the word
+        text:
+          type: string
+          description: The word text
+        word_is_final:
+          type: boolean
+          description: Boolean indicating if the word is finalized
+    AudioEncoding:
+      description: The encoding of the audio data
+      type: string
+      x-fern-sdk-group-name: realtime
+      enum:
+        - pcm_s16le
+        - pcm_mulaw
+
+  securitySchemes:
+    ApiKey:
+      description: Authenticate using your AssemblyAI API key
+      type: httpApiKey
+      in: header
+      name: Authorization
+    Token:
+      description: "Authenticate using a [generated temporary token](https://www.assemblyai.com/docs/speech-to-text/streaming#authenticate-with-a-temporary-token)"
+      type: httpApiKey
+      in: query
+      name: token
