@@ -26,7 +26,6 @@ Here's the full sample code of what you'll build in this tutorial:
 
 ```python
 import logging
-import os
 from typing import Type
 
 import assemblyai as aai
@@ -42,8 +41,7 @@ from assemblyai.streaming.v3 import (
     TurnEvent,
 )
 
-api_key = os.getenv("ASSEMBLYAI_API_KEY")
-audio_file = "gore.wav"
+api_key = "<YOUR_API_KEY>"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,7 +76,7 @@ def main():
     client = StreamingClient(
         StreamingClientOptions(
             api_key=api_key,
-            api_host="streaming.sandbox000.assemblyai-labs.com",
+            api_host="null",
         )
     )
 
@@ -89,17 +87,14 @@ def main():
 
     client.connect(
         StreamingParameters(
-            sample_rate=8000,
+            sample_rate=16000,
             formatted_finals=True,
         )
     )
 
     try:
         client.stream(
-            aai.extras.stream_file(
-                filepath=audio_file,
-                sample_rate=8000,
-            ),
+          aai.extras.MicrophoneStream(sample_rate=16000)
         )
     finally:
         client.disconnect(terminate=True)
@@ -650,7 +645,6 @@ Create a file called `main.py` and import the following packages at the top of y
 
 ```python
 import logging
-import os
 from typing import Type
 
 import assemblyai as aai
@@ -999,16 +993,35 @@ Create functions to handle the events from the real-time service.
 <Tabs groupId="language">
 
 <Tab language="python-sdk" title="Python SDK">
+Define the event handlers:
 
 ```python
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
 
-def on_close():
-    print("Closing Session")
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
+
+    if event.end_of_turn and not event.turn_is_formatted:
+        params = StreamingSessionParameters(
+            formatted_finals=True,
+        )
+
+        self.set_params(params)
+
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
 ```
 
 </Tab>
@@ -1187,9 +1200,8 @@ async function run() {
 </Tab>
 </Tabs>
 
-<Tip title="End of turn controls">
-
-You can configure the minimum amount of silence required to detect end of turn when confident and the maximum amount of silence allowed in a turn before end of turn is triggered. (Links to be added)
+<Tip title="Message sequence and turn events">
+To get a better understand of the turn event and the message sequences, check out our [Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/universal-streaming/message-sequence) page. This object is how you'll receive your transcripts.
 </Tip>
 
 ## Step 5: Connect and start transcription
@@ -1199,35 +1211,51 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
 
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
+<Steps>
+  <Step>
+  In the `main` function create a `client`. and and connect to the streaming service:
 
-First, create a transcriber and connect to the real-time service:
+  ```python
+      client = StreamingClient(
+          StreamingClientOptions(
+              api_key=api_key,
+              api_host="null",
+          )
+      )
 
-```python
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16_000,
-    on_data=on_data,
-    on_error=on_error,
-    on_open=on_open,
-    on_close=on_close,
-)
+      client.on(StreamingEvents.Begin, on_begin)
+      client.on(StreamingEvents.Turn, on_turn)
+      client.on(StreamingEvents.Termination, on_terminated)
+      client.on(StreamingEvents.Error, on_error)
 
-transcriber.connect()
-```
+      client.connect(
+          StreamingParameters(
+              sample_rate=16000,
+              formatted_finals=True,
+          )
+      )
+  ```
+  </Step>
+  <Step>
+  Then, create a microphone stream and start transcribing audio:
 
-Then, create a microphone stream and start transcribing audio:
-
-```python
-microphone_stream = aai.extras.MicrophoneStream(sample_rate=16_000)
-transcriber.stream(microphone_stream)  # Press Ctrl+C to stop
-```
+  ```python
+      try:
+          client.stream(
+            aai.extras.MicrophoneStream(sample_rate=16000)
+          )
+  ```
+  </Step>
+</Steps>
 
 </Tab>
 <Tab language="python" title="Python">
-Initialize the audio stream and create a WebSocket connection to the real-time service:
+
+<Steps>
+<Step>
+In the `run` function, initialize the audio stream.
 
 ```python
-import websocket
-
 def run():
     global audio, stream, ws_app
     # Initialize PyAudio
@@ -1249,6 +1277,12 @@ def run():
         if audio:
             audio.terminate()
         return  # Exit if microphone cannot be opened
+```
+</Step>
+
+<Step>
+Next, create a WebSocket connection to the real-time service:
+```python
     # Create WebSocketApp
     ws_app = websocket.WebSocketApp(
         API_ENDPOINT,
@@ -1263,6 +1297,9 @@ def run():
     ws_thread.daemon = True
     ws_thread.start()
 ```
+</Step>
+</Steps>
+
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
@@ -1273,8 +1310,17 @@ Null
 </Tab>
 
 <Tab language="typescript" title="TypeScript">
+<Steps>
+<Step>
 
-Create the function that initializes the audio stream. This function is called within the `main` function from the previous. step above.
+<Note title="Initialize WebSocket">
+The WebSocket was initialized in at the beginning of the `main` function in Step 4.
+</Note>
+
+
+</Step>
+<Step>
+Create the function that initializes the audio stream. This function is called within the `main` function from Step 4.
 ```ts
 function startMicrophone() {
   try {
@@ -1307,23 +1353,28 @@ function startMicrophone() {
   }
 }
 ```
+</Step>
+</Steps>
+
+
 </Tab>
 </Tabs>
 
 
 ## Step 6: Close the connection
 
-<Steps>
-<Step>
+
 
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
 
-Close the transcriber when you're done:
+Disconnect the client when you're done:
 
 ```python
-transcriber.close()
+    finally:
+        client.disconnect(terminate=True)
 ```
+The connection will also close automatically when you press Ctrl+C. In both cases, the `.disconnect()` handler will clean up the audio resources.
 
 </Tab>
 <Tab language="python" title="Python">
@@ -1369,6 +1420,7 @@ Close the WebSocket connection when you're done:
             audio.terminate()
         print("Cleanup complete. Exiting.")
 ```
+The connection will also close automatically when you press Ctrl+C. In both cases, the `.close()` handler will clean up the audio resources.
 
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
@@ -1381,7 +1433,7 @@ Null
 
 <Tab language="typescript" title="TypeScript">
 
-Create the function that initializes the audio stream. This function is called within the `main` function from the previous. step above.
+Terminate the session when you're done:
 ```ts
 function cleanup() {
   stopRequested = true;
@@ -1438,13 +1490,10 @@ function setupTerminationHandlers() {
   });
 }
 ```
+The connection will also close automatically when you press Ctrl+C. In both cases, the `cleanup` function will clean up the audio resources.
 </Tab>
 </Tabs>
 
-The connection will also close automatically when you press Ctrl+C. In both cases, the `on_close` handler will clean up the audio resources.
-
-</Step>
-</Steps>
 
 ## Next steps
 
