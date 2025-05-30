@@ -1,0 +1,124 @@
+---
+title: "Livekit"
+description: "Livekit voice agent integration"
+---
+## Overview
+
+LiveKit is an open source platform for developers building realtime media applications. In this guide, we'll show you how to integrate AssemblyAI's streaming speech-to-text model into your Livekit voice agent using the Agents framework.
+
+<Card 
+    title="Livekit" 
+    icon={<img src="https://assemblyaiassets.com/images/Livekit.svg" alt="Livekit logo"/>} 
+    href="https://docs.livekit.io/agents/integrations/stt/assemblyai/"
+>
+    View Livekit's AssemblyAI STT plugin documentation.
+</Card>
+
+## Quick start
+
+### Installation
+
+Install the plugin from PyPI:
+
+```bash
+pip install "livekit-agents[assemblyai]"
+```
+
+### Authentication
+
+The AssemblyAI plugin requires an [AssemblyAI API key](https://www.assemblyai.com/docs/api-reference/overview#authorization). Set `ASSEMBLYAI_API_KEY` in your `.env` file.
+
+<Tip>
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
+
+### Basic usage
+
+Use AssemblyAI STT in an `AgentSession` or as a standalone transcription service:
+
+```python
+from livekit.plugins import assemblyai
+
+session = AgentSession(
+    stt = assemblyai.STT(
+      word_finalization_max_wait_time=160,
+      end_of_turn_confidence_threshold=0.7,
+      min_end_of_turn_silence_when_confident=160,
+      max_turn_silence=400,
+    ),
+    # ... llm, tts, etc.
+    turn_detection="stt", # Enable Turn Detection
+)
+```
+
+## Configuration
+
+### Turn detection
+
+The AssemblyAI plugin provides two options for turn detection. You can set the `turn_detection` parameter within the `AgentSession` constructor:
+
+<Note>
+VAD should be enabled in both cases to enable fast interruptions.
+</Note>
+
+STT-based Turn Detection (`turn_detection = "stt"`)
+
+- **VAD end-of-speech events are ignored** (only timestamps are recorded for metrics)
+- STT turn detection determines when a turn ends
+- The turn ends after receiving the final transcript from the STT service
+
+VAD-based Turn Detection (`turn_detection = "vad"`)
+
+- **STT turn detection is ignored**
+- VAD end-of-speech events determine turn boundaries
+- The turn ends when VAD detects speech has stopped & a final transcript is received
+
+Key Differences
+
+- **STT-based**: Better for accuracy, waits for complete thoughts
+- **VAD-based**: Lower latency, more responsive to quick back-and-forth
+
+Choose the mode that best fits your application's requirements for latency versus accuracy.
+
+Example Usage:
+```python
+session = AgentSession(
+        stt=assemblyai.STT(),
+        # llm, tts, vad
+        turn_detection="stt",
+    )
+```
+
+
+### Parameters
+
+<ParamField path="api_key" type="str">
+  Your AssemblyAI API key.
+</ParamField>
+
+<ParamField path="sample_rate" type="int" default="16000">
+  The sample rate of the audio stream
+</ParamField>
+
+<ParamField path="encoding" type="str" default="pcm_s16le">
+  The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`
+</ParamField>
+
+<ParamField path="formatted_finals" type="bool" default="True">
+  Whether to return formatted final transcripts. If enabled, formatted final
+  transcripts will be emitted shortly following an end-of-turn detection.
+</ParamField>
+
+<ParamField path="end_of_turn_confidence_threshold" type="float" default="0.7">
+  The confidence threshold to use when determining if the end of a turn has been
+  reached.
+</ParamField>
+
+<ParamField path="min_end_of_turn_silence_when_confident" type="int" default="160">
+  The minimum amount of silence required to detect end of turn when confident.
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default="400">
+  The maximum amount of silence allowed in a turn before end of turn is triggered.
+</ParamField>
