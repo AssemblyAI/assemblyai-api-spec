@@ -1,0 +1,370 @@
+asyncapi: 3.0.0
+
+info:
+  title: AssemblyAI Streaming WebSocket API
+  version: 1.0.0
+  description: |
+    Real-time speech-to-text transcription API over WebSocket.
+    Clients send audio data and configuration messages and receive transcription events.
+
+servers:
+  production:
+    host: streaming.assemblyai.com
+    protocol: wss
+    description: Production WebSocket endpoint
+
+channels:
+  streaming:
+    address: /v3/ws
+    description: Main channel for bi-directional audio and transcription data
+    servers:
+      - $ref: "#/servers/production"
+    parameters:
+      sample_rate:
+        description: Sample rate of the audio stream
+        location: $message.payload#/sample_rate
+        examples: ["16000", "48000"]
+
+      encoding:
+        description: Encoding of the audio stream
+        location: $message.payload#/encoding
+        enum: ["pcm_s16le", "pcm_mulaw"]
+        default: "pcm_s16le"
+
+      token:
+        description: API token for authentication
+        location: $message.payload#/token
+
+      format_turns:
+        description: Whether to return formatted final transcripts
+        location: $message.payload#/format_turns
+        enum:
+          - "true"
+          - "false"
+        examples:
+          - "true"
+
+      word_finalization_max_wait_time:
+        description: The max amount of time in milliseconds to wait for a word to be finalized
+        location: $message.payload#/word_finalization_max_wait_time
+        examples:
+          - "160"
+          - "200"
+
+      end_of_turn_confidence_threshold:
+        description: The confidence threshold to use when determining if the end of a turn has been reached
+        location: $message.payload#/end_of_turn_confidence_threshold
+        examples:
+          - "0.4"
+          - "0.7"
+
+      min_end_of_turn_silence_when_confident:
+        description: The minimum amount of silence required to detect end of turn when confident
+        location: $message.payload#/min_end_of_turn_silence_when_confident
+        examples:
+          - "480"
+          - "600"
+
+      max_turn_silence:
+        description: The maximum amount of silence allowed in a turn before end of turn is triggered
+        location: $message.payload#/max_turn_silence
+        examples:
+          - "700"
+          - "1000"
+
+      ApiKey:
+        description: >-
+          API key for authentication.
+        location: $message.header#/Authorization
+        examples:
+          - token YOUR_ASSEMBLYAI_API_KEY
+    messages:
+      updateConfiguration:
+        $ref: "#/components/messages/UpdateConfiguration"
+      forceEndpoint:
+        $ref: "#/components/messages/ForceEndpoint"
+      sessionTermination:
+        $ref: "#/components/messages/SessionTermination"
+      audioChunk:
+        $ref: "#/components/messages/AudioChunk"
+
+      sessionBegins:
+        $ref: "#/components/messages/SessionBegins"
+      turn:
+        $ref: "#/components/messages/Turn"
+      termination:
+        $ref: "#/components/messages/Termination"
+operations:
+  sendAudio:
+    action: send
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/audioChunk"
+    description: Send audio data chunks for transcription.
+
+  sendUpdateConfiguration:
+    action: send
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/updateConfiguration"
+    description: Update streaming configuration parameters during an active session.
+
+  sendForceEndpoint:
+    action: send
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/forceEndpoint"
+    description: Manually force an endpoint in the transcription.
+
+  sendSessionTermination:
+    action: send
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/sessionTermination"
+    description: Gracefully terminate the streaming session.
+
+  receiveSessionBegins:
+    action: receive
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/sessionBegins"
+    description: Receive confirmation that the streaming session has successfully started.
+
+  receiveTurn:
+    action: receive
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/turn"
+    description: Receive a formatted turn-based transcription result.
+
+  receiveTermination:
+    action: receive
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/termination"
+    description: Receive confirmation that the session has been terminated by the server.
+
+components:
+  # securitySchemes:
+  #   ApiKeyAuth:
+  #     type: apiKey
+  #     in: header
+  #     name: Authorization # AssemblyAI uses the Authorization header for the API key
+  #     description: API key for authenticating requests. The key itself is provided as the header value.
+
+  messages:
+    UpdateConfiguration:
+      name: UpdateConfiguration
+      title: Update Streaming Configuration
+      summary: Client message to update streaming configuration parameters during an active session.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/UpdateConfigurationPayload"
+
+    ForceEndpoint:
+      name: ForceEndpoint
+      title: Force Endpoint
+      summary: Client message to manually force an endpoint in the transcription.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ForceEndpointPayload"
+      examples:
+        - payload:
+            type: ForceEndpoint
+
+    SessionTermination:
+      name: SessionTermination
+      title: Terminate Session (Client Initiated)
+      summary: Client message to gracefully terminate the streaming session.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SessionTerminationPayload"
+
+    AudioChunk:
+      name: AudioChunk
+      title: Audio Data Chunk
+      summary: Client sends audio data as a base64-encoded string within a JSON object.
+      type: string
+      format: base64
+      examples:
+        - payload: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+
+    SessionBegins:
+      name: SessionBegins
+      title: Session Begins Confirmation
+      summary: Server message indicating the streaming session has successfully started.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SessionBeginsPayload"
+
+    Turn:
+      name: Turn
+      title: Formatted Turn Result
+      summary: Server message containing a formatted turn-based transcription result.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TurnPayload"
+
+    Termination:
+      name: Termination
+      title: Session Terminated (Server Confirmation)
+      summary: Server message confirming session termination with session statistics.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TerminationPayload"
+
+  schemas:
+    UpdateConfigurationPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: UpdateConfiguration
+        word_finalization_max_wait_time:
+          type: integer
+          nullable: true
+          description: Maximum time in ms to wait for word finalization.
+        end_of_turn_confidence_threshold:
+          type: number
+          format: float
+          nullable: true
+          description: Confidence threshold (0-1) for detecting end of turn.
+        min_end_of_turn_silence_when_confident:
+          type: integer
+          nullable: true
+          description: Minimum silence duration in ms when confident about end of turn.
+        max_turn_silence:
+          type: integer
+          nullable: true
+          description: Maximum silence duration in ms before ending turn.
+      required:
+        - type
+
+    ForceEndpointPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: ForceEndpoint
+      required:
+        - type
+
+    SessionTerminationPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: Terminate
+      required:
+        - type
+
+    SessionBeginsPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: Begin
+          description: Identifies the type of the message.
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the streaming session.
+        expires_at:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp indicating when the session will expire.
+      required:
+        - type
+        - id
+        - expires_at
+
+    Word:
+      type: object
+      properties:
+        word:
+          type: string
+          description: The transcribed word.
+        start:
+          type: integer
+          description: Start time in milliseconds relative to the beginning of the audio stream.
+        end:
+          type: integer
+          description: End time in milliseconds relative to the beginning of the audio stream.
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score for the word (0.0 to 1.0).
+        word_is_final:
+          type: boolean
+          description: Whether the word is final.
+      required:
+        - word
+        - start
+        - end
+        - confidence
+        - word_is_final
+
+    TurnPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: Turn
+        turn_order:
+          type: integer
+          description: Order of this turn in the conversation.
+        turn_is_formatted:
+          type: boolean
+          description: Whether this turn has been formatted.
+        end_of_turn:
+          type: boolean
+          description: Whether this marks the end of a turn.
+        transcript:
+          type: string
+          description: The complete turn transcript.
+        end_of_turn_confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence that this is the end of a turn.
+        words:
+          type: array
+          items:
+            $ref: "#/components/schemas/Word"
+          description: Array of word-level details for this turn.
+      required:
+        - type
+        - turn_order
+        - turn_is_formatted
+        - end_of_turn
+        - transcript
+        - end_of_turn_confidence
+        - words
+
+    TerminationPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: Termination
+          description: Indicates the session has been terminated.
+        audio_duration_seconds:
+          type: integer
+          description: Duration of the audio in seconds.
+        session_duration_seconds:
+          type: integer
+          description: Duration of the session in seconds.
+      required:
+        - type
+        - audio_duration_seconds
+        - session_duration_seconds
