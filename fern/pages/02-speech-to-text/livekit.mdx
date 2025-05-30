@@ -55,33 +55,48 @@ session = AgentSession(
 
 ## Configuration
 
-### Constructor Parameters
+### Turn detection
 
-<ParamField path="api_key" type="str" required>
+The AssemblyAI plugin provides two options for turn detection. You can set the `turn_detection` parameter within the `AgentSession` constructor:
+
+<Note>
+VAD should be enabled in both cases to enable fast interruptions.
+</Note>
+
+STT-based Turn Detection (`turn_detection = "stt"`)
+
+- **VAD end-of-speech events are ignored** (only timestamps are recorded for metrics)
+- STT turn detection determines when a turn ends
+- The turn ends after receiving the final transcript from the STT service
+
+VAD-based Turn Detection (`turn_detection = "vad"`)
+
+- **STT turn detection is ignored**
+- VAD end-of-speech events determine turn boundaries
+- The turn ends when VAD detects speech has stopped & a final transcript is received
+
+Key Differences
+
+- **STT-based**: Better for accuracy, waits for complete thoughts
+- **VAD-based**: Lower latency, more responsive to quick back-and-forth
+
+Choose the mode that best fits your application's requirements for latency versus accuracy.
+
+Example Usage:
+```python
+session = AgentSession(
+        stt=assemblyai.STT(),
+        # llm, tts, vad
+        turn_detection="stt",
+    )
+```
+
+
+### Parameters
+
+<ParamField path="api_key" type="str">
   Your AssemblyAI API key.
 </ParamField>
-
-<ParamField path="connection_params" type="AssemblyAIConnectionParams">
-  Connection parameters for the AssemblyAI WebSocket connection. See below for
-  details.
-</ParamField>
-
-<ParamField path="vad_force_turn_endpoint" type="bool" default="True">
-  When true, sends a `ForceEndpoint` event to AssemblyAI when a
-  `UserStoppedSpeakingFrame` is received. Requires a VAD (Voice Activity
-  Detection) processor in the pipeline to generate these frames.
-</ParamField>
-
-<ParamField path="language" type="Language" default="Language.EN">
-  Language for transcription. AssemblyAI currently only supports English
-  Streaming transcription.
-</ParamField>
-
-<ParamField path="api_endpoint_base_url" type="str">
-  Base URL for the WebSocket API endpoint.
-</ParamField>
-
-### Connection Parameters
 
 <ParamField path="sample_rate" type="int" default="16000">
   The sample rate of the audio stream
@@ -96,10 +111,6 @@ session = AgentSession(
   transcripts will be emitted shortly following an end-of-turn detection.
 </ParamField>
 
-<ParamField path="word_finalization_max_wait_time" type="int" default="160">
-  The max amount of time in milliseconds to wait for a word to be finalized.
-</ParamField>
-
 <ParamField path="end_of_turn_confidence_threshold" type="float" default="0.7">
   The confidence threshold to use when determining if the end of a turn has been
   reached.
@@ -112,11 +123,3 @@ session = AgentSession(
 <ParamField path="max_turn_silence" type="int" default="400">
   The maximum amount of silence allowed in a turn before end of turn is triggered.
 </ParamField>
-
-## Additional resources
-
-- **[Python package](https://pypi.org/project/livekit-plugins-assemblyai/)**: The `livekit-plugins-assemblyai` package on PyPI.
-- **[Plugin reference](https://docs.livekit.io/reference/python/v1/livekit/plugins/assemblyai/stt.html.md)**: Reference for the AssemblyAI STT plugin.
-- **[GitHub repo](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-assemblyai)**: View the source or contribute to the LiveKit AssemblyAI STT plugin.
-- **[AssemblyAI docs](https://www.assemblyai.com/docs/speech-to-text/universal-streaming)**: AssemblyAI's full docs site.
-- **[Voice AI quickstart](https://docs.livekit.io/agents/start/voice-ai.md)**: Get started with LiveKit Agents and AssemblyAI.
