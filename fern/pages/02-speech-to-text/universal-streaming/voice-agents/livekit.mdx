@@ -2,57 +2,121 @@
 title: "Livekit"
 description: "Livekit voice agent integration"
 ---
+## Overview
 
-### Overview
+LiveKit is an open source platform for developers building realtime media applications. In this guide, we'll show you how to integrate AssemblyAI's streaming speech-to-text model into your Livekit voice agent using the Agents framework.
 
-AssemblyAI's end-of-turn detection functionality is integrated into our Streaming STT model, leveraging both acoustic and semantic features, and is coupled with a traditional silence-based heuristic approach. Both mechanisms work jointly and either can trigger end-of-turn detection throughout the audio stream. This joint approach significantly enhances the speed and accuracy of end-of-turn detection while allowing this functionality to fall back to the traditional method when the model makes a misprediction.
+<Card 
+    title="Livekit" 
+    icon="circle" 
+    href="https://docs.livekit.io/agents/integrations/stt/assemblyai/"
+>
+    View Livekit's AssemblyAI STT plugin documentation.
+</Card>
 
-<Note>
-  End-of-turn and end-of-utterances refer to the same thing and may be used
-  interchangeably in these docs.
-</Note>
+## Quick start
 
-### Model-based detection
+### Installation
 
-Triggers when **all** conditions are met:
+Install the plugin from PyPI:
 
-#### EOT token predicted
+```bash
+pip install "livekit-agents[assemblyai]"
+```
 
-- Model predicts semantic end-of-turn with a probability greater than `end_of_turn_confidence_threshold`
-- Default: 0.5 (user configurable)
+### Authentication
 
-#### Minimum silence duration has passed
+The AssemblyAI plugin requires an [AssemblyAI API key](https://www.assemblyai.com/docs/api-reference/overview#authorization). Set `ASSEMBLYAI_API_KEY` in your `.env` file.
 
-- After the last non-silence word token, `min_end_of_turn_silence_when_confident` milliseconds must pass
-- Default: 400ms (user configurable)
+<Tip>
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
 
-#### Minimum speech duration spoken
+### Basic usage
 
-- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-- Set to 80 ms (internal)
+Use AssemblyAI STT in an `AgentSession` or as a standalone transcription service:
 
-#### Word finalized
+```python
+from livekit.plugins import assemblyai
 
-- Last word in `turn.words` has been finalized
-- Internal configuration
+session = AgentSession(
+    stt = assemblyai.STT(
+      sample_rate=16000,
+      encoding="pcm_s16le",
+      word_finalization_max_wait_time=160,
+      end_of_turn_confidence_threshold=0.7,
+      min_end_of_turn_silence_when_confident=160,
+      max_turn_silence=400,
+    ),
+    # ... llm, tts, etc.
+)
+```
 
-### Silence-based detection
+## Configuration
 
-Triggers when **all** conditions are met:
+### Constructor Parameters
 
-#### Minimum speech duration spoken
+<ParamField path="api_key" type="str" required>
+  Your AssemblyAI API key.
+</ParamField>
 
-- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-- Set to 80 ms (internal)
+<ParamField path="connection_params" type="AssemblyAIConnectionParams">
+  Connection parameters for the AssemblyAI WebSocket connection. See below for
+  details.
+</ParamField>
 
-#### Maximum silence duration has passed
+<ParamField path="vad_force_turn_endpoint" type="bool" default="True">
+  When true, sends a `ForceEndpoint` event to AssemblyAI when a
+  `UserStoppedSpeakingFrame` is received. Requires a VAD (Voice Activity
+  Detection) processor in the pipeline to generate these frames.
+</ParamField>
 
-- After the last non-silence word token, `max_turn_silence` milliseconds must pass
-- Default: 2400ms (user configurable)
+<ParamField path="language" type="Language" default="Language.EN">
+  Language for transcription. AssemblyAI currently only supports English
+  Streaming transcription.
+</ParamField>
 
-### Important notes
+<ParamField path="api_endpoint_base_url" type="str">
+  Base URL for the WebSocket API endpoint.
+</ParamField>
 
-- Silence-based detection can override model-based detection even with high EOT confidence thresholds
-- Word finalization always takes precedence — endpointing won't occur until the last word is finalized
-- We define end-of-turn detection as the process of detecting the end of sustained speech activity, often called end-pointing in the Voice Agents context
+### Connection Parameters
 
+<ParamField path="sample_rate" type="int" default="16000">
+  The sample rate of the audio stream
+</ParamField>
+
+<ParamField path="encoding" type="str" default="pcm_s16le">
+  The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`
+</ParamField>
+
+<ParamField path="formatted_finals" type="bool" default="True">
+  Whether to return formatted final transcripts. If enabled, formatted final
+  transcripts will be emitted shortly following an end-of-turn detection.
+</ParamField>
+
+<ParamField path="word_finalization_max_wait_time" type="int" default="160">
+  The max amount of time in milliseconds to wait for a word to be finalized.
+</ParamField>
+
+<ParamField path="end_of_turn_confidence_threshold" type="float" default="0.7">
+  The confidence threshold to use when determining if the end of a turn has been
+  reached.
+</ParamField>
+
+<ParamField path="min_end_of_turn_silence_when_confident" type="int" default="160">
+  The minimum amount of silence required to detect end of turn when confident.
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default="400">
+  The maximum amount of silence allowed in a turn before end of turn is triggered.
+</ParamField>
+
+## Additional resources
+
+- **[Python package](https://pypi.org/project/livekit-plugins-assemblyai/)**: The `livekit-plugins-assemblyai` package on PyPI.
+- **[Plugin reference](https://docs.livekit.io/reference/python/v1/livekit/plugins/assemblyai/stt.html.md)**: Reference for the AssemblyAI STT plugin.
+- **[GitHub repo](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-assemblyai)**: View the source or contribute to the LiveKit AssemblyAI STT plugin.
+- **[AssemblyAI docs](https://www.assemblyai.com/docs/speech-to-text/universal-streaming)**: AssemblyAI's full docs site.
+- **[Voice AI quickstart](https://docs.livekit.io/agents/start/voice-ai.md)**: Get started with LiveKit Agents and AssemblyAI.

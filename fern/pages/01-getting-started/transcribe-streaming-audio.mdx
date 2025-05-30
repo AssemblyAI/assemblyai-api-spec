@@ -76,7 +76,7 @@ def main():
     client = StreamingClient(
         StreamingClientOptions(
             api_key=api_key,
-            api_host="null",
+            api_host="streaming.assemblyai.com",
         )
     )
 
@@ -355,7 +355,73 @@ if __name__ == "__main__":
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
 ```typescript
-Null
+import { Readable } from 'stream'
+import { AssemblyAI } from 'assemblyai'
+import recorder from 'node-record-lpcm16'
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason),
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+
+    console.log("Turn:", turn.transcript);
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C.
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
 ```
 
 </Tab>
@@ -456,7 +522,7 @@ function saveWavFile() {
 
 // --- Main function ---
 async function run() {
-  console.log("Starting AssemblyAI real-time transcription...");
+  console.log("Starting AssemblyAI streaming transcription...");
   console.log("Audio will be saved to a WAV file when the session ends.");
 
   // Initialize WebSocket connection
@@ -697,9 +763,26 @@ from datetime import datetime
 
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-```ts
-null
+<Steps>
+  <Step>
+
+Run `npm init` to create an NPM package, and then install the necessary packages via NPM:
+
+```bash
+npm install assemblyai node-record-lpcm16
 ```
+  </Step>
+  <Step>
+
+Create a file called `main.ts` and import the packages at the top of your file:
+
+```ts
+import { Readable } from 'stream'
+import { AssemblyAI } from 'assemblyai'
+import recorder from 'node-record-lpcm16'
+```
+  </Step>
+</Steps>
 
 </Tab>
 
@@ -736,7 +819,7 @@ const fs = require("fs");
 
 ## Step 2: Configure the API key
 
-In this step, you'll configure your API key to authenticate with AssemblyAI.
+In this step, you’ll configure your AssemblyAI API key to authenticate your application and enable access to the streaming transcription service.
 
 <Steps>
 <Step>
@@ -749,7 +832,7 @@ Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API 
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
 
-Configure the SDK to use your API key. Replace `YOUR_API_KEY` with your copied API key.
+Configure the SDK to use your API key. Replace `<YOUR_API_KEY>` with your copied API key.
 
 ```python
 
@@ -759,7 +842,7 @@ api_key = "<YOUR_API_KEY>"
 </Tab>
 <Tab language="python" title="Python">
 
-Store your API key in a variable. Replace `YOUR_API_KEY` with your copied API key.
+Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key.
 
 ```python
 YOUR_API_KEY = "<YOUR_API_KEY>"
@@ -769,17 +852,21 @@ YOUR_API_KEY = "<YOUR_API_KEY>"
 
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-In you async function, create an SDK client and configure the client to use your API key by replacing `YOUR_API_KEY` with your copied API key.
+In your file, define an async function and create an SDK client within the function. Configure the client to use your API key by replacing `<YOUR_API_KEY>` with your copied API key.
 
 ```ts
-Null
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+};
 ```
 
 </Tab>
 
 <Tab language="typescript" title="TypeScript">
 
-Store your API key in a variable. Replace `YOUR_API_KEY` with your copied API key.
+Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key.
 
 ```ts
 const API_KEY = "<YOUR_API_KEY>";
@@ -797,13 +884,13 @@ const API_KEY = "<YOUR_API_KEY>";
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
 
-The Python SDK handles audio configuration automatically. You'll specify the sample rate when connecting to the transcriber.
+The Python SDK handles audio configuration automatically. You'll specify the sample rate when connecting to the transcriber. If you don’t set a sample rate, it defaults to 16 kHz.
 
 </Tab>
 <Tab language="python" title="Python">
 <Steps>
 <Step>
-Configure your connection params: 
+Set the parameters that control how your client connects to AssemblyAI’s streaming transcription API. These options determine things like audio sample rate and whether you want punctuation and formatting in your final transcripts.
 
 ```python
 CONNECTION_PARAMS = {
@@ -818,7 +905,7 @@ API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 </Step>
 
 <Step>
-Set up the audio configuration:
+Prepare your audio input settings and recording logic. This configuration controls how microphone data is streamed in real-time:
 
 ```python
 # Audio Configuration
@@ -872,11 +959,16 @@ def save_wav_file():
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
-Create a new streaming service from the AssemblyAI client and add it to your async function. If you don't set a sample rate, it defaults to 16 kHz.
+Create a new streaming service from the AssemblyAI client and add it to your async function. If you don't set a sample rate, it defaults to 16 kHz. Configure your API key in th streaming service as well.
 
 ```typescript
-Null
+const transcriber = client.streaming.transcriber({
+  sampleRate: 16_000,
+  apiKey: "<YOUR_API_KEY>",
+});
 ```
+
+For the Typescript SDK, we will set up the audio configuration in [Step 5](#step-5-connect-and-start-transcription) of this guide.
 
 </Tab>
 
@@ -884,7 +976,8 @@ Null
 
 <Steps>
 <Step>
-Configure your connection params: 
+Set the parameters that control how your client connects to AssemblyAI’s streaming transcription API. These options determine things like audio sample rate and whether you want punctuation and formatting in your final transcripts.
+
 ```ts
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
@@ -896,7 +989,7 @@ const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTIO
 ```
 </Step>
 <Step>
-Set up the audio configuration:
+Prepare your audio input settings and recording logic. This configuration controls how microphone data is streamed in real-time:
 
 ```ts
 // Audio Configuration
@@ -986,14 +1079,18 @@ Use a sample rate of 16 kHz and encoding of pcm_s16le. While all sampling rates 
 
 ## Step 4: Create event handlers
 
-In this step, you’ll set up callback functions that handle the different events.
-
-Create functions to handle the events from the real-time service.
+In this step, you’ll define event handlers to manage the different types of events emitted during the streaming session.
+The handlers will respond to session lifecycle events, transcription turns, errors, and session termination.
 
 <Tabs groupId="language">
 
 <Tab language="python-sdk" title="Python SDK">
-Define the event handlers:
+Implement basic event handlers. These handlers let your app respond to key streaming events:
+
+* `on_begin` – Logs when the session starts.
+* `on_turn` – Handles each transcription turn and optionally enables formatted finals.
+* `on_terminated` – Logs when the session ends and how much audio was processed.
+* `on_error` – Captures and prints any errors during streaming.
 
 ```python
 logging.basicConfig(level=logging.INFO)
@@ -1027,7 +1124,13 @@ def on_error(self: Type[StreamingClient], error: StreamingError):
 </Tab>
 <Tab language="python" title="Python">
 
-Define the event handlers:
+Implement basic event handlers. These handlers let your app respond to key streaming events:
+
+* `on_open` – Starts streaming microphone audio in a background thread.
+* `on_message` – Handles transcription events like `Begin`, `Turn`, and `Termination`.
+* `on_error` – Logs any connection or streaming errors and triggers cleanup.
+* `on_close` – Cleans up audio resources and saves a WAV recording when the session ends.
+
 
 ```python
 # --- WebSocket Event Handlers ---
@@ -1116,29 +1219,50 @@ def on_close(ws, close_status_code, close_msg):
 
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
+Add basic event handlers to your async function. These handlers let your app respond to key streaming events:
+
+* `open` – Triggered when the session starts; logs the session ID.
+* `error` – Logs any errors that occur during the session.
+* `close` – Triggered when the session ends; logs the close code and reason.
+* `turn` – Handles each transcription turn and logs the transcript if available.
+
 ```typescript
-transcriber.on("open", ({ sessionId }) => {
-  console.log(`Session opened with ID: ${sessionId}`);
-});
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
 
-transcriber.on("error", (error) => {
-  console.error("Error:", error);
-});
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
 
-transcriber.on("close", (code, reason) =>
-  console.log("Session closed:", code, reason)
-);
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason),
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+
+    console.log("Turn:", turn.transcript);
+  });
 ```
 
 </Tab>
 
 <Tab language="typescript" title="TypeScript">
 
-Set the event handlers in the `main` function:
+Create an async function. Within it you'll initialize the the WebSocket and set the event handlers:
+
+* `open` – Triggered when the WebSocket connection is established; starts the microphone stream.
+* `message` – Handles incoming messages like `Begin`, `Turn`, and `Termination`, and displays transcripts in real time.
+* `error` – Logs connection or message errors and triggers cleanup.
+* `close` – Called when the connection closes; logs status and reason, and cleans up resources.
+
 
 ```ts
 async function run() {
-  console.log("Starting AssemblyAI real-time transcription...");
+  console.log("Starting AssemblyAI streaming transcription...");
   console.log("Audio will be saved to a WAV file when the session ends.");
   // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
@@ -1201,7 +1325,7 @@ async function run() {
 </Tabs>
 
 <Tip title="Message sequence and turn events">
-To get a better understand of the turn event and the message sequences, check out our [Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/universal-streaming/message-sequence) page. This object is how you'll receive your transcripts.
+To get a better understanding of the turn event and the message sequences, check out our [Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/universal-streaming/message-sequence) page. This object is how you'll receive your transcripts.
 </Tip>
 
 ## Step 5: Connect and start transcription
@@ -1213,13 +1337,13 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
 <Tab language="python-sdk" title="Python SDK">
 <Steps>
   <Step>
-  In the `main` function create a `client`. and and connect to the streaming service:
+  In the `main` function create a `client` and connect to the streaming service:
 
   ```python
       client = StreamingClient(
           StreamingClientOptions(
               api_key=api_key,
-              api_host="null",
+              api_host="streaming.assemblyai.com",
           )
       )
 
@@ -1237,7 +1361,7 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
   ```
   </Step>
   <Step>
-  Then, create a microphone stream and start transcribing audio:
+  Next, create a microphone stream and begin transcribing audio. Make sure the `sample_rate` matches the value you specified in the `StreamingParameters` when initializing the streaming client.
 
   ```python
       try:
@@ -1253,7 +1377,7 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
 
 <Steps>
 <Step>
-In the `run` function, initialize the audio stream.
+Create a main execution function and initialize the audio stream.
 
 ```python
 def run():
@@ -1281,7 +1405,7 @@ def run():
 </Step>
 
 <Step>
-Next, create a WebSocket connection to the real-time service:
+Next, create a WebSocket connection to the streaming service:
 ```python
     # Create WebSocketApp
     ws_app = websocket.WebSocketApp(
@@ -1303,8 +1427,26 @@ Next, create a WebSocket connection to the real-time service:
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
 
+In your async function, connect to the transcriber. Create a new microphone stream and set up the audio configuration after the transcriber connects. The `sampleRate` needs to be the same value used in the [streaming service setting](#step-3-set-up-audio-and-websocket-configuration).
+
 ```typescript
-Null
+ try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
+
+  } catch (error) {
+    console.error(error);
+  }
+};
 ```
 
 </Tab>
@@ -1313,14 +1455,15 @@ Null
 <Steps>
 <Step>
 
-<Note title="Initialize WebSocket">
-The WebSocket was initialized in at the beginning of the `main` function in Step 4.
+<Note title="Initializing WebSocket">
+The WebSocket was initialized in at the beginning of the `main` function in [Step 4](#step-4-create-event-handlers).
 </Note>
 
 
 </Step>
 <Step>
-Create the function that initializes the audio stream. This function is called within the `main` function from Step 4.
+Create the function that initializes the audio stream. This function is called within the `main` function from [Step 4](#step-4-create-event-handlers).
+
 ```ts
 function startMicrophone() {
   try {
@@ -1424,9 +1567,27 @@ The connection will also close automatically when you press Ctrl+C. In both case
 
 </Tab>
 <Tab language="typescript-sdk" title="TypeScript SDK" default>
+Terminate the session when you're done:
 
 ```typescript
-Null
+ try {
+    /* ....code for transcriber connection and audio configuration here... */
+
+    // Stop recording and close connection using Ctrl-C.
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
 ```
 
 </Tab>
