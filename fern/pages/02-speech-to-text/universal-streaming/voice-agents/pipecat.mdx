@@ -1,58 +1,154 @@
 ---
-title: "Turn detection"
-description: "Intelligent turn detection with Streaming Speech-to-Text"
+title: "Pipecat"
+description: "Pipecat voice agent integration"
 ---
+## Overview
 
-### Overview
+Pipecat is a framework for building voice-enabled, real-time, multimodal AI applications. In this guide, we'll show you how to integrate AssemblyAI's streaming speech-to-text model into your Pipecat voice agent.
 
-AssemblyAI's end-of-turn detection functionality is integrated into our Streaming STT model, leveraging both acoustic and semantic features, and is coupled with a traditional silence-based heuristic approach. Both mechanisms work jointly and either can trigger end-of-turn detection throughout the audio stream. This joint approach significantly enhances the speed and accuracy of end-of-turn detection while allowing this functionality to fall back to the traditional method when the model makes a misprediction.
+<Card 
+    title="Pipecat" 
+    icon={<img src="https://assemblyaiassets.com/images/Pipecat.svg" alt="Pipecat logo"/>} 
+    href="https://docs.pipecat.ai/server/services/stt/assemblyai"
+>
+    View Pipecat's AssemblyAI STT plugin documentation.
+</Card>
+
+## Quick start
+
+### Installation
+
+Install the AssemblyAI service:
+
+```bash
+pip install "pipecat-ai[assemblyai]"
+```
+
+### Authentication
+
+The AssemblyAI service requires an [AssemblyAI API key](https://www.assemblyai.com/docs/api-reference/overview#authorization). Set `ASSEMBLYAI_API_KEY` in your `.env` file.
+
+<Tip>
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
+
+### Basic usage
+
+Use AssemblyAI STT in a `Pipeline`:
+
+```python
+from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+# Configure service
+stt = AssemblyAISTTService(
+    connection_params=AssemblyAIConnectionParams(
+        end_of_turn_confidence_threshold=0.7,
+        min_end_of_turn_silence_when_confident=160,
+        max_turn_silence=400,
+    ),
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+)
+
+# Use in pipeline
+pipeline = Pipeline([
+    transport.input(),
+    stt,
+    llm,
+    ...
+])
+```
+
+## Configuration
+
+### Turn detection
+
+The `AssemblyAISTTService` provides two options for turn detection. You can set the `vad_force_turn_endpoint` parameter within the `AssemblyAISTTService` constructor:
 
 <Note>
-  End-of-turn and end-of-utterances refer to the same thing and may be used
-  interchangeably in these docs.
+VAD should be enabled in both cases to enable fast interruptions.
 </Note>
 
-### Model-based detection
+STT-based Turn Detection (`vad_force_turn_endpoint = False`)
 
-Triggers when **all** conditions are met:
+- **VAD end-of-speech events are ignored** (only timestamps are recorded for metrics)
+- STT turn detection determines when a turn ends
+- The turn ends after receiving the final transcript from the STT service
 
-#### EOT token predicted
+VAD-based Turn Detection (`vad_force_turn_endpoint = True`)
 
-- Model predicts semantic end-of-turn with a probability greater than `end_of_turn_confidence_threshold`
-- Default: 0.5 (user configurable)
+- **STT turn detection is ignored**
+- VAD end-of-speech events determine turn boundaries
+- The turn ends when VAD detects speech has stopped & a final transcript is received
 
-#### Minimum silence duration has passed
+Key Differences
 
-- After the last non-silence word token, `min_end_of_turn_silence_when_confident` milliseconds must pass
-- Default: 400ms (user configurable)
+- **STT-based**: Better for accuracy, waits for complete thoughts
+- **VAD-based**: Lower latency, more responsive to quick back-and-forth
 
-#### Minimum speech duration spoken
+Choose the mode that best fits your application's requirements for latency versus accuracy.
 
-- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-- Set to 80 ms (internal)
+Example Usage:
+```python
+stt = AssemblyAISTTService(
+    vad_force_turn_endpoint=False,
+)
+```
 
-#### Word finalized
 
-- Last word in `turn.words` has been finalized
-- Internal configuration
+## Parameters
 
-### Silence-based detection
+### Constructor Parameters
 
-Triggers when **all** conditions are met:
+<ParamField path="api_key" type="str" required>
+  Your AssemblyAI API key.
+</ParamField>
 
-#### Minimum speech duration spoken
+<ParamField path="connection_params" type="AssemblyAIConnectionParams">
+  Connection parameters for the AssemblyAI WebSocket connection. See below for
+  details.
+</ParamField>
 
-- The user must speak for at least 80ms since the last end-of-turn (ensures at least one word)
-- Set to 80 ms (internal)
+<ParamField path="vad_force_turn_endpoint" type="bool" default="True">
+  When true, sends a `ForceEndpoint` event to AssemblyAI when a
+  `UserStoppedSpeakingFrame` is received. Requires a VAD (Voice Activity
+  Detection) processor in the pipeline to generate these frames.
+</ParamField>
 
-#### Maximum silence duration has passed
+<ParamField path="language" type="Language" default="Language.EN">
+  Language for transcription. AssemblyAI currently only supports English
+  Streaming transcription.
+</ParamField>
 
-- After the last non-silence word token, `max_turn_silence` milliseconds must pass
-- Default: 2400ms (user configurable)
+<ParamField path="api_endpoint_base_url" type="str">
+  Base URL for the WebSocket API endpoint.
+</ParamField>
 
-### Important notes
+### Connection Parameters
 
-- Silence-based detection can override model-based detection even with high EOT confidence thresholds
-- Word finalization always takes precedence — endpointing won't occur until the last word is finalized
-- We define end-of-turn detection as the process of detecting the end of sustained speech activity, often called end-pointing in the Voice Agents context
+<ParamField path="sample_rate" type="int" default="16000">
+  The sample rate of the audio stream
+</ParamField>
 
+<ParamField path="encoding" type="str" default="pcm_s16le">
+  The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`
+</ParamField>
+
+<ParamField path="formatted_finals" type="bool" default="True">
+  Whether to return formatted final transcripts. If enabled, formatted final
+  transcripts will be emitted shortly following an end-of-turn detection.
+</ParamField>
+
+<ParamField path="end_of_turn_confidence_threshold" type="float">
+  The confidence threshold to use when determining if the end of a turn has been
+  reached.
+</ParamField>
+
+<ParamField path="min_end_of_turn_silence_when_confident" type="int">
+  The minimum amount of silence required to detect end of turn when confident.
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int">
+  The maximum amount of silence allowed in a turn before end of turn is
+  triggered.
+</ParamField>
