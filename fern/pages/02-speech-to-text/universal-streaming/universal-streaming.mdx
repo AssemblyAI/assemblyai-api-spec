@@ -674,85 +674,20 @@ Each word in the `words` array includes:
 - Use an audio chunk size of 50ms. Larger chunk sizes are workable, but may result in latency fluctuations.
 - Use a sample rate of 16 kHz and encoding of pcm_s16le. While all sampling rates are supported, using 16 kHz and pcm_s16le is recommended for the best experience, as our STT model operates at a 16 kHz sample rate. If the incoming audio uses a different rate, we perform additional sampling rate conversion under the hood, which might marginally increase latency.
 
-<Note>
-
-This is an early access version of the model. Development is ongoing to reduce latency variability.
-
-</Note>
-
 ## Voice Agents
 
-### Optimizing for ultra-low latency
+<CardGroup cols={2}>
+  <Card title="Livekit" icon={<img src="https://assemblyaiassets.com/images/Livekit.svg" alt="Livekit logo"/>} href="https://docs.livekit.io/agents/integrations/stt/assemblyai/">
+    View Livekit's AssemblyAI STT plugin documentation.
+  </Card>
+  <Card title="Pipecat" icon={<img src="https://assemblyaiassets.com/images/Pipecat.svg" alt="Pipecat logo"/>} href="https://docs.pipecat.ai/server/services/stt/assemblyai">
+    View Pipecat's AssemblyAI STT plugin documentation.
+  </Card>
+  <Card title="Vapi" icon={<img src="https://assemblyaiassets.com/images/Vapi.svg" alt="Vapi logo"/>} href="https://docs.vapi.ai/providers/transcriber/assembly-ai">
+    View Vapi's AssemblyAI STT plugin documentation.
+  </Card>
+</CardGroup>
 
-In the current iteration of our streaming model, "Partial transcripts" are **immutable**, unchanging outputs. They are delivered in the following format:
-
-```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is zac
-→ hello my name is zack
-```
-
-This is followed by a Final Transcript:
-
-```json
-→ hello my name is zack (unformatted)
-→ Hello my name is Zack. (formatted)
-```
-
-<Note>
-  To optimise for latency, we recommend using the unformatted Final Transcript
-  as it's received more quickly than the formatted version. However, this
-  creates a tradeoff as you won't receive punctuation and proper casing. Choose
-  based on whether speed or formatting is more important for your application.
-</Note>
-
-### Implementation strategy
-
-Since our Partial Transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here's how to handle the data flow:
-
-1. When you receive a Final Transcript but your Voice Agent hasn't detected end of turn, save this data in a variable (let's call it `running_transcript`).
-2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
-3. Clear the `running_transcript` after sending and be sure to ignore the Final Transcript that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
-
-What you send to the voice agent should look like:
-`running_transcript` + ' ' + `latest_partial`
-
-#### Example flow
-
-```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is son
-→ hello my name is sonny (final – added to running_transcript)
-
-→ I
-→ I work at
-→ I work at assembly ai (final – added to running_transcript)
-
-→ how
-→ how can
-→ how can I help
-→ how can I help you today (latest partial, final not yet received)
-
-<END_OF_TURN_DETECTED>
-"hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
-
-<running_transcript cleared>
-<final for latest_partial not added to running_transcript>
-```
-
-Utilizing our Partial Transcripts in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
-
-<Note>
-  When using the latest Partial Transcript, ignore the subsequent Final
-  Transcript for that segment to avoid sending duplicate information to the
-  voice agent.
-</Note>
 
 ## Reference
 
@@ -770,7 +705,7 @@ Utilizing our Partial Transcripts in this manner will allow you to achieve the f
   The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`
 </ParamField>
 
-<ParamField path="formatted_finals" type="boolean" default={"False"}>
+<ParamField path="formatted_turns" type="boolean" default={"False"}>
   Whether to return formatted final transcripts.
   <Note>
     If enabled, formatted final transcripts will be emitted shortly following an
@@ -778,11 +713,7 @@ Utilizing our Partial Transcripts in this manner will allow you to achieve the f
   </Note>
 </ParamField>
 
-<ParamField path="word_finalization_max_wait_time" type="int" default={160}>
-  The max amount of time in milliseconds to wait for a word to be finalized.
-</ParamField>
-
-<ParamField path="end_of_turn_confidence_threshold" type="float" default={0.4}>
+<ParamField path="end_of_turn_confidence_threshold" type="float" default={0.7}>
   The confidence threshold to use when determining if the end of a turn has been
   reached.
 </ParamField>
@@ -790,12 +721,12 @@ Utilizing our Partial Transcripts in this manner will allow you to achieve the f
 <ParamField
   path="min_end_of_turn_silence_when_confident"
   type="int"
-  default={480}
+  default={160}
 >
   The minimum amount of silence required to detect end of turn when confident.
 </ParamField>
 
-<ParamField path="max_turn_silence" type="int" default={700}>
+<ParamField path="max_turn_silence" type="int" default={400}>
   The maximum amount of silence allowed in a turn before end of turn is
   triggered.
 </ParamField>
