@@ -1,0 +1,296 @@
+---
+title: "Building a Voice Agent with LiveKit and AssemblyAI"
+description: "Complete guide to building a voice agent from scratch using LiveKit and AssemblyAI"
+---
+
+## Overview
+
+Build a complete voice agent from scratch using LiveKit's Agents framework and AssemblyAI's streaming speech-to-text with advanced turn detection. This guide walks you through creating a fully functional voice agent that can have natural conversations with users in real-time.
+
+**LiveKit** is an open-source platform for building real-time audio and video applications. It provides the infrastructure for live streaming, video conferencing, and interactive media experiences.
+
+**LiveKit Agents** is a framework within LiveKit specifically designed for building AI-powered voice and video agents. It handles the complex orchestration of speech-to-text (STT), large language models (LLM), and text-to-speech (TTS) services, allowing you to focus on your agent's behavior rather than the underlying real-time media processing.
+
+<Note>
+  New to LiveKit? This guide assumes no prior LiveKit experience and walks you through everything from setup to deployment.
+</Note>
+
+<Card 
+    title="LiveKit Agents" 
+    icon={<img src="https://assemblyaiassets.com/images/Livekit.svg" alt="LiveKit logo"/>} 
+    href="https://docs.livekit.io/agents/"
+>
+    Learn more about LiveKit's voice agent framework.
+</Card>
+
+## What you'll build
+
+By the end of this guide, you'll have:
+- A real-time voice agent with sub-second response times
+- Natural conversation flow with AssemblyAI's advanced turn detection model
+- Voice Activity Detection based interruption handling for responsive interactions
+- A complete setup ready for production deployment
+
+## Prerequisites
+
+- Python 3.9 or higher
+- A microphone and speakers/headphones
+- API keys for AssemblyAI, OpenAI, and Cartesia
+
+## Step 1: Installation
+
+Create a new Python environment and install the required packages:
+
+Create virtual environment
+```bash
+python -m venv voice-agent
+source voice-agent/bin/activate  # On Windows: voice-agent\\Scripts\\activate
+```
+Install LiveKit Agents with all required plugins and python-dotenv
+```bash
+pip install "livekit-agents[assemblyai,openai,cartesia,silero]" livekit-plugins-noise-cancellation python-dotenv
+```
+
+## Step 2: Get API Keys
+
+To build your voice agent, you'll use:
+
+- **AssemblyAI** for **STT** (speech-to-text)
+- **GPT-4o mini** from OpenAI for the **LLM** (language model)
+- **Cartesia** for **TTS** (text-to-speech)
+
+You'll need API keys for each:
+
+<Tip>
+  **AssemblyAI (STT)**  
+  - Sign up: [assemblyai.com/signup](https://www.assemblyai.com/dashboard/signup)  
+  - API Key: [assemblyai.com/api-keys](https://www.assemblyai.com/dashboard/api-keys)
+</Tip>
+
+<Tip>
+  **OpenAI (LLM)**  
+  - Sign up: [auth.openai.com/create-account](https://auth.openai.com/create-account)  
+  - API Key: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+</Tip>
+
+<Tip>
+  **Cartesia (TTS)**  
+  - Sign up: [cartesia.ai/sign-up](https://play.cartesia.ai/sign-up)  
+  - API Key: [cartesia.ai/keys](https://play.cartesia.ai/keys)
+</Tip>
+
+<Note>
+  Looking for alternatives? LiveKit Agents supports multiple TTS and LLM providers.  
+  Explore the full plugin list [here](https://docs.livekit.io/agents/plugins/).
+</Note>
+
+## Step 3: Set Up LiveKit Account
+
+You'll need a LiveKit Cloud account to use the Agents Playground for testing your voice agent.
+
+<Tip>
+  **LiveKit Cloud**  
+  - Sign up: [cloud.livekit.io](https://cloud.livekit.io/)  
+  - It's free to get started with generous usage limits
+</Tip>
+
+**Getting Your LiveKit Credentials:**
+
+1. **Create a Project**: After signing up, you'll see your dashboard. In the bottom left corner, click on "Projects" and create a new project for your voice agent (e.g., "voice-agent-dev").
+
+2. **Get API Credentials**: Once your project is created, navigate to **Settings > API Keys** in your project dashboard. You'll find all three credentials you need in this section:
+   - **WebSocket URL** (e.g., `wss://your-project.livekit.cloud`)
+   - **API Key** (e.g., `APIaBcDeFgHiJkLm`)
+   - **API Secret** (e.g., `SecretXyZ123AbC456DeF789GhI012JkL345MnO678PqR`)
+
+**Project Environments:**
+
+It's recommended to use separate LiveKit projects for different environments:
+- **Development**: For local testing and development
+- **Staging**: For testing before production
+- **Production**: For live user traffic
+
+Each project has unique credentials, ensuring you won't accidentally process real user traffic during development.
+
+**Testing Options:**
+
+LiveKit provides multiple ways to test your voice agent (web SDKs, mobile apps, custom frontends), but for this guide we'll use the [**LiveKit Agents Playground**](https://agents-playground.livekit.io/) - a ready-to-use web interface that makes testing quick and easy.
+
+<Note>
+  While you can run LiveKit locally for development, you need LiveKit Cloud credentials to access the Agents Playground for testing. The playground provides an easy web interface to test your voice agent without building a custom frontend.
+</Note>
+
+<Note>
+  Keep your API credentials secure and never commit them to version control. We'll add them to your `.env` file in the next step.
+</Note>
+
+## Step 4: Environment Setup
+
+Create a `.env` file in your project directory with your API keys and LiveKit credentials:
+
+```env
+# API Keys
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+CARTESIA_API_KEY=your_cartesia_api_key_here
+
+# LiveKit Cloud Credentials (from Step 3 - Development Project)
+LIVEKIT_URL=wss://your-dev-project.livekit.cloud
+LIVEKIT_API_KEY=APIaBcDeFgHiJkLm
+LIVEKIT_API_SECRET=SecretXyZ123AbC456DeF789GhI012JkL345MnO678PqR
+```
+
+Replace the placeholder values with your actual credentials:
+- Use the API keys you obtained in Step 2
+- Use the LiveKit credentials from your **development project's** **Settings > API Keys** section
+
+<Note>
+  For this tutorial, use your development project credentials. When you're ready for production, create separate projects for staging and production environments, each with their own `.env` configuration.
+</Note>
+
+## Step 5: Create Your Voice Agent
+
+Create a file called `voice_agent.py`:
+
+```python
+from dotenv import load_dotenv
+from livekit import agents
+from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.plugins import (
+    openai,
+    cartesia,
+    assemblyai,
+    noise_cancellation,
+    silero,
+)
+
+load_dotenv()
+
+
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(instructions="You are a helpful AI assistant. Keep your responses concise and conversational. You're having a real-time voice conversation, so avoid long explanations unless asked.")
+
+
+async def entrypoint(ctx: agents.JobContext):
+    await ctx.connect()
+
+    # Create agent session with AssemblyAI's advanced turn detection
+    session = AgentSession(
+        stt=assemblyai.STT(
+            end_of_turn_confidence_threshold=0.7,
+            min_end_of_turn_silence_when_confident=160,
+            max_turn_silence=400,
+        ),
+        llm=openai.LLM(
+            model="gpt-4o-mini",
+            temperature=0.7,
+        ),
+        tts=cartesia.TTS(),
+        vad=silero.VAD.load(),  # Voice Activity Detection for interruptions
+        turn_detection="stt",  # Use AssemblyAI's STT-based turn detection
+    )
+
+    await session.start(
+        room=ctx.room,
+        agent=Assistant(),
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVC(),
+        ),
+    )
+
+    # Greet the user when they join
+    await session.generate_reply(
+        instructions="Greet the user and offer your assistance."
+    )
+
+
+if __name__ == "__main__":
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+## Step 6: Run Your Voice Agent
+
+Start your voice agent:
+
+```bash
+python voice_agent.py dev
+```
+
+You should see output indicating the agent is ready and waiting for connections.
+
+## Step 7: Test Your Agent
+
+Open [LiveKit Agents Playground](https://agents-playground.livekit.io/) in your browser:
+
+1. **Select your project**: If you're logged in to your LiveKit Cloud account, you should see your project listed. Click on your development project.
+
+2. **Connect**: Click "Connect" and start talking to your voice agent!
+
+<Note>
+  Make sure you're logged in to the same LiveKit Cloud account where you created your project. The playground will automatically use your project's credentials.
+</Note>
+
+## Configuration
+
+### Turn Detection (Key Feature)
+
+AssemblyAI's new turn detection model was built specifically for voice agents and you can tweak it to fit your use case. It processes both audio and linguistic information to determine an end of turn confidence score on every inference, and if that confidence score is past the set threshold, it triggers end of turn.
+
+This custom model was designed to address 2 major issues with voice agents. With traditional VAD (voice activity detection) approaches based on silence alone, there are situations where the agent wouldn't wait for a user to finish their turn even if the audio data suggested it. Think of a situation like "My credit card number is____" - if someone is looking that up, traditional VAD may not wait for the user, where our turn detection model is far better in these situations.
+
+Additionally, in situations where we are certain that the user is done speaking like "What is my credit score?", a high end of turn confidence is returned, greater than the threshold, and triggering end of turn, allowing for minimal turnaround latency in those scenarios.
+
+```python
+# STT-based turn detection (recommended)
+turn_detection="stt"
+
+stt=assemblyai.STT(
+    end_of_turn_confidence_threshold=0.7,
+    min_end_of_turn_silence_when_confident=160,  # in ms
+    max_turn_silence=400,  # in ms
+)
+```
+
+**Parameter tuning:**
+- **end_of_turn_confidence_threshold**: Raise or lower the threshold based on how confident you'd like us to be before triggering end of turn based on confidence score
+- **min_end_of_turn_silence_when_confident**: Increase or decrease the amount of time we wait to trigger end of turn when confident
+- **max_turn_silence**: Lower or raise the amount of time needed to trigger end of turn when end of turn isn't triggered by a high confidence score
+
+<Tip>
+  You can also set `turn_detection="vad"` if you'd like turn detection to be based on Silero VAD instead of our advanced turn detection model.
+</Tip>
+
+For more information, see our [Universal-Streaming end-of-turn detection guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming#end-of-turn-detection) and [message-by-message breakdown](https://www.assemblyai.com/docs/speech-to-text/universal-streaming-messages-guide).
+
+**Customizing your agent:**
+
+Modify the agent's instructions to change behavior:
+
+```python
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(instructions="You are a friendly customer service representative. Help users with technical questions and maintain a professional tone. Keep responses under 30 seconds.")
+```
+
+For customizing Cartesia TTS, see the [LiveKit Cartesia TTS documentation](https://docs.livekit.io/agents/integrations/tts/cartesia/).
+
+For configuring OpenAI models and parameters, see the [LiveKit OpenAI LLM documentation](https://docs.livekit.io/agents/integrations/llm/openai/).
+
+For complete details on all AssemblyAI parameters, see the [AssemblyAI Universal-Streaming API Reference](https://www.assemblyai.com/docs/speech-to-text/universal-streaming#reference).
+
+<Tip>
+  **Want to build more advanced voice agents?** LiveKit has tons of guides on building custom voice agents and workflows. Explore their [documentation](https://docs.livekit.io/agents/build/) to see how you can do things like [function calling with tools](https://docs.livekit.io/agents/build/tools/) or [integrate RAG](https://docs.livekit.io/agents/build/external-data/).
+</Tip>
+
+## Production Deployment
+
+When your voice agent is working well in development, it's time to deploy it to production. Head over to the [LiveKit Agents Deployment Guide](https://docs.livekit.io/agents/ops/deployment/) to learn about deploying your voice agent to production using LiveKit Cloud.
+
+Since LiveKit is open source, you have the flexibility to deploy the infrastructure yourself for complete control over your deployment and data. However, LiveKit Cloud makes it really easy to deploy with managed infrastructure that includes auto-scaling, global edge locations for low latency, built-in monitoring and analytics, zero-downtime deployments, and enterprise-grade security.
+
+For production, make sure to create separate LiveKit projects for staging and production environments, each with their own API credentials and `.env` configurations to keep your environments isolated.
+
+## More Questions?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
