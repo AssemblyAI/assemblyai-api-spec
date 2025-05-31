@@ -14,6 +14,29 @@ To run the quickstart:
 
 <Tabs>
 
+<Tab title="Python SDK" language="python-sdk">
+<Steps>
+    <Step>
+    Create a new Python file (for example, `main.py`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 17.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    pip install assemblyai
+    ```
+
+    </Step>
+    <Step>
+    Run with `python main.py`
+    </Step>
+
+</Steps>
+</Tab>
+
 <Tab title="Python" language="python" default>
 
 <Steps>
@@ -39,8 +62,29 @@ To run the quickstart:
 
 </Tab>
 
-<Tab title="JavaScript" language="javascript">
+<Tab title="JavaScript SDK" language="javascript-sdk">
+<Steps>
+    <Step>
+    Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 7 and 12.
+    </Step>
+    <Step>
+    Install the necessary libraries
 
+    ```bash
+    npm install assemblyai node-record-lpcm16
+    ```
+
+    </Step>
+    <Step>
+    Run with `node main.js`
+    </Step>
+</Steps>
+</Tab>
+
+<Tab title="JavaScript" language="javascript">
 <Steps>
     <Step>
     Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
@@ -59,12 +103,117 @@ To run the quickstart:
     <Step>
     Run with `node main.js`
     </Step>
-
 </Steps>
 </Tab>
+
 </Tabs>
 
 <Tabs>
+<Tab title="Python SDK" language="python-sdk">
+```python
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    StreamingSessionParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+
+api_key = "<YOUR_API_KEY>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
+
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
+
+    if event.end_of_turn and not event.turn_is_formatted:
+        params = StreamingSessionParameters(
+            formatted_finals=True,
+        )
+
+        self.set_params(params)
+
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            formatted_finals=True,
+        )
+    )
+
+    try:
+        client.stream(
+          aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+{/* TODO: Not implemented in SDK yet. */}
+{/* <Accordion title='Authenticate With A Temporary Token'>
+
+```python {6-12}
+def generate_temp_token(api_key, expires_in_seconds=60):
+    """Generate a temporary authentication token that expires after the specified time."""
+    import requests
+    from urllib.parse import urlencode
+
+    url = "https://streaming.assemblyai.com/v3/token"
+    response = requests.get(
+        f"{url}?{urlencode({'expires_in_seconds': expires_in_seconds})}",
+        headers={"Authorization": api_key}
+    )
+    data = response.json()
+    return data.get("token")
+
+# Example usage:
+# temp_token = generate_temp_token(YOUR_API_KEY)
+# Then use temp_token instead of YOUR_API_KEY for authentication
+```
+
+</Accordion> */}
+</Tab>
+
 <Tab title="Python" language="python">
 
 ```python
@@ -336,6 +485,110 @@ def generate_temp_token(api_key, expires_in_seconds=60):
 
 </Accordion>
 
+</Tab>
+
+<Tab title="JavaScript SDK" language="javascript-sdk">
+
+```javascript
+import { Readable } from 'stream'
+import { AssemblyAI } from 'assemblyai'
+import recorder from 'node-record-lpcm16'
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason),
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+
+    console.log("Turn:", turn.transcript);
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C.
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+{/* TODO: Not implemented in SDK yet. */}
+{/* <Accordion title='Authenticate With A Temporary Token'>
+
+```js {6-13}
+async function generateTempToken(apiKey, expiresInSeconds = 60) {
+  // Generate a temporary authentication token that expires after the specified time.
+  const url = new URL("https://streaming.assemblyai.com/v3/token");
+  url.search = new URLSearchParams({
+    expires_in_seconds: expiresInSeconds,
+  }).toString();
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: apiKey,
+    },
+  });
+
+  const data = await response.json();
+  return data.token;
+}
+
+// Example usage:
+// const tempToken = generateTempToken(YOUR_API_KEY);
+// Then use tempToken instead of YOUR_API_KEY for authentication
+// const transcriber = client.streaming.transcriber({
+//   sampleRate: 16_000,
+//   token: tempToken,
+// });
+```
+</Accordion> */}
 </Tab>
 
 <Tab title="JavaScript" language="javascript">
