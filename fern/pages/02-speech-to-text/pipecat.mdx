@@ -2,9 +2,14 @@
 title: "Pipecat"
 description: "Pipecat voice agent integration"
 ---
+
+<Note>
+  This guide assumes prior knowledge of Pipecat. If you haven't used Pipecat before and are unfamiliar with Pipecat, please check out our [Building a Voice Agent with Pipecat and AssemblyAI guide](https://www.assemblyai.com/docs/speech-to-text/pipecat-intro-guide).
+</Note>
+
 ## Overview
 
-Pipecat is an open source platform for developers building realtime media applications. In this guide, we'll show you how to integrate AssemblyAI's streaming speech-to-text model into your Pipecat voice agent using the Agents framework.
+Pipecat is an open source platform for developers building realtime media applications. In this guide, we'll show you how to integrate AssemblyAI's streaming speech-to-text model into your Pipecat voice agent using the Pipeline framework.
 
 <Card 
     title="Pipecat" 
@@ -38,16 +43,17 @@ The AssemblyAI service requires an [AssemblyAI API key](https://www.assemblyai.c
 Use AssemblyAI STT in a `Pipeline`:
 
 ```python
-from pipecat.services.assemblyai.stt import AssemblyAISTTService
+from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAIConnectionParams
 
 # Configure service
 stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    vad_force_turn_endpoint=False,  # Use AssemblyAI's STT-based turn detection
     connection_params=AssemblyAIConnectionParams(
         end_of_turn_confidence_threshold=0.7,
         min_end_of_turn_silence_when_confident=160,
         max_turn_silence=400,
-    ),
-    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    )
 )
 
 # Use in pipeline
@@ -55,46 +61,45 @@ pipeline = Pipeline([
     transport.input(),
     stt,
     llm,
-    ...
+    tts,
+    transport.output(),
 ])
 ```
 
 ## Configuration
 
-### Turn detection
+### Turn Detection (Key Feature)
 
-The `AssemblyAISTTService` provides two options for turn detection. You can set the `vad_force_turn_endpoint` parameter within the `AssemblyAISTTService` constructor:
+AssemblyAI's new turn detection model was built specifically for voice agents and you can tweak it to fit your use case. It processes both audio and linguistic information to determine an end of turn confidence score on every inference, and if that confidence score is past the set threshold, it triggers end of turn.
 
-<Note>
-VAD should be enabled in both cases to enable fast interruptions.
-</Note>
+This custom model was designed to address 2 major issues with voice agents. With traditional VAD (voice activity detection) approaches based on silence alone, there are situations where the agent wouldn't wait for a user to finish their turn even if the audio data suggested it. Think of a situation like "My credit card number is____" - if someone is looking that up, traditional VAD may not wait for the user, where our turn detection model is far better in these situations.
 
-STT-based Turn Detection (`vad_force_turn_endpoint = False`)
+Additionally, in situations where we are certain that the user is done speaking like "What is my credit score?", a high end of turn confidence is returned, greater than the threshold, and triggering end of turn, allowing for minimal turnaround latency in those scenarios.
 
-- **VAD end-of-speech events are ignored** (only timestamps are recorded for metrics)
-- STT turn detection determines when a turn ends
-- The turn ends after receiving the final transcript from the STT service
+You can set the `vad_force_turn_endpoint` parameter within the `AssemblyAISTTService` constructor:
 
-VAD-based Turn Detection (`vad_force_turn_endpoint = True`)
-
-- **STT turn detection is ignored**
-- VAD end-of-speech events determine turn boundaries
-- The turn ends when VAD detects speech has stopped & a final transcript is received
-
-Key Differences
-
-- **STT-based**: Better for accuracy, waits for complete thoughts
-- **VAD-based**: Lower latency, more responsive to quick back-and-forth
-
-Choose the mode that best fits your application's requirements for latency versus accuracy.
-
-Example Usage:
 ```python
 stt = AssemblyAISTTService(
-    vad_force_turn_endpoint=False,
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    vad_force_turn_endpoint=False,  # Use AssemblyAI's STT-based turn detection
+    connection_params=AssemblyAIConnectionParams(
+        end_of_turn_confidence_threshold=0.7,
+        min_end_of_turn_silence_when_confident=160,  # in ms
+        max_turn_silence=400,  # in ms
+    )
 )
 ```
 
+**Parameter tuning:**
+- **end_of_turn_confidence_threshold**: Raise or lower the threshold based on how confident you'd like us to be before triggering end of turn based on confidence score
+- **min_end_of_turn_silence_when_confident**: Increase or decrease the amount of time we wait to trigger end of turn when confident
+- **max_turn_silence**: Lower or raise the amount of time needed to trigger end of turn when end of turn isn't triggered by a high confidence score
+
+<Tip>
+  You can also set `vad_force_turn_endpoint=True` if you'd like turn detection to be based on VAD instead of our advanced turn detection model.
+</Tip>
+
+For more information, see our [Universal-Streaming end-of-turn detection guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming#end-of-turn-detection) and [message-by-message breakdown](https://www.assemblyai.com/docs/speech-to-text/universal-streaming-messages-guide).
 
 ## Parameters
 
@@ -120,10 +125,6 @@ stt = AssemblyAISTTService(
   Streaming transcription.
 </ParamField>
 
-<ParamField path="api_endpoint_base_url" type="str">
-  Base URL for the WebSocket API endpoint.
-</ParamField>
-
 ### Connection Parameters
 
 <ParamField path="sample_rate" type="int" default="16000">
@@ -139,16 +140,16 @@ stt = AssemblyAISTTService(
   transcripts will be emitted shortly following an end-of-turn detection.
 </ParamField>
 
-<ParamField path="end_of_turn_confidence_threshold" type="float">
+<ParamField path="end_of_turn_confidence_threshold" type="float" default="0.4">
   The confidence threshold to use when determining if the end of a turn has been
   reached.
 </ParamField>
 
-<ParamField path="min_end_of_turn_silence_when_confident" type="int">
+<ParamField path="min_end_of_turn_silence_when_confident" type="int"  default="480">
   The minimum amount of silence required to detect end of turn when confident.
 </ParamField>
 
-<ParamField path="max_turn_silence" type="int">
+<ParamField path="max_turn_silence" type="int" default="700">
   The maximum amount of silence allowed in a turn before end of turn is
   triggered.
 </ParamField>
