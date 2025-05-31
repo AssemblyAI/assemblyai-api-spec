@@ -1,0 +1,114 @@
+openapi: 3.0.3
+
+info:
+  title: AssemblyAI Streaming Token API
+  description: API for generating temporary authentication tokens for streaming services
+  version: 1.0.0
+  termsOfService: https://www.assemblyai.com/legal/terms-of-service
+  contact:
+    name: API Support
+    email: support@assemblyai.com
+    url: https://www.assemblyai.com/docs/
+
+servers:
+  - url: https://streaming.assemblyai.com
+    description: Production server
+    x-fern-server-name: Default
+
+paths:
+  /v3/token:
+    get:
+      summary: Generate temporary streaming token
+      description: |
+        Generates a temporary authentication token for use with streaming services.
+      operationId: generateStreamingToken
+      x-fern-sdk-group-name: Streaming API
+      x-fern-sdk-method-name: generateStreamingToken
+      security:
+        - apiKey: []
+      parameters:
+        - name: expires_in_seconds
+          in: query
+          description: |
+            The desired expiration time for the token in seconds.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            example: 60
+        - name: max_session_duration_seconds
+          in: query
+          description: |
+            The desired maximum duration for the session started using this token in seconds.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            example: 600
+      responses:
+        "200":
+          description: Successfully generated temporary token
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - expires_in_seconds
+                properties:
+                  token:
+                    type: string
+                    description: The temporary authentication token
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_in_seconds:
+                    type: integer
+                    description: |
+                      The actual expiration time of the token in seconds.
+                    example: 60
+        "401":
+          description: Unauthorized - Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Bad Request - Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too Many Requests - Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Your AssemblyAI API key
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+        code:
+          type: string
+          description: Error code for programmatic handling
+        details:
+          type: object
+          description: Additional error details if available
