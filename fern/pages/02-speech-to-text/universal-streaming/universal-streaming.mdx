@@ -887,9 +887,9 @@ async function generateTempToken(apiKey, expiresInSeconds = 60) {
 
 ## Core concepts
 
-[Streaming API: Message Sequence Breakdown](/docs/speech-to-text/universal-streaming-messages-guide)
+[Streaming API: Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/message-sequence)
 
-The core concept of the new streaming API is the **Turn** object, which replaces the previous concepts of "partial" and "final" transcripts.
+Universal-Streaming is built based upon two core concepts: Turn objects and immutable transcriptions
 
 ```json
 {
@@ -907,27 +907,85 @@ The core concept of the new streaming API is the **Turn** object, which replaces
 }
 ```
 
-- `turn_order`: Integer that increments with each new utterance
-- `turn_is_formatted`: Boolean indicating if this is a formatted version (with punctuation, capitalization)
+- `turn_order`: Integer that increments with each new turn
+- `turn_is_formatted`: Boolean indicating if the text in the transcript field is formatted. Text formatting is enabled when `formatted_finals` is set to `true`. It adds punctuation as well as performs casing and inverse text normalization to display various entities, such as dates, times, and phone numbers, in a human-friendly format
 - `end_of_turn`: Boolean indicating if this is the end of the current turn
 - `transcript`: String containing only finalized words
-- `end_of_turn_confidence`: Double (0-1) representing confidence that user has completed their turn
-- `words`: List of word objects with individual metadata
+- `end_of_turn_confidence`: Floating number (0-1) representing the confidence that the current turn has finished, i.e., the current speaker has completed their turn
+- `words`: List of Word objects with individual metadata
 
-Each word in the `words` array includes:
+Each Word object in the `words` array includes:
 
-- `text`: The word text
-- `word_is_final`: Boolean indicating if the word is finalized
+- `text`: The string representation of the word
+- `word_is_final`: Boolean indicating if the word is finalized, where a finalized word means the word won't be altered in future transcription responses
 - `start`: Timestamp for word start
 - `end`: Timestamp for word end
 - `confidence`: Confidence score for the word
+
+## Immutable transcription
+
+As Universal Streaming receives audio in a streaming fashion, it returns transcription responses in real-time using the format specified above. Unlike many other streaming speech-to-text models that implement the concept of partial/variable transcriptions to show transcripts in an ongoing manner, Universal-Streaming transcriptions are immutable. In other words, the text that has already been produced will not be overwritten in future transcription responses. Therefore, with Universal-Streaming, the transcriptions will be delivered in the following way: 
+→ hello my na
+→ hello my name
+→ hello my name
+→ hello my name is
+→ hello my name is zac
+→ hello my name is zack
+
+When an end of the current turn is detected, you then receive a message with `end_of_turn` being `true`. Additionally, if you enable text formatting, you will also receive a transcription response with `turn_is_formatted` being `true`.
+→ hello my name is zack (unformatted)
+→ Hello my name is Zack. (formatted)
+
+In this example, you may have noticed that the last word of each transcript may occasionally be a subword ("zac" in the example shown above). Each Word object has the `word_is_final` field to indicate whether the model is confident that the last word is a completed word. Note that, except for the last word, `word_is_final` is always true.
 
 ## Recommendations
 
 - Use an audio chunk size of 50ms. Larger chunk sizes are workable, but may result in latency fluctuations.
 - Use a sample rate of 16 kHz and encoding of pcm_s16le. While all sampling rates are supported, using 16 kHz and pcm_s16le is recommended for the best experience, as our STT model operates at a 16 kHz sample rate. If the incoming audio uses a different rate, we perform additional sampling rate conversion under the hood, which might marginally increase latency.
 
-## Voice Agents
+## Voice agent use case
+
+<Note>To optimize for latency, we recommend using the unformatted transcript as it’s received more quickly than the formatted version. In typical voice agent applications involving large language models (LLMs), the lack of formatting makes little impact on the subsequent LLM processing.</Note>
+
+### Possible implementation strategy
+
+Since all our transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here’s one way to handle the conversation flow:
+1. When you receive a transcription response with the end_of_turn value being true but your Voice Agent (i.e., your own turn detection logic) hasn’t detected end of turn, save this data in a variable (let’s call it `running_transcript`).
+2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
+3. Clear the `running_transcript` after sending and be sure to ignore the next transcription with `end_of_turn` of true, that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
+
+What you send to the voice agent should look like: `running_transcript` + ’ ’ + `latest_partial`
+
+#### Example flow
+```
+→ hello my na
+→ hello my name
+→ hello my name
+→ hello my name is
+→ hello my name is son
+→ hello my name is sonny (final – added to running_transcript)
+
+→ I
+→ I work at
+→ I work at assembly ai (final – added to running_transcript)
+
+→ how
+→ how can
+→ how can I help
+→ how can I help you today (latest partial, final not yet received)
+
+<END_OF_TURN_DETECTED>
+"hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
+
+<running_transcript cleared>
+<final for latest_partial not added to running_transcript>
+```
+
+Utilizing our ongoing transcriptions in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
+
+<Tip>Instead of building your own logic for conversation flow handling, you may use Universal Streaming via integrations with tools like LiveKit and Pipecat. See the next section of our docs for more information on using these orchestrators.</Tip>
+
+## Voice agent orchestrators
 
 <CardGroup cols={2}>
   <Card title="Livekit" icon={<img src="https://assemblyaiassets.com/images/Livekit.svg" alt="Livekit logo"/>} href="https://docs.livekit.io/agents/integrations/stt/assemblyai/">
@@ -940,7 +998,6 @@ Each word in the `words` array includes:
     View Vapi's AssemblyAI STT plugin documentation.
   </Card>
 </CardGroup>
-
 
 ## Reference
 
@@ -962,24 +1019,24 @@ Each word in the `words` array includes:
   Whether to return formatted final transcripts.
   <Note>
     If enabled, formatted final transcripts will be emitted shortly following an
-    end-of-turn detection.
+    end-of-turn detection with the `turn_is_formatted` value being true.
   </Note>
 </ParamField>
 
-<ParamField path="end_of_turn_confidence_threshold" type="float" default={0.7}>
+<ParamField path="end_of_turn_confidence_threshold" type="float" default={0.5}>
   The confidence threshold to use when determining if the end of a turn has been
-  reached.
+  reached. Increasing this value will reduce how often new turns are generated.
 </ParamField>
 
 <ParamField
   path="min_end_of_turn_silence_when_confident"
   type="int"
-  default={160}
+  default={400}
 >
-  The minimum amount of silence required to detect end of turn when confident.
+  The minimum amount of silence required to detect end of turn when confident. Increasing this value will reduce how often new turns are generated.
 </ParamField>
 
-<ParamField path="max_turn_silence" type="int" default={400}>
+<ParamField path="max_turn_silence" type="int" default={2400}>
   The maximum amount of silence allowed in a turn before end of turn is
   triggered.
 </ParamField>
@@ -988,7 +1045,7 @@ Each word in the `words` array includes:
 
 The audio format must conform to the following requirements:
 
-- PCM16 or Mu-law encoding (See Specify the encoding)
+- PCM16 or Mu-law encoding
 - A sample rate that matches the value of the `sample_rate` parameter
 - Single-channel
 - 50 milliseconds of audio per message (recommended)
