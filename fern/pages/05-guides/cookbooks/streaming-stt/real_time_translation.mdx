@@ -2,144 +2,502 @@
 title: "Translate Streaming STT Transcripts with LeMUR"
 ---
 
-In this guide, you'll learn how to implement real-time translation using AssemblyAI's Streaming model and LeMUR framework.
+In this guide, you'll learn how to implement real-time translation of final transcripts using AssemblyAI's Streaming model and LeMUR framework.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import pyaudio
+import websocket
+import json
+import threading
+import time
+import wave
+import requests
+from urllib.parse import urlencode
+from datetime import datetime
 
-aai.settings.api_key = "API_KEY"
+# --- Configuration ---
+YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
 
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    "This function is called when the connection has been established."
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "formatted_finals": True,  # Request formatted final transcripts
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
-    print("Session ID:", session_opened.session_id)
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
 
-def on_error(error: aai.RealtimeError):
-    "This function is called when an error has been thrown."
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()  # To signal the audio thread to stop
 
-    print("An error occurred:", error)
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 
-def on_close():
-    "This function is called when the connection has been closed."
+# --- Function to Translate Text with LeMUR ---
 
-    print("Closing Session")
+def translate_text(text):
+    """Called when translating final transcripts."""
+    headers = {
+        "authorization": YOUR_API_KEY
+    }
 
+    prompt = "Translate the following text into Spanish. Do not write a preamble. Just return the translated text."
 
-def on_data(transcript: aai.RealtimeTranscript):
-    "This function is called when a new transcript has been received."
+    lemur_data = {
+        "prompt": prompt,
+        "input_text": text,
+        "final_model": "anthropic/claude-3-7-sonnet-20250219",
+    }
+    result = requests.post("https://api.assemblyai.com/lemur/v3/generate/task", headers=headers, json=lemur_data)
+    return result.json()["response"]
 
-    if not transcript.text:
-        return
+# --- WebSocket Event Handlers ---
 
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        result = aai.Lemur().task("Translate the following text into Spanish. Do not write a preamble. Just return the translated text.", input_text=transcript.text)
-        print(result.response, end="\r\n")
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
 
-transcriber = aai.RealtimeTranscriber(
-    on_data=on_data,
-    on_error=on_error,
-    sample_rate=44_100,
-    on_open=on_open,
-    on_close=on_close,
-)
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
+                break
+        print("Audio streaming stopped.")
 
-# Start the connection
-transcriber.connect()
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
+    audio_thread.start()
 
-# Open a microphone stream
-microphone_stream = aai.extras.MicrophoneStream()
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
 
-# Press Ctrl+C to abort
-transcriber.stream(microphone_stream)
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
 
-transcriber.close()
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(translate_text(transcript))
+
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    # Ensure audio resources are released
+    global stream, audio
+    stop_event.set()  # Signal audio thread just in case it's still running
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+# --- Main Execution ---
+
+def run():
+    global audio, stream, ws_app
+
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+        print("Audio will be saved to a WAV file when the session ends.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return  # Exit if microphone cannot be opened
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+if __name__ == "__main__":
+    run()
 ```
 
 ## Step-by-Step Instructions
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard. Please note that this feature is available for paid accounts only. If you're on the free plan, you'll need to upgrade.
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) and get your API key from your dashboard.
 
-Install the AssemblyAI Python SDK. To use the microphone stream, you need to install the extras for this SDK. Mac and Linux users also need to install `portaudio` before installing the extras.
+### Import Packages & Set API Key
 
 ```python
-# (Mac)
-brew install portaudio
+import pyaudio
+import websocket
+import json
+import threading
+import time
+import requests
+from urllib.parse import urlencode
+from datetime import datetime
 
-# (Debian/Ubuntu)
-apt install portaudio19-dev
-
-pip install "assemblyai[extras]"
+YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
 ```
 
-Import the `assemblyai` package and set the API key.
+### Audio Configuration & Global Variables
 
-```python
-import assemblyai as aai
+Set all of your audio configurations and global variables. Make sure that you have the parameter `formatted_finals` set to `True`.
 
-aai.settings.api_key = "API_KEY"
+```python {3}
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "formatted_finals": True,  # Request formatted final transcripts
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()  # To signal the audio thread to stop
+
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 ```
 
-Create functions to handle different events during transcription.
+### Define Translate Text Function
+
+Define a function called `translate_text`, which uses LeMUR to translate the English final transcripts into another language. This example is translating the text into Spanish. To set this to a different language, just replace "Spanish" in the prompt with your language of choice.
 
 ```python
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    "This function is called when the connection has been established."
+def translate_text(text):
+    """Called when translating final transcripts."""
+    headers = {
+        "authorization": YOUR_API_KEY
+    }
 
-    print("Session ID:", session_opened.session_id)
+    prompt = "Translate the following text into Spanish. Do not write a preamble. Just return the translated text."
 
-def on_error(error: aai.RealtimeError):
-    "This function is called when an error has been thrown."
-
-    print("An error occurred:", error)
-
-def on_close():
-    "This function is called when the connection has been closed."
-
-    print("Closing Session")
+    lemur_data = {
+        "prompt": prompt,
+        "input_text": text,
+        "final_model": "anthropic/claude-3-7-sonnet-20250219",
+    }
+    result = requests.post("https://api.assemblyai.com/lemur/v3/generate/task", headers=headers, json=lemur_data)
+    return result.json()["response"]
 ```
 
-In our `on_data` function, we're going to call LeMUR to perform real-time translation using the Claude 3 Haiku model. Other models work just as well (if not better, in the case of 3.5 Sonnet), but Haiku has proven to be the fastest at translation tasks. Note that LeMUR does only officially support English, so your mileage may vary with how well the translations turn out.
+### Websocket Event Handlers
+
+#### Open Websocket
 
 ```python
-def on_data(transcript: aai.RealtimeTranscript):
-    "This function is called when a new transcript has been received."
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
 
-    if not transcript.text:
-        return
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
+                break
+        print("Audio streaming stopped.")
 
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        result = aai.Lemur().task(
-            "Translate the following text into Spanish. Do not write a preamble. Just return the translated text.",
-            input_text=transcript.text,
-            final_model=aai.LemurModel.claude3_haiku)
-        print(result.response, end="\r\n")
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
+    audio_thread.start()
 ```
 
-Create a `RealtimeTranscriber` to set up the Streaming STT configuration.
+#### Handle Websocket Messages
 
-```python
-transcriber = aai.RealtimeTranscriber(
-    on_data=on_data,
-    on_error=on_error,
-    sample_rate=44_100,
-    on_open=on_open, # Optional
-    on_close=on_close, # Optional
-)
+In this function, use the previously defined `translate_text` to translate all final transcripts.
+
+```python {16}
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(translate_text(transcript))
+
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
 ```
 
-Begin the Streaming STT transcription process.
+#### Close Websocket
 
 ```python
-# Start the connection
-transcriber.connect()
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    # Ensure audio resources are released
+    global stream, audio
+    stop_event.set()  # Signal audio thread just in case it's still running
 
-# Open a microphone stream
-microphone_stream = aai.extras.MicrophoneStream()
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+```
 
-# Press Ctrl+C to abort
-transcriber.stream(microphone_stream)
+#### Websocket Error Handling
 
-transcriber.close()
+```python
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
+    stop_event.set()
+```
+
+### Begin Streaming STT Transcription
+
+```python
+def run():
+    global audio, stream, ws_app
+
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+        print("Audio will be saved to a WAV file when the session ends.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return  # Exit if microphone cannot be opened
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+if __name__ == "__main__":
+    run()
 ```
