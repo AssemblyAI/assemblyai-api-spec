@@ -6,152 +6,544 @@ This guide solves the challenge of transcribing system audio, which is can be us
 
 The key to success lies in creating a virtual input device that captures your speaker output and converts it into an input stream. This approach allows you to bypass the limitations of direct system audio access.
 
-For Mac Users: We recommend using [BlackHole](https://github.com/ExistentialAudio/BlackHole), a free open-source tool available through Homebrew. BlackHole creates a virtual audio device that can route your system audio to AssemblyAI's API seamlessly.
-For Windows Users: [Virtual Audio Cable (VAC)](https://vac.muzychenko.net/en/) is a popular option. While we don't provide specific Windows instructions in this guide, VAC offers similar functionality to BlackHole for the Windows environment.
+**For Mac Users:** We recommend using [BlackHole](https://github.com/ExistentialAudio/BlackHole), a free open-source tool available through Homebrew. BlackHole creates a virtual audio device that can route your system audio to AssemblyAI's API seamlessly.
+
+**For Windows Users:** [Virtual Audio Cable (VAC)](https://vac.muzychenko.net/en/) is a popular option. While we don't provide specific Windows instructions in this guide, VAC offers similar functionality to BlackHole for the Windows environment.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
 import pyaudio
-import asyncio
-import sys
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
 
-# You'll need to install these dependencies:
-# pip install assemblyai pyaudio
+# --- Configuration ---
+YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
 
-# Set your AssemblyAI API key
-aai.settings.api_key = "YOUR-API-KEY"
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,  # Request formatted final transcripts
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
 
-def on_data(transcript: aai.RealtimeTranscript):
-    if not transcript.text:
-        return
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        print(transcript.text, end="\r\n")
-    else:
-        print(transcript.text, end="\r")
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()  # To signal the audio thread to stop
 
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 
-def on_close():
-    print("Closing Session")
+# --- BlackHole Device Detection ---
 
 def get_blackhole_device_index():
+    """Find BlackHole audio device index."""
     p = pyaudio.PyAudio()
+    blackhole_index = None
+
+    print("Available audio devices:")
+
     for i in range(p.get_device_count()):
         dev_info = p.get_device_info_by_index(i)
-        if str(dev_info['name']).startswith('BlackHole'):
-            return i
-    return None
+        print(f"  {i}: {dev_info['name']} (inputs: {dev_info['maxInputChannels']})")
 
-blackhole_index = get_blackhole_device_index()
+        if str(dev_info['name']).startswith('BlackHole') and dev_info['maxInputChannels'] > 0:
+            blackhole_index = i
+            print(f"  -> Found BlackHole device at index {i}")
 
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=44_100,
-    on_data=on_data,
-    on_error=on_error,
-    on_open=on_open,
-    on_close=on_close,
-    end_utterance_silence_threshold=500
-)
+    p.terminate()
+    return blackhole_index
 
-transcriber.connect()
+# --- WebSocket Event Handlers ---
 
-microphone_stream = aai.extras.MicrophoneStream(sample_rate=44_100)
-microphone_stream.device_index = blackhole_index
-transcriber.stream(microphone_stream)
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
 
-transcriber.close()
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            # Clear previous line for formatted messages
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(transcript)
+            else:
+                print(f"\r{transcript}", end='')
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
+    stop_event.set()
+
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    # Ensure audio resources are released
+    global stream, audio
+    stop_event.set()  # Signal audio thread just in case it's still running
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+# --- Main Execution ---
+def run():
+    global audio, stream, ws_app
+
+
+    # Find BlackHole device
+    blackhole_index = get_blackhole_device_index()
+
+    if blackhole_index is None:
+        print("Error: BlackHole audio device not found!")
+        print("Please install BlackHole from https://existential.audio/blackhole/")
+        return
+    
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open Blackhole audio stream
+    try:
+        stream = audio.open(
+            input=True,
+            input_device_index=blackhole_index,  # Use BlackHole device
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+
+        print(f"BlackHole audio stream opened successfully (device index: {blackhole_index}).")
+        print("Now capturing system audio through BlackHole. Press Ctrl+C to stop.")
+        print("Make sure audio is routed through BlackHole for transcription.")
+
+    except Exception as e:
+        print(f"Error opening Blackhole audio stream: {e}")
+        if audio:
+            audio.terminate()
+        return  # Exit if blackhole cannot be opened
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+if __name__ == "__main__":
+    run()
 ```
 
-## Step-by-step guide
+## Step-By-Step Guide
 
-First, install the following packages: assemblyai, pyaudio, asyncio, sys
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) and get your API key from your dashboard.
+
+### Install/import Packages & Set API Key
+
+Install the package pyaudio.
 
 ```bash
-pip install assemblyai pyaudio asyncio
+pip install pyaudio
 ```
 
+Import packages and set your API key.
+
 ```python
-import assemblyai as aai
 import pyaudio
-import asyncio
-import sys
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
+
+YOUR_API_KEY = "YOUR-API-KEY"  # Replace with your actual API key
+```
+### Audio Configuration & Global Variables
+
+Set all of your audio configurations and global variables. Make sure that you have the parameter `format_turns` set to `True`.
+
+```python {3}
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,  # Request formatted final transcripts
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()  # To signal the audio thread to stop
+
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 ```
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can sign up for a free account and get your API key from your dashboard. Please note that Streaming Speech-to-text is available for upgraded accounts only. If you're on the free plan, you'll need to upgrade your account by adding a credit card.
+### Define Function to Find Blackhole Audio Device Index
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "YOUR-API-KEY"
-```
-
-**Make sure not to share this token with anyone** - it is a private key associated uniquely to your account.
-
-Create functions to handle different events during transcription.
-
-```python
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
-
-def on_data(transcript: aai.RealtimeTranscript):
-    if not transcript.text:
-        return
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        print(transcript.text, end="\r\n")
-    else:
-        print(transcript.text, end="\r")
-
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
-
-def on_close():
-    print("Closing Session")
-```
-
-Create a function to get the device index for your BlackHole virtual input device.
+Define a function called `get_blackhole_device_index`, which retrieves the device index for your BlackHole virtual input device.
 
 ```python
 def get_blackhole_device_index():
+    """Find BlackHole audio device index."""
     p = pyaudio.PyAudio()
+    blackhole_index = None
+
+    print("Available audio devices:")
+
     for i in range(p.get_device_count()):
         dev_info = p.get_device_info_by_index(i)
-        if dev_info['name'].startswith('BlackHole'):
-            return i
-    return None
+        print(f"  {i}: {dev_info['name']} (inputs: {dev_info['maxInputChannels']})")
 
-blackhole_index = get_blackhole_device_index()
+        if str(dev_info['name']).startswith('BlackHole') and dev_info['maxInputChannels'] > 0:
+            blackhole_index = i
+            print(f"  -> Found BlackHole device at index {i}")
+
+    p.terminate()
+    return blackhole_index
 ```
 
-Now we create our transcriber and MicrophoneStream, setting the BlackHole virtual device index.
+### Websocket Event Handlers
+
+#### Open Websocket
 
 ```python
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=44_100,
-    on_data=on_data,
-    on_error=on_error,
-    on_open=on_open,
-    on_close=on_close,
-    end_utterance_silence_threshold=500
-)
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
 
-transcriber.connect()
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
+                break
+        print("Audio streaming stopped.")
 
-microphone_stream = aai.extras.MicrophoneStream(sample_rate=44_100)
-microphone_stream.device_index = blackhole_index
-transcriber.stream(microphone_stream)
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
+    audio_thread.start()
+```
 
-transcriber.close()
+#### Handle Websocket Messages
+
+```python
+def on_message(ws, message):
+        try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            # Clear previous line for formatted messages
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(transcript)
+            else:
+                print(f"\r{transcript}", end='')
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+```
+
+#### Close Websocket
+
+```python
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    # Ensure audio resources are released
+    global stream, audio
+    stop_event.set()  # Signal audio thread just in case it's still running
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+```
+
+#### Websocket Error Handling
+
+```python
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
+    stop_event.set()
+```
+
+### Begin Streaming STT Transcription
+
+Make sure to find the Blackhole device index and to set it to the `input_device_index`.
+
+```python {5,19}
+def run():
+    global audio, stream, ws_app
+
+    # Find BlackHole device index
+    blackhole_index = get_blackhole_device_index()
+
+    if blackhole_index is None:
+        print("Error: BlackHole audio device not found!")
+        print("Please install BlackHole from https://existential.audio/blackhole/")
+        return
+    
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open Blackhole audio stream
+    try:
+        stream = audio.open(
+            input=True,
+            input_device_index=blackhole_index,  # Use BlackHole device
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+
+        print(f"BlackHole audio stream opened successfully (device index: {blackhole_index}).")
+        print("Now capturing system audio through BlackHole. Press Ctrl+C to stop.")
+        print("Make sure audio is routed through BlackHole for transcription.")
+
+    except Exception as e:
+        print(f"Error opening Blackhole audio stream: {e}")
+        if audio:
+            audio.terminate()
+        return  # Exit if blackhole cannot be opened
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        # Keep main thread alive until interrupted
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+if __name__ == "__main__":
+    run()
 ```
 
 You can press Ctrl+C to stop the transcription.
 
-## Troubleshooting:
+## Troubleshooting
 
 - You need to select BlackHole as your system output device for the audio to be piped correctly
 
