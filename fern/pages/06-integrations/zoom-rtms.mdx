@@ -1,0 +1,275 @@
+---
+title: "Transcribe Your Zoom Meetings"
+---
+
+This guide creates a Node.js service that captures audio from Zoom Real-Time Media Streams (RTMS) and provides both real-time and asynchronous transcription using AssemblyAI.
+
+<Note title="Zoom RTMS Documentation">
+  For complete Zoom RTMS documentation, visit
+  https://developers.zoom.us/docs/rtms/
+</Note>
+
+## Features
+
+- **Real-time Transcription**: Live transcription during meetings using AssemblyAI's streaming API
+- **Asynchronous Transcription**: Complete post-meeting transcription with advanced features
+- **Flexible Audio Modes**:
+  - Mixed stream (all participants combined)
+  - Individual participant streams transcribed
+- **Multichannel Audio Support**: Separate channels for different participants
+- **Configurable Processing**: Enable/disable real-time or async transcription independently
+
+## Setup
+
+### Prerequisites
+
+- Node.js 16+
+- FFmpeg installed on your system
+- Zoom RTMS Developer Preview access
+- AssemblyAI API key
+- ngrok (for local development and testing)
+
+### Installation
+
+1. **Clone the example repository and install dependencies**:
+
+```bash
+git clone https://github.com/zkleb-aai/assemblyai-zoom-rtms.git
+cd assemblyai-zoom-rtms
+npm install
+```
+
+2. **Configure environment variables**:
+
+```bash
+cp .env.example .env
+```
+
+Fill in your `.env` file:
+
+```env
+# Zoom Configuration
+ZM_CLIENT_ID=your_zoom_client_id
+ZM_CLIENT_SECRET=your_zoom_client_secret
+ZOOM_SECRET_TOKEN=your_webhook_secret_token
+
+# AssemblyAI Configuration
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key
+
+# Service Configuration
+PORT=8080
+REALTIME_ENABLED=true
+REALTIME_MODE=mixed
+ASYNC_ENABLED=true
+AUDIO_CHANNELS=mono
+AUDIO_SAMPLE_RATE=16000
+TARGET_CHUNK_DURATION_MS=100
+```
+
+### Local Development with ngrok
+
+For testing and development, you can use ngrok to expose your local server to the internet:
+
+1. **Install ngrok**: Download from [ngrok.com](https://ngrok.com/) or install via package manager:
+
+   ```bash
+   # macOS
+   brew install ngrok
+
+   # Windows (chocolatey)
+   choco install ngrok
+
+   # Or download directly from ngrok.com
+   ```
+
+2. **Start your local server**:
+
+   ```bash
+   npm start
+   ```
+
+3. **In a separate terminal, start ngrok**:
+
+   ```bash
+   ngrok http 8080
+   ```
+
+4. **Copy the ngrok URL**: ngrok will display a forwarding URL like:
+
+   ```
+   Forwarding    https://example-abc123.ngrok-free.app -> http://localhost:8080
+   ```
+
+5. **Use the ngrok URL in your Zoom app webhook configuration**:
+   ```
+   https://example-abc123.ngrok-free.app/webhook
+   ```
+
+### Configuration Options
+
+#### Real-time Transcription
+
+- `REALTIME_ENABLED`: Enable/disable live transcription (default: `true`)
+- `REALTIME_MODE`:
+  - `mixed`: Single stream with all participants combined
+  - `individual`: Separate streams per participant
+
+#### Audio Settings
+
+- `AUDIO_CHANNELS`: `mono` or `multichannel`
+- `AUDIO_SAMPLE_RATE`: Audio sample rate in Hz (default: `16000`)
+- `TARGET_CHUNK_DURATION_MS`: Audio chunk duration for streaming (default: `100`)
+
+#### Async Transcription
+
+- `ASYNC_ENABLED`: Enable/disable post-meeting transcription (default: `true`)
+
+## Usage
+
+### Start the Service
+
+```bash
+npm start
+```
+
+The service will start on the configured port (default: 8080) and display:
+
+```
+🎧 Zoom RTMS to AssemblyAI Transcription Service
+📋 Configuration:
+   Real-time: ✅ (mixed)
+   Audio: mono @ 16000Hz
+   Async: ✅
+🚀 Server running on port 8080
+📡 Webhook endpoint: http://localhost:8080/webhook
+```
+
+### Configure Zoom Webhook
+
+1. In your Zoom App configuration, set the webhook endpoint to:
+
+   ```
+   # For production
+   https://your-domain.com/webhook
+
+   # For local development with ngrok
+   https://example-abc123.ngrok-free.app/webhook
+   ```
+
+2. Subscribe to these events:
+   - `meeting.rtms_started`
+   - `meeting.rtms_stopped`
+
+### Testing with ngrok
+
+When using ngrok for testing:
+
+1. **Keep ngrok running**: The ngrok tunnel must remain active during testing
+2. **Update webhook URL**: If you restart ngrok, you'll get a new URL that needs to be updated in your Zoom app configuration
+3. **Monitor ngrok logs**: ngrok shows incoming webhook requests in its terminal output
+4. **Free tier limitations**: The free ngrok tier has some limitations; consider upgrading for heavy testing
+
+### Real-time Output
+
+During meetings, you'll see live transcription:
+
+```
+🚀 AssemblyAI session started: [abc12345]
+🎙️ [abc12345] Hello everyone, welcome to the meeting
+📝 [abc12345] FINAL: Hello everyone, welcome to the meeting.
+```
+
+### Post-meeting Files
+
+After each meeting, the service generates:
+
+- `transcript_[meeting_uuid].json` - Full AssemblyAI response with metadata
+- `transcript_[meeting_uuid].txt` - Plain text transcript
+
+## Advanced Configuration
+
+### AssemblyAI Features
+
+Modify the `ASYNC_CONFIG` object in the code to enable additional features:
+
+```javascript
+const ASYNC_CONFIG = {
+  speaker_labels: true, // Speaker identification
+  auto_chapters: true, // Automatic chapter detection
+  sentiment_analysis: true, // Sentiment analysis
+  entity_detection: true, // Named entity recognition
+  redact_pii: true, // PII redaction
+  summarization: true, // Auto-summarization
+  auto_highlights: true, // Key highlights
+};
+```
+
+See [AssemblyAI's API documentation](https://www.assemblyai.com/docs/api-reference/transcripts/submit) for all available options.
+
+### Audio Processing Modes
+
+#### Mixed Mode (Default)
+
+- Single audio stream combining all participants
+- Most efficient for general transcription
+- Best for meetings with clear speakers
+
+#### Individual Mode
+
+- Separate transcription stream per participant
+- Better speaker attribution
+- Higher resource usage
+
+#### Multichannel Audio
+
+- Separate audio channels for different participants
+- Enables advanced speaker separation
+- Requires `AUDIO_CHANNELS=multichannel`
+
+## API Endpoints
+
+### POST /webhook
+
+Handles Zoom RTMS webhook events:
+
+- URL validation
+- Meeting start/stop events
+- Automatic RTMS connection setup
+
+## Error Handling
+
+The service includes comprehensive error handling:
+
+- Automatic reconnection for dropped connections
+- Graceful cleanup on meeting end
+- Audio buffer flushing to prevent data loss
+- Temporary file cleanup
+
+## Monitoring
+
+### Real-time Logs
+
+- Connection status updates
+- Audio processing statistics
+- Transcription progress
+- Error notifications
+
+### Example Log Output
+
+```
+📡 Connecting to Zoom signaling for meeting abc123
+✅ Zoom signaling connected for meeting abc123
+🎵 Connecting to Zoom media for meeting abc123
+✅ Zoom media connected for meeting abc123
+🚀 Started audio streaming for meeting abc123
+🎵 [abc12345] 100 chunks, 32768 bytes, 10.2s
+📝 [abc12345] FINAL: This is the final transcription.
+```
+
+### Development Workflow
+
+1. Start your local server: `npm start`
+2. Start ngrok in another terminal: `ngrok http 8080`
+3. Update your Zoom app webhook URL with the ngrok URL
+4. Test with Zoom meetings
+5. Monitor logs in both your app and ngrok terminals
