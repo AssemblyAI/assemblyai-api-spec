@@ -1,0 +1,185 @@
+---
+title: "Downsampling recommendations and best practices"
+description: "Learn best practices for reducing audio file size while maintaining transcription quality with AssemblyAI"
+---
+
+This tutorial will cover best practices when it comes to reducing audio file size while still ensuring proper processing by our API.
+
+Though AssemblyAI recommends providing audio to our API in the highest quality and form closest to the original recording whenever possible, there may be times where this isn't possible due to outside constraints such as storage costs, processing speeds, transfer costs, etc.
+
+<Note>
+Reducing file size generally comes at the cost of transcription quality as audio data is being lost in the process which our ASR models use to transcribe. You should consider whether this tradeoff is acceptable for your specific use case.
+</Note>
+
+## Sample rate, bit depth, and compression
+
+**Sample Rate**: A higher sample rate captures more detail in the audio signal. For speech-to-text applications, 16 kHz is typically sufficient, as it accurately covers the frequency range of human speech without unnecessary overhead.
+
+**Bit Depth**: Bit depth affects dynamic range, or the difference between the quietest and loudest sounds. A minimum of 16-bit is recommended for speech-to-text, offering a good balance between audio quality and file size.
+
+**Compression**: Lossless compression preserves all audio data, ensuring maximum quality but resulting in larger files. Lossy compression reduces file size by removing some audio detail, which may impact transcription accuracy.
+
+## Lossy vs lossless audio
+
+First, determine which type of audio you are working with: Lossy or Lossless audio.
+
+- **Lossless audio** is uncompressed, meaning it preserves all audio details, making it ideal for Speech-to-Text applications where accuracy is paramount. Common examples include wav and flac. 
+
+- **Lossy audio** is compressed, meaning some audio data is discarded to reduce file size. Common examples include mp3, aac, and m4a (sometimes). For a full list of supported audio formats, see [this page of our FAQ](https://support.assemblyai.com/articles/2616970375-what-audio-and-video-file-types-are-supported-by-your-api).
+
+You may not necessarily need to convert your lossless audio to a lossy type, but formats like `mp3` are popular due to their efficient compression while still retaining relatively high quality. What's more important is understanding your desired sample rate and bit depth, then choosing the file format that works best for your use case. For a summary of the best formats and suitability for different Speech-to-Text use cases, see this [blog post](https://www.assemblyai.com/blog/best-audio-file-formats-for-speech-to-text).
+
+<Note>
+Simply converting a lossy audio type to a lossless audio type (i.e. mp3 to wav) will not add back any audio quality. The audio data is lost during compression, so this conversion will not improve transcription quality.
+</Note>
+
+## Prerequisites
+
+For this tutorial, you will need FFmpeg (which includes FFprobe).
+
+FFmpeg is a command-line tool for converting, processing, and manipulating audio and video files between different formats, while ffprobe is a companion tool for analyzing and extracting detailed metadata information from media files without modifying them.
+
+To download, go to [FFmpeg's official download page](https://ffmpeg.org/download.html).
+
+If using homebrew, run the command: `brew install ffmpeg`
+
+## Checking your audio
+
+Before converting your audio, it's good to verify that the file's metadata accurately reflects the actual audio properties. Discrepancies between expected and actual metadata often indicate the audio has undergone previous processing steps, potentially compromising quality below anticipated levels.
+
+```bash
+ffprobe -v quiet -print_format json -show_format -show_streams <file_path>
+```
+
+What you want to pay attention to here are:
+
+- `codec_name` - The name of the audio codec used to encode/decode the audio stream (e.g., mp3, aac, flac)
+- `sample_rate` - The number of audio samples captured per second, measured in Hz (e.g., 44100 Hz for CD quality)
+- `sample_fmt` - The format that defines how each audio sample is stored in memory (e.g., 16-bit integer, 32-bit float)
+- `channels` - The number of separate audio channels in the stream (e.g., 1 for mono, 2 for stereo, etc.)
+- `bits_per_sample` - The number of bits used to represent each individual audio sample, determining dynamic range and quality
+- `bit_rate` - The amount of data used per second to represent the audio stream, measured in bits per second (bps) or kilobits per second (kbps)
+
+Make sure they match what you would expect for the file type and recording method. For example, if I had what I believe to be a `wav`, but the metadata said the codec was `mp3` with a bitrate of 128 kbps, this would indicate the file was likely an mp3 that was incorrectly renamed with a .wav extension. Similarly, if you expected a high-quality music recording but saw a sample rate of 8000 Hz, this would suggest you're actually looking at a low-quality voice recording rather than the professional audio file you anticipated.
+
+## Converting audio files
+
+Once you've determined your audio file is being presented accurately, you'll want to use a command that resembles this:
+
+```bash
+ffmpeg -i input.wav -ar 16000 -ac 1 -ab 128k output.mp3
+```
+
+The above example can be broken down into:
+
+- `-i input.wav` - Specifies the input file named "input.wav" that will be processed.
+- `-ar 16000` - Sets the audio sample rate to 16,000 Hz (16 kHz) for the output file.
+- `-ac 1` - Sets the audio channels to 1, converting the audio to mono (single channel). This should save on storage space, but if your file is stereo and you plan to enable `multichannel` for your request, set this to `2`.
+- `-ab 128k` - Sets the audio bitrate to 128 kbps, common for mp3s.
+- `output.mp3` - Specifies the output filename and format (mp3 file).
+
+Note that the actual values and formats you use will vary between use cases, initial audio file quality, desired final file size, and other tradeoffs. It is recommended to experiment with different options to see what works best for your application.
+
+## Converting video files
+
+Though our API will accept certain video file formats, these files contain a large amount of video data that isn't useful during transcription. If you'd like to save on upload times and/or storage costs, you can also use `FFmpeg` to extract only the audio data:
+
+```bash
+ffmpeg -i input.mp4 -af aresample=async=1 -ac 1 -ar 48000 output.wav
+```
+
+Breaking down this command:
+
+- `-i input.mp4` - Specifies the input file (an MP4 video file that contains audio to be extracted)
+- `-af aresample=async=1` - Applies an audio filter (-af) that resamples the audio with async correction enabled to fix audio synchronization issues or timing inconsistencies. Optional: adds minimal processing overhead, but provides insurance against timing issues without affecting properly synced files.
+- `-ac 1` - Sets the audio channels to 1, converting the audio to mono (single channel)
+- `-ar 48000` - Sets the audio sample rate to 48,000 Hz (48 kHz) for professional audio quality
+- `output.wav` - Specifies the output filename and format (uncompressed wav audio file)
+
+<Tip>
+You can find a full list of FFmpeg conversion options [here](https://ffmpeg.org/ffmpeg.html#Options).
+</Tip>
+
+## Pre-transcription processing step
+
+Ffmpeg is available in package form to introduce to your application's transcription flow programmatically. Instead of running these commands manually for each file:
+
+<Tabs>
+<Tab title="Python">
+
+```python
+import subprocess
+
+def convert_audio(input_file, output_file):
+    command = [
+        'ffmpeg',
+        '-i', input_file,
+        '-ar', '16000',
+        '-ac', '1',
+        '-ab', '128k',
+        output_file
+    ]
+    
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        print("Conversion successful!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e.stderr}")
+        return False
+
+# Usage
+convert_audio('input.wav', 'output.mp3')
+```
+
+</Tab>
+<Tab title="JavaScript">
+
+```javascript
+import { spawn } from 'child_process';
+
+function convertAudio(inputFile, outputFile) {
+    return new Promise((resolve, reject) => {
+        const ffmpeg = spawn('ffmpeg', [
+            '-i', inputFile,
+            '-ar', '16000',
+            '-ac', '1',
+            '-ab', '128k',
+            outputFile
+        ]);
+
+        ffmpeg.on('close', (code) => {
+            if (code === 0) {
+                console.log('Conversion successful!');
+                resolve();
+            } else {
+                reject(new Error(`FFmpeg exited with code ${code}`));
+            }
+        });
+
+        ffmpeg.stderr.on('data', (data) => {
+            console.error(`Error: ${data}`);
+        });
+    });
+}
+
+// Usage
+convertAudio('input.wav', 'output.mp3')
+    .then(() => console.log('Done!'))
+    .catch(err => console.error(err));
+```
+
+</Tab>
+</Tabs>
+
+Once this file is converted, provide it as the [audio_url](/docs/api-reference/transcripts/submit#request.body.audio_url) in your transcription request.
+
+<Note>
+For troubleshooting purposes, it's useful to save both versions of your files when possible. For example, if you are only converting for transcription and discarding afterwards, you no longer have access to the file used during transcription.
+</Note>
+
+## Conclusion
+
+While numerous applications and services offer audio conversion capabilities, the methods outlined in this tutorial provide precise control over the conversion process and preserve the metadata essential for successful processing by AssemblyAI's transcription pipeline.
+
+If you have any questions on downsampling or implementing a pre-processing flow to your application similar to the one described above, please contact our Support team at support@assemblyai.com.
