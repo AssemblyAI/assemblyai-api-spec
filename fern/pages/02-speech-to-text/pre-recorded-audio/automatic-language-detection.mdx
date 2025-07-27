@@ -1,14 +1,14 @@
 ---
-title: "Automatic language detection"
+title: "Automatic Language Detection"
 ---
-
-<Note title="Supported languages">
-  Automatic Language Detection is supported for all languages
-</Note>
 
 Identify the dominant language spoken in an audio file and use it during the transcription. Enable it to detect any of the [supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
 
-To reliably identify the dominant language, the file must contain **at least 50 seconds** of spoken audio.
+<Note title="Additional language support">
+  We will be adding support for all Universal tier languages by the end of Q3 2025. Until then, if you need automatic language detection for an unsupported language please reach out to our Support team at support@assemblyai.com for more information on how that can be accomplished.
+</Note>
+
+<Warning>To reliably identify the dominant language, a file must contain **at least 15 seconds** of spoken audio. Results will be improved if there is at least 15-90 seconds of spoken audio in the file.</Warning>
 
 <CodeBlocks>
 
@@ -73,7 +73,7 @@ while True:
 
 ```
 
-```ts title="TypeScript SDK" highlight={13} maxLines=15
+```javascript title="JavaScript SDK" highlight={12} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -98,7 +98,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={19} maxLines=15
+```javascript title="JavaScript" highlight={19} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -144,7 +144,7 @@ while (true) {
 }
 ```
 
-```csharp title="C#" highlight={39}  maxLines=15
+```csharp title="C#" highlight={69}  maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -161,73 +161,95 @@ public class Transcript
     public string Status { get; set; }
     public string Text { get; set; }
     public string Error { get; set; }
-    [JsonPropertyName("language_code")]
-    public string LanguageCode { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var localFilePath = "audio.mp3";
+
+            Console.WriteLine("Uploading file...");
+            var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
+
+            Console.WriteLine("Creating transcript with speech_model...");
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+
+            Console.WriteLine("Waiting for transcript...");
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine("Transcription completed!");
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine(transcript.Text);
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var content = new StreamContent(fileStream))
+        {
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", content);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl, language_detection = true };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
-
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        var data = new
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            audio_url = audioUrl,
+            language_detection = true
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
 
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
 
-    Console.WriteLine(transcript.Text);
-    Console.WriteLine(transcript.LanguageCode);
+            switch (transcript.Status)
+            {
+                case "processing":
+                case "queued":
+                    Console.WriteLine($"Status: {transcript.Status}... waiting...");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
 }
 ```
 
@@ -367,17 +389,9 @@ while (true) {
         sleep(3);
     }
 }
->
 ```
 
 </CodeBlocks>
-
-<Tip title="Select model class based on detected language">
-  By performing automatic language detection on a small chunk of audio first,
-  you can then select between the Best or Nano model depending on the detected
-  language. To learn more, see [Separating automatic language detection from
-  transcription](/docs/guides/automatic-language-detection-workflow).
-</Tip>
 
 ## Confidence score
 
@@ -446,7 +460,7 @@ while True:
 
 ```
 
-```ts title="TypeScript SDK" highlight={20} maxLines=15
+```javascript title="JavaScript SDK" highlight={19} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -471,7 +485,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={36} maxLines=15
+```javascript title="JavaScript" highlight={36} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -812,7 +826,7 @@ while True:
 
 ```
 
-```ts title="TypeScript SDK" highlight={14} maxLines=15
+```javascript title="JavaScript SDK" highlight={13} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -842,7 +856,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={20} maxLines=15
+```javascript title="JavaScript" highlight={20} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -1121,5 +1135,5 @@ while (true) {
 <Tip title="Fallback to a default language">
   For a workflow that resubmits a transcription request using a default language
   if the threshold is not reached, see [this
-  cookbook](https://github.com/AssemblyAI/cookbook/blob/master/core-transcription/automatic-language-detection-route-default-language-python.ipynb).
+  cookbook](/docs/guides/automatic-language-detection-route-default-language).
 </Tip>

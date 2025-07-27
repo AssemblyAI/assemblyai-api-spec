@@ -1,5 +1,5 @@
 ---
-title: "Delete transcripts"
+title: "Delete Transcripts"
 ---
 
 You can remove the data from the transcript and mark it as deleted.
@@ -74,7 +74,7 @@ response = requests.delete(polling_endpoint, headers=headers)
 print(response.json()['text'])
 ```
 
-```ts title="TypeScript SDK" highlight={20} maxLines=15
+```javascript title="JavaScript SDK" highlight={19} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -101,7 +101,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={43-45} maxLines=15
+```javascript title="JavaScript" highlight={43-45} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -151,7 +151,7 @@ const res = await axios.delete(pollingEndpoint, {
 console.log(res.data.text);
 ```
 
-```csharp title="C#" highlight={70-76} maxLines=15
+```csharp title="C#" highlight={95-101} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -170,79 +170,89 @@ public class Transcript
     public string Error { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var uploadUrl = await UploadFileAsync("audio.mp3", httpClient);
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine(transcript.Text);
+
+            var deleteResponse = await DeleteTranscriptAsync(transcript.Id, httpClient);
+            Console.WriteLine(deleteResponse.RootElement.GetProperty("text").GetString());
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-async Task<JsonDocument> DeleteTranscriptAsync(string transcriptId, HttpClient httpClient)
-{
-    var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
-    var response = await httpClient.DeleteAsync(url);
-    response.EnsureSuccessStatusCode();
-    return await response.Content.ReadFromJsonAsync<JsonDocument>();
-}
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
 
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
 
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
 
-    Console.WriteLine(transcript.Text);
-
-    var deleteResponse = await DeleteTranscriptAsync(transcript.Id, httpClient);
-    Console.WriteLine(deleteResponse.RootElement.GetProperty("text").GetString());
+    static async Task<JsonDocument> DeleteTranscriptAsync(string transcriptId, HttpClient httpClient)
+    {
+        var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
+        var response = await httpClient.DeleteAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<JsonDocument>();
+    }
 }
 ```
 

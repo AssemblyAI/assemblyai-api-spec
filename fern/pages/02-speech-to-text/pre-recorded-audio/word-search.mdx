@@ -1,9 +1,9 @@
 ---
-title: "Word search"
+title: "Word Search"
 ---
 
 <Note title="Supported languages">
-  Word search is supported for all languages
+  Word search is supported for all languages.
 </Note>
 
 You can search through a completed transcript for a specific set of keywords, which is useful for quickly finding relevant information.
@@ -12,7 +12,7 @@ The parameter can be a list of words, numbers, or phrases up to five words.
 
 <CodeBlocks>
 
-```python title="Python SDK" highlight={18} maxLines=15
+```python title="Python SDK" highlight={16,18,20-21} maxLines=15
 import assemblyai as aai
 
 aai.settings.api_key = "<YOUR_API_KEY>"
@@ -36,7 +36,7 @@ for match in matches:
   print(f"Found '{match.text}' {match.count} times in the transcript")
 ```
 
-```python title="Python" highlight={42,44} maxLines=15
+```python title="Python" highlight={40,42,44,46-47} maxLines=15
 import requests
 import time
 
@@ -86,7 +86,7 @@ for match in response_json['matches']:
   print(f"Found '{match['text']}' {match['count']} times in the transcript")
 ```
 
-```ts title="TypeScript SDK" highlight={21} maxLines=15
+```javascript title="JavaScript SDK" highlight={18,20,22-24} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -116,7 +116,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={45-48} maxLines=15
+```javascript title="JavaScript" highlight={43,45-48,50-52} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -138,9 +138,9 @@ const data = {
 };
 
 const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
+const transcript = await axios.post(url, data, { headers: headers });
 
-const transcriptId = response.data.id;
+const transcriptId = transcript.data.id;
 const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
 while (true) {
@@ -171,7 +171,7 @@ for (const match of response.data.matches) {
 }
 ```
 
-```csharp title="C#" highlight={85-90} maxLines=15
+```csharp title="C#" highlight={112-118} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -205,84 +205,95 @@ public class WordSearchResponse
     public WordSearchMatch[] Matches { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var uploadUrl = await UploadFileAsync("audio.mp3", httpClient);
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            var wordSearchResponse = await WordSearchAsync(transcript.Id, new[] { "foo", "bar", "foo bar", "42" }, httpClient);
+
+            foreach (var match in wordSearchResponse.Matches)
+            {
+                Console.WriteLine($"Found '{match.Text}' {match.Count} times in the transcript");
+            }
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-async Task<WordSearchResponse> WordSearchAsync(string transcriptId, string[] words, HttpClient httpClient)
-{
-    var wordSearchEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/word-search?words={string.Join(',', words)}";
-    var response = await httpClient.GetAsync(wordSearchEndpoint);
-    return await response.Content.ReadFromJsonAsync<WordSearchResponse>();
-}
-
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
-
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-
-    var wordSearchResponse = await WordSearchAsync(transcript.Id, new[] { "foo", "bar", "foo bar", "42" }, httpClient);
-
-    foreach (var match in wordSearchResponse.Matches)
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
     {
-        Console.WriteLine($"Found '{match.Text}' {match.Count} times in the transcript");
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
+
+    static async Task<WordSearchResponse> WordSearchAsync(string transcriptId, string[] words, HttpClient httpClient)
+    {
+        var wordSearchEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/word-search?words={string.Join(',', words)}";
+        var response = await httpClient.GetAsync(wordSearchEndpoint);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<WordSearchResponse>();
     }
 }
 ```
 
-```ruby title="Ruby" highlight={69} maxLines=15
+```ruby title="Ruby" highlight={63,65,73-75} maxLines=15
 require 'net/http'
 require 'json'
 
@@ -361,10 +372,8 @@ end
 
 ```
 
-```php title="PHP" highlight={76} maxLines=15
+```php title="PHP" highlight={83-85,87,102-104} maxLines=15
 <?php
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $base_url = "https://api.assemblyai.com";
 
@@ -373,77 +382,101 @@ $headers = array(
     "content-type: application/json"
 );
 
-$path = "./my-audio.mp3";
+$path = "./audio.mp3";
+if (!file_exists($path)) {
+    throw new Exception("Audio file not found at $path");
+}
 
+// Upload the audio file
 $ch = curl_init();
-
-curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/upload");
+curl_setopt($ch, CURLOPT_URL, "$base_url/v2/upload");
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
 $response = curl_exec($ch);
-$response_data = json_decode($response, true);
-$upload_url = $response_data["upload_url"];
-
-curl_close($ch);
-
-$data = array(
-    "audio_url" => $upload_url // You can also use a URL to an audio or video file on the web
-);
-
-$url = $base_url . "/v2/transcript";
-$curl = curl_init($url);
-
-curl_setopt($curl, CURLOPT_POST, true);
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-$response = curl_exec($curl);
-
-$response = json_decode($response, true);
-
-curl_close($curl);
-
-$transcript_id = $response['id'];
-echo "Transcript ID: $transcript_id\n";
-
-$polling_endpoint = $base_url . "/v2/transcript/" . $transcript_id;
-
-while (true) {
-    $polling_response = curl_init($polling_endpoint);
-
-    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
-
-    $transcription_result = json_decode(curl_exec($polling_response), true);
-
-    if ($transcription_result['status'] === "completed") {
-        echo $transcription_result['text'];
-        break;
-    } else if ($transcription_result['status'] === "error") {
-        throw new Exception("Transcription failed: " . $transcription_result['error']);
-    } else {
-        sleep(3);
-    }
+if (curl_errno($ch)) {
+    throw new Exception("Upload cURL error: " . curl_error($ch));
 }
 
-$words = ['foo', 'bar', 'foo bar', '42'];
+$response_data = json_decode($response, true);
+if (!isset($response_data['upload_url'])) {
+    throw new Exception("Upload failed: " . $response);
+}
+$upload_url = $response_data["upload_url"];
+curl_close($ch);
 
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/transcript/" . $transcript_id . "/word-search?words=" . implode(',', $words));
+// Start transcription
+$data = array("audio_url" => $upload_url);
+$ch = curl_init("$base_url/v2/transcript");
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $response = curl_exec($ch);
-$response_data = json_decode($response, true);
+if (curl_errno($ch)) {
+    throw new Exception("Transcription start cURL error: " . curl_error($ch));
+}
 
+$response_data = json_decode($response, true);
+if (!isset($response_data['id'])) {
+    throw new Exception("Failed to create transcription: " . $response);
+}
+
+$transcript_id = $response_data['id'];
+echo "Transcript ID: $transcript_id\n";
 curl_close($ch);
 
-foreach ($response_data['matches'] as $match) {
-    echo "Found '" . $match['text'] . "' " . $match['count'] . " times in the transcript\n";
+// Poll for completion
+$polling_endpoint = "$base_url/v2/transcript/$transcript_id";
+while (true) {
+    $ch = curl_init($polling_endpoint);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    $polling_response = curl_exec($ch);
+    if (curl_errno($ch)) {
+        throw new Exception("Polling cURL error: " . curl_error($ch));
+    }
+
+    $transcription_result = json_decode($polling_response, true);
+    curl_close($ch);
+
+    if ($transcription_result['status'] === "completed") {
+        echo "Transcription complete:\n" . $transcription_result['text'] . "\n";
+        break;
+    } elseif ($transcription_result['status'] === "error") {
+        throw new Exception("Transcription failed: " . $transcription_result['error']);
+    } else {
+        sleep(3); // Wait and poll again
+    }
+}
+
+// Optional: Word search
+$words = ['foo', 'bar', 'foo bar', '42'];
+$encoded_words = array_map('urlencode', $words);
+$word_query = implode(',', $encoded_words);
+
+$ch = curl_init("$base_url/v2/transcript/$transcript_id/word-search?words=$word_query");
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$response = curl_exec($ch);
+if (curl_errno($ch)) {
+    throw new Exception("Word search cURL error: " . curl_error($ch));
+}
+
+$response_data = json_decode($response, true);
+curl_close($ch);
+
+if (!isset($response_data['matches'])) {
+    echo "No matches found or error in word search response:\n" . json_encode($response_data) . "\n";
+} else {
+    foreach ($response_data['matches'] as $match) {
+        echo "Found '" . $match['text'] . "' " . $match['count'] . " times in the transcript\n";
+    }
 }
 ```
 

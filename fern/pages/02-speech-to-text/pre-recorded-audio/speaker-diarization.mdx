@@ -38,17 +38,17 @@ The Speaker Diarization model lets you detect multiple speakers in an audio file
 
 If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
 
-<Warning title="Speaker Diarization and multichannel">
-  Speaker Diarization doesn't support multichannel transcription. Enabling both
-  Speaker Diarization and
-  [multichannel](/docs/speech-to-text/pre-recorded-audio/multichannel-transcription)
-  will result in an error.
+<Warning title="Speaker Diarization and Multichannel">
+
+Speaker Diarization doesn't support multichannel transcription. Enabling both Speaker Diarization and [multichannel](/docs/speech-to-text/pre-recorded-audio/multichannel-transcription) will result in an error.
+
 </Warning>
 
 ## Quickstart
 
 <Tabs groupId="language">
-  <Tab language="python-sdk" title="Python SDK" default>
+<Tab language="python-sdk" title="Python SDK" default>
+
 To enable Speaker Diarization, set `speaker_labels` to `True` in the transcription config.
 
 ```python {14,19-20} maxLines=15
@@ -74,8 +74,9 @@ for utterance in transcript.utterances:
   print(f"Speaker {utterance.speaker}: {utterance.text}")
 ```
 
-  </Tab>
-  <Tab language="python" title="Python">
+</Tab>
+<Tab language="python" title="Python">
+
 To enable Speaker Diarization, set `speaker_labels` to `True` in the POST request body:
 
 ```python {19,41,42} maxLines=15
@@ -123,11 +124,12 @@ for utterance in transcription_result['utterances']:
   print(f"Speaker {utterance['speaker']}: {utterance['text']}")
 ```
 
-  </Tab>
-  <Tab language="typescript-sdk" title="TypeScript SDK">
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
 To enable Speaker Diarization, set `speaker_labels` to `true` in the transcription config.
 
-```ts {15,21-23} maxLines=15
+```javascript {15,21-23} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -156,58 +158,60 @@ const run = async () => {
 run();
 ```
 
-  </Tab>
-  <Tab language="typescript" title="TypeScript">
-```ts highlight={19, 35-37} maxLines=15
-import axios from 'axios'
-import fs from 'fs-extra'
+</Tab>
+<Tab language="javascript" title="JavaScript">
 
-const baseUrl = 'https://api.assemblyai.com'
+```javascript highlight={21, 35-37} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
-authorization: '<YOUR_API_KEY>'
-}
+  authorization: "<YOUR_API_KEY>",
+};
 
-const path = './my-audio.mp3'
-const audioData = await fs.readFile(path)
+const path = "./audio/audio.mp3";
+const audioData = await fs.readFile(path);
+
 const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-headers
-})
-const uploadUrl = uploadResponse.data.upload_url
+  headers,
+});
+
+const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
-audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
-speaker_labels: true
-}
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speaker_labels: true,
+};
 
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers });
 
-const transcriptId = response.data.id
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
 while (true) {
-const pollingResponse = await axios.get(pollingEndpoint, {
-headers: headers
-})
-const transcriptionResult = pollingResponse.data
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  const transcriptionResult = pollingResponse.data;
 
-if (transcriptionResult.status === 'completed') {
-for (const utterance of transcriptionResult.utterances) {
-console.log(`Speaker ${utterance.speaker}: ${utterance.text}`)
+  if (transcriptionResult.status === "completed") {
+    for (const utterance of transcriptionResult.utterances) {
+      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
 }
-break
-} else if (transcriptionResult.status === 'error') {
-throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-} else {
-await new Promise((resolve) => setTimeout(resolve, 3000))
-}
-}
+```
 
-````
-  </Tab>
-  <Tab language="csharp" title="C#">
-```csharp highlight={44, 87-90} maxLines=15
+</Tab>
+<Tab language="csharp" title="C#">
+
+```csharp highlight={73, 43-49} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -233,76 +237,95 @@ public class Utterance
     public string Text { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var uploadUrl = await UploadFileAsync("audio.mp3", httpClient);
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            if (transcript.Utterances != null)
+            {
+                foreach (var utterance in transcript.Utterances)
+                {
+                    Console.WriteLine($"Speaker {utterance.Speaker}: {utterance.Text}");
+                }
+            }
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var content = new StreamContent(fileStream))
+        {
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", content);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl, speaker_labels = true };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
-
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        var data = new
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+          audio_url = audioUrl,
+          speaker_labels = true
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
+        }
+    }
+
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
+
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
+
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
         }
     }
 }
+```
 
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+</Tab>
+<Tab language="ruby" title="Ruby">
 
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
-
-    foreach (var utterance in transcript.Utterances)
-    {
-        Console.WriteLine($"Speaker {utterance.Speaker}: {utterance.Text}");
-    }
-}
-````
-
-  </Tab>
-  <Tab language="ruby" title="Ruby">
 ```ruby highlight={23, 54-55} maxLines=15
 require 'net/http'
 require 'json'
@@ -369,9 +392,11 @@ sleep(3)
 end
 end
 
-````
-  </Tab>
-  <Tab language="php" title="PHP">
+```
+
+</Tab>
+<Tab language="php" title="PHP">
+
 ```php highlight={30, 61-63} maxLines=15
 <?php
 $ch = curl_init();
@@ -443,10 +468,56 @@ while (true) {
         sleep(3);
     }
 }
-````
+```
 
-  </Tab>
+</Tab>
 </Tabs>
+
+## Set number of speakers expected
+
+You can set the number of speakers expected in the audio file by setting the `speakers_expected` parameter.
+
+Only use this parameter if you are certain about the number of speakers in the audio file.
+
+### Example
+
+```bash {6} maxLines=15
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "speaker_labels": true,
+  "speakers_expected": 3
+}'
+```
+
+## Set a range of possible speakers
+
+You can set a range of possible speakers in the audio file by setting the `speaker_options` parameter. By default, the model will return between 1 and 10 speakers.
+
+This parameter is suitable for use cases where there is a known minimum/maximum number of speakers in the audio file that is outside the bounds of the default value of 1 to 10 speakers.
+
+<Warning>
+  Setting `max_speakers_expected` higher than is necessary may hurt model
+  accuracy.
+</Warning>
+
+### Example
+
+```bash
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "speaker_labels": true,
+  "speaker_options": {
+    "min_speakers_expected": 3,
+    "max_speakers_expected": 5
+  }
+}'
+```
 
 ## API reference
 
@@ -463,10 +534,13 @@ curl https://api.assemblyai.com/v2/transcript \
 }'
 ```
 
-| Key                | Type    | Description                 |
-| ------------------ | ------- | --------------------------- |
-| `speaker_labels`   | boolean | Enable Speaker Diarization. |
-| `speaker_expected` | number  | Set number of speakers.     |
+| Key                                     | Type    | Description                                                |
+| --------------------------------------- | ------- | ---------------------------------------------------------- |
+| `speaker_labels`                        | boolean | Enable Speaker Diarization.                                |
+| `speakers_expected`                     | number  | Set number of speakers.                                    |
+| `speaker_options`                       | object  | Set range of possible speakers.                            |
+| `speaker_options.min_speakers_expected` | number  | The minimum number of speakers expected in the audio file. |
+| `speaker_options.max_speakers_expected` | number  | The maximum number of speakers expected in the audio file. |
 
 ### Response
 
@@ -503,7 +577,8 @@ The response also includes the request parameters used to generate the transcrip
   theme="dark"
   iconColor="white"
 >
-  The upper limit on the number of speakers for Speaker Diarization is 10.
+  By default, the upper limit on the number of speakers for Speaker Diarization is 10. If you expect more than 10 speakers, you can use [`speaker_options`](/docs/api-reference/transcripts/submit#request.body.speaker_options) to set a range of possible speakers.
+  Please note, setting `max_speakers_expected` higher than necessary may hurt model accuracy.
 </Accordion>
 
 {" "}

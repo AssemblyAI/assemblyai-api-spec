@@ -16,94 +16,95 @@ The implementation uses Python and combines proven audio processing techniques w
 ## Quickstart
 
 ```python
-import assemblyai as aai
-import noisereduce as nr
+import logging
 import numpy as np
-
+import noisereduce as nr
 import assemblyai as aai
-
-aai.settings.api_key = "YOUR-API-KEY"
-
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
-
-def on_data(transcript: aai.RealtimeTranscript):
-    if not transcript.text:
-        return
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        print(transcript.text, end="\r\n")
-    else:
-        print(transcript.text, end="\r")
-
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
-
-def on_close():
-    print("Closing Session")
-
-class NoiseReducedMicrophoneStream:
-    def __init__(self, sample_rate):
-        self.microphone_stream = aai.extras.MicrophoneStream(sample_rate=sample_rate)
-        self.sample_rate = sample_rate
-        self.buffer = np.array([])
-        self.buffer_size = int(sample_rate * 0.5)  # 0.5 seconds buffer
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        # Get audio chunk from microphone
-        audio_chunk = next(self.microphone_stream)
-
-        # Convert bytes to numpy array
-        audio_data = np.frombuffer(audio_chunk, dtype=np.int16)
-
-        # Add to buffer
-        self.buffer = np.append(self.buffer, audio_data)
-
-        # Process when buffer is full
-        if len(self.buffer) >= self.buffer_size:
-            # Convert to float32 for noise reduction
-            float_buffer = self.buffer.astype(np.float32) / 32768.0
-
-            # Apply noise reduction
-            # You can tweak these parameters to change the aggressiveness of the noise reduction
-            reduced_noise = nr.reduce_noise(
-                y=float_buffer,
-                sr=self.sample_rate,
-                prop_decrease=0.75,
-                n_fft=1024
-            )
-
-            # Convert back to int16
-            processed_chunk = (reduced_noise * 32768.0).astype(np.int16)
-
-            # Clear buffer but keep a small overlap
-            overlap = 1024
-            self.buffer = self.buffer[-overlap:] if len(self.buffer) > overlap else np.array([])
-
-            # Convert back to bytes
-            return processed_chunk.tobytes()
-
-        # If buffer not full, return empty bytes
-        return b''
-
-
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16_000,
-    on_data=on_data,
-    on_error=on_error,
-    on_open=on_open,
-    on_close=on_close,
+from typing import Type
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    StreamingSessionParameters,
+    TerminationEvent,
+    TurnEvent,
 )
 
-transcriber.connect()
+logging.basicConfig(level=logging.INFO)
 
-# Use the noise-reduced stream instead of the regular microphone stream
-noise_reduced_stream = NoiseReducedMicrophoneStream(sample_rate=16_000)
-transcriber.stream(noise_reduced_stream)
+api_key = "<YOUR_API_KEY>"
 
-transcriber.close()
+# --- Noise-reduced microphone stream ---
+def noise_reduced_mic_stream(sample_rate=16000):
+    mic = aai.extras.MicrophoneStream(sample_rate=sample_rate)
+    buffer = np.array([], dtype=np.int16)
+    buffer_size = int(sample_rate * 0.5)  # 0.5 seconds
+
+    for raw_audio in mic:
+        audio_data = np.frombuffer(raw_audio, dtype=np.int16)
+        buffer = np.append(buffer, audio_data)
+
+        if len(buffer) >= buffer_size:
+            float_audio = buffer.astype(np.float32) / 32768.0
+            denoised = nr.reduce_noise(
+                y=float_audio,
+                sr=sample_rate,
+                prop_decrease=0.75,
+                n_fft=1024,
+            )
+            int_audio = (denoised * 32768.0).astype(np.int16)
+            buffer = buffer[-1024:]  # keep some overlap
+            yield int_audio.tobytes()
+
+
+# --- Event Handlers ---
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f" Session started: {event.id}")
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
+
+    if event.end_of_turn and not event.turn_is_formatted:
+        self.set_params(StreamingSessionParameters(format_turns=True))
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(f" Session terminated after {event.audio_duration_seconds} seconds")
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f" Error occurred: {error}")
+
+# --- Main Function ---
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+        )
+    )
+
+    try:
+        denoised_stream = noise_reduced_mic_stream(sample_rate=16000)
+        client.stream(denoised_stream)
+    finally:
+        client.disconnect(terminate=True)
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## Step-by-step guide
@@ -115,112 +116,105 @@ pip install assemblyai noisereduce numpy
 ```
 
 ```python
-import assemblyai as aai
-import noisereduce as nr
+import logging
 import numpy as np
+import noisereduce as nr
+import assemblyai as aai
+from typing import Type
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    StreamingSessionParameters,
+    TerminationEvent,
+    TurnEvent,
+)
 ```
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can sign up for a free account and get your API key from your dashboard. Please note that Streaming Speech-to-text is available for upgraded accounts only. If you're on the free plan, you'll need to upgrade your account by adding a credit card.
 
 ```python
-import assemblyai as aai
-
-aai.settings.api_key = "YOUR-API-KEY"
+api_key = "<YOUR_API_KEY>"
 ```
 
 **Make sure not to share this token with anyone** - it is a private key associated uniquely to your account.
 
+Create a generator function that includes noise reduction.
+
+```python
+def noise_reduced_mic_stream(sample_rate=16000):
+    mic = aai.extras.MicrophoneStream(sample_rate=sample_rate)
+    buffer = np.array([], dtype=np.int16)
+    buffer_size = int(sample_rate * 0.5)  # 0.5 seconds
+    for raw_audio in mic:
+        audio_data = np.frombuffer(raw_audio, dtype=np.int16)
+        buffer = np.append(buffer, audio_data)
+        if len(buffer) >= buffer_size:
+            float_audio = buffer.astype(np.float32) / 32768.0
+            denoised = nr.reduce_noise(
+                y=float_audio,
+                sr=sample_rate,
+                prop_decrease=0.75,
+                n_fft=1024,
+            )
+            int_audio = (denoised * 32768.0).astype(np.int16)
+            buffer = buffer[-1024:]  # keep some overlap
+            yield int_audio.tobytes()
+```
+
 Create functions to handle different events during transcription.
 
 ```python
-def on_open(session_opened: aai.RealtimeSessionOpened):
-    print("Session ID:", session_opened.session_id)
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f" Session started: {event.id}")
 
-def on_data(transcript: aai.RealtimeTranscript):
-    if not transcript.text:
-        return
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        print(transcript.text, end="\r\n")
-    else:
-        print(transcript.text, end="\r")
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
 
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
+    if event.end_of_turn and not event.turn_is_formatted:
+        self.set_params(StreamingSessionParameters(format_turns=True))
 
-def on_close():
-    print("Closing Session")
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(f" Session terminated after {event.audio_duration_seconds} seconds")
+    
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f" Error occurred: {error}")
 ```
 
-Create a custom stream class that includes noise reduction.
+Now we create our transcriber and `noise_reduced_mic_stream`.
 
 ```python
-class NoiseReducedMicrophoneStream:
-    def __init__(self, sample_rate):
-        self.microphone_stream = aai.extras.MicrophoneStream(sample_rate=sample_rate)
-        self.sample_rate = sample_rate
-        self.buffer = np.array([])
-        self.buffer_size = int(sample_rate * 0.5)  # 0.5 seconds buffer
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
 
-    def __iter__(self):
-        return self
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
 
-    def __next__(self):
-        # Get audio chunk from microphone
-        audio_chunk = next(self.microphone_stream)
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+        )
+    )
 
-        # Convert bytes to numpy array
-        audio_data = np.frombuffer(audio_chunk, dtype=np.int16)
+    try:
+        denoised_stream = noise_reduced_mic_stream(sample_rate=16000)
+        client.stream(denoised_stream)
+    finally:
+        client.disconnect(terminate=True)
 
-        # Add to buffer
-        self.buffer = np.append(self.buffer, audio_data)
-
-        # Process when buffer is full
-        if len(self.buffer) >= self.buffer_size:
-            # Convert to float32 for noise reduction
-            float_buffer = self.buffer.astype(np.float32) / 32768.0
-
-            # Apply noise reduction
-            # You can tweak these parameters to change the aggressiveness of the noise reduction
-            reduced_noise = nr.reduce_noise(
-                y=float_buffer,
-                sr=self.sample_rate,
-                prop_decrease=0.75,
-                n_fft=1024
-            )
-
-            # Convert back to int16
-            processed_chunk = (reduced_noise * 32768.0).astype(np.int16)
-
-            # Clear buffer but keep a small overlap
-            overlap = 1024
-            self.buffer = self.buffer[-overlap:] if len(self.buffer) > overlap else np.array([])
-
-            # Convert back to bytes
-            return processed_chunk.tobytes()
-
-        # If buffer not full, return empty bytes
-        return b''
-```
-
-Now we create our transcriber and `NoiseReducedMicrophoneStream`.
-
-```python
-
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16_000,
-    on_data=on_data,
-    on_error=on_error,
-    on_open=on_open,
-    on_close=on_close,
-)
-
-transcriber.connect()
-
-# Use the noise-reduced stream instead of the regular microphone stream
-noise_reduced_stream = NoiseReducedMicrophoneStream(sample_rate=16_000)
-transcriber.stream(noise_reduced_stream)
-
-transcriber.close()
+if __name__ == "__main__":
+    main()
 ```
 
 You can press Ctrl+C to stop the transcription.

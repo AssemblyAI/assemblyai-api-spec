@@ -1,5 +1,5 @@
 ---
-title: "Export SRT or VTT caption files"
+title: "Export SRT or VTT Caption Files"
 ---
 
 import { LanguageTable } from "../../../assets/components/LanguagesTable";
@@ -179,7 +179,7 @@ with open(f"transcript_{transcript_id}.srt", "w") as srt_file:
 #   vtt_file.write(vtt_response.text)
 ```
 
-```ts title="TypeScript SDK" highlight={19} maxLines=15
+```javascript title="JavaScript SDK" highlight={19} maxLines=15
 import { AssemblyAI } from "assemblyai";
 import fs from "fs";
 
@@ -207,7 +207,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={44} maxLines=15
+```javascript title="JavaScript" highlight={44} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -263,7 +263,7 @@ fs.writeFileSync(`transcript_${transcriptId}.srt`, srt);
 // fs.writeFileSync(`transcript_${transcriptId}.vtt`, vtt)
 ```
 
-```csharp title="C#" highlight={70-76} maxLines=15
+```csharp title="C#" highlight={109-123} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -282,88 +282,111 @@ public class Transcript
     public string Error { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY> ");
+
+            var localFilePath = "audio.mp3"; // Update your file name here
+
+            Console.WriteLine("Uploading file...");
+            var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
+
+            Console.WriteLine("Creating transcript...");
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+
+            Console.WriteLine("Waiting for transcription to complete...");
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine("Fetching SRT subtitles...");
+            var srt = await GetSrtAsync(transcript.Id, httpClient);
+            File.WriteAllText($"transcript_{transcript.Id}.srt", srt);
+            Console.WriteLine($"SRT file saved as transcript_{transcript.Id}.srt");
+
+            // Optional: fetch and save VTT
+            // Console.WriteLine("Fetching VTT subtitles...");
+            // var vtt = await GetVttAsync(transcript.Id, httpClient);
+            // File.WriteAllText($"transcript_{transcript.Id}.vtt", vtt);
+            // Console.WriteLine($"VTT file saved as transcript_{transcript.Id}.vtt");
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var fileContent = new StreamContent(fileStream))
+        {
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
+        var data = new { audio_url = audioUrl };
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-async Task<string> GetSrtAsync(string transcriptId, HttpClient httpClient, int charsPerCaption = 32)
-{
-    var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/srt?chars_per_caption={charsPerCaption}";
-    var response = await httpClient.GetAsync(url);
-    response.EnsureSuccessStatusCode();
-    return await response.Content.ReadAsStringAsync();
-}
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
 
-async Task<string> GetVttAsync(string transcriptId, HttpClient httpClient, int charsPerCaption = 32)
-{
-    var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/vtt?chars_per_caption={charsPerCaption}";
-    var response = await httpClient.GetAsync(url);
-    response.EnsureSuccessStatusCode();
-    return await response.Content.ReadAsStringAsync();
-}
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
 
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+            switch (transcript.Status)
+            {
+                case "queued":
+                case "processing":
+                    Console.WriteLine($"Status: {transcript.Status}... waiting...");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
 
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+    static async Task<string> GetSrtAsync(string transcriptId, HttpClient httpClient, int charsPerCaption = 32)
+    {
+        var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/srt?chars_per_caption={charsPerCaption}";
+        var response = await httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 
-    var srt = await GetSrtAsync(transcript.Id, httpClient);
-    File.WriteAllText($"transcript_{transcript.Id}.srt", srt);
-
-    // var vtt = await GetVttAsync(transcript.Id, httpClient);
-    // File.WriteAllText($"transcript_{transcript.Id}.vtt", vtt);
+    static async Task<string> GetVttAsync(string transcriptId, HttpClient httpClient, int charsPerCaption = 32)
+    {
+        var url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/vtt?chars_per_caption={charsPerCaption}";
+        var response = await httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 }
 ```
 
@@ -528,13 +551,16 @@ $srt_response = curl_exec($srt_request);
 
 file_put_contents("transcript_" . $transcript_id . ".srt", $srt_response);
 
-// vtt_endpoint = URI.parse("#{base_url}/v2/transcript/#{transcript_id}/vtt?chars_per_caption=32")
+/* $vtt_endpoint = $base_url . "/v2/transcript/" . $transcript_id . "/vtt?chars_per_caption=32";
 
-// vtt_request = Net::HTTP::Get.new(vtt_endpoint.request_uri, headers)
-// vtt_response = polling_http.request(vtt_request)
-// vtt = vtt_response.body
+$vtt_request = curl_init($vtt_endpoint);
+curl_setopt($vtt_request, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($vtt_request, CURLOPT_RETURNTRANSFER, true);
 
-// file_put_contents("transcript_" . $transcript_id . ".vtt", $vtt_response);
+$vtt_response = curl_exec($vtt_request);
+
+file_put_contents("transcript_" . $transcript_id . ".vtt", $vtt_response); 
+ */
 ```
 
 </CodeBlocks>

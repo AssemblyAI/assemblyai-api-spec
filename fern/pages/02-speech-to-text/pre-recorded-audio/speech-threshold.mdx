@@ -1,5 +1,5 @@
 ---
-title: "Speech threshold"
+title: "Speech Threshold"
 ---
 
 <Note title="Supported languages">
@@ -13,6 +13,8 @@ If the percentage of speech in the audio file is below the provided threshold, t
 ```plain maxLines=15
 Audio speech threshold 0.9461 is below the requested speech threshold value 1.0
 ```
+
+<Warning>A file must contain at least 30 seconds of audio for the amount of spoken audio to reliably be determined.</Warning>
 
 <CodeBlocks>
 
@@ -77,7 +79,7 @@ while True:
 
 ```
 
-```ts title="TypeScript SDK" highlight={13} maxLines=15
+```javascript title="JavaScript SDK" highlight={12} maxLines=15
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
@@ -105,7 +107,7 @@ const run = async () => {
 run();
 ```
 
-```ts title="TypeScript" highlight={19} maxLines=15
+```javascript title="JavaScript" highlight={19} maxLines=15
 import axios from "axios";
 import fs from "fs-extra";
 
@@ -150,7 +152,7 @@ while (true) {
 }
 ```
 
-```csharp title="C#" highlight={37} maxLines=15
+```csharp title="C#" highlight={69} maxLines=15
 using System;
 using System.IO;
 using System.Net.Http;
@@ -169,68 +171,93 @@ public class Transcript
     public string Error { get; set; }
 }
 
-async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+class Program
 {
-    using (var fileStream = File.OpenRead(filePath))
-    using (var fileContent = new StreamContent(fileStream))
+    static void Main(string[] args)
     {
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        MainAsync(args).GetAwaiter().GetResult();
+    }
 
-        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", fileContent))
+    static async Task MainAsync(string[] args)
+    {
+        using (var httpClient = new HttpClient())
         {
+            httpClient.DefaultRequestHeaders.Add("authorization", "<YOUR-API-KEY>");
+
+            var localFilePath = "audio.mp3";
+
+            Console.WriteLine("Uploading file...");
+            var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
+
+            Console.WriteLine("Creating transcript with speech_model...");
+            var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
+
+            Console.WriteLine("Waiting for transcript...");
+            transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+
+            Console.WriteLine("Transcription completed!");
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine(transcript.Text);
+        }
+    }
+
+    static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
+    {
+        using (var fileStream = File.OpenRead(filePath))
+        using (var content = new StreamContent(fileStream))
+        {
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/upload", content);
             response.EnsureSuccessStatusCode();
+
             var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
             return jsonDoc.RootElement.GetProperty("upload_url").GetString();
         }
     }
-}
 
-async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
-{
-    var data = new { audio_url = audioUrl, speech_threshold = 0.5 };
-    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-
-    using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+    static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Transcript>();
-    }
-}
-
-async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
-{
-    var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
-
-    while (true)
-    {
-        var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
-        transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
-        switch (transcript.Status)
+        var data = new
         {
-            case "queued" or "processing":
-                await Task.Delay(TimeSpan.FromSeconds(3));
-                break;
-            case "completed":
-                return transcript;
-            case "error":
-                throw new Exception($"Transcription failed: {transcript.Error}");
-            default:
-                throw new Exception("This code should not be reachable.");
+            audio_url = audioUrl,
+            speech_threshold = 0.5
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+        using (var response = await httpClient.PostAsync("https://api.assemblyai.com/v2/transcript", content))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<Transcript>();
         }
     }
-}
 
-// Main execution
-using (var httpClient = new HttpClient())
-{
-    httpClient.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("<YOUR-API-KEY>");
+    static async Task<Transcript> WaitForTranscriptToProcess(Transcript transcript, HttpClient httpClient)
+    {
+        var pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcript.Id}";
 
-    var uploadUrl = await UploadFileAsync("my-audio.mp3", httpClient);
-    var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
-    transcript = await WaitForTranscriptToProcess(transcript, httpClient);
+        while (true)
+        {
+            var pollingResponse = await httpClient.GetAsync(pollingEndpoint);
+            transcript = await pollingResponse.Content.ReadFromJsonAsync<Transcript>();
 
-    Console.WriteLine(transcript.Text);
+            switch (transcript.Status)
+            {
+                case "processing":
+                case "queued":
+                    Console.WriteLine($"Status: {transcript.Status}... waiting...");
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    break;
+                case "completed":
+                    return transcript;
+                case "error":
+                    throw new Exception($"Transcription failed: {transcript.Error}");
+                default:
+                    throw new Exception("Unexpected transcript status.");
+            }
+        }
+    }
 }
 ```
 

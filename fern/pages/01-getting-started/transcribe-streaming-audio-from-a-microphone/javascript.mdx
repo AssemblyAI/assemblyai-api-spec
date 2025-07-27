@@ -1,13 +1,13 @@
 ---
-title: "Transcribe streaming audio from a microphone in TypeScript"
-subtitle: "Learn how to transcribe streaming audio in TypeScript."
+title: "Transcribe streaming audio from a microphone in JavaScript"
+subtitle: "Learn how to transcribe streaming audio in JavaScript."
 hide-nav-links: true
-description: "Learn how to transcribe streaming audio in TypeScript."
+description: "Learn how to transcribe streaming audio in JavaScript."
 ---
 
 ## Overview
 
-By the end of this tutorial, you'll be able to transcribe audio from your microphone in TypeScript.
+By the end of this tutorial, you'll be able to transcribe audio from your microphone in JavaScript.
 
 <Note title="Supported languages">
   Streaming Speech-to-Text is only available for English.
@@ -18,120 +18,120 @@ By the end of this tutorial, you'll be able to transcribe audio from your microp
 To complete this tutorial, you need:
 
 - [Node.js](https://nodejs.org/) installed. You can check to see if it is installed with `node -v`.
-- [TypeScript](https://www.typescriptlang.org/) installed. You can check to see if it is installed with `tsc -v`
 - An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account</a> with credit card set up.
 
 Here's the full sample code for what you'll build in this tutorial:
 
 <Tabs groupId="language">
 
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
-```typescript
-import { Readable } from 'stream'
-import { AssemblyAI, RealtimeTranscript } from 'assemblyai'
-import { SoxRecording } from './sox.js'
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
+
+```javascript
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
 
 const run = async () => {
-const client = new AssemblyAI({
-apiKey: '<YOUR_API_KEY>'
-})
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
 
-const SAMPLE_RATE = 16_000
+  const transcriber = client.realtime.transcriber({
+    sampleRate: 16_000,
+  });
 
-const transcriber = client.realtime.transcriber({
-sampleRate: SAMPLE_RATE
-})
+  transcriber.on("open", ({ sessionId }) => {
+    console.log(`Session opened with ID: ${sessionId}`);
+  });
 
-transcriber.on('open', ({ sessionId }) => {
-console.log(`Session opened with ID: ${sessionId}`)
-})
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
 
-transcriber.on('error', (error: Error) => {
-console.error('Error:', error)
-})
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
 
-transcriber.on('close', (code: number, reason: string) =>
-console.log('Session closed:', code, reason)
-)
-
-transcriber.on('transcript', (transcript: RealtimeTranscript) => {
-if (!transcript.text) {
-return
-}
-
-    if (transcript.message_type === 'PartialTranscript') {
-      console.log('Partial:', transcript.text)
-    } else {
-      console.log('Final:', transcript.text)
+  transcriber.on("transcript", (transcript) => {
+    if (!transcript.text) {
+      return;
     }
 
-})
+    if (transcript.message_type === "PartialTranscript") {
+      console.log("Partial:", transcript.text);
+    } else {
+      console.log("Final:", transcript.text);
+    }
+  });
 
-console.log('Connecting to real-time transcript service')
-await transcriber.connect()
+  try {
+    console.log("Connecting to real-time transcript service");
+    await transcriber.connect();
 
-console.log('Starting recording')
-const recording = new SoxRecording({
-channels: 1,
-sampleRate: SAMPLE_RATE,
-audioType: 'wav' // Linear PCM
-})
+    console.log("Starting recording");
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
 
-recording.stream().pipeTo(transcriber.stream())
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
 
-// Stop recording and close connection using Ctrl-C.
-process.on('SIGINT', async function () {
-console.log()
-console.log('Stopping recording')
-recording.stop()
+    // Stop recording and close connection using Ctrl-C.
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
 
-    console.log('Closing real-time transcript connection')
-    await transcriber.close()
+      console.log("Closing real-time transcript connection");
+      await transcriber.close();
 
-    process.exit()
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
 
-})
-}
+run();
+```
 
-run()
-
-````
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
-```ts
-import WebSocket from 'ws';
-import recorder from 'node-record-lpcm16';
+```javascript
+import WebSocket from "ws";
+import recorder from "node-record-lpcm16";
 
 const API_KEY = "<YOUR_API_KEY>";
 
 const SAMPLE_RATE = 16000; // 16kHz sample rate
 
 const ws = new WebSocket(
-    `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=${SAMPLE_RATE}`,
-    {
-      headers: {
-        'Authorization': API_KEY
-      }
-    }
-  );
+  `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=${SAMPLE_RATE}`,
+  {
+    headers: {
+      Authorization: API_KEY,
+    },
+  }
+);
 
-ws.on('open', () => onOpen(ws))
-  .on('message', (message) => onMessage(ws, message))
-  .on('error', (error) => onError(ws, error))
-  .on('close', (code, reason) => onClose(ws, code, reason));
+ws.on("open", () => onOpen(ws))
+  .on("message", (message) => onMessage(ws, message))
+  .on("error", (error) => onError(ws, error))
+  .on("close", (code, reason) => onClose(ws, code, reason));
 
 function onOpen(ws: WebSocket) {
   recording = micStream.stream();
 
-  recording.on('data', (data: Buffer) => {
+  recording.on("data", (data: Buffer) => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(data);
     }
   });
 
-  recording.on('error', (err: Error) => {
+  recording.on("error", (err: Error) => {
     console.error(`Error streaming audio: ${err}`);
   });
 }
@@ -141,23 +141,23 @@ function onMessage(ws: WebSocket, message: WebSocket.Data) {
     const msg = JSON.parse(message.toString());
     const msgType = msg.message_type;
 
-    if (msgType === 'SessionBegins') {
+    if (msgType === "SessionBegins") {
       const sessionId = msg.session_id;
       console.log(`Session ID: ${sessionId}`);
       return;
     }
 
-    const text = msg.text || '';
+    const text = msg.text || "";
     if (!text) {
       return;
     }
 
-    if (msgType === 'PartialTranscript') {
+    if (msgType === "PartialTranscript") {
       console.log(`Partial: ${text}`);
-    } else if (msgType === 'FinalTranscript') {
+    } else if (msgType === "FinalTranscript") {
       console.log(`Final: ${text}`);
-    } else if (msgType === 'error') {
-      console.error(`Error: ${msg.error || 'Unknown error'}`);
+    } else if (msgType === "error") {
+      console.error(`Error: ${msg.error || "Unknown error"}`);
     }
   } catch (e) {
     console.error(`Error handling message: ${e}`);
@@ -172,56 +172,74 @@ function onClose(ws: WebSocket, code: number, reason: string | Buffer) {
   if (recording) {
     recording.end();
   }
-  console.log('Disconnected');
+  console.log("Disconnected");
 }
 
 const CHANNELS = 1; // Mono audio
 const micStream = recorder.record({
-    sampleRate: SAMPLE_RATE,
-    channels: CHANNELS,
-    audioType: 'raw', // Raw PCM data
-    verbose: false
-  });
+  sampleRate: SAMPLE_RATE,
+  channels: CHANNELS,
+  audioType: "raw", // Raw PCM data
+  verbose: false,
+});
 
 let recording: any = null;
 
-process.on('SIGINT', async function () {
-  console.log()
-  console.log('Stopping recording')
+process.on("SIGINT", async function () {
+  console.log();
+  console.log("Stopping recording");
   if (recording) {
-    recording.end()
+    recording.end();
   }
-  console.log('Closing real-time transcript connection')
+  console.log("Closing real-time transcript connection");
   if (ws.readyState === WebSocket.OPEN) {
-    ws.close()
+    ws.close();
   }
-  process.exit()
+  process.exit();
 });
-````
+```
 
 </Tab>
 </Tabs>
 
-## Step 1: Install dependencies
+## Step 1: Install dependencies and import packages
 
 <Tabs groupId="language">
 
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-Run `npm init` to create an NPM package, and then install the AssemblyAI package via NPM:
+<Steps>
+  <Step>
+
+Run `npm init` to create an NPM package, and then install the necessary packages via NPM:
 
 ```bash
-npm install assemblyai
+npm install assemblyai node-record-lpcm16
 ```
+
+  </Step>
+  <Step>
+
+Create a file called `main.js` and import the packages at the top of your file:
+
+```javascript
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+```
+
+  </Step>
+</Steps>
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
 Run `npm init` to create an NPM package, and then install the following packages via NPM:
 
 ```bash
-npm install @types/node @types/ws ts-node typescript ws
+npm install ws
+npm install
 ```
 
 </Tab>
@@ -234,30 +252,37 @@ In this step, you'll create an SDK client and configure it to use your API key.
 <Steps>
 <Step>
 
-Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+In your file, define an async function.
+
+```javascript
+const run = async () => {};
+```
 
 </Step>
 <Step>
+  Browse to <a href="https://www.assemblyai.com/app/api-keys" target="_blank">API Keys</a> in your dashboard, and then copy your API key.
+</Step>
+<Step>
 <Tabs groupId="language">
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-Configure the SDK to use your API key. Create a file called `main.ts` and add the below code, replacing `YOUR_API_KEY` with your copied API key.
+In you async function, create an SDK client and configure the client to use your API key by replacing `YOUR_API_KEY` with your copied API key.
 
-```ts
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
+```javascript
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+};
 ```
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
 Store your API key in a variable. Replace `YOUR_API_KEY` with your copied API key.
 
-```ts
+```javascript
 const API_KEY = "<YOUR_API_KEY>";
 ```
 
@@ -273,25 +298,23 @@ const API_KEY = "<YOUR_API_KEY>";
 <Step>
 
 <Tabs groupId="language">
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-Create a new streaming service from the AssemblyAI client. If you don't set a sample rate, it defaults to 16 kHz.
+Create a new streaming service from the AssemblyAI client and add it to your async function. If you don't set a sample rate, it defaults to 16 kHz.
 
-```typescript
-const SAMPLE_RATE = 16_000;
-
+```javascript
 const transcriber = client.realtime.transcriber({
-  sampleRate: SAMPLE_RATE,
+  sampleRate: 16_000,
 });
 ```
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
 Create a WebSocket connection to the real-time service and assign the event handlers.
 
-```ts
+```javascript
 const SAMPLE_RATE = 16000; // 16kHz sample rate
 const ws = new WebSocket(
   `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=${SAMPLE_RATE}`,
@@ -326,30 +349,30 @@ We recommend the following sample rates:
 </Step>
 <Step>
 
-Create functions to handle events from the real-time service.
+Add the following event handlers to your async function.
 
 <Tabs groupId="language">
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-```typescript
+```javascript
 transcriber.on("open", ({ sessionId }) => {
   console.log(`Session opened with ID: ${sessionId}`);
 });
 
-transcriber.on("error", (error: Error) => {
+transcriber.on("error", (error) => {
   console.error("Error:", error);
 });
 
-transcriber.on("close", (code: number, reason: string) => {
-  console.log("Session closed:", code, reason);
-});
+transcriber.on("close", (code, reason) =>
+  console.log("Session closed:", code, reason)
+);
 ```
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
-```ts
+```javascript
 function onOpen(ws: WebSocket) {
   recording = micStream.stream();
 
@@ -382,7 +405,7 @@ function onClose(ws: WebSocket, code: number, reason: string | Buffer) {
 </Step>
 <Step>
 
-Create another function to handle transcripts. The real-time transcriber returns two types of transcripts: _partial_ and _final_.
+Create another event handler to handle incoming transcripts. The real-time transcriber returns two types of transcripts: _partial_ and _final_.
 
 - _Partial transcripts_ are returned as the audio is being streamed to AssemblyAI.
 - _Final transcripts_ are returned when the service detects a pause in speech.
@@ -396,10 +419,10 @@ Create another function to handle transcripts. The real-time transcriber returns
 </Tip>
 
 <Tabs groupId="language">
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-```typescript
-transcriber.on("transcript", (transcript: RealtimeTranscript) => {
+```javascript
+transcriber.on("transcript", (transcript) => {
   if (!transcript.text) {
     return;
   }
@@ -418,9 +441,9 @@ You can also use the `on("transcript.partial")`, and `on("transcript.final")` ca
 
 </Tip>
 </Tab>
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
-```ts
+```javascript
 function onMessage(ws: WebSocket, message: WebSocket.Data) {
   try {
     const msg = JSON.parse(message.toString());
@@ -462,15 +485,20 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
 
 <Tabs groupId="language">
 
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-```typescript
-await transcriber.connect();
+```javascript
+try {
+  console.log("Connecting to real-time transcript service");
+  await transcriber.connect();
+} catch (error) {
+  console.error(error);
+}
 ```
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
 The WebSocket connection is already established in step 3.
 
@@ -482,62 +510,26 @@ The WebSocket connection is already established in step 3.
 
 <Tabs groupId="language">
 
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
-
-In this step, you'll use [SoX](http://sox.sourceforge.net/), a cross-platform audio library, to record audio from your microphone.
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
 <Steps>
+
 <Step>
 
-Install SoX on your machine.
+Create a new microphone stream after the transcriber connects. The `sampleRate` needs to be the same value as the real-time service settings.
 
-<Tabs groupId="os">
-
-<Tab title="macOS">
-
-```bash
-brew install sox
-```
-
-</Tab>
-<Tab title="Windows">
-
-[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
-
-</Tab>
-<Tab title="Linux">
-
-```bash
-apt-get install sox libsox-fmt-all
-```
-
-</Tab>
-
-</Tabs>
-
-</Step>
-<Step>
-
-Download the [sox.ts](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.ts) (or [sox.js](https://raw.githubusercontent.com/AssemblyAI/assemblyai-node-sdk/main/samples/streaming-stt-from-mic/sox.js)) script to the root of your project, and
-
-The `SoxRecording` class lets you interact with SoX more easily.
-
-</Step>
-<Step>
-
-Create a new microphone stream. The `sampleRate` needs to be the same value as the real-time service settings.
-
-```typescript
-const recording = new SoxRecording({
+```javascript
+console.log("Starting recording");
+const recording = recorder.record({
   channels: 1,
-  sampleRate: SAMPLE_RATE,
-  audioType: "wav",
+  sampleRate: 16_000,
+  audioType: "wav", // Linear PCM
 });
 ```
 
 <Note title="Audio data format">
 
-The `SoxRecording` formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
+The `recorder` formats the audio data for you. If you want to stream data from elsewhere, make sure that your audio data is in the following format:
 
 - Single channel
 - 16-bit signed integer PCM or mu-law encoding
@@ -551,8 +543,8 @@ By default, the Streaming STT service expects PCM16-encoded audio. If you want t
 
 Pipe the recording stream to the real-time stream to send the audio for transcription.
 
-```typescript
-recording.stream().pipeTo(transcriber.stream());
+```javascript
+Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
 ```
 
 <Note title="Send audio buffers">
@@ -566,40 +558,12 @@ If you don't use streams, you can also send buffers of audio data using `transcr
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
 In this step, you'll use [node-record-lpcm16](https://www.npmjs.com/package/node-record-lpcm16), a Node.js library, to record audio from your microphone.
 
 <Steps>
-<Step>
 
-First, install SoX on your machine.
-
-<Tabs groupId="os">
-
-<Tab title="macOS">
-
-```bash
-brew install sox
-```
-
-</Tab>
-<Tab title="Windows">
-
-[Download the binaries](https://www.npmjs.com/package/node-record-lpcm16#for-windows) and then run the installer.
-
-</Tab>
-<Tab title="Linux">
-
-```bash
-apt-get install sox libsox-fmt-all
-```
-
-</Tab>
-
-</Tabs>
-
-</Step>
 <Step>
 
 Install the `node-record-lpcm16` package.
@@ -613,7 +577,7 @@ npm install node-record-lpcm16
 
 Create a new microphone stream. The `sampleRate` needs to be the same value as the real-time service settings.
 
-```typescript
+```javascript
 const CHANNELS = 1; // Mono audio
 const micStream = recorder.record({
   sampleRate: SAMPLE_RATE,
@@ -646,9 +610,9 @@ By default, the Streaming STT service expects PCM16-encoded audio. If you want t
 When you are done, disconnect the transcriber to close the connection.
 
 <Tabs groupId="language">
-<Tab language="typescript-sdk" title="TypeScript SDK" default>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-```typescript
+```javascript
 process.on("SIGINT", async function () {
   console.log();
   console.log("Stopping recording");
@@ -661,13 +625,13 @@ process.on("SIGINT", async function () {
 });
 ```
 
-To run the program, use `tsc main.ts` to compile the JavaScript file, and then run `node main.js` to run it.
+To run the program, use the command `node main.js`.
 
 </Tab>
 
-<Tab language="typescript" title="TypeScript">
+<Tab language="javascript" title="JavaScript">
 
-```ts
+```javascript
 process.on("SIGINT", async function () {
   console.log();
   console.log("Stopping recording");
@@ -682,7 +646,7 @@ process.on("SIGINT", async function () {
 });
 ```
 
-To run the program, use the command `npx ts-node main.ts` to compile and run the program in one step.
+To run the program, use the command `node main.js`.
 
 </Tab>
 </Tabs>
