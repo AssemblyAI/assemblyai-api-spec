@@ -1,0 +1,157 @@
+## Authenticate with a temporary token
+
+If you need to authenticate on the client, you can avoid exposing your API key by using temporary authentication tokens.
+You should generate this token on your server and pass it to the client.
+
+<EndpointRequestSnippet endpoint="GET /v3/token" />
+
+<Steps>
+<Step>
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+To generate a temporary token, call `StreamingClient.create_temporary_token()`.
+
+Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid. Optionally, use the `max_session_duration_seconds` parameter to specify the desired maximum duration for the session started using this token.
+
+```python
+client = StreamingClient(
+    StreamingClientOptions(
+        api_key="<YOUR_API_KEY>",
+        api_host="streaming.assemblyai.com",
+    )
+)
+
+return client.create_temporary_token(expires_in_seconds=60)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+To generate a temporary token, make a `POST` request to the temporary [token endpoint](/docs/api-reference/streaming-api/generate-streaming-token).
+
+Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid. Optionally, use the `max_session_duration_seconds` parameter to specify the desired maximum duration for the session initialized using this token.
+
+```python
+import requests
+from urllib.parse import urlencode
+
+url = "https://streaming.assemblyai.com/v3/token"
+response = requests.get(
+    f"{url}?{urlencode({'expires_in_seconds': 60})}",
+    headers={"Authorization": "<YOUR_API_KEY>"}
+)
+data = response.json()
+return data.get("token")
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+To generate a temporary token, call `client.streaming.createTemporaryToken()`.
+
+Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid. Optionally, use the `max_session_duration_seconds` parameter to specify the desired maximum duration for the session started using this token.
+
+```js
+const client = new AssemblyAI({ apiKey: "<YOUR_API_KEY>" });
+const token = await client.streaming.createTemporaryToken({ expires_in_seconds: 60 });
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+To generate a temporary token, make a `POST` request to the temporary [token endpoint](/docs/api-reference/streaming-api/generate-streaming-token).
+
+Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid. Optionally, use the `max_session_duration_seconds` parameter to specify the desired maximum duration for the session started using this token.
+
+```js
+const url = new URL("https://streaming.assemblyai.com/v3/token");
+url.search = new URLSearchParams({
+  expires_in_seconds: 60,
+}).toString();
+
+const response = await fetch(url, {
+  headers: {
+    Authorization: "<YOUR_API_KEY>",
+  },
+});
+
+const data = await response.json();
+return data.token;
+```
+
+</Tab>
+</Tabs>
+
+<Note>`expires_in_seconds` must be a value between `1` and `600` seconds. If specified, `max_session_duration_seconds` must be a value between `60` and `10800` seconds (defaults to maximum session duration of 3 hours).</Note>
+
+</Step>
+<Step>
+
+The client should retrieve the token from the server and use the token to authenticate the transcriber.
+
+<Note>
+  Each token has a one-time use restriction and can only be used for a single
+  session. Any usage associated with a temporary token will be attributed to the
+  API key that generated it.
+</Note>
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+To use it, specify the `token` parameter when initializing the `StreamingClient`.
+
+```python
+client = StreamingClient(
+    StreamingClientOptions(
+        token=token,
+        api_host="streaming.assemblyai.com",
+    )
+)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+To use it, specify the `token` parameter as a query parameter in the WebSocket URL.
+
+```python
+params_w_token = {**CONNECTION_PARAMS, "token": token}
+ws_app = websocket.WebSocketApp(
+    f'{API_ENDPOINT_BASE_URL}?{urlencode(params_w_token)}',
+    on_open=on_open,
+    on_message=on_message,
+    on_error=on_error,
+    on_close=on_close,
+)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+To use it, specify the `token` parameter when initializing the `StreamingTranscriber`.
+
+```js
+import { StreamingTranscriber } from "assemblyai";
+
+const token = await getToken(); // Implement getToken to retrieve token from server
+const rt = new StreamingTranscriber({
+  token,
+});
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+To use it, specify the `token` parameter as a query parameter in the WebSocket URL.
+
+```js
+const token = await getToken(); // Implement getToken to retrieve token from server
+const paramsWithToken = { ...CONNECTION_PARAMS, token };
+ws = new WebSocket(`${API_ENDPOINT_BASE_URL}?${querystring.stringify(paramsWithToken)}`);
+```
+
+</Tab>
+</Tabs>
+</Step>
+</Steps>
