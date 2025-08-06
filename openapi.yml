@@ -1416,7 +1416,7 @@ components:
 
         speakers_expected:
           x-label: Speakers expected
-          description: Tells the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.
+          description: Tells the speaker label model how many speakers it should attempt to identify. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.
           type: [integer, "null"]
           default: null
 
@@ -2201,7 +2201,6 @@ components:
       x-fern-sdk-group-name: transcripts
       enum:
         - best
-        - nano
         - slam-1
         - universal
       x-fern-enum:
@@ -2214,9 +2213,6 @@ components:
         best:
           name: Best
           description: The model optimized for accuracy, low latency, ease of use, and mutli-language support.
-        nano:
-          name: Nano
-          description: A lightweight, lower cost model for a wide range of languages.
       x-aai-enum:
         best:
           label: Best
@@ -2839,7 +2835,7 @@ components:
 
         speakers_expected:
           x-label: Speakers expected
-          description: Tell the speaker label model how many speakers it should attempt to identify, up to 10. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.
+          description: Tell the speaker label model how many speakers it should attempt to identify. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.
           type: [integer, "null"]
 
         content_safety:
@@ -5577,7 +5573,7 @@ components:
         transcript_ids:
           x-label: Transcript IDs
           description: |
-            A list of completed transcripts with text. Up to a maximum of 100 hours.
+            A list of completed transcripts with text. Up to a maximum of 100 hours of audio.
             Use either transcript_ids or input_text as input into LeMUR.
           type: array
           items:
@@ -5631,7 +5627,7 @@ components:
               "7c3acd18-df4d-4432-88f5-1e89f8827eea",
             ],
           context: "This is an interview about wildfires.",
-          final_model: "anthropic/claude-3-7-sonnet-20250219",
+          final_model: "anthropic/claude-sonnet-4-20250514",
           temperature: 0,
           max_output_size: 3000,
         }
@@ -5648,14 +5644,51 @@ components:
               x-label: Prompt
               description: Your text to prompt the model to produce a desired output, including any context you want to pass into the model.
               type: string
-          required: [prompt]
-        - $ref: "#/components/schemas/LemurBaseParams"
+            transcript_ids:
+              x-label: Transcript IDs
+              description: |
+                A list of completed transcripts with text. Up to a maximum of 100 hours of audio.
+                Use either transcript_ids or input_text as input into LeMUR.
+              type: array
+              items:
+                x-label: Transcript ID
+                type: string
+                format: uuid
+            input_text:
+              x-label: Input text
+              description: |
+                Custom formatted transcript data. Maximum size is the context limit of the selected model.
+                Use either transcript_ids or input_text as input into LeMUR.
+              type: string
+            final_model:
+              x-label: Final model
+              description: |
+                The model that is used for the final prompt after compression is performed.
+              default: "default"
+              oneOf:
+                - $ref: "#/components/schemas/LemurModel"
+            max_output_size:
+              x-label: Maximum output size
+              description: Max output size in tokens, up to 4000
+              type: integer
+              default: 2000
+            temperature:
+              x-label: Temperature
+              description: |
+                The temperature to use for the model.
+                Higher values result in answers that are more creative, lower values are more conservative.
+                Can be any value between 0.0 and 1.0 inclusive.
+              type: number
+              format: float
+              default: 0
+              minimum: 0
+              maximum: 1
+          required: [prompt, final_model]
       example:
         {
           transcript_ids: ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
           prompt: "List all the locations affected by wildfires.",
-          context: "This is an interview about wildfires.",
-          final_model: "anthropic/claude-3-7-sonnet-20250219",
+          final_model: "anthropic/claude-sonnet-4-20250514",
           temperature: 0,
           max_output_size: 3000,
         }
@@ -5678,7 +5711,7 @@ components:
         {
           transcript_ids: ["47b95ba5-8889-44d8-bc80-5de38306e582"],
           context: "This is an interview about wildfires.",
-          final_model: "anthropic/claude-3-7-sonnet-20250219",
+          final_model: "anthropic/claude-sonnet-4-20250514",
           temperature: 0,
           max_output_size: 3000,
         }
@@ -5716,7 +5749,7 @@ components:
                 answer_options: ["yes", "no"],
               },
             ],
-          final_model: "anthropic/claude-3-7-sonnet-20250219",
+          final_model: "anthropic/claude-sonnet-4-20250514",
           temperature: 0,
           max_output_size: 3000,
         }
@@ -5779,7 +5812,7 @@ components:
           transcript_ids: ["64nygnr62k-405c-4ae8-8a6b-d90b40ff3cce"],
           context: "This is an interview about wildfires.",
           answer_format: "Bullet Points",
-          final_model: "anthropic/claude-3-7-sonnet-20250219",
+          final_model: "anthropic/claude-sonnet-4-20250514",
           temperature: 0,
           max_output_size: 3000,
         }
@@ -5798,7 +5831,6 @@ components:
         - anthropic/claude-3-5-haiku-20241022
         - anthropic/claude-3-opus
         - anthropic/claude-3-haiku
-        - anthropic/claude-3-sonnet
       x-fern-enum:
         anthropic/claude-3-5-sonnet:
           description: >
@@ -5824,14 +5856,6 @@ components:
             snake: anthropic_claude3_haiku
             pascal: AnthropicClaude3_Haiku
             screamingSnake: ANTHROPIC_CLAUDE3_HAIKU
-        anthropic/claude-3-sonnet:
-          description: >
-            Claude 3 Sonnet is a legacy model with a balanced combination of performance and speed for efficient, high-throughput tasks.
-          casing:
-            camel: anthropicClaude3_Sonnet
-            snake: anthropic_claude3_sonnet
-            pascal: AnthropicClaude3_Sonnet
-            screamingSnake: ANTHROPIC_CLAUDE3_SONNET
         anthropic/claude-2-1:
           description: >
             Sunsetting on 2025-02-06. Claude 2.1 is a legacy model similar to Claude 2.0. The key difference is that it minimizes model hallucination and system prompts, has a larger context window, and performs better in citations.
@@ -5866,8 +5890,6 @@ components:
           label: Claude 3 Opus (on Anthropic)
         anthropic/claude-3-haiku:
           label: Claude 3 Haiku (on Anthropic)
-        anthropic/claude-3-sonnet:
-          label: Claude 3 Sonnet (on Anthropic)
         anthropic/claude-2-1:
           label: Claude 2.1 (on Anthropic) (sunsetting on 2025-02-06)
         anthropic/claude-2:
