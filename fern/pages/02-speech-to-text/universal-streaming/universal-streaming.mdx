@@ -3,6 +3,11 @@ title: "Streaming Audio"
 description: "Transcribe live audio with Streaming Speech-to-Text"
 ---
 
+<Note>
+  Universal-Streaming currently only supports English, although we are working
+  on adding support for more languages in the coming months.
+</Note>
+
 ## Quickstart
 
 In this quick guide you will learn how to use AssemblyAI's Streaming Speech-to-Text feature to transcribe audio from your microphone.
@@ -83,6 +88,7 @@ To run the quickstart:
     <Step>
     Run with `node main.js`
     </Step>
+
 </Steps>
 </Tab>
 
@@ -105,6 +111,7 @@ To run the quickstart:
     <Step>
     Run with `node main.js`
     </Step>
+
 </Steps>
 </Tab>
 
@@ -132,15 +139,13 @@ from assemblyai.streaming.v3 import (
 api_key = "<YOUR_API_KEY>"
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger(**name**)
 
 def on_begin(self: Type[StreamingClient], event: BeginEvent):
-    print(f"Session started: {event.id}")
-
+print(f"Session started: {event.id}")
 
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    print(f"{event.transcript} ({event.end_of_turn})")
+print(f"{event.transcript} ({event.end_of_turn})")
 
     if event.end_of_turn and not event.turn_is_formatted:
         params = StreamingSessionParameters(
@@ -149,24 +154,21 @@ def on_turn(self: Type[StreamingClient], event: TurnEvent):
 
         self.set_params(params)
 
-
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-    print(
-        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
-    )
-
+print(
+f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+)
 
 def on_error(self: Type[StreamingClient], error: StreamingError):
-    print(f"Error occurred: {error}")
-
+print(f"Error occurred: {error}")
 
 def main():
-    client = StreamingClient(
-        StreamingClientOptions(
-            api_key=api_key,
-            api_host="streaming.assemblyai.com",
-        )
-    )
+client = StreamingClient(
+StreamingClientOptions(
+api_key=api_key,
+api_host="streaming.assemblyai.com",
+)
+)
 
     client.on(StreamingEvents.Begin, on_begin)
     client.on(StreamingEvents.Turn, on_turn)
@@ -187,10 +189,10 @@ def main():
     finally:
         client.disconnect(terminate=True)
 
+if **name** == "**main**":
+main()
 
-if __name__ == "__main__":
-    main()
-```
+````
 </Tab>
 
 <Tab title="Python" language="python">
@@ -439,16 +441,16 @@ def run():
 
 if __name__ == "__main__":
     run()
-```
+````
 
 </Tab>
 
 <Tab title="JavaScript SDK" language="javascript-sdk">
 
 ```javascript
-import { Readable } from 'stream'
-import { AssemblyAI } from 'assemblyai'
-import recorder from 'node-record-lpcm16'
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
 
 const run = async () => {
   const client = new AssemblyAI({
@@ -457,7 +459,7 @@ const run = async () => {
 
   const transcriber = client.streaming.transcriber({
     sampleRate: 16_000,
-    formatTurns: true
+    formatTurns: true,
   });
 
   transcriber.on("open", ({ id }) => {
@@ -469,7 +471,7 @@ const run = async () => {
   });
 
   transcriber.on("close", (code, reason) =>
-    console.log("Session closed:", code, reason),
+    console.log("Session closed:", code, reason)
   );
 
   transcriber.on("turn", (turn) => {
@@ -786,13 +788,18 @@ run();
 
 ## Core concepts
 
-[Streaming API: Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/message-sequence)
+<Note>
+  For a message-by-message breakdown of a turn, see our [Streaming API: Message
+  Sequence Breakdown](/docs/speech-to-text/universal-streaming/message-sequence)
+  guide.
+</Note>
 
 Universal-Streaming is built based upon two core concepts: Turn objects and immutable transcriptions.
 
 ### Turn object
 
 A Turn object is intended to correspond to a speaking turn in the context of voice agent applications, and therefore it roughly corresponds to an utterance in a broader context. We assign a unique ID to each Turn object, which is included in our response. Specifically, the Universal-Streaming response is formatted as follows:
+
 ```json
 {
   "turn_order": 1,
@@ -836,240 +843,30 @@ AssemblyAI's streaming system receives audio in a streaming fashion, it returns 
 → hello my name is zac
 → hello my name is zack
 ```
+
 When an end of the current turn is detected, you then receive a message with `end_of_turn` being `true`. Additionally, if you enable text formatting, you will also receive a transcription response with `turn_is_formatted` being `true`.
+
 ```json
 → hello my name is zack (unformatted)
 → Hello my name is Zack. (formatted)
 ```
+
 In this example, you may have noticed that the last word of each transcript may occasionally be a subword ("zac" in the example shown above). Each Word object has the `word_is_final` field to indicate whether the model is confident that the last word is a completed word. Note that, except for the last word, `word_is_final` is always true.
 
+## Use-case specific recommendations
 
-## Recommendations
-
-- Use an audio chunk size of 50ms. Larger chunk sizes are workable, but may result in latency fluctuations.
-
-## Voice agent use case
-
-<Note>To optimize for latency, we recommend using the unformatted transcript as it’s received more quickly than the formatted version. In typical voice agent applications involving large language models (LLMs), the lack of formatting makes little impact on the subsequent LLM processing.</Note>
-
-### Possible implementation strategy
-
-Since all our transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here’s one way to handle the conversation flow:
-1. When you receive a transcription response with the `end_of_turn` value being `true` but your Voice Agent (i.e., your own turn detection logic) hasn’t detected end of turn, save this data in a variable (let’s call it `running_transcript`).
-2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
-3. Clear the `running_transcript` after sending and be sure to ignore the next transcription with `end_of_turn` of `true`, that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
-
-What you send to the voice agent should look like: `running_transcript` + ’ ’ + `latest_partial`
-
-#### Example flow
-```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is son
-→ hello my name is sonny (final – added to running_transcript)
-
-→ I
-→ I work at
-→ I work at assembly ai (final – added to running_transcript)
-
-→ how
-→ how can
-→ how can I help
-→ how can I help you today (latest partial, final not yet received)
-
-<END_OF_TURN_DETECTED>
-"hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
-
-<running_transcript cleared>
-<final for latest_partial not added to running_transcript>
-```
-
-Utilizing our ongoing transcriptions in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
-
-<Tip>Instead of building your own logic for conversation flow handling, you may use AssemblyAI via integrations with tools like LiveKit and Pipecat. See the next section of our docs for more information on using these orchestrators.</Tip>
-
-## Voice agent orchestrators
-
-<CardGroup cols={2}>
-  <Card title="Livekit" icon={<img src="https://assemblyaiassets.com/images/Livekit.svg" alt="Livekit logo"/>} href="/docs/speech-to-text/universal-streaming/livekit">
-    View our Livekit integration guide.
-  </Card>
-  <Card title="Pipecat" icon={<img src="https://assemblyaiassets.com/images/Pipecat.svg" alt="Pipecat logo"/>} href="/docs/speech-to-text/universal-streaming/pipecat">
-    View our Pipecat integration guide.
-  </Card>
-  <Card title="Vapi" icon={<img src="https://assemblyaiassets.com/images/Vapi.svg" alt="Vapi logo"/>} href="/docs/speech-to-text/universal-streaming/vapi">
-    View our Vapi integration guide.
-  </Card>
-</CardGroup>
-
-## Live captioning use case
+### Live captioning
 
 The default setting for Streaming Speech-to-Text is optimized for the Voice Agent use case, where you expect one person speaking with long silences happening during the agent's speaking turn.
-
 For applications such as live captioning, where the input audio stream typically contains multiple people speaking, it is usually beneficial to wait longer before detecting turns, which trigger text formatting.
 
 When captioning conversations with multiple speakers, we recommend setting `min_end_of_turn_silence_when_confident` to 560 ms. By default, this is set to 160 ms.
 
-## Authenticate with a temporary token
-If you need to authenticate on the client, you can avoid exposing your API key by using temporary authentication tokens.
-You should generate this token on your server and pass it to the client.
+### Voice agents
 
-<EndpointRequestSnippet endpoint="GET /v3/token" />
+To optimize for latency when building a voice agent, we recommend using the unformatted transcript as it’s received more quickly than the formatted version. In typical voice agent applications involving large language models (LLMs), the lack of formatting makes little impact on the subsequent LLM processing. For more information, see [Voice agents](/docs/speech-to-text/universal-streaming/voice-agents).
 
-<Steps>
-<Step>
-
-<Tabs groupId="language">
-<Tab language="python-sdk" title="Python SDK" default>
-To generate a temporary token, call `StreamingClient.create_temporary_token()`.
-
-Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid and use the `max_session_duration_seconds` parameter to specify the desired maximum duration for the session started using this token.
-
-```python
-client = StreamingClient(
-    StreamingClientOptions(
-        api_key="<YOUR_API_KEY>",
-        api_host="streaming.assemblyai.com",
-    )
-)
-
-return client.create_temporary_token(expires_in_seconds=60, max_session_duration_seconds=3600)
-```
-
-</Tab>
-<Tab language="python" title="Python">
-
-To generate a temporary token, make a `POST` request to the temporary [token endpoint](/docs/api-reference/streaming-api/generate-streaming-token).
-
-Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid.
-
-```python
-import requests
-from urllib.parse import urlencode
-
-url = "https://streaming.assemblyai.com/v3/token"
-response = requests.get(
-    f"{url}?{urlencode({'expires_in_seconds': 60})}",
-    headers={"Authorization": "<YOUR_API_KEY>"}
-)
-data = response.json()
-return data.get("token")
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-To generate a temporary token, call `client.streaming.createTemporaryToken()`.
-
-Use the `expires_in_seconds` parameter to specify the duration for which the token will remain valid.
-
-```js
-const client = new AssemblyAI({ apiKey: "<YOUR_API_KEY>" });
-const token = await client.streaming.createTemporaryToken({ expires_in_seconds: 60 });
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-
-To generate a temporary token, make a `POST` request to the temporary [token endpoint](/docs/api-reference/streaming-api/generate-streaming-token).
-
-Use the `expires_in` parameter to specify the duration for which the token will remain valid.
-
-```js
-const url = new URL("https://streaming.assemblyai.com/v3/token");
-url.search = new URLSearchParams({
-  expires_in_seconds: 60,
-}).toString();
-
-const response = await fetch(url, {
-  headers: {
-    Authorization: "<YOUR_API_KEY>",
-  },
-});
-
-const data = await response.json();
-return data.token;
-```
-
-</Tab>
-</Tabs>
-
-<Note>The expiration time must be a value between 60 and 360000 seconds.</Note>
-
-</Step>
-<Step>
-
-The client should retrieve the token from the server and use the token to authenticate the transcriber.
-
-<Note>
-  Each token has a one-time use restriction and can only be used for a single
-  session. Any usage associated with a temporary token will be attributed to the
-  API key that generated it.
-</Note>
-
-<Tabs groupId="language">
-<Tab language="python-sdk" title="Python SDK" default>
-  
-To use it, specify the `token` parameter when initializing the `StreamingClient`.
-
-```python
-client = StreamingClient(
-    StreamingClientOptions(
-        token=token,
-        api_host="streaming.assemblyai.com",
-    )
-)
-```
-
-</Tab>
-<Tab language="python" title="Python">
-  
-To use it, specify the `token` parameter as a query parameter in the WebSocket URL.
-
-```python
-params_w_token = {**CONNECTION_PARAMS, "token": token}
-ws_app = websocket.WebSocketApp(
-    f'{API_ENDPOINT_BASE_URL}?{urlencode(params_w_token)}',
-    on_open=on_open,
-    on_message=on_message,
-    on_error=on_error,
-    on_close=on_close,
-)
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-  
-To use it, specify the `token` parameter when initializing the `StreamingTranscriber`.
-
-```js
-import { StreamingTranscriber } from "assemblyai";
-
-const token = await getToken(); // Implement getToken to retrieve token from server
-const rt = new StreamingTranscriber({
-  token,
-});
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-  
-To use it, specify the `token` parameter as a query parameter in the WebSocket URL.
-
-```js
-const token = await getToken(); // Implement getToken to retrieve token from server
-const paramsWithToken = { ...CONNECTION_PARAMS, token };
-ws = new WebSocket(`${API_ENDPOINT_BASE_URL}?${querystring.stringify(paramsWithToken)}`);
-```
-
-</Tab>
-</Tabs>
-</Step>
-</Steps>
-
-## Reference
+## API Reference
 
 ### Connection parameters
 

@@ -1,0 +1,90 @@
+## Voice agent use case
+
+<Note>
+  To optimize for latency, we recommend using the unformatted transcript as it’s
+  received more quickly than the formatted version. In typical voice agent
+  applications involving large language models (LLMs), the lack of formatting
+  makes little impact on the subsequent LLM processing.
+</Note>
+
+### Possible implementation strategy
+
+Since all our transcripts are immutable, the data is immediately ready to be sent in the voice agent pipeline. Here’s one way to handle the conversation flow:
+
+1. When you receive a transcription response with the `end_of_turn` value being `true` but your Voice Agent (i.e., your own turn detection logic) hasn’t detected end of turn, save this data in a variable (let’s call it `running_transcript`).
+2. When the voice agent detects end of turn, combine the `running_transcript` with the latest partial transcript and send it to the LLM.
+3. Clear the `running_transcript` after sending and be sure to ignore the next transcription with `end_of_turn` of `true`, that will eventually arrive for the latest partial you used. This prevents duplicate information from being processed in future turns.
+
+What you send to the voice agent should look like: `running_transcript` + ’ ’ + `latest_partial`
+
+#### Example flow
+
+```json
+→ hello my na
+→ hello my name
+→ hello my name
+→ hello my name is
+→ hello my name is son
+→ hello my name is sonny (final – added to running_transcript)
+
+→ I
+→ I work at
+→ I work at assembly ai (final – added to running_transcript)
+
+→ how
+→ how can
+→ how can I help
+→ how can I help you today (latest partial, final not yet received)
+
+<END_OF_TURN_DETECTED>
+"hello my name is sonny I work at assembly ai how can I help you today" → sent to LLM
+
+<running_transcript cleared>
+<final for latest_partial not added to running_transcript>
+```
+
+Utilizing our ongoing transcriptions in this manner will allow you to achieve the fastest possible latency for this step of your Voice Agent. Please reach out to the AssemblyAI team with any questions.
+
+<Tip>
+  Instead of building your own logic for conversation flow handling, you may use
+  AssemblyAI via integrations with tools like LiveKit and Pipecat. See the next
+  section of our docs for more information on using these orchestrators.
+</Tip>
+
+## Voice agent orchestrators
+
+<CardGroup cols={2}>
+  <Card
+    title="Livekit"
+    icon={
+      <img
+        src="https://assemblyaiassets.com/images/Livekit.svg"
+        alt="Livekit logo"
+      />
+    }
+    href="/docs/speech-to-text/universal-streaming/livekit"
+  >
+    View our Livekit integration guide.
+  </Card>
+  <Card
+    title="Pipecat"
+    icon={
+      <img
+        src="https://assemblyaiassets.com/images/Pipecat.svg"
+        alt="Pipecat logo"
+      />
+    }
+    href="/docs/speech-to-text/universal-streaming/pipecat"
+  >
+    View our Pipecat integration guide.
+  </Card>
+  <Card
+    title="Vapi"
+    icon={
+      <img src="https://assemblyaiassets.com/images/Vapi.svg" alt="Vapi logo" />
+    }
+    href="/docs/speech-to-text/universal-streaming/vapi"
+  >
+    View our Vapi integration guide.
+  </Card>
+</CardGroup>
