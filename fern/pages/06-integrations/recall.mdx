@@ -1,0 +1,283 @@
+---
+title: "Build a Zoom Real-time transcription bot with Recall.ai"
+---
+
+A real-time transcription bot that integrates [Recall.ai](https://www.recall.ai/assemblyai) with [AssemblyAI](https://www.assemblyai.com) to provide live transcription of Zoom meetings.
+
+## Quickstart
+
+```bash
+# 1. Clone and install
+git clone https://github.com/AssemblyAI/assemblyai-recallai-zoom-bot.git
+cd assemblyai-recallai-zoom-bot
+npm install
+
+# 2. Run ngrok and copy the ngrok URL
+# ngrok http 8000
+
+# 3. Configure your .env file and edit it with your API keys and ngrok URL
+cp .env.example .env
+
+# 4a. Open a new terminal and run
+# node webhook.js
+
+# 4b. Open another terminal and run
+# node zoomBot.js
+```
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/en/) (v14 or higher)
+- [ngrok](https://ngrok.com) - [Installation guide](https://ngrok.com/download)
+- Recall.ai API key with AssemblyAI configured
+
+## Step-by-step
+
+Follow this step-by-step guide to set up and run the transcription bot.
+
+### Step 1: Get your API keys
+
+**1.1 Choose your Recall.ai region and get your API Key:**
+
+| Region           | Dashboard                                                    | RECALL_REGION    |
+| ---------------- | ------------------------------------------------------------ | ---------------- |
+| US Pay-as-you-go | [us-west-2.recall.ai](https://us-west-2.recall.ai)           | `us-west-2`      |
+| US Monthly plan  | [us-east-1.recall.ai](https://us-east-1.recall.ai)           | `us-east-1`      |
+| EU               | [eu-central-1.recall.ai](https://eu-central-1.recall.ai)     | `eu-central-1`   |
+| Japan            | [ap-northeast-1.recall.ai](https://ap-northeast-1.recall.ai) | `ap-northeast-1` |
+
+**1.2 Configure AssemblyAI in your Recall.ai dashboard:**
+
+- Get an AssemblyAI API key from [assemblyai.com](https://www.assemblyai.com)
+- In your Recall.ai dashboard (same region as step 1.1), navigate to the transcription providers section
+- Add your AssemblyAI API key to enable AssemblyAI as a transcript provider
+
+<Warning>
+  This step is required for the bot to work with AssemblyAI transcription!
+</Warning>
+
+### Step 2: Clone the example repo and install dependencies
+
+Open a new terminal and run the following commands:
+
+```bash
+git clone https://github.com/AssemblyAI/assemblyai-recallai-zoom-bot.git
+cd assemblyai-recallai-zoom-bot
+npm install
+```
+
+### Step 3: Configure environment
+
+Set up your environment variables using the example `.env` file in the repo:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your Recall values.
+
+```bash
+RECALL_API_KEY=your_recall_api_key
+RECALL_REGION=us-west-2
+```
+
+<Note>Set `RECALL_REGION` to according to your Recall region in Step 1.1</Note>
+
+### Step 4: Start ngrok tunnel
+
+In a new terminal, start ngrok to create a public URL for your webhook:
+
+```bash
+ngrok http 8000
+```
+
+The output should look like this:
+
+```
+ngrok by @inconshreveable
+
+Session Status                online
+Account                       your-account@email.com
+Version                       2.3.40
+Region                        United States (us)
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    https://abc123.ngrok.io -> http://localhost:8000
+Forwarding                    http://abc123.ngrok.io -> http://localhost:8000
+```
+
+Copy the https URL (e.g., `https://abc123.ngrok.io`) - you'll need this for the next step.
+
+### Step 5: Update Webhook URL
+
+Edit your `.env` file and set `WEBHOOK_URL` to your ngrok URL:
+
+```bash
+WEBHOOK_URL=https://abc123.ngrok.io
+```
+
+<Warning>Use the exact URL from ngrok output (no trailing slash)</Warning>
+
+### Step 6: Start webhook server
+
+In another terminal, start the webhook server (receives transcripts):
+
+```bash
+node webhook.js
+```
+
+### Step 7: Start the bot CLI
+
+In another terminal, start the bot CLI (manages meeting connection):
+
+```bash
+node zoomBot.js
+```
+
+Once you run this command, you'll see this output:
+
+```
+[BOT] Starting Recall.ai bot for Zoom → AssemblyAI integration
+[BOT] Configured for region: us-west-2
+[BOT] API endpoint: https://us-west-2.recall.ai/api/v1
+[BOT] Starting application...
+[BOT] Validating configuration...
+[BOT] ✓ Configuration valid
+[BOT] ✓ Region: us-west-2
+[BOT] ✓ Webhook: https://abc123.ngrok.io
+[BOT] Ready to join meeting and start transcription
+What is your meeting URL?:
+```
+
+### Step 8: Join meeting and start transcription
+
+Enter your Zoom meeting URL when prompted:
+
+```
+What is your meeting URL?: https://zoom.us/j/123456789
+```
+
+And your terminal will look like this:
+
+```
+[BOT] Creating bot for meeting: https://zoom.us/j/123456789
+[BOT] Webhook endpoint: https://abc123.ngrok.io/meeting_transcript
+[API] POST /bot - Creating bot with AssemblyAI integration
+[API] Bot created successfully
+[BOT] Bot ID: bot_abc123
+[BOT] Status: joining_call
+[BOT] ✓ Bot deployed successfully
+[BOT] Bot is joining meeting and will start sending transcripts to webhook
+[BOT] Check Terminal 2 for real-time transcripts
+Type "STOP" to end transcription:
+```
+
+In your second terminal (running `webhook.js`), you should see a meeting transcript of your participants:
+
+```
+[WEBHOOK] Server running on port 8000
+[WEBHOOK] Ready to receive transcripts from Recall.ai
+[WEBHOOK] Integration: Zoom → Recall.ai → AssemblyAI → This webhook
+[TRANSCRIPT] PARTIAL - John Doe: Hello everyone
+[TRANSCRIPT] PARTIAL - John Doe: Hello everyone, welcome to
+[TRANSCRIPT] FINAL - John Doe: Hello everyone, welcome to today's meeting.
+[TRANSCRIPT] FINAL - Jane Smith: Thanks for joining, let's get started with the agenda.
+```
+
+### Step 9: Stop transcription
+
+To stop transcribing, type "STOP" to end transcription on your third terminal running `node zoomBot.js`:
+
+```
+Type "STOP" to end transcription: STOP
+```
+
+## 🔧 Troubleshooting
+
+### Environment Variable Errors
+
+#### `RECALL_API_KEY not found in .env file`
+
+Solution: Make sure you copied `.env.example` to `.env` and added your API key.
+
+#### `RECALL_REGION must be one of: us-west-2, us-east-1, eu-central-1, ap-northeast-1`
+
+Solution: Check your `.env` file and ensure `RECALL_REGION` matches where you got your API key
+
+### Bot Creation Errors
+
+#### AssemblyAI not configured
+
+```bash
+Failed to create bot: { recording_config: { transcript: { provider: [Object] } } }
+```
+
+Solution: Configure AssemblyAI in your Recall.ai dashboard (Step 1.2)
+
+### Webhook Issues
+
+#### No transcripts appearing
+
+```bash
+[WEBHOOK] Server running on port 8000
+[WEBHOOK] Ready to receive transcripts from Recall.ai
+[WEBHOOK] Integration: Zoom → Recall.ai → AssemblyAI → This webhook
+(no transcript output)
+```
+
+Solution:
+
+- Verify `WEBHOOK_URL` in `.env` matches your ngrok URL exactly
+- Ensure ngrok is still running (it may timeout after inactivity)
+- Check that the webhook server was started before the bot
+
+#### ngrok connection refused
+
+```bash
+Failed to complete tunnel connection
+```
+
+Solution:
+
+- Restart ngrok: `ngrok http 8000`
+- Update `WEBHOOK_URL` in `.env` with the new ngrok URL
+- Ensure port 8000 is available
+
+### Common network issues
+
+#### Timeout connecting to Recall.ai
+
+```bash
+timeout of 10000ms exceeded
+```
+
+Solution:
+
+- Check your internet connection
+- Verify your `RECALL_REGION` is correct
+- Try again after a few seconds
+
+#### Bot appears to join but no transcripts
+
+Solution:
+
+- Ensure people are speaking in the meeting
+- Check that meeting participants have unmuted their microphones
+- Verify AssemblyAI is properly configured in Recall.ai dashboard
+
+### Quick Debug Commands
+
+Check your environment variables:
+
+```bash
+cat .env
+```
+
+**Expected Output:**
+
+```env
+RECALL_API_KEY=your_actual_key
+RECALL_REGION=us-west-2
+WEBHOOK_URL=https://abc123.ngrok.io
+```
+
+**Stuck?** Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
