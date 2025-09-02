@@ -29,7 +29,7 @@
 
 // fetch pylon credentials (email, and email_hash) based on user's auth cookie and show chat bubble
 (function () {
-  executeRequest(BASE_URL + "/dashboard/api/pylon-credentials", {
+  fetch("https://www.assemblyai.com/dashboard/api/pylon-credentials", {
     // will no longer be needed when we're on the same domain
     credentials: "include",
   })
