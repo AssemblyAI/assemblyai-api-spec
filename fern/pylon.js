@@ -39,12 +39,14 @@
     })
     .then((data) => {
       if (data && data.email && data.emailHash) {
-        window.Pylon("config", {
-          app_id: "f28d5a70-a10d-4a6c-bd5e-cff70ac09f60",
-          name: "User",
-          email: data.email,
-          email_hash: data.emailHash,
-        });
+        window.pylon = {
+          chat_settings: {
+            app_id: "f28d5a70-a10d-4a6c-bd5e-cff70ac09f60",
+            name: "User",
+            email: data.email,
+            email_hash: data.emailHash,
+          },
+        };
       }
     })
     .catch((error) => {
