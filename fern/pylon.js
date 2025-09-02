@@ -47,6 +47,8 @@
             email_hash: data.emailHash,
           },
         };
+
+        window.Pylon("show");
       }
     })
     .catch((error) => {
