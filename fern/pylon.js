@@ -27,23 +27,27 @@
   }
 })();
 
-// fetch pylon credentials (email, and email_hash) based on user's auth cookie and show chat bubble
 (function () {
   fetch("https://www.assemblyai.com/dashboard/api/pylon-credentials", {
-    // will no longer be needed when we're on the same domain
     credentials: "include",
   })
-    .then((res) => {
-      if (res && res.email && res.emailHash) {
-        window.pylon = {
-          chat_settings: {
-            app_id: "f28d5a70-a10d-4a6c-bd5e-cff70ac09f60",
-            name: "User",
-            email: res.email,
-            email_hash: res.emailHash,
-          },
-        };
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Network response was not ok: " + response.statusText);
+      }
+      return response.json();
+    })
+    .then((data) => {
+      if (data && data.email && data.emailHash) {
+        window.Pylon("config", {
+          app_id: "f28d5a70-a10d-4a6c-bd5e-cff70ac09f60",
+          name: "User",
+          email: data.email,
+          email_hash: data.emailHash,
+        });
       }
     })
-    .catch((error) => {});
+    .catch((error) => {
+      console.error("Failed to initialize Pylon widget:", error);
+    });
 })();
