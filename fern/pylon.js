@@ -47,8 +47,10 @@
             email_hash: data.emailHash,
           },
         };
-
-        window.Pylon("show");
+        const path = window.location.pathname;
+        if (path === "/docs" || path === "/docs/") {
+          window.Pylon("show");
+        }
       }
     })
     .catch((error) => {
