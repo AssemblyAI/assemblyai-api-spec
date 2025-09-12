@@ -100,7 +100,7 @@ For optimal results, use shorter phrases when possible and be mindful of your to
 
 </Note>
 
-## Using `keyterms_prompt` with Universal (Beta)
+## Using Universal (Beta)
 
 <Warning>
 
@@ -112,4 +112,83 @@ As we continue to develop this feature, functionality may evolve. For the latest
 
 If you're currently using our `universal` model, the `keyterms_prompt` parameter is in Beta for English files.
 
-The maximum number of keyterms with Universal is 200.
+The maximum number of keyterms with Universal is 200. Keyterms shorter than 5 characters or longer than 50 characters are ignored.
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+    ```python
+    import requests
+    import time
+
+    base_url = "https://api.assemblyai.com"
+    headers = {"authorization": "<YOUR_API_KEY>"}
+
+    data = {
+        "audio_url": "https://assembly.ai/sports_injuries.mp3",
+        "speech_model": "universal",
+        "keyterms_prompt": ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+    }
+
+    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code}, Response: {response.text}")
+        response.raise_for_status()
+
+    transcript_response = response.json()
+    transcript_id = transcript_response["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print(transcript["text"])
+            break
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+    ```
+
+  </Tab>
+  <Tab language="javascript" title="JavaScript">
+    ```javascript
+      import axios from 'axios'
+
+      const baseUrl = 'https://api.assemblyai.com'
+
+      const headers = {
+        authorization: '<YOUR_API_KEY>'
+      }
+
+      const data = {
+        audio_url: 'https://assembly.ai/sports_injuries.mp3',
+        speech_model: 'universal',
+        keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+      }
+
+      const url = `${baseUrl}/v2/transcript`
+      const response = await axios.post(url, data, { headers: headers })
+
+      const transcriptId = response.data.id
+      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+      while (true) {
+        const pollingResponse = await axios.get(pollingEndpoint, {
+          headers: headers
+        })
+        const transcriptionResult = pollingResponse.data
+
+        if (transcriptionResult.status === 'completed') {
+          console.log(transcriptionResult.text)
+          break
+        } else if (transcriptionResult.status === 'error') {
+          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+        }
+      }
+    ```
+
+  </Tab>
+</Tabs>
