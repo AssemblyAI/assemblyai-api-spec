@@ -95,27 +95,46 @@ If you exceed your concurrency limit, you'll receive an email stating that your 
 ![Email notifying user that their transcripts have been throttled due to exceeding the Concurrency limit](../05-guides/limit.png)
 
 ### Streaming Speech-to-Text usage limits
+Usage limits for streaming speech-to-text are distinct from asynchronous speech-to-text usage limits. There are two key metrics that define streaming usage limits:
+- **New sessions rate limit**: The number of new streaming sessions able to be opened per minute.
+- **Concurrency**: The total number of streaming sessions able to be open simultaneously.
 
-AssemblyAI limits the number of concurrent streaming sessions.
+AssemblyAI's Universal-Streaming API features unlimited, automatic scaling concurrency limits for paid accounts that are dynamic based on usage.
+We do not limit the total number of concurrent streaming sessions. Instead, there is only a limit on the number of **new streaming sessions** that can be created per minute. These limits start at:
 
-| Usage limit                   | Free account | Paid account |
-| ----------------------------- | ------------ | ------------ |
-| Concurrent Streaming sessions | 5            | 100          |
+| Account type  | Starting rate limit (new sessions/min) |
+| ------------- | -------------------------------------- |
+|     Free      |   5                                    |
+|     Paid      |   100+                                 |     
 
-<Tip>
-Our Streaming STT feature includes automatically scaling concurrency limits for paid accounts.
+<Tip title="How unlimited streaming session scaling works">
+Anytime you are utilizing **70% or more of your current limit**, the number of new streams able to be opened over the next minute will automatically increase by 10%.
 
-Anytime you are using 70% or more of your current limit, your concurrency limit will automatically increase and scale up by 10% every 60 seconds.
+Assuming you follow this pattern minute-over-minute maxing out your available new sessions rate limit for 5 minutes:
 
-As your traffic starts to scale back down and you are using less than 50% of your current limit, your concurrency will start to scale back down until it eventually returns to your default value.
+- Minute 1: `100 new streams/min` (default of 100) → 100 **concurrent** streams
+- Minute 2: `110 new streams/min` (100 × 1.10) → 210 **concurrent** streams
+- Minute 3: `121 new streams/min` (110 × 1.10) → 331 **concurrent** streams
+- Minute 4: `133 new streams/min` (121 × 1.10) → 464 **concurrent** streams
+- Minute 5: `146 new streams/min` (133 × 1.10) → 610 **concurrent** streams
 
+Total streams: 100 + 110 + 121 + 133 + 146 = `610 streams`
+
+At the start of the 6th minute, there would be `610` **total concurrent open streams**. Over the next 60 seconds, a maximum of `161` (146 x 1.10) **new streams** would be able to be opened.
 </Tip>
 
-If you exceed your current limit, you'll receive an error with an error message: `Unauthorized connection: Too many concurrent sessions`.
+This usage pattern has no ceiling and can continue to scale up indefinitely to whatever your application requires.
+Based on the rate at which you are opening streams in comparison to your current limit, your new sessions per minute limit will adjust as follows:
+- **70% or more** — Scale up by 10%.
+- **Within 50-69%** — Unchanged.
+- **Less than 50%** — Begin to scale back down (to your account's starting limit).
+  - **Important:** This may impact your ability to immediately open a large number of new streams if the rate at which you have been creating new streams has been low for a period of time despite having a high number of open concurrent streams.
+
+If you exceed your current limit, you'll receive an error with the message: `Unauthorized connection: Too many concurrent sessions`.
 
 <Note title="Properly terminating sessions">
 
-If you're consistently exceeding the limit of concurrent sessions, first make sure that you're terminating sessions properly.
+If you're consistently hitting rate limits when trying to open new sessions, first make sure that you're terminating sessions properly.
 
 - If you're using the [WebSocket API](https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api) directly, you need to send a `terminate_session` message.
 
@@ -127,7 +146,7 @@ LeMUR requests are rate limited within a 60-second time window. For more informa
 
 | Usage limit         | Free account | Paid account |
 | ------------------- | ------------ | ------------ |
-| Requests per minute | 2            | 30           |
+| Requests per minute | 2            | 30+          |
 
 ## Best Practices
 
