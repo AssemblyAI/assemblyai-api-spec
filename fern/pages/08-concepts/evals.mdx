@@ -1,0 +1,123 @@
+---
+title: "Evaluating STT models"
+---
+
+# Introduction
+
+The high level objective of a STT model evaluation is to answer the question *"Which Speech-to-text model is the best for my product?"*.
+
+This guide will provide a step-by-step framework for evaluating and benchmarking Speech-to-text models to help you select the best fit for you.
+
+<Note>
+    Need help evaluating our Speech-to-text products? [Contact our Sales team](https://www.assemblyai.com/contact/sales) to request for an evaluation.
+</Note>
+
+# Common Evaluation Metrics
+
+## Word Error Rate (WER)
+
+$$
+WER = \frac{S + D + I}{N}
+$$
+
+This formula takes the number of Substitutions (S), Deletions (D), and Insertions (I), and divides their sum by the Total Number of Words in the ground truth transcript (N).
+
+<Note>
+    While WER calculation may seem simple, it requires a methodical granular approach and reliable reference data.
+    Word Error Rate can tell you how “different” the automatic transcription was compared to the human transcription, and *generally*, this is a reliable metric to determine how “good” a transcription is. For more info on WER as a metric, read Dylan Fox's blog post [here](https://www.assemblyai.com/blog/word-error-rate).
+</Note>
+
+## Concatenated minimum-Permutation Word Error Rate (cpWER)
+
+$$
+\text{cpWER} = \frac{S_{\text{spk}} + D + I}{N}
+$$
+
+cpWER is similar to WER, but it also measures the number of errors a speech recognition model makes where words with incorrectly-ascribed speakers are considered to be incorrect. The primary difference from standard WER is how *S* is calculated. A correct word with an incorrect speaker label counts as a substitution error, thereby penalizing both transcription and speaker diarization mistakes.
+
+## Formatted WER (F-WER)
+
+F-WER is similar to WER but F-WER does not apply text normalization, so all formatting differences are accounted for, in addition to word differences when computing the WER. Therefore, F-WER is always higher than or equal to WER.
+
+
+## Sentence Error Rate (SER)
+
+$$
+\text{SER} = \frac{N_{\text{err}}}{N_{\text{sent}}}
+$$
+
+The Sentence Error Rate (SER) is the ratio of the number of sentences with one or more errors to the total number of sentences.
+
+## Diarization Error Rate (DER)
+
+$$
+DER = \frac{false alarm + missed detection + confusion}{total}
+$$
+
+This formula takes the duration of non-speech incorrectly classified as speech (false alarm), the duration of speech incorrectly classified as non-speech (missed detection), the duration of speaker confusion (confusion), and divides the sum over the total speech duration.
+
+## Missed Entity Rate (MER)
+
+$$
+\text{MER} = 1 - \frac{N_{\text{rec}}}{N_{\text{total}}}
+$$
+
+Fundamentally, MER is a negative recall rate computed for specified target entities. It is defined as the number of correctly transcribed entities relative to their total occurrence count. It accounts for multiple occurrences of the same entity and their positions within the hypothesis transcription. Our Research team proposes this as the best metric to measure the effectiveness of word boost.
+
+# The Evaluation Process
+
+This section will be the core of the documentation, providing a step-by-step guide on how to run an evaluation.
+
+For that reason, the evaluation process should closely match your production environment - including the files you intend to transcribe, the model you intend to use, and the settings applied to those models.
+
+## Step 1: Get files to benchmark
+
+Ensure that the files you use to benchmark are representative of the files you plan to use in production. For example, if you plan to transcribe meetings, gather a set of meeting recordings. If you plan to transcribe phone calls, focus on finding phone calls that match your customer base's language and region.
+
+Then, gather human-labeled data to act as your source of ground truth. Ground truth is accurately transcribed audio data that will serve as the "correct answer" for our benchmark. Human-labeled data can be purchased from an external vendor or created manually.
+
+## Step 2: Transcribe your files
+
+Next, transcribe your files using AssemblyAI's API.
+
+## Step 3: Text Normalization
+
+Before calculating any metrcics, both reference (ground truth) and hypothesis (model generated) texts need to be normalized to ensure a fair comparison.
+
+This accounts for differences in:
+- Punctuation and capitalization
+- Number formatting (e.g., “twenty-one” vs. “21”)
+- Contractions and abbreviations
+- Other stylistic variations that don’t affect meaning
+
+Normalisation can be done with a library like [Whisper Normalizer](https://pypi.org/project/whisper-normalizer/).
+
+## Step 4: Compare and Calculate
+
+Calculate the Error rates using the formula above or consider using a library like [pyannote.metrics](https://github.com/pyannote/pyannote-metrics).
+
+# Vibes vs metrics
+
+While metrics provide a useful quantitative evaluation of a Speech-to-text model, sometimes a subjective perspective can also be useful. For this, we recommend doing a "vibe-eval".
+
+## Why do a vibe-eval?
+
+Vibe-evals are useful to determine can be useful for seeing the qualitative difference between STT providers that metrics might not capture. For example, how certain keyterms can are transcribed make or break a transcript, even if the rest of the transcript is more accurate for other terms.
+
+Vibe-evals are also good for tie-breaking instances where the benchmarking metrics don't lean in favour of one model over the other.
+
+Another benefit of doing a vibe-evals is that truth files don't have to be sourced for them since Speech-to-text models are being compared against each other.
+
+## How to do a vibe-eval?
+
+To do a vibe-eval, have users compare and pick their favourite between two __formatted__ transcripts from different STT providers. This can be done with something like a [Diffchecker](https://www.diffchecker.com/), or any other side-by-side interface.
+
+Another option is to do A/B testing with your current Speech-to-text provider in production and asking users to give the transcript a score. We've also seen users in the past compare the number of support ticket complaints about transcription based on the models served to the user.
+
+Vibe-evals are a great way to see how our models perform in a production setting while also letting your users determine their preferred Speech-to-text provider.
+
+# Conclusion
+
+We hope that this short guide was helpful in shaping your evaluation methodology.
+
+Have more questions about evaluating our Speech-to-text models? [Contact our sales team](https://www.assemblyai.com/contact/sales) and we can help.
