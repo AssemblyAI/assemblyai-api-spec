@@ -9,9 +9,11 @@ description: "The anatomy of an utterance from partial words to finalized uttera
   object](/docs/speech-to-text/universal-streaming#turn-object) explanation.
 </Note>
 
-## Session initialization
+For this example, we are going to walk through a user saying:
+`Hi my name is Sonny. I am a voice agent.`
 
-When the session begins you will get a message indicating the session ID.
+## Session initialization
+When the session begins you will get a message indicating the session ID and expiration time.
 ```json
 {
   "type": "Begin",
@@ -20,9 +22,10 @@ When the session begins you will get a message indicating the session ID.
 }
 ```
 
-## Start of utterance (Partial transcript), and Start of turn
+## Initial utterance and turn
 
-The user begins saying `Hi my name is Sonny.`. Each message return finalizes words as they come through. Finalized words appear in the `transcript` field.
+### Start of utterance (Partial transcript), and Start of turn
+The user begins saying `Hi my name is Sonny`. Each message return finalizes words as they come through. Finalized words appear in the `transcript` field.
 ```json
 {
   "turn_order": 0,
@@ -247,11 +250,10 @@ The user begins saying `Hi my name is Sonny.`. Each message return finalizes wor
 }
 ```
 
-## End of utterance (Final transcript), and End of turn
-
+### End of utterance (Final transcript), and End of turn
 When the utterance is completed, the turn may or may not be predicted to end (this depends entirely on the `end_of_turn_confidence` value). Since the utterance is complete, we push the utterance value to the `utterance` key so you can process it for pre-emptive generation with the LLM step coming next. This is especially useful to get the fastest possible return from our streaming STT model.
 
-In this case, the turn also ends since `end_of_turn_confidence` is set as `0.2`. If the turn confidence was higher, the turn will end later - see XXX below.
+In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confidence` is greater than `0.5`. If the turn confidence was higher, the turn will end later - see [End of utterance (Final Transcript), not End of turn](#end-of-utterance-final-transcript-not-end-of-turn) section below.
 ```json
 {
   "turn_order": 0,
@@ -302,8 +304,7 @@ In this case, the turn also ends since `end_of_turn_confidence` is set as `0.2`.
 ```
 
 ### End of turn formatting
-
-Once the turn ends, if formatting is enabled there will be an addition return where `"end_of_turn":True` comes back. This will format the final message.
+Once the turn ends, if formatting is enabled there will be an additional message where `"turn_is_formatted":True` comes back. This will format the final message.
 
 Since LLMs don't require formatting, this step is NOT recommended for voice agents. It is recommended for other use cases like closed captioning where the transcript will be displayed to the end user.
 ```json
@@ -311,7 +312,7 @@ Since LLMs don't require formatting, this step is NOT recommended for voice agen
   "turn_order": 0,
   "turn_is_formatted": true,
   "end_of_turn": true,
-  "transcript": "Hi, my name is Sunny.",
+  "transcript": "Hi, my name is Sonny.",
   "end_of_turn_confidence": 0.5005,
   "words": [
     {
@@ -345,7 +346,7 @@ Since LLMs don't require formatting, this step is NOT recommended for voice agen
     {
       "start": 3600,
       "end": 3840,
-      "text": "Sunny.",
+      "text": "Sonny.",
       "confidence": 0.822963,
       "word_is_final": true
     }
@@ -355,9 +356,10 @@ Since LLMs don't require formatting, this step is NOT recommended for voice agen
 }
 ```
 
-## Start of a new utterance (Partial transcript), and Start of a new turn
+## Additional utterance(s) and turn(s)
 
-In this case, the user is not actually done speaking yet. Normally you would have a VAD set up to cancel the end of turn above and let the user keep speaking even though End of Turn was predicted.
+### Start of a new utterance (Partial transcript), and Start of a new turn
+In this case, the user is not actually done speaking yet. Normally you would have a VAD set up to cancel the end of turn above and let the user keep speaking even though End of Turn was predicted. The user now continues to speak `I am a voice agent.`
 ```json
 {
   "turn_order": 1,
@@ -582,8 +584,7 @@ In this case, the user is not actually done speaking yet. Normally you would hav
 }
 ```
 
-## End of utterance (Final Transcript), not End of turn
-
+### End of utterance (Final Transcript), not End of turn
 In many cases, the turn may not end but we will have finalized an utterance. For this reason, we supply the `utterances` param to finalize each utterance as fast as possible for downstream LLM pre-emptive generation.
 
 Note for providers like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide) and [Pipecat](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide), our plugins handle this logic for the user and allow for the fastest performance.
@@ -636,9 +637,8 @@ Note for providers like [LiveKit](https://www.assemblyai.com/docs/voice-agents/l
 }
 ```
 
-## End of turn, after End of utterance
-
-Once the confidence score is passed for End of Turn, we will end the turn.
+### End of turn, after End of utterance
+Once the confidence score of `0.5` is passed for End of Turn, we will end the turn.
 ```json
 {
   "turn_order": 1,
@@ -688,9 +688,9 @@ Once the confidence score is passed for End of Turn, we will end the turn.
 }
 ```
 
-## End of turn formatting
+### End of turn formatting
 
-Lastly we will format the transcript again if formatting is enabled. Again this is only recommended for use cases where the end user will be shown the transcript as it adds significant latency for voice agents.
+Lastly we will format the transcript if formatting is enabled. Again this is only recommended for use cases where the end user will be shown the transcript as it adds significant latency for voice agents.
 ```json
 {
   "turn_order": 1,
@@ -739,3 +739,16 @@ Lastly we will format the transcript again if formatting is enabled. Again this 
   "type": "Turn"
 }
 ```
+
+## Best practices
+
+### Voice agents
+- Grab the `utterance` parameter as soon as it is available for the fastest STT model response. This is particularly useful if you are using an external Turn Detection model. You can read more about [configuring for third-party turn detection here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#disable-turn-detection).
+  - If you are using AssemblyAI's turn detection, you can simply configure your settings to be [Aggressive](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#aggressive), [Balanced](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#balanced), or [Conservative](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#conservative).
+- Avoid using `format_turns` as it will significantly increase latency. LLMs don't need formatting so you can just pass raw text as soon as its ready.
+- Utilize the `end_of_turn` parameter to determine when a user is likely to end their turn. Combined with a VAD you can determine if the user is continuing to speak, or if the turn has ended and you can safely interrupt with your voice agent.
+  - Note that AssemblyAI has a built-in VAD to the model. If you modify `min_end_of_turn_silence_when_confident` latency will increase but you can substitute the model entirely for a VAD.
+
+### Notetakers and Closed captioning
+- Utilize `format_turns` since text will be displayed to the end user and this will make it human-readable. The added latency will be less noticeable to the human eye in these applications.
+- Utilize `keyterms_prompt` to increase the accuracy of rare words and entities. Again since the text will be shown to the end user this will improve their perception of accuracy.
