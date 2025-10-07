@@ -251,7 +251,7 @@ The user begins saying `Hi my name is Sonny`. Each message return finalizes word
 ```
 
 ### End of utterance (Final transcript), and End of turn
-When the utterance is completed, the turn may or may not be predicted to end (this depends entirely on the `end_of_turn_confidence` value). Since the utterance is complete, we push the utterance value to the `utterance` key so you can process it for pre-emptive generation with the LLM step coming next. This is especially useful to get the fastest possible return from our streaming STT model.
+When the utterance is completed, the turn may or may not be predicted to end (this depends entirely on the `end_of_turn_confidence` value). Since the utterance is complete, we push the utterance value to the `utterance` key so you can process it for pre-emptive generation. This is especially useful to get the fastest possible return from our streaming STT model.
 
 In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confidence` is greater than `0.5`. If the turn confidence was higher, the turn will end later - see [End of utterance (Final Transcript), not End of turn](#end-of-utterance-final-transcript-not-end-of-turn) section below.
 ```json
@@ -306,7 +306,8 @@ In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confide
 ### End of turn formatting
 Once the turn ends, if formatting is enabled there will be an additional message where `"turn_is_formatted":True` comes back. This will format the final message.
 
-Since LLMs don't require formatting, this step is NOT recommended for voice agents. It is recommended for other use cases like closed captioning where the transcript will be displayed to the end user.
+Since LLMs can parse unformatted text, waiting for this message is NOT recommended for voice agents as it adds additional latency. It is recommended for other use cases like closed captioning where the transcript will be displayed to the end user.
+
 ```json
 {
   "turn_order": 0,
@@ -359,7 +360,9 @@ Since LLMs don't require formatting, this step is NOT recommended for voice agen
 ## Additional utterance(s) and turn(s)
 
 ### Start of a new utterance (Partial transcript), and Start of a new turn
+
 In this case, the user is not actually done speaking yet. Normally you would have a VAD set up to cancel the end of turn above and let the user keep speaking even though End of Turn was predicted. The user now continues to speak `I am a voice agent.`
+
 ```json
 {
   "turn_order": 1,
@@ -587,7 +590,10 @@ In this case, the user is not actually done speaking yet. Normally you would hav
 ### End of utterance (Final Transcript), not End of turn
 In many cases, the turn may not end but we will have finalized an utterance. For this reason, we supply the `utterances` param to finalize each utterance as fast as possible for downstream LLM pre-emptive generation.
 
-Note for providers like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide) and [Pipecat](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide), our plugins handle this logic for the user and allow for the fastest performance.
+<Note>
+If you're using a voice agent provider like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide) or [Pipecat](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide), this logic is pre-configured for you with the fastest performance settings.
+<Note>
+
 ```json
 {
   "turn_order": 1,
@@ -638,7 +644,9 @@ Note for providers like [LiveKit](https://www.assemblyai.com/docs/voice-agents/l
 ```
 
 ### End of turn, after End of utterance
+
 Once the confidence score of `0.5` is passed for End of Turn, we will end the turn.
+
 ```json
 {
   "turn_order": 1,
@@ -690,7 +698,8 @@ Once the confidence score of `0.5` is passed for End of Turn, we will end the tu
 
 ### End of turn formatting
 
-Lastly we will format the transcript if formatting is enabled. Again this is only recommended for use cases where the end user will be shown the transcript as it adds significant latency for voice agents.
+Lastly we will format the transcript if formatting is enabled. Again this is only recommended for use cases where the end user will be shown the transcript as it adds some latency for voice agents.
+
 ```json
 {
   "turn_order": 1,
