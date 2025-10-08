@@ -1,0 +1,336 @@
+---
+title: "Self-Hosted Streaming"
+hide-nav-links: true
+description: "Deploy AssemblyAI's streaming transcription solution within your own infrastructure"
+---
+
+The AssemblyAI Streaming Self-Hosted Solution provides a secure, low-latency real-time transcription solution that can be deployed within your own infrastructure. This early access version is designed for design partners to evaluate and provide feedback on our self-hosted offering.
+
+## Core Principle
+
+Complete data isolation - no audio, transcripts, or personally identifiable information (PII) will ever be sent to AssemblyAI servers. Only usage metadata and licensing information is transmitted.
+
+## System Requirements
+
+### Hardware Requirements
+
+- **GPU**: NVIDIA GPU support required (any NVIDIA GPU model will work, T4 or newer recommended)
+
+### Software Requirements
+
+- **Operating System**: Linux
+- **Container Runtime**: Docker required
+- **AWS Account**: Required for pulling container images from our ECR registry
+
+## Architecture
+
+The streaming solution consists of three Docker container images:
+
+1. **API Service** - Primary ingress point for all transcription requests
+2. **Streaming Transcription Service** - Core ASR service producing unformatted transcriptions
+   - Universal Streaming model with embedded weights
+   - Note: Text formatting not included in initial release
+3. **License and Usage Proxy Service** - Validates deployment license and reports non-sensitive usage metadata for billing
+
+## Prerequisites
+
+- Active enterprise contract with AssemblyAI
+- AWS account for container registry access
+- Linux environment with Docker installed
+
+## Setup and Deployment
+
+<Steps>
+<Step>
+
+### 1. Obtain Credentials
+
+**AWS ECR Access**: We will manually provision AWS account credentials for your team to pull container images from our private Amazon ECR registry
+
+**License File**: We will generate and securely share a license file that encodes:
+- License expiration date
+- Authorized features
+
+</Step>
+
+<Step>
+
+### 2. Pull Container Images
+
+Authenticate with AWS ECR using provided credentials:
+
+```bash
+# Authenticate with AWS ECR using provided credentials
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 344839248844.dkr.ecr.us-west-2.amazonaws.com
+
+# Pull the three required containers
+docker pull 344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-api-v2:2025.36.016-8b86bf84c2
+docker pull 344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-asr-v2:2025.35.027-fc6bd860b7
+docker pull 344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter-api:2025.35.040-20ee216965
+```
+
+</Step>
+
+<Step>
+
+### 3. Deploy with Docker Compose
+
+We provide a Docker Compose file for easy deployment. This demonstrates the service configuration and can be adapted for your production orchestration platform (Kubernetes, ECS, etc.).
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Check service status
+docker-compose ps
+```
+
+The transcription service container includes baked-in model weights - no separate model download required.
+
+</Step>
+</Steps>
+
+## Configuration Examples
+
+### Docker Compose Configuration
+
+Create a `docker-compose.yml` file with the following configuration:
+
+```yaml
+services:
+  load-balancer:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - streaming-api
+    networks:
+      - streaming-network
+
+  streaming-api:
+    image: ${STREAMING_API_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-api-v2:2025.36.016-8b86bf84c2}
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - AAI_HTTP_PORT=8081
+      - AAI_WSS_PORT=8080
+      - AAI_ENV=local
+      - AAI_ASR_ENDPOINT=streaming-asr:50051
+      - AAI_TEXT_FORMATTER_ENDPOINT=streaming-text-formatting:8000
+      - AAI_USE_SECURE_CHANNEL_TO_ASR_SERVICE=False
+      - AAI_USE_SECURE_CHANNEL_TO_TEXT_FORMATTER_SERVICE=False
+    depends_on:
+      - streaming-asr
+      - streaming-text-formatting
+    networks:
+      - streaming-network
+
+  streaming-asr:
+    image: ${STREAMING_ASR_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-asr-v2:2025.35.027-fc6bd860b7}
+    ports:
+      - "50051:50051"
+    environment:
+      - SERVER_PORT=50051
+      - AAI_ENV=local
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - WORK_BATCH_ACCUMULATING_WORKER_GRACE_PERIOD_SEC=1
+      - INFERENCE_WORKER_GRACE_PERIOD_SEC=4
+      - INPUT_STREAM_TIMEOUT_THRESHOLD_SEC=10800
+      - LOGGING_LEVEL=INFO
+    networks:
+      - streaming-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ "gpu" ]
+
+  streaming-text-formatting:
+    image: ${STREAMING_TEXT_FORMATTING_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter-api:2025.35.040-20ee216965}
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - ENV=local
+      - LOG_LEVEL=warning
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - LITSERVE_ACCELERATOR=auto
+      - MAX_BATCH_SIZE=1024
+      - BATCH_TIMEOUT=0.02
+    networks:
+      - streaming-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ "gpu" ]
+
+networks:
+  streaming-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+```
+
+### Environment Variables
+
+Create a `.env` file to override default container images:
+
+```bash
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-api-v2:2025.36.016-8b86bf84c2
+STREAMING_ASR_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-asr-v2:2025.35.027-fc6bd860b7
+STREAMING_TEXT_FORMATTING_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter-api:2025.35.040-20ee216965
+```
+
+### Nginx Configuration
+
+Create an `nginx.conf` file for load balancing:
+
+```nginx
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream streaming_api_wss {
+        server streaming-api:8080;
+        keepalive 32;
+    }
+
+    upstream streaming_api_http {
+        server streaming-api:8081;
+        keepalive 32;
+    }
+
+    # Map for WebSocket upgrade
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    server {
+        listen 80;
+        server_name self-hosted-api localhost;
+
+        # WebSocket connections for realtime streaming
+        location ~ ^/(ws/)?v3/ws {
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_connect_timeout 30s;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_pass http://streaming_api_wss;
+        }
+
+        # HTTP API endpoints
+        location ~ ^/v3/ {
+            proxy_set_header Host $host;
+            proxy_pass http://streaming_api_http;
+        }
+
+        location / {
+            return 404;
+        }
+    }
+}
+```
+
+## Service Endpoints
+
+- **WebSocket**: `ws://localhost:80/v3/ws` or `ws://localhost:80/ws/v3/ws`
+- **HTTP API**: `http://localhost:80/v3/`
+
+## Updating Services
+
+### Model Updates
+
+To update to a new model version:
+
+1. Pull the new API Service and Transcription Service container images
+2. Update your Docker Compose or deployment configuration to reference the new versions
+3. Make a joint rollout of the services (both API and Transcription services must be updated together)
+
+### License Updates
+
+To update your license:
+
+1. Obtain the new license file from AssemblyAI
+2. Mount the new license file to the License and Usage Proxy container(s)
+3. Make a rollout of the proxy service
+
+## Monitoring & Debugging
+
+### View Service Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f streaming-api
+```
+
+### Check Service Status
+
+```bash
+# Container status
+docker-compose ps
+
+# Resource usage
+docker stats
+```
+
+## Troubleshooting
+
+### Debug Commands
+
+```bash
+# Check nginx configuration
+docker-compose exec load-balancer nginx -t
+
+# Restart specific service
+docker-compose restart streaming-api
+```
+
+## Current Limitations
+
+As a design partner, please be aware of these current limitations:
+
+- Text formatting is not included (coming in future streaming model release)
+- Manual credential provisioning (no self-service dashboard yet)
+- Docker Compose deployment example only (production orchestration templates coming later)
+- Flat-fee billing only (usage-based billing in development)
+
+## Design Partner Support
+
+### What We Provide
+
+- Docker Compose configuration file
+- Manual credential provisioning
+- Direct engineering support for deployment
+- Regular model updates
+
+### What We Need From You
+
+- Feedback on deployment experience
+- Performance metrics in your environment
+- Feature requests and prioritization input
+- Use case validation
