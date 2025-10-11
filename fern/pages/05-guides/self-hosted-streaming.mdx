@@ -212,70 +212,86 @@ STREAMING_ASR_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-str
 STREAMING_TEXT_FORMATTING_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:2025.40.078-e59b7b9c9b
 ```
 
-### Nginx configuration 
-
-Create an `nginx.conf` file for load balancing:
-
+### Nginx Configuration
+**API Load Balancer** (`nginx_streaming_api.conf`):
+- **Path-based routing** for WebSocket and HTTP requests
+- **WebSocket upgrade support** with proper headers
+- Routes to streaming-api service
 ```nginx
-events {
-    worker_connections 1024;
-}
+events {}
 
 http {
-    upstream streaming_api_wss {
-        server streaming-api:8080;
-        keepalive 32;
+  server {
+    listen 80;
+    server_name _;
+
+    # WebSocket endpoint(s): /v3/ws and /ws/v3/ws
+    location ~ ^/(ws/)?v3/ws {
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_read_timeout 36000s;
+      proxy_pass http://streaming-api:8080;
     }
 
-    upstream streaming_api_http {
-        server streaming-api:8081;
-        keepalive 32;
+    # HTTP API
+    location ~ ^/v3/ {
+      proxy_set_header Host $host;
+      proxy_pass http://streaming-api:8081;
     }
 
-    # Map for WebSocket upgrade
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        '' close;
+    location / {
+      return 404;
     }
+  }
+}
+```
 
-    server {
-        listen 80;
-        server_name self-hosted-api localhost;
+**ASR Load Balancer** (`nginx_streaming_asr.conf`):
+- **Header-based routing** using `X-Model-Version` header
+- **gRPC proxying** to ASR services
+- Routes to English or Multilang models based on header value
 
-        # WebSocket connections for realtime streaming
-        location ~ ^/(ws/)?v3/ws {
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_read_timeout 3600s;
-            proxy_send_timeout 3600s;
-            proxy_connect_timeout 30s;
-            proxy_buffering off;
-            proxy_cache off;
-            proxy_pass http://streaming_api_wss;
-        }
+```nginx
+events { worker_connections 1024; }
 
-        # HTTP API endpoints
-        location ~ ^/v3/ {
-            proxy_set_header Host $host;
-            proxy_pass http://streaming_api_http;
-        }
+http {
+  access_log /dev/stdout;
+  error_log  /dev/stderr info;
 
-        location / {
-            return 404;
-        }
+  upstream streaming_asr_english { server streaming-asr-english:50051; }
+  upstream streaming_asr_multilang { server streaming-asr-multilang:50051; }
+
+  map $http_x_model_version $asr_backend {
+    default    streaming_asr_english;
+    en-default streaming_asr_english;
+    ml-default streaming_asr_multilang;
+  }
+
+  keepalive_timeout     10h;
+  client_header_timeout 10h;
+  send_timeout          10h;
+
+  server {
+    listen 80;
+    http2 on;
+    client_max_body_size 0;
+
+    location / {
+      grpc_pass grpc://$asr_backend;
+      grpc_connect_timeout 75s;
+      grpc_read_timeout    10h;
+      grpc_send_timeout    10h;
+      grpc_socket_keepalive on;
     }
+  }
 }
 ```
 
 ## Service endpoints
 
 - **WebSocket**: `ws://localhost:80/v3/ws` or `ws://localhost:80/ws/v3/ws`
-- **HTTP API**: `http://localhost:80/v3/`
 
 ## Streaming example script
 
@@ -634,11 +650,14 @@ docker stats
 ### Debug commands
 
 ```bash
-# Check nginx configuration
-docker-compose exec load-balancer nginx -t
+# Check nginx configurations
+docker-compose exec streaming-api-lb nginx -t
+docker-compose exec streaming-asr-lb nginx -t
 
 # Restart specific service
 docker-compose restart streaming-api
+docker-compose restart streaming-asr-english
+docker-compose restart streaming-asr-multilang
 ```
 
 ## Current limitations
