@@ -1,0 +1,239 @@
+---
+title: "LLM Gateway"
+hidden: true
+---
+
+Unified interface to multiple LLM providers (Claude, GPT, Gemini) with tool calling and agentic workflows.
+
+## Features
+
+- **Basic Chat Completions** - Simple request/response patterns
+- **Tool/Function Calling** - Define and execute custom functions
+- **Tool Result Handling** - Send function results back to continue conversations
+- **Agentic Tool Chaining** - Iterative tool calling for multi-step reasoning
+- **Multi-turn Conversations** - Maintain conversation history and context
+- **Multiple Model Providers** - Claude, GPT, Gemini, and more through one API
+
+## Basic Chat Completion
+
+The simplest way to use the LLM Gateway is to send a message and receive a response:
+
+```python
+import requests
+import os
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+        "max_tokens": 1000
+    }
+)
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])
+```
+
+## Tool/Function Calling
+
+Define tools the model can call to access external data or functionality:
+
+```python
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_employees",
+            "description": "Search employee database by name, department, or other criteria",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "first_name": {
+                        "type": "string",
+                        "description": "Employee's first name"
+                    },
+                    "department": {
+                        "type": "string",
+                        "description": "Department name"
+                    }
+                },
+                "required": []
+            }
+        }
+    }
+]
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers={"Authorization": api_key},
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": "Find employees in Engineering"}],
+        "tools": tools
+    }
+)
+```
+
+## Handling Tool Calls
+
+When the model calls a tool, execute it and send results back:
+
+```python
+import json
+
+choice = response.json()["choices"][0]
+
+if choice.get("tool_calls"):
+    tool_call = choice["tool_calls"][0]
+
+    # Add function call to history
+    conversation_history.append({
+        "type": "function_call",
+        "tool_call_id": tool_call["id"],
+        "name": tool_call["function"]["name"],
+        "arguments": tool_call["function"]["arguments"]
+    })
+
+    # Execute your function
+    result = execute_function(
+        tool_call["function"]["name"],
+        json.loads(tool_call["function"]["arguments"])
+    )
+
+    # Add function output to history
+    conversation_history.append({
+        "type": "function_call_output",
+        "tool_call_id": tool_call["id"],
+        "name": tool_call["function"]["name"],
+        "output": json.dumps({"result": result})
+    })
+
+    # Continue conversation with the result
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers={"Authorization": api_key},
+        json={
+            "model": "claude-sonnet-4-5-20250929",
+            "messages": conversation_history,
+            "tools": tools
+        }
+    )
+```
+
+## Agentic Tool Chaining
+
+Allow the model to make multiple sequential tool calls to answer complex questions:
+
+```python
+conversation_history = [
+    {"role": "user", "content": "Where does Sarah work and what city is that in?"}
+]
+
+max_iterations = 10
+iteration = 0
+
+while iteration < max_iterations:
+    iteration += 1
+    response = chat(conversation_history, model)
+    choice = response["choices"][0]
+
+    if choice.get("tool_calls"):
+        # Execute tools and add results to history
+        handle_tool_calls(choice["tool_calls"], conversation_history)
+        # Continue loop - model can make more tool calls
+        continue
+    else:
+        # Model has final answer
+        print(choice["message"]["content"])
+        break
+```
+
+**Example interaction:**
+```
+You: Where does Andrew live?
+🔧 Calling: search_employees(first_name="Andrew")
+✅ Result: Found 1 result
+🔧 Calling: search_tavily(query="33186 zip code location")
+✅ Result: The zip code 33186 is located in Miami, Florida...
+Assistant: Andrew lives in Miami, Florida (zip code 33186).
+```
+
+## Available Models
+
+The API supports 15+ models across multiple providers:
+
+### Anthropic Claude
+- `claude-3-haiku-20240307` - Fastest Claude model
+- `claude-3-5-haiku-20241022` - Fast with better reasoning
+- `claude-sonnet-4-20250514` - Balanced speed & intelligence
+- `claude-sonnet-4-5-20250929` - Best for coding & agents
+- `claude-opus-4-20250514` - Most powerful Claude model
+
+### OpenAI GPT
+- `gpt-4.1` - Low latency GPT model
+- `chatgpt-4o-latest` - General purpose ChatGPT
+- `gpt-5`, `gpt-5-nano`, `gpt-5-mini` - Advanced reasoning models
+- `gpt-oss-20b`, `gpt-oss-120b` - Open source models
+
+### Google Gemini
+- `gemini-2.5-flash-lite` - Fastest Gemini model
+- `gemini-2.5-flash` - High-throughput processing
+- `gemini-2.5-pro` - Most capable Gemini model
+
+## Key Concepts
+
+### Message Types
+
+When using tools, messages can have these types:
+- `user` / `assistant` / `system` - Standard chat roles
+- `function_call` - Records a tool being called by the model
+- `function_call_output` - Records the result of executing a tool
+
+### Tool Call Flow
+
+1. Send user message with `tools` array
+2. Model responds with `tool_calls` if it wants to use a tool
+3. Execute the tool in your code
+4. Add `function_call` and `function_call_output` to conversation history
+5. Send updated history back to API
+6. Model incorporates results and responds (may call more tools or give final answer)
+
+### Agentic Behavior
+
+The API enables "agentic" patterns where the model:
+- Decides which tools to use based on the question
+- Chains multiple tools together (e.g., get employee info → lookup location details)
+- Iterates until it has enough information to answer completely
+- Handles multi-step reasoning automatically
+
+This is achieved by running a loop that continues sending requests as long as the model is making tool calls.
+
+## Multi-turn Conversations
+
+Maintain context across multiple exchanges by including the conversation history in each request:
+
+```python
+conversation_history = [
+    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "assistant", "content": "The capital of France is Paris."},
+    {"role": "user", "content": "What's the population?"}
+]
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers={"Authorization": api_key},
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": conversation_history,
+        "max_tokens": 1000
+    }
+)
+```
+
+<Note>
+The LLM Gateway API is separate from the Speech-to-Text and Audio Intelligence APIs. It provides a unified interface to work with large language models across multiple providers.
+</Note>
