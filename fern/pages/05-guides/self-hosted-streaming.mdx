@@ -4,19 +4,20 @@ hide-nav-links: true
 description: "Deploy AssemblyAI's streaming transcription solution within your own infrastructure"
 ---
 
-The AssemblyAI Streaming Self-Hosted Solution provides a secure, low-latency real-time transcription solution that can be deployed within your own infrastructure. This early access version is designed for design partners to evaluate and provide feedback on our self-hosted offering.
+The **AssemblyAI Self-Hosted Streaming Solution** provides a secure, low-latency real-time transcription solution that can be deployed within your own infrastructure.
+This early access version is designed for design partners to evaluate and provide feedback on our self-hosted offering.
 
-## Core Principle
+## Core principle
 
-Complete data isolation - no audio, transcripts, or personally identifiable information (PII) will ever be sent to AssemblyAI servers. Only usage metadata and licensing information is transmitted.
+- **Complete data isolation**: No audio data, transcript data, or personally identifiable information (PII) will ever be sent to AssemblyAI servers. Only usage metadata and licensing information is transmitted.
 
-## System Requirements
+## System requirements
 
-### Hardware Requirements
+### Hardware requirements
 
 - **GPU**: NVIDIA GPU support required (any NVIDIA GPU model will work, T4 or newer recommended)
 
-### Software Requirements
+### Software requirements
 
 - **Operating System**: Linux
 - **Container Runtime**: Docker required
@@ -28,8 +29,8 @@ The streaming solution consists of three Docker container images:
 
 1. **API Service** - Primary ingress point for all transcription requests
 2. **Streaming Transcription Service** - Core ASR service producing unformatted transcriptions
-   - Universal Streaming model with embedded weights
-   - Note: Text formatting not included in initial release
+   - Universal-Streaming model with embedded weights
+   - **Note:** Text formatting not available during early access
 3. **License and Usage Proxy Service** - Validates deployment license and reports non-sensitive usage metadata for billing
 
 ## Prerequisites
@@ -38,12 +39,29 @@ The streaming solution consists of three Docker container images:
 - AWS account for container registry access
 - Linux environment with Docker installed
 
-## Setup and Deployment
+## Setup and deployment
 
 <Steps>
 <Step>
+### 1. Docker runtime with GPU support
 
-### 1. Obtain Credentials
+**1.1** Verify NVIDIA drivers are installed:
+```bash
+nvidia-smi
+```
+
+**1.2** Install NVIDIA Container Toolkit:
+
+Follow the [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) to set up GPU support for Docker.
+
+**1.3** Verify the Docker runtime has GPU access:
+```bash
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+</Step>
+<Step>
+
+### 2. Obtain credentials
 
 **AWS ECR Access**: We will manually provision AWS account credentials for your team to pull container images from our private Amazon ECR registry
 
@@ -55,7 +73,7 @@ The streaming solution consists of three Docker container images:
 
 <Step>
 
-### 2. Pull Container Images
+### 3. Pull container images
 
 Authenticate with AWS ECR using provided credentials:
 
@@ -73,7 +91,7 @@ docker pull 344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter
 
 <Step>
 
-### 3. Deploy with Docker Compose
+### 4. Deploy with Docker Compose
 
 We provide a Docker Compose file for easy deployment. This demonstrates the service configuration and can be adapted for your production orchestration platform (Kubernetes, ECS, etc.).
 
@@ -93,55 +111,60 @@ The transcription service container includes baked-in model weights - no separat
 </Step>
 </Steps>
 
-## Configuration Examples
+## Configuration examples
 
-### Docker Compose Configuration
+### Docker Compose configuration
 
 Create a `docker-compose.yml` file with the following configuration:
 
 ```yaml
 services:
-  load-balancer:
+  streaming-api-lb:
     image: nginx:alpine
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx_streaming_api.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - streaming-api
     networks:
       - streaming-network
 
   streaming-api:
-    image: ${STREAMING_API_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-api-v2:2025.36.016-8b86bf84c2}
+    image: ${STREAMING_API_IMAGE}
     ports:
       - "8080:8080"
       - "8081:8081"
     environment:
       - AAI_HTTP_PORT=8081
       - AAI_WSS_PORT=8080
-      - AAI_ENV=local
-      - AAI_ASR_ENDPOINT=streaming-asr:50051
-      - AAI_TEXT_FORMATTER_ENDPOINT=streaming-text-formatting:8000
+      - AAI_ASR_ENDPOINT=streaming-asr-lb:80
+      - AAI_STREAMING_ASR_ENDPOINT=streaming-asr-lb:80
       - AAI_USE_SECURE_CHANNEL_TO_ASR_SERVICE=False
-      - AAI_USE_SECURE_CHANNEL_TO_TEXT_FORMATTER_SERVICE=False
     depends_on:
-      - streaming-asr
-      - streaming-text-formatting
+      - streaming-asr-lb
     networks:
       - streaming-network
 
-  streaming-asr:
-    image: ${STREAMING_ASR_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-asr-v2:2025.35.027-fc6bd860b7}
+  streaming-asr-lb:
+    image: nginx:alpine
+    ports:
+      - "81:80"
+    volumes:
+      - ./nginx_streaming_asr.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - streaming-asr-english
+      - streaming-asr-multilang
+    networks:
+      - streaming-network
+
+  streaming-asr-english:
+    image: ${STREAMING_ASR_ENGLISH_IMAGE}
     ports:
       - "50051:50051"
     environment:
       - SERVER_PORT=50051
-      - AAI_ENV=local
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - WORK_BATCH_ACCUMULATING_WORKER_GRACE_PERIOD_SEC=1
-      - INFERENCE_WORKER_GRACE_PERIOD_SEC=4
-      - INPUT_STREAM_TIMEOUT_THRESHOLD_SEC=10800
       - LOGGING_LEVEL=INFO
     networks:
       - streaming-network
@@ -153,18 +176,14 @@ services:
               count: 1
               capabilities: [ "gpu" ]
 
-  streaming-text-formatting:
-    image: ${STREAMING_TEXT_FORMATTING_IMAGE:-344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter-api:2025.35.040-20ee216965}
+  streaming-asr-multilang:
+    image: ${STREAMING_ASR_MULTILANG_IMAGE}
     ports:
-      - "8000:8000"
+      - "50052:50051"
     environment:
-      - PORT=8000
-      - ENV=local
-      - LOG_LEVEL=warning
+      - SERVER_PORT=50051
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - LITSERVE_ACCELERATOR=auto
-      - MAX_BATCH_SIZE=1024
-      - BATCH_TIMEOUT=0.02
+      - LOGGING_LEVEL=INFO
     networks:
       - streaming-network
     deploy:
@@ -183,17 +202,17 @@ networks:
         - subnet: 172.20.0.0/16
 ```
 
-### Environment Variables
+### Environment variables
 
-Create a `.env` file to override default container images:
+Create a `.env` file with container image references:
 
 ```bash
-STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-api-v2:2025.36.016-8b86bf84c2
-STREAMING_ASR_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-asr-v2:2025.35.027-fc6bd860b7
-STREAMING_TEXT_FORMATTING_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/realtime-text-formatter-api:2025.35.040-20ee216965
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:2025.40.035-1cf4e1ebe8
+STREAMING_ASR_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:2025.40.020-982b47ecf0
+STREAMING_TEXT_FORMATTING_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:2025.40.078-e59b7b9c9b
 ```
 
-### Nginx Configuration
+### Nginx configuration 
 
 Create an `nginx.conf` file for load balancing:
 
@@ -253,14 +272,326 @@ http {
 }
 ```
 
-## Service Endpoints
+## Service endpoints
 
 - **WebSocket**: `ws://localhost:80/v3/ws` or `ws://localhost:80/ws/v3/ws`
 - **HTTP API**: `http://localhost:80/v3/`
 
-## Updating Services
+## Streaming example script
 
-### Model Updates
+<CodeBlocks>
+```python
+import argparse
+import json
+import logging
+import math
+import os
+import tempfile
+import time
+import wave
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import List, Optional
+from urllib.parse import urlencode
+
+from pydub import AudioSegment
+from websockets.sync.client import ClientConnection, connect
+
+LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AudioChunk:
+    data: bytes
+    duration_ms: int
+
+
+def _convert_to_pcm16_wav(input_file: str, output_file: str, sample_rate: int) -> None:
+    """
+    Converts an audio file to a PCM16-encoded WAV file, merging all channels into a single mono channel if necessary.
+
+    :param input_file: Path to the input audio file.
+    :param output_file: Path to save the converted WAV file.
+    :param sample_rate: Sample rate to convert the audio file to.
+    """
+    audio = AudioSegment.from_file(input_file)
+    # If the audio is not mono, merge all channels into one.
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    # Resample the audio to the desired sample rate.
+    audio = audio.set_frame_rate(sample_rate)
+    audio.export(output_file, format="wav", codec="pcm_s16le")
+
+
+def _get_pcm16_raw_bytes(wav_file_path: str) -> bytes:
+    """
+    Extract raw PCM16 audio data from a WAV file.
+
+    :param wav_file_path: Path to the WAV file.
+    :return: Raw audio content as bytes.
+    """
+    with wave.open(wav_file_path, "rb") as wav_file:
+        if wav_file.getsampwidth() != 2 or wav_file.getcomptype() != "NONE":
+            raise ValueError("The WAV file is not PCM16 encoded.")
+
+        raw_audio = wav_file.readframes(wav_file.getnframes())
+    return raw_audio
+
+
+def _get_chunks_from_file(
+    filepath: str,
+    desired_sample_rate: int,
+    chunk_size_ms: int,
+) -> List[AudioChunk]:
+    chunks = []
+    with tempfile.NamedTemporaryFile(mode="w+", delete=True) as temp_file:
+        _convert_to_pcm16_wav(filepath, temp_file.name, desired_sample_rate)
+        audio_bytes: bytes = _get_pcm16_raw_bytes(temp_file.name)
+        read_bytes = 0
+        while read_bytes < len(audio_bytes):
+            frame_size = 2  # 16-bit PCM
+            chunk_bytes_len = int(
+                desired_sample_rate * chunk_size_ms * frame_size // 1000
+            )
+            data = audio_bytes[read_bytes : read_bytes + chunk_bytes_len]
+            read_bytes += len(data)
+            actual_chunk_ms = math.ceil(
+                len(data) * 1000 / (desired_sample_rate * frame_size)
+            )
+            chunks.append(AudioChunk(data=data, duration_ms=actual_chunk_ms))
+
+    return chunks
+
+
+def _write_to_ws(ws: ClientConnection, audio_chunks: List[AudioChunk]) -> None:
+    try:
+        for chunk in audio_chunks:
+            # Sleep for the chunk duration to send chunks with realtime rate
+            time.sleep(chunk.duration_ms / 1000)
+            ws.send(chunk.data)
+        ws.send('{"type": "Terminate"}')
+    except Exception as e:
+        LOGGER.error(
+            f"Exception occurred while writing to websocket: {e}", exc_info=True
+        )
+        ws.close()
+        raise
+
+
+def _read_from_ws(ws: ClientConnection) -> None:
+    try:
+        for message in ws:
+            data = json.loads(message)
+            if "type" not in data:
+                raise Exception(f"Unknown message received: {data}")
+            elif data["type"] == "Turn":
+                if data["words"]:
+                    text = " ".join([word["text"] for word in data["words"]])
+                    audio_start = data["words"][0]["start"]
+                    audio_end = data["words"][-1]["end"]
+                    end_of_turn = "True " if data["end_of_turn"] else "False"
+                    LOGGER.info(
+                        f"{timedelta(milliseconds=audio_start)}-"
+                        f"{timedelta(milliseconds=audio_end)}, end-of-turn: {end_of_turn}: {text}",
+                    )
+            elif data["type"] == "Begin":
+                expires_at = datetime.fromtimestamp(int(data["expires_at"]))
+                LOGGER.info(
+                    f"Session started. Session id: {data['id']}, expires_at: {expires_at}",
+                )
+            elif data["type"] == "Termination":
+                LOGGER.info(
+                    f"Session completed with session duration: {data['session_duration_seconds']} sec.",
+                )
+            else:
+                LOGGER.error(f"Unknown message type: {data}")
+    except Exception as e:
+        LOGGER.error(
+            f"Exception occurred while reading from the websocket: {e}", exc_info=True
+        )
+        ws.close()
+        raise
+
+
+def run_session(
+    api_endpoint: str,
+    audio_chunks: List[AudioChunk],
+    sample_rate: int,
+    keyterms_prompt: Optional[List[str]] = None,
+    language: Optional[str] = None,
+) -> None:
+    try:
+        params = {
+            "sample_rate": sample_rate,
+        }
+        if keyterms_prompt:
+            params["keyterms"] = json.dumps(keyterms_prompt)
+        if language:
+            params["language"] = language
+
+        endpoint_str = f"{api_endpoint}/v3/ws?{urlencode(params)}"
+        headers = {"Authorization": "self-hosted"}
+        LOGGER.info(f"Endpoint: {endpoint_str}")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with connect(endpoint_str, additional_headers=headers) as websocket:
+                write_future = executor.submit(
+                    _write_to_ws,
+                    websocket,
+                    audio_chunks,
+                )
+                read_future = executor.submit(
+                    _read_from_ws,
+                    websocket,
+                )
+                write_future.result()
+                read_future.result()
+    except Exception as e:
+        LOGGER.error(
+            f"Exception occurred: {e}",
+            exc_info=True,
+        )
+        raise
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Stream audio to AssemblyAI self-hosted real-time transcription service",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with default endpoint
+  python example_with_prerecorded_audio_file.py --audio-file my_audio.wav
+
+  # Specify custom endpoint and language
+  python example_with_prerecorded_audio_file.py --audio-file my_audio.wav --endpoint ws://localhost:8080 --language multi
+
+  # Use keyterms for better accuracy
+  python example_with_prerecorded_audio_file.py --audio-file my_audio.wav --keyterms "AssemblyAI" "machine learning" "API"
+        """,
+    )
+    parser.add_argument(
+        "--audio-file",
+        type=str,
+        default=os.path.dirname(__file__) + os.path.sep + "example_audio_file.wav",
+        help="Path to the audio file to transcribe (default: example_audio_file.wav)",
+    )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        default="ws://localhost:80",
+        help="WebSocket endpoint URL (default: ws://localhost:80)",
+    )
+    parser.add_argument(
+        "--sample-rate",
+        type=int,
+        default=16000,
+        help="Sample rate in Hz for audio processing (default: 16000)",
+    )
+    parser.add_argument(
+        "--chunk-size-ms",
+        type=int,
+        default=100,
+        help="Audio chunk size in milliseconds (default: 100)",
+    )
+    parser.add_argument(
+        "--keyterms",
+        nargs="*",
+        default=[],
+        help="List of keyterms to improve transcription accuracy (space-separated)",
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="",
+        help="Language code for transcription (e.g., 'multi')",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    try:
+        args = parse_args()
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+        audio_chunks = _get_chunks_from_file(
+            args.audio_file,
+            desired_sample_rate=args.sample_rate,
+            chunk_size_ms=args.chunk_size_ms,
+        )
+        run_session(
+            api_endpoint=args.endpoint,
+            audio_chunks=audio_chunks,
+            sample_rate=args.sample_rate,
+            keyterms_prompt=args.keyterms if args.keyterms else None,
+            language=args.language if args.language else None,
+        )
+    except KeyboardInterrupt:
+        LOGGER.info("Interrupted by user, exiting.")
+        exit(0)
+```
+</CodeBlocks>
+
+## Running the example script
+
+A Python example script above is provided to demonstrate how to stream audio to the self-hosted stack.
+
+_Note_: You can initiate a session as soon as the `streaming-asr-english` and `streaming-asr-multilang` services are running and have output a "Ready to serve!" log line.
+
+Change the current directory to the `streaming_example` directory:
+``` bash
+cd streaming_example
+```
+
+Create a fresh Python virtual environment and activate it:
+```bash
+python -m venv streaming_venv
+source streaming_venv/bin/activate
+```
+
+Install the required packages to run the example script:
+```bash
+pip install -r requirements.txt
+```
+
+The example script (`example_with_prerecorded_audio_file.py`) accepts several CLI arguments:
+
+**Basic usage:**
+```bash
+python example_with_prerecorded_audio_file.py --audio-file "example_audio_file.wav"
+```
+
+**Example using all available options:**
+```bash
+python example_with_prerecorded_audio_file.py \
+  --audio-file "example_audio_file.wav" \
+  --endpoint "ws://localhost:80" \
+  --sample-rate 16000 \
+  --chunk-size-ms 100 \
+  --keyterms "AssemblyAI" "transcription" \
+  --language "multi"
+```
+
+**Command-line arguments:**
+
+| Argument | Description                                            | Default |
+|----------|--------------------------------------------------------|---------|
+| `--audio-file` | Path to the audio file to transcribe                   | `example_audio_file.wav` |
+| `--endpoint` | WebSocket endpoint URL                                 | `ws://localhost:80` |
+| `--sample-rate` | Sample rate in Hz for audio processing                 | `16000` |
+| `--chunk-size-ms` | Audio chunk size in milliseconds                       | `100` |
+| `--keyterms` | List of keyterms to improve accuracy (space-separated) | `[]` |
+| `--language` | Language code for transcription (e.g., 'multi')        | `` |
+
+**View help:**
+```bash
+python example_with_prerecorded_audio_file.py --help
+```
+
+## Updating services
+
+### Model updates
 
 To update to a new model version:
 
@@ -268,7 +599,7 @@ To update to a new model version:
 2. Update your Docker Compose or deployment configuration to reference the new versions
 3. Make a joint rollout of the services (both API and Transcription services must be updated together)
 
-### License Updates
+### License updates
 
 To update your license:
 
@@ -276,9 +607,9 @@ To update your license:
 2. Mount the new license file to the License and Usage Proxy container(s)
 3. Make a rollout of the proxy service
 
-## Monitoring & Debugging
+## Monitoring & debugging
 
-### View Service Logs
+### View service logs
 
 ```bash
 # All services
@@ -288,7 +619,7 @@ docker-compose logs -f
 docker-compose logs -f streaming-api
 ```
 
-### Check Service Status
+### Check service status
 
 ```bash
 # Container status
@@ -300,7 +631,7 @@ docker stats
 
 ## Troubleshooting
 
-### Debug Commands
+### Debug commands
 
 ```bash
 # Check nginx configuration
@@ -310,7 +641,7 @@ docker-compose exec load-balancer nginx -t
 docker-compose restart streaming-api
 ```
 
-## Current Limitations
+## Current limitations
 
 As a design partner, please be aware of these current limitations:
 
@@ -319,16 +650,16 @@ As a design partner, please be aware of these current limitations:
 - Docker Compose deployment example only (production orchestration templates coming later)
 - Flat-fee billing only (usage-based billing in development)
 
-## Design Partner Support
+## Design partner support
 
-### What We Provide
+### What we provide
 
 - Docker Compose configuration file
 - Manual credential provisioning
 - Direct engineering support for deployment
 - Regular model updates
 
-### What We Need From You
+### What we need from you
 
 - Feedback on deployment experience
 - Performance metrics in your environment
