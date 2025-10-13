@@ -17,7 +17,7 @@ Speaker Identification allows you to identify speakers by their actual names or 
 <Note>
   Speaker Identification requires that a file be transcribed with Speaker Diarization enabled. See [this section](/docs/speech-to-text/speaker-diarization) of our documentation if you would like to learn more about the Speaker Diarization feature.
 
-  To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice.
+  To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice, which will have a downstream affect on the quality of Speaker Identification.
 </Note>
 
 ## Quickstart
@@ -98,7 +98,7 @@ for utterance in result["utterances"]:
 
 ## Output format
 
-The Speech Understanding API transforms generic speaker labels into identified names. Here is how the structure of the utterances in the `utterances` differs when Speaker Diarization is used and when Speaker Identification is used:
+The Speech Understanding API transforms generic speaker labels into specific names or roles. Here is how the structure of the utterances in the `utterances` key differs when Speaker Diarization is used versus when Speaker Identification is used:
 
 **Before (Speaker Diarization):**
 ```txt wordWrap
@@ -118,7 +118,7 @@ Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry 
 
 ## Identifying speakers by role
 
-In addition to identifying speakers by name as shown in the example above, you can also identify speakers by role.
+Instead of identifying speakers by name as shown in the example above, you can also identify speakers by role.
 
 This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
 
@@ -175,33 +175,29 @@ Interviewee: Well, there's a couple of things. The season has been pretty dry al
 
 ### Request
 
-The Speech Understanding API uses the `/v2/transcript` and `/v1/understanding` endpoints, which are separate from the LLM Gateway API.
-
-#### Transcription flow
-
-1. Submit audio URL to `/v2/transcript` endpoint with `speaker_labels: true`
-2. Poll the transcription status until `status == "completed"`
-3. Send completed transcript to `/v1/understanding` with speaker identification request
-4. Receive utterances with identified speaker names
-
-#### Speaker identification request structure
-
-To request speaker identification, add a `speech_understanding` property to your completed transcript:
+The Speech Understanding API requires a previously completed transcript so the request below shows how to retrieve a completed transcript using the transcript id and how to use that completed transcript in a request to the Speech Understanding API.
 
 ```bash {6} maxLines=15
-curl -X POST "https://llm-gateway.assemblyai.com/v1/understanding" \
-  -H "authorization: <YOUR_API_KEY>" \
+# Step 1: Get the completed transcript
+transcript=$(curl -s -X GET \
+  "https://api.assemblyai.com/v2/transcript/YOUR_TRANSCRIPT_ID" \
+  -H "Authorization: YOUR_API_KEY")
+
+# Step 2: Add speaker identification and send to Speech Understanding API
+curl -X POST \
+  "https://llm-gateway.assemblyai.com/v1/understanding" \
+  -H "Authorization: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{
+  -d "$(echo "$transcript" | jq '. + {
     "speech_understanding": {
       "request": {
         "speaker_identification": {
-          "speaker_type": "name", # or "role"
+          "speaker_type": "name",
           "known_values": ["Name1", "Name2"]
         }
       }
     }
-  }'
+  }')"
 ```
 
 | Key                                                | Type   | Description                                                                                              |
@@ -280,7 +276,3 @@ The Speaker Identification API returns a modified version of your transcript wit
 | `utterances[].words[].speaker` | Generic labels (`"A"`, `"B"`, `"C"`) | Identified names or roles matching the utterance speaker |
 
 All other fields (`text`, `start`, `end`, `confidence`, `words`) remain unchanged from the original transcript.
-
-<Note>
-Additional features like translation will be added to this API in the future.
-</Note>
