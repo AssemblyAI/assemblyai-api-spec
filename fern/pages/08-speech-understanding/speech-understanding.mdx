@@ -25,34 +25,73 @@ To reliably identify speakers, your audio should contain clear, distinguishable 
 
 This guide assumes you already have a completed transcript with speaker labels. The examples below show how to map generic speaker labels (Speaker A, Speaker B) to actual names or roles.
 
+Here’s the full sample code for what you’ll build in this tutorial:
+
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
 
 ```python
 import requests
-import os
+import time
 
-# Assume you already have a completed transcript with speaker labels
-# See Prerequisites section above for how to get a transcript
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+## Use this section and comment out lines 18 and 19 to transcribe a local file
+# with open("./my-audio.mp3", "rb") as f:
+# response = requests.post(base_url + "/v2/upload",
+# headers=headers,
+# data=f)
+# upload_url = response.json()["upload_url"]
+
+# Or use a publicly-accessible URL:
+upload_url = "https://assembly.ai/wildfires.mp3"
+
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True
+}
+
+# transcribe file
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# poll for transcription results
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+      break
+
+    elif transcript["status"] == "error":
+      raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+    else:
+      time.sleep(3)
 
 # Add speaker identification request to the transcript
 transcript["speech_understanding"] = {
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "name",
-            "known_values": ["Rhett", "Link"]  # Names of speakers to identify
-        }
+  "request": {
+    "speaker_identification": {
+      "speaker_type": "name",
+      "known_values": ["Interviewer", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
     }
+  }
 }
 
-# Send the modified transcript to the understanding API
+# Send the modified transcript to the Speech Understanding API
 result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
-    json=transcript
+  "https://llm-gateway.assemblyai.com/v1/understanding",
+  headers = headers,
+  json = transcript
 ).json()
 
-# Access the results
+# Access the results and print utterances to the terminal
 for utterance in result["utterances"]:
     print(f"{utterance['speaker']}: {utterance['text']}")
 ```
