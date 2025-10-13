@@ -1,30 +1,32 @@
 ---
-title: "Speech Understanding API"
-hidden: true
+title: "Speaker Identification"
+description: "Identify speakers by name or role in your transcript"
 ---
 
-Audio transcription with speaker identification using AssemblyAI's Speech Understanding API.
+<AccordionGroup>
 
-## Features
+<Accordion title="Supported regions">
+  US only <br />
+</Accordion>
 
-- **Audio Transcription** - Convert audio to text with speaker labels
-- **Speaker Identification** - Identify speakers by name or role from known values
+</AccordionGroup>
 
-## Speaker Identification
-
-The Speech Understanding API allows you to transcribe audio and identify speakers by their actual names or roles, rather than generic labels like "Speaker A" or "Speaker B".
-
-### Prerequisites
+The Speaker Identification feature allows you to identify speakers by their actual names or roles, rather than generic labels like "Speaker A" or "Speaker B".
 
 <Note>
 Speaker identification requires a transcript with **speaker labels enabled**. See the [Speaker Diarization guide](/docs/speech-to-text/speaker-diarization) to learn how to transcribe audio with speaker labels.
 </Note>
 
+<Warning>
+To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient speech from each speaker. The accuracy of speaker identification depends on the quality of the audio and the distinctiveness of each speaker's voice.
+</Warning>
+
+## Quickstart
+
 This guide assumes you already have a completed transcript with speaker labels. The examples below show how to map generic speaker labels (Speaker A, Speaker B) to actual names or roles.
 
-### Identifying Speakers by Name
-
-Use the Speech Understanding API to map generic speaker labels to actual speaker names:
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
 
 ```python
 import requests
@@ -49,9 +51,41 @@ result = requests.post(
     headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
     json=transcript
 ).json()
+
+# Access the results
+for utterance in result["utterances"]:
+    print(f"{utterance['speaker']}: {utterance['text']}")
 ```
 
-#### Output Format
+</Tab>
+</Tabs>
+
+## Identifying speakers by name
+
+Use the Speech Understanding API to map generic speaker labels to actual speaker names.
+
+### Example
+
+```python
+# Add speaker identification request to the transcript
+transcript["speech_understanding"] = {
+    "request": {
+        "speaker_identification": {
+            "speaker_type": "name",
+            "known_values": ["Rhett", "Link"]  # Names of speakers to identify
+        }
+    }
+}
+
+# Send the modified transcript to the understanding API
+result = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/understanding",
+    headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
+    json=transcript
+).json()
+```
+
+### Output format
 
 The API transforms generic speaker labels into identified names. Here's how the utterances change:
 
@@ -69,15 +103,11 @@ Link: Thanks for having me, it's great to be here.
 Rhett: Today we're talking about our favorite foods...
 ```
 
-**Access the results:**
-```python
-for utterance in result["utterances"]:
-    print(f"{utterance['speaker']}: {utterance['text']}")
-```
+## Identifying speakers by role
 
-### Identifying Speakers by Role
+For customer service calls, AI interactions, or any scenario where you want to identify speakers by their function rather than name, use `speaker_type: "role"`.
 
-For customer service calls, AI interactions, or any scenario where you want to identify speakers by their function rather than name, use `speaker_type: "role"`:
+### Example
 
 ```python
 # Add speaker identification request to the transcript
@@ -98,7 +128,7 @@ result = requests.post(
 ).json()
 ```
 
-#### Output Format
+### Output format
 
 The API maps speaker labels to their respective roles:
 
@@ -124,11 +154,45 @@ Customer: I keep getting an error message when I try to log in.
 - `["Support", "Customer"]` - Technical support calls
 - `["Interviewer", "Interviewee"]` - Interview recordings
 
-## Response Format
+## API reference
 
-The speaker identification API returns a modified version of your transcript with updated speaker labels. Here's the detailed structure:
+### Request
 
-### Response Structure
+The Speech Understanding API uses the `/v2/transcript` and `/v1/understanding` endpoints, which are separate from the LLM Gateway API.
+
+#### Transcription flow
+
+1. Submit audio URL to `/v2/transcript` endpoint with `speaker_labels: true`
+2. Poll the transcription status until `status == "completed"`
+3. Send completed transcript to `/v1/understanding` with speaker identification request
+4. Receive utterances with identified speaker names
+
+#### Speaker identification request structure
+
+To request speaker identification, add a `speech_understanding` property to your completed transcript:
+
+```python
+transcript["speech_understanding"] = {
+    "request": {
+        "speaker_identification": {
+            "speaker_type": "name",  # or "role"
+            "known_values": ["Name1", "Name2"]
+        }
+    }
+}
+```
+
+| Key                                                | Type   | Description                                                                                              |
+| -------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| `speech_understanding`                             | object | Container for speech understanding requests.                                                             |
+| `speech_understanding.request`                     | object | The understanding request configuration.                                                                 |
+| `speech_understanding.request.speaker_identification` | object | Speaker identification configuration.                                                                    |
+| `speaker_identification.speaker_type`              | string | Type of speaker labels: `"name"` for actual names or `"role"` for roles/titles.                          |
+| `speaker_identification.known_values`              | array  | List of speaker names or roles to identify in the audio.                                                 |
+
+### Response
+
+The speaker identification API returns a modified version of your transcript with updated speaker labels.
 
 ```json
 {
@@ -164,7 +228,22 @@ The speaker identification API returns a modified version of your transcript wit
 }
 ```
 
-### Key Differences from Standard Transcription
+| Key                                 | Type   | Description                                                                                                                                                |
+| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `utterances`                        | array  | A turn-by-turn temporal sequence of the transcript, where the i-th element is an object containing information about the i-th utterance in the audio file. |
+| `utterances[i].confidence`          | number | The confidence score for the transcript of this utterance.                                                                                                 |
+| `utterances[i].end`                 | number | The ending time, in milliseconds, of the utterance in the audio file.                                                                                      |
+| `utterances[i].speaker`             | string | The identified speaker name or role for this utterance.                                                                                                    |
+| `utterances[i].start`               | number | The starting time, in milliseconds, of the utterance in the audio file.                                                                                    |
+| `utterances[i].text`                | string | The transcript for this utterance.                                                                                                                         |
+| `utterances[i].words`               | array  | A sequential array for the words in the transcript, where the j-th element is an object containing information about the j-th word in the utterance.       |
+| `utterances[i].words[j].text`       | string | The text of the j-th word in the i-th utterance.                                                                                                           |
+| `utterances[i].words[j].start`      | number | The starting time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                 |
+| `utterances[i].words[j].end`        | number | The ending time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                   |
+| `utterances[i].words[j].confidence` | number | The confidence score for the transcript of the j-th word in the i-th utterance.                                                                            |
+| `utterances[i].words[j].speaker`    | string | The identified speaker name or role who uttered the j-th word in the i-th utterance.                                                                       |
+
+#### Key differences from standard transcription
 
 | Field | Standard Transcription | With Speaker Identification |
 |-------|------------------------|----------------------------|
@@ -173,48 +252,6 @@ The speaker identification API returns a modified version of your transcript wit
 
 All other fields (`text`, `start`, `end`, `confidence`, `words`) remain unchanged from the original transcript.
 
-## Key Concepts
-
-### Transcription Flow
-
-1. Submit audio URL to `/v2/transcript` endpoint with `speaker_labels: true`
-2. Poll the transcription status until `status == "completed"`
-3. Send completed transcript to `/v1/understanding` with speaker identification request
-4. Receive utterances with identified speaker names
-
-### Speaker Identification Request Structure
-
-To request speaker identification, add a `speech_understanding` property to your completed transcript:
-
-```python
-transcript["speech_understanding"] = {
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "name",  # or "role"
-            "known_values": ["Name1", "Name2"]
-        }
-    }
-}
-```
-
-The request allows you to:
-- Provide `known_values` - names or roles of speakers to identify
-- Specify `speaker_type: "name"` to map speaker labels to actual names (e.g., "John", "Sarah")
-- Specify `speaker_type: "role"` to map speaker labels to roles/titles (e.g., "Agent", "Customer")
-- Get back utterances with identified labels instead of generic labels (Speaker A, Speaker B)
-
-### API Endpoints
-
-- **`/v2/transcript`** - Submit audio for transcription
-- **`/v2/transcript/{id}`** - Check transcription status and retrieve results
-- **`/v1/understanding`** - Process transcript with speaker identification
-
-<Warning>
-To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient speech from each speaker. The accuracy of speaker identification depends on the quality of the audio and the distinctiveness of each speaker's voice.
-</Warning>
-
 <Note>
-The Speech Understanding API uses the `/v2/transcript` and `/v1/understanding` endpoints, which are separate from the LLM Gateway API. Additional features like translation will be added to this API in the future.
+Additional features like translation will be added to this API in the future.
 </Note>
-
-{/* Future expansion: Translation example will be added here */}
