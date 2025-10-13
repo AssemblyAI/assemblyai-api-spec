@@ -3,9 +3,6 @@ title: "Speech-to-Speech"
 description: "Speech-to-speech API docs"
 ---
 
-
-# Speech-to-Speech API Reference
-
 Real-time voice AI over WebSocket with speech-to-text, language model processing, and text-to-speech.
 
 ---
@@ -13,7 +10,7 @@ Real-time voice AI over WebSocket with speech-to-text, language model processing
 ## Endpoint
 
 ```
-ws://localhost:8765/ws
+wss://aaigents.up.railway.app/ws
 ```
 
 Connect to establish a voice agent session.
@@ -286,6 +283,13 @@ Define tools in `session.tools`:
 | `function.name` | string | Yes | Function name |
 | `function.description` | string | Yes | Human-readable description |
 | `function.parameters` | object | Yes | JSON Schema for parameters |
+| `function.parameters.type` | string | Yes | Must be `"object"` |
+| `function.parameters.properties` | object | Yes | Object defining each parameter |
+| `function.parameters.properties.<param>` | object | Yes | Individual parameter definition |
+| `function.parameters.properties.<param>.type` | string | Yes | JSON type: `"string"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
+| `function.parameters.properties.<param>.description` | string | No | Human-readable parameter description |
+| `function.parameters.properties.<param>.enum` | array | No | Valid values for the parameter |
+| `function.parameters.required` | array | No | List of required parameter names |
 
 ---
 
@@ -297,18 +301,7 @@ Values for `audio.input.language`:
 |------|----------|
 | `multi` | Auto-detect (default) |
 | `en` | English |
-| `es` | Spanish |
-| `fr` | French |
-| `de` | German |
-| `it` | Italian |
-| `pt` | Portuguese |
-| `nl` | Dutch |
-| `hi` | Hindi |
-| `ja` | Japanese |
-| `zh` | Chinese |
-| `ko` | Korean |
 
-See [AssemblyAI documentation](https://www.assemblyai.com/docs) for full language support.
 
 ---
 
@@ -326,110 +319,122 @@ Additional voices available via Rime API.
 
 ## Examples
 
-### JavaScript Client
 
-```javascript
-const ws = new WebSocket('ws://localhost:8765/ws');
+### Python
 
-ws.onopen = () => {
-  // Initialize session
-  ws.send(JSON.stringify({
-    type: "session.update",
-    session: {
-      instructions: "You are a helpful assistant.",
-      audio: {
-        input: {
-          format: { type: "audio/pcm", rate: 16000 },
-          language: "en"
-        },
-        output: {
-          format: { type: "audio/pcm", rate: 24000 },
-          voice: "rex"
-        }
-      }
-    }
-  }));
-};
+**Installation**
 
-ws.onmessage = (event) => {
-  if (event.data instanceof Blob) {
-    // Binary audio - play it
-    playAudio(event.data);
-  } else {
-    // JSON event
-    const msg = JSON.parse(event.data);
-    console.log(msg.type);
-  }
-};
-
-// Send audio
-function streamMicrophone() {
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      const context = new AudioContext({ sampleRate: 16000 });
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      
-      processor.onaudioprocess = (e) => {
-        const pcm16 = convertToPCM16(e.inputBuffer.getChannelData(0));
-        ws.send(pcm16);
-      };
-      
-      source.connect(processor);
-      processor.connect(context.destination);
-    });
-}
+```bash
+pip install websockets sounddevice numpy
 ```
 
-### Python Client
+**Code**
 
 ```python
 import asyncio
-import websockets
 import json
+import websockets
+import sounddevice as sd
+import numpy as np
 
-async def main():
-    uri = "ws://localhost:8765/ws"
-    async with websockets.connect(uri) as ws:
-        # Initialize session
-        await ws.send(json.dumps({
-            "type": "session.update",
-            "session": {
-                "instructions": "You are a helpful assistant.",
-                "audio": {
-                    "input": {
-                        "format": {"type": "audio/pcm", "rate": 16000},
-                        "language": "en"
-                    },
-                    "output": {
-                        "format": {"type": "audio/pcm", "rate": 24000},
-                        "voice": "rex"
-                    }
-                }
-            }
-        }))
-        
-        # Handle messages
-        async for message in ws:
-            if isinstance(message, bytes):
-                # Binary audio
-                play_audio(message)
-            else:
-                # JSON event
-                data = json.loads(message)
-                print(f"Event: {data['type']}")
+URI = "wss://aaigents.up.railway.app/ws"
+INSTRUCTIONS = "You are a helpful voice assistant. Keep responses concise."
 
-asyncio.run(main())
+async def voice_chat():
+    queue = asyncio.Queue(maxsize=100)
+    session_ready = False
+
+    async with websockets.connect(URI, ping_interval=10, ping_timeout=20) as ws:
+        print(f"Connected to {URI}")
+
+        # Task to send audio from queue to WebSocket
+        async def sender():
+            while True:
+                data = await queue.get()
+                if session_ready:
+                    await ws.send(data)
+                queue.task_done()
+
+        sender_task = asyncio.create_task(sender())
+        loop = asyncio.get_running_loop()
+
+        # Microphone callback
+        def mic_callback(indata, frames, time, status):
+            if status.input_overflow:
+                print("Audio buffer overflow!")
+            pcm_bytes = bytes(indata)
+            loop.call_soon_threadsafe(
+                lambda: queue.full() or queue.put_nowait(pcm_bytes)
+            )
+
+        # Open audio streams
+        with sd.InputStream(
+            samplerate=16000, channels=1, dtype='int16', callback=mic_callback
+        ), sd.OutputStream(samplerate=24000, channels=1, dtype='int16') as speaker:
+            
+            print("Waiting for session to be ready...")
+
+            try:
+                async for message in ws:
+                    if isinstance(message, bytes):
+                        # Play audio response
+                        speaker.write(np.frombuffer(message, dtype=np.int16))
+                    
+                    else:
+                        # Handle JSON events
+                        data = json.loads(message)
+                        event_type = data.get("type")
+                        
+                        if event_type == "session.created":
+                            # Configure session
+                            await ws.send(json.dumps({
+                                "type": "session.update",
+                                "session": {
+                                    "instructions": INSTRUCTIONS,
+                                    "llm": {
+                                        "model": "llama-4-scout-17b-16e-instruct"
+                                    },
+                                    "audio": {
+                                        "input": {
+                                            "format": {"type": "audio/pcm", "rate": 16000},
+                                            "language": "multi"
+                                        },
+                                        "output": {
+                                            "format": {"type": "audio/pcm", "rate": 24000},
+                                            "voice": "rex",
+                                            "speed": 1
+                                        }
+                                    }
+                                }
+                            }))
+                            print("Session created, configuring...")
+                        
+                        elif event_type == "session.updated":
+                            session_ready = True
+                            print("✓ Voice chat active. Press Ctrl+C to quit.")
+                        
+                        elif event_type == "conversation.item.done":
+                            item = data.get("item", {})
+                            role = item.get("role", "")
+                            content = item.get("content", [])
+                            if content:
+                                text = content[0].get("text", "")
+                                print(f"[{role}]: {text}")
+                        
+                        elif event_type == "tool_call":
+                            tool_call = data.get("tool_call", {})
+                            function_name = tool_call.get("function", {}).get("name")
+                            print(f"🔧 Tool call: {function_name}")
+
+            except KeyboardInterrupt:
+                print("\nDisconnecting...")
+            finally:
+                sender_task.cancel()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(voice_chat())
+    except KeyboardInterrupt:
+        print("Exited.")
 ```
 
----
-
-## Environment Variables
-
-Required API keys:
-
-```env
-ASSEMBLYAI_API_KEY=your_key
-CEREBRAS_API_KEY=your_key
-RIME_API_KEY=your_key
-```
