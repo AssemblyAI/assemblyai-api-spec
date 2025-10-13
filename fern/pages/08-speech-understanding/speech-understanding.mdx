@@ -37,7 +37,7 @@ headers = {
   "authorization": "<YOUR_API_KEY>"
 }
 
-## Use this section and comment out lines 18 and 19 to transcribe a local file
+## Use this section and comment out lines 17 and 18 to transcribe a local file
 # with open("./my-audio.mp3", "rb") as f:
 # response = requests.post(base_url + "/v2/upload",
 # headers=headers,
@@ -101,7 +101,7 @@ for utterance in result["utterances"]:
 The Speech Understanding API transforms generic speaker labels into identified names. Here is how the structure of the utterances in the `utterances` differs when Speaker Diarization is used and when Speaker Identification is used:
 
 **Before (Speaker Diarization):**
-```
+```txt wordWrap
 Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
 Speaker B: Good morning.
 Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
@@ -109,7 +109,7 @@ Speaker B: Well, there's a couple of things. The season has been pretty dry alre
 ```
 
 **After (Speaker Identification):**
-```
+```txt wordWrap
 Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
 Peter DeCarlo: Good morning.
 Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
@@ -118,7 +118,9 @@ Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry 
 
 ## Identifying speakers by role
 
-In addition to identifying speakers by name, you can also identify speakers by role. This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
+In addition to identifying speakers by name as shown in the example above, you can also identify speakers by role.
+
+This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
 
 To identify speakers by role, use the `speaker_type` parameter with a value of "role"
 
@@ -148,7 +150,7 @@ result = requests.post(
 Before and after output when using roles instead of names:
 
 **Before (Speaker Diarization):**
-```
+```txt wordWrap
 Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
 Speaker B: Good morning.
 Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
@@ -156,7 +158,7 @@ Speaker B: Well, there's a couple of things. The season has been pretty dry alre
 ```
 
 **After (Speaker Identification):**
-```
+```txt wordWrap
 Interviewer: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
 Interviewee: Good morning.
 Interviewer: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
@@ -186,15 +188,20 @@ The Speech Understanding API uses the `/v2/transcript` and `/v1/understanding` e
 
 To request speaker identification, add a `speech_understanding` property to your completed transcript:
 
-```python
-transcript["speech_understanding"] = {
-    "request": {
+```bash {6} maxLines=15
+curl -X POST "https://llm-gateway.assemblyai.com/v1/understanding" \
+  -H "authorization: <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "speech_understanding": {
+      "request": {
         "speaker_identification": {
-            "speaker_type": "name",  # or "role"
-            "known_values": ["Name1", "Name2"]
+          "speaker_type": "name", # or "role"
+          "known_values": ["Name1", "Name2"]
         }
+      }
     }
-}
+  }'
 ```
 
 | Key                                                | Type   | Description                                                                                              |
@@ -202,41 +209,48 @@ transcript["speech_understanding"] = {
 | `speech_understanding`                             | object | Container for speech understanding requests.                                                             |
 | `speech_understanding.request`                     | object | The understanding request configuration.                                                                 |
 | `speech_understanding.request.speaker_identification` | object | Speaker identification configuration.                                                                    |
-| `speaker_identification.speaker_type`              | string | Type of speaker labels: `"name"` for actual names or `"role"` for roles/titles.                          |
+| `speaker_identification.speaker_type`              | string | The type of speakers being identified, "name" for actual names or "role" for roles/titles.                          |
 | `speaker_identification.known_values`              | array  | List of speaker names or roles to identify in the audio.                                                 |
 
 ### Response
 
-The speaker identification API returns a modified version of your transcript with updated speaker labels.
+The Speaker Identification API returns a modified version of your transcript with updated speaker labels in the `utterances` key.
 
 ```json
 {
   "utterances": [
     {
-      "speaker": "Rhett",
-      "text": "Hey everyone, welcome back to the show!",
-      "start": 0,
-      "end": 2500,
-      "confidence": 0.95,
+      "speaker": "Michel Martin",
+      "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US Skylines from Maine to Maryland to Minnesota are gray and smoggy. And in some places, the air quality warnings include the warning to stay inside. We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.",
+      "start": 240,
+      "end": 26560,
+      "confidence": 0.9815734,
       "words": [
         {
-          "text": "Hey",
-          "start": 0,
-          "end": 300,
-          "confidence": 0.98,
-          "speaker": "Rhett"
-        }
+          "text": "Smoke"
+          "start": 240,
+          "end": 640,
+          "confidence": 0.90152997,
+          "speaker": "Michel Martin",
+        },
         // ... more words
       ]
     },
     {
-      "speaker": "Link",
-      "text": "Thanks for having me, it's great to be here.",
-      "start": 2600,
-      "end": 5100,
-      "confidence": 0.93,
+      "speaker": "Peter DeCarlo",
+      "text": "Good morning.",
+      "start": 28060,
+      "end": 28620,
+      "confidence": 0.98217773,
       "words": [
-        // ... word-level details
+        {
+          "text": "Good",
+          "start": 28060,
+          "end": 28260,
+          "confidence": 0.96484375,
+          "speaker": "Peter DeCarlo"
+        },
+        // ... more words
       ]
     }
   ]
