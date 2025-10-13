@@ -1,0 +1,435 @@
+---
+title: "Speech-to-Speech"
+description: "Speech-to-speech API docs"
+---
+
+
+# Speech-to-Speech API Reference
+
+Real-time voice AI over WebSocket with speech-to-text, language model processing, and text-to-speech.
+
+---
+
+## Endpoint
+
+```
+ws://localhost:8765/ws
+```
+
+Connect to establish a voice agent session.
+
+---
+
+## Client Events
+
+### session.update
+
+Initialize or update session configuration.
+
+**Request**
+
+```json
+{
+  "type": "session.update",
+  "session": {
+    "instructions": "You are a helpful voice assistant.",
+    "temperature": 0.8,
+    "max_tokens": 4096,
+    "llm": {
+      "model": "llama-4-scout-17b-16e-instruct"
+    },
+    "tools": [],
+    "audio": {
+      "input": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 16000
+        },
+        "language": "multi",
+        "turn_detection": {
+          "type": "assemblyai"
+        }
+      },
+      "output": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 24000
+        },
+        "voice": "rex",
+        "speed": 1
+      }
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Event type: `"session.update"` |
+| `session` | object | Yes | Session configuration |
+| `session.instructions` | string | No | System instructions for AI (default: elementary teacher prompt) |
+| `session.temperature` | number | No | LLM temperature 0-1 (default: `0.8`) |
+| `session.max_tokens` | number | No | Max output tokens (default: `4096`) |
+| `session.llm` | object | No | LLM configuration |
+| `session.llm.model` | string | No | Model name (default: `"llama-4-scout-17b-16e-instruct"`) |
+| `session.tools` | array | No | Function calling tools (default: `[]`) |
+| `session.audio` | object | No | Audio configuration |
+| `session.audio.input` | object | No | Input audio settings |
+| `session.audio.input.format` | object | No | Audio format |
+| `session.audio.input.format.type` | string | No | Format type (default: `"audio/pcm"`) |
+| `session.audio.input.format.rate` | number | No | Sample rate in Hz (default: `16000`) |
+| `session.audio.input.language` | string | No | Language code or `"multi"` for auto-detect (default: `"multi"`) |
+| `session.audio.input.turn_detection` | object | No | VAD configuration |
+| `session.audio.input.turn_detection.type` | string | No | VAD provider (default: `"assemblyai"`) |
+| `session.audio.output` | object | No | Output audio settings |
+| `session.audio.output.format` | object | No | Audio format |
+| `session.audio.output.format.type` | string | No | Format type (default: `"audio/pcm"`) |
+| `session.audio.output.format.rate` | number | No | Sample rate in Hz (default: `24000`) |
+| `session.audio.output.voice` | string | No | Voice ID (default: `"rex"`) |
+| `session.audio.output.speed` | number | No | Speech speed multiplier (default: `1`) |
+
+### Audio Stream
+
+Send raw PCM audio as binary WebSocket frames.
+
+**Format**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample Rate: Must match `audio.input.format.rate`
+- Channels: 1 (mono)
+- Recommended chunk size: 4096 samples
+
+---
+
+## Server Events
+
+### session.updated
+
+Confirmation of session configuration.
+
+**Response**
+
+```json
+{
+  "type": "session.updated",
+  "session": {
+    "id": "session_abc123def456",
+    "llm": {
+      "model": "llama-4-scout-17b-16e-instruct"
+    },
+    "instructions": "You are a helpful voice assistant.",
+    "tools": [],
+    "tool_choice": "auto",
+    "max_output_tokens": 4096,
+    "temperature": 0.8,
+    "audio": {
+      "input": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 16000
+        },
+        "language": "multi",
+        "turn_detection": {
+          "type": "assemblyai"
+        }
+      },
+      "output": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 24000
+        },
+        "voice": "rex",
+        "speed": 1
+      }
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"session.updated"` |
+| `session` | object | Complete session state |
+| `session.id` | string | Unique session identifier |
+| `session.llm` | object | LLM configuration |
+| `session.instructions` | string | System instructions |
+| `session.tools` | array | Available tools |
+| `session.tool_choice` | string | Tool selection mode |
+| `session.max_output_tokens` | number | Max output tokens |
+| `session.temperature` | number | LLM temperature |
+| `session.audio` | object | Audio configuration (mirrors request) |
+
+### conversation.item.done
+
+Notification when a conversation turn completes.
+
+**Response**
+
+```json
+{
+  "type": "conversation.item.done",
+  "event_id": "evt_789xyz",
+  "previous_item_id": null,
+  "item": {
+    "id": "msg_456def",
+    "type": "message",
+    "status": "completed",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "What's the weather like?"
+      }
+    ]
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"conversation.item.done"` |
+| `event_id` | string | Unique event identifier |
+| `previous_item_id` | string \| null | Previous item ID in conversation |
+| `item` | object | Conversation item |
+| `item.id` | string | Item identifier |
+| `item.type` | string | Item type: `"message"` |
+| `item.status` | string | Status: `"completed"` |
+| `item.role` | string | `"user"` or `"assistant"` |
+| `item.content` | array | Content parts |
+| `item.content[].type` | string | `"input_text"` (user) or `"text"` (assistant) |
+| `item.content[].text` | string | Transcript text |
+
+### tool_call
+
+Function call request from AI agent.
+
+**Response**
+
+```json
+{
+  "type": "tool_call",
+  "tool_call": {
+    "id": "call_abc123",
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "arguments": "{\"location\":\"San Francisco\"}"
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"tool_call"` |
+| `tool_call` | object | Tool call request |
+| `tool_call.id` | string | Unique call identifier |
+| `tool_call.type` | string | Type: `"function"` |
+| `tool_call.function` | object | Function details |
+| `tool_call.function.name` | string | Function name |
+| `tool_call.function.arguments` | string | JSON-encoded arguments |
+
+### Audio Stream
+
+Raw PCM audio response as binary WebSocket frames.
+
+**Format**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample Rate: Matches `audio.output.format.rate`
+- Channels: 1 (mono)
+
+---
+
+## Tools / Function Calling
+
+Define tools in `session.tools`:
+
+**Tool Schema**
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "get_weather",
+    "description": "Get current weather for a location",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "City name"
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["celsius", "fahrenheit"]
+        }
+      },
+      "required": ["location"]
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Must be `"function"` |
+| `function` | object | Yes | Function definition |
+| `function.name` | string | Yes | Function name |
+| `function.description` | string | Yes | Human-readable description |
+| `function.parameters` | object | Yes | JSON Schema for parameters |
+
+---
+
+## Supported Languages
+
+Values for `audio.input.language`:
+
+| Code | Language |
+|------|----------|
+| `multi` | Auto-detect (default) |
+| `en` | English |
+| `es` | Spanish |
+| `fr` | French |
+| `de` | German |
+| `it` | Italian |
+| `pt` | Portuguese |
+| `nl` | Dutch |
+| `hi` | Hindi |
+| `ja` | Japanese |
+| `zh` | Chinese |
+| `ko` | Korean |
+
+See [AssemblyAI documentation](https://www.assemblyai.com/docs) for full language support.
+
+---
+
+## Available Voices
+
+Values for `audio.output.voice` (Rime TTS):
+
+| Voice ID | Description |
+|----------|-------------|
+| `rex` | Default male voice |
+
+Additional voices available via Rime API.
+
+---
+
+## Examples
+
+### JavaScript Client
+
+```javascript
+const ws = new WebSocket('ws://localhost:8765/ws');
+
+ws.onopen = () => {
+  // Initialize session
+  ws.send(JSON.stringify({
+    type: "session.update",
+    session: {
+      instructions: "You are a helpful assistant.",
+      audio: {
+        input: {
+          format: { type: "audio/pcm", rate: 16000 },
+          language: "en"
+        },
+        output: {
+          format: { type: "audio/pcm", rate: 24000 },
+          voice: "rex"
+        }
+      }
+    }
+  }));
+};
+
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary audio - play it
+    playAudio(event.data);
+  } else {
+    // JSON event
+    const msg = JSON.parse(event.data);
+    console.log(msg.type);
+  }
+};
+
+// Send audio
+function streamMicrophone() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      const context = new AudioContext({ sampleRate: 16000 });
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      
+      processor.onaudioprocess = (e) => {
+        const pcm16 = convertToPCM16(e.inputBuffer.getChannelData(0));
+        ws.send(pcm16);
+      };
+      
+      source.connect(processor);
+      processor.connect(context.destination);
+    });
+}
+```
+
+### Python Client
+
+```python
+import asyncio
+import websockets
+import json
+
+async def main():
+    uri = "ws://localhost:8765/ws"
+    async with websockets.connect(uri) as ws:
+        # Initialize session
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "instructions": "You are a helpful assistant.",
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcm", "rate": 16000},
+                        "language": "en"
+                    },
+                    "output": {
+                        "format": {"type": "audio/pcm", "rate": 24000},
+                        "voice": "rex"
+                    }
+                }
+            }
+        }))
+        
+        # Handle messages
+        async for message in ws:
+            if isinstance(message, bytes):
+                # Binary audio
+                play_audio(message)
+            else:
+                # JSON event
+                data = json.loads(message)
+                print(f"Event: {data['type']}")
+
+asyncio.run(main())
+```
+
+---
+
+## Environment Variables
+
+Required API keys:
+
+```env
+ASSEMBLYAI_API_KEY=your_key
+CEREBRAS_API_KEY=your_key
+RIME_API_KEY=your_key
+```
