@@ -1,6 +1,7 @@
 ---
 title: "Speaker Identification"
 description: "Identify speakers by name or role in your transcript"
+hidden: true
 ---
 
 <AccordionGroup>
@@ -11,21 +12,17 @@ description: "Identify speakers by name or role in your transcript"
 
 </AccordionGroup>
 
-The Speaker Identification feature allows you to identify speakers by their actual names or roles, rather than generic labels like "Speaker A" or "Speaker B".
+Speaker Identification allows you to identify speakers by their actual names or roles, by mapping over generic labels like "Speaker A" or "Speaker B" and replacing them with the speaker names and roles that you provided.
 
 <Note>
-Speaker identification requires a transcript with **speaker labels enabled**. See the [Speaker Diarization guide](/docs/speech-to-text/speaker-diarization) to learn how to transcribe audio with speaker labels.
-</Note>
+  Speaker Identification requires that a file be transcribed with Speaker Diarization enabled. See [this section](/docs/speech-to-text/speaker-diarization) of our documentation if you would like to learn more about the Speaker Diarization feature.
 
-<Warning>
-To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient speech from each speaker. The accuracy of speaker identification depends on the quality of the audio and the distinctiveness of each speaker's voice.
-</Warning>
+  To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice.
+</Note>
 
 ## Quickstart
 
-This guide assumes you already have a completed transcript with speaker labels. The examples below show how to map generic speaker labels (Speaker A, Speaker B) to actual names or roles.
-
-Here’s the full sample code for what you’ll build in this tutorial:
+Here is how you can use the Speech Understanding API to map generic speaker labels to actual speaker names.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -79,7 +76,7 @@ transcript["speech_understanding"] = {
   "request": {
     "speaker_identification": {
       "speaker_type": "name",
-      "known_values": ["Interviewer", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
+      "known_values": ["Michel Martin", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
     }
   }
 }
@@ -99,92 +96,71 @@ for utterance in result["utterances"]:
 </Tab>
 </Tabs>
 
-## Identifying speakers by name
+## Output format
 
-Use the Speech Understanding API to map generic speaker labels to actual speaker names.
+The Speech Understanding API transforms generic speaker labels into identified names. Here is how the structure of the utterances in the `utterances` differs when Speaker Diarization is used and when Speaker Identification is used:
 
-### Example
-
-```python
-# Add speaker identification request to the transcript
-transcript["speech_understanding"] = {
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "name",
-            "known_values": ["Rhett", "Link"]  # Names of speakers to identify
-        }
-    }
-}
-
-# Send the modified transcript to the understanding API
-result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
-    json=transcript
-).json()
+**Before (Speaker Diarization):**
+```
+Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
 ```
 
-### Output format
-
-The API transforms generic speaker labels into identified names. Here's how the utterances change:
-
-**Before (generic labels):**
+**After (Speaker Identification):**
 ```
-Speaker A: Hey everyone, welcome back to the show!
-Speaker B: Thanks for having me, it's great to be here.
-Speaker A: Today we're talking about our favorite foods...
-```
-
-**After (identified speakers):**
-```
-Rhett: Hey everyone, welcome back to the show!
-Link: Thanks for having me, it's great to be here.
-Rhett: Today we're talking about our favorite foods...
+Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Peter DeCarlo: Good morning.
+Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
 ```
 
 ## Identifying speakers by role
 
-For customer service calls, AI interactions, or any scenario where you want to identify speakers by their function rather than name, use `speaker_type: "role"`.
+In addition to identifying speakers by name, you can also identify speakers by role. This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
+
+To identify speakers by role, use the `speaker_type` parameter with a value of "role"
 
 ### Example
 
 ```python
 # Add speaker identification request to the transcript
 transcript["speech_understanding"] = {
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "role",
-            "known_values": ["Agent", "Customer"]  # Roles instead of names
-        }
+  "request": {
+    "speaker_identification": {
+      "speaker_type": "role",
+      "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
     }
+  }
 }
 
-# Send the modified transcript to the understanding API
+# Send the modified transcript to the Speech Understanding API
 result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    headers={"Authorization": os.getenv("ASSEMBLYAI_API_KEY")},
-    json=transcript
+  "https://llm-gateway.assemblyai.com/v1/understanding",
+  headers = headers,
+  json = transcript
 ).json()
 ```
 
 ### Output format
 
-The API maps speaker labels to their respective roles:
+Before and after output when using roles instead of names:
 
-**Before (generic labels):**
+**Before (Speaker Diarization):**
 ```
-Speaker A: Thank you for calling customer support. How can I help you today?
-Speaker B: Hi, I'm having trouble with my account login.
-Speaker A: I'd be happy to help you with that. Can you tell me more about the issue?
-Speaker B: I keep getting an error message when I try to log in.
+Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
 ```
 
-**After (identified roles):**
+**After (Speaker Identification):**
 ```
-Agent: Thank you for calling customer support. How can I help you today?
-Customer: Hi, I'm having trouble with my account login.
-Agent: I'd be happy to help you with that. Can you tell me more about the issue?
-Customer: I keep getting an error message when I try to log in.
+Interviewer: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Interviewee: Good morning.
+Interviewer: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Interviewee: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
 ```
 
 **Common role combinations:**
