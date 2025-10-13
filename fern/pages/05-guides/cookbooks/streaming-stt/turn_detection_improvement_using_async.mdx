@@ -1,0 +1,883 @@
+---
+title: "Turn Detection Improvement Using Async"
+---
+
+This guide shows how to analyze utterance timing in pre-recorded audio to automatically configure ideal streaming turn detection settings.
+## Quickstart
+
+```python
+import requests
+import time
+import json
+import pyaudio
+import websocket
+import threading
+from urllib.parse import urlencode
+from datetime import datetime
+
+
+YOUR_API_KEY = "<YOUR-API-KEY>"  # Replace with your AssemblyAI API key
+AUDIO_FILE_PATH = "files/audio_sample.mp3"  # Or use a URL for gap analysis
+
+# Audio Configuration
+SAMPLE_RATE = 16000
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+recorded_frames = []
+recording_lock = threading.Lock()
+
+# Store the optimized configuration
+OPTIMIZED_CONFIG = {}
+
+
+def analyze_utterance_gaps(audio_file, api_key):
+    """
+    Analyzes a pre-recorded audio file to calculate average time between utterances.
+    Returns gap statistics that will inform streaming configuration.
+    """
+    print("=" * 70)
+    print("ANALYZING PRE-RECORDED AUDIO")
+    print("=" * 70)
+    
+    base_url = "https://api.assemblyai.com"
+    headers = {"authorization": api_key}
+    
+    # Upload audio file
+    print(f"\nUploading audio file: {audio_file}")
+    
+    if audio_file.startswith("http"):
+        upload_url = audio_file
+        print("Using provided URL")
+    else:
+        with open(audio_file, "rb") as f:
+            response = requests.post(
+                base_url + "/v2/upload",
+                headers=headers,
+                data=f
+            )
+        upload_url = response.json()["upload_url"]
+        print(f"Upload complete")
+    
+    # Enable Speaker Labels
+    data = {
+        "audio_url": upload_url,
+        "speaker_labels": True
+    }
+    
+    response = requests.post(
+        base_url + "/v2/transcript",
+        json=data,
+        headers=headers
+    )
+    transcript_id = response.json()['id']
+    print(f"Transcript ID: {transcript_id}")
+    
+    # Poll for completion
+    print("\nWaiting for transcription to complete...")
+    polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+    
+    while True:
+        transcription_result = requests.get(polling_endpoint, headers=headers).json()
+        
+        if transcription_result['status'] == 'completed':
+            print("Transcription completed!")
+            break
+        elif transcription_result['status'] == 'error':
+            raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+        else:
+            time.sleep(3)
+    
+    # Calculate gaps
+    utterances = transcription_result['utterances']
+    
+    if len(utterances) < 2:
+        print("\nNot enough utterances to analyze gaps (need at least 2)")
+        return None
+    
+    gaps = []
+    for i in range(len(utterances) - 1):
+        current_end = utterances[i]['end']
+        next_start = utterances[i + 1]['start']
+        gap = next_start - current_end
+        
+        if gap > 0:
+            gaps.append(gap)
+    
+    if not gaps:
+        print("\n No gaps found between utterances (all speech overlaps)")
+        return None
+    
+    # Calculate statistics
+    stats = {
+        'average_gap_ms': sum(gaps) / len(gaps),
+        'min_gap_ms': min(gaps),
+        'max_gap_ms': max(gaps),
+        'median_gap_ms': sorted(gaps)[len(gaps) // 2],
+        'total_utterances': len(utterances),
+        'total_gaps': len(gaps)
+    }
+    
+    print("\n" + "=" * 70)
+    print("GAP ANALYSIS RESULTS")
+    print("=" * 70)
+    print(f"Total utterances:            {stats['total_utterances']}")
+    print(f"Total gaps analyzed:         {stats['total_gaps']}")
+    print(f"Average gap:                 {stats['average_gap_ms']:.0f} ms ({stats['average_gap_ms']/1000:.2f} seconds)")
+    print(f"Median gap:                  {stats['median_gap_ms']:.0f} ms")
+    print(f"Minimum gap:                 {stats['min_gap_ms']:.0f} ms")
+    print(f"Maximum gap:                 {stats['max_gap_ms']:.0f} ms")
+    
+    # Determine variability
+    variability_ratio = stats['max_gap_ms'] / stats['average_gap_ms']
+    print(f"Variability ratio:           {variability_ratio:.2f}x")
+    
+    if variability_ratio > 3:
+        print("└─> HIGH variability - mixed conversation patterns")
+    elif variability_ratio > 2:
+        print("└─> MODERATE variability - some pattern variation")
+    else:
+        print("└─> LOW variability - consistent conversation rhythm")
+    
+    # Save transcript JSON to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_filename = f"transcript_{timestamp}.json"
+    
+    try:
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(transcription_result, f, indent=2, ensure_ascii=False)
+        print(f"\nTranscript JSON saved to: {json_filename}")
+    except Exception as e:
+        print(f"\nError saving transcript JSON: {e}")
+    
+    return stats
+
+
+def determine_streaming_config(gap_stats):
+    """
+    Determines optimal Universal-Streaming configuration based on gap analysis.
+    Returns WebSocket connection parameters.
+    """
+    if gap_stats is None:
+        print("\nUsing default balanced configuration (no gap data available)")
+        return {
+            'name': 'Balanced (Default)',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 400,
+            'max_turn_silence': 1280,
+            'description': 'Standard configuration for general use'
+        }
+    
+    print("\n" + "=" * 70)
+    print("DETERMINING OPTIMAL STREAMING CONFIGURATION")
+    print("=" * 70)
+    
+    avg_gap = gap_stats['average_gap_ms']
+    
+    # Determine configuration based on average gap
+    if avg_gap < 500:
+        config = {
+            'name': 'Aggressive',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 160,
+            'max_turn_silence': 400,
+            'description': 'Fast-paced conversation with quick turn-taking'
+        }
+        use_cases = "IVR systems, order confirmations, yes/no queries, retail support"
+    elif avg_gap < 1000:
+        config = {
+            'name': 'Balanced',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 400,
+            'max_turn_silence': 1280,
+            'description': 'Natural conversation pacing'
+        }
+        use_cases = "General customer support, consultations, standard voice agents"
+    else:
+        config = {
+            'name': 'Conservative',
+            'end_of_turn_confidence_threshold': 0.7,
+            'min_end_of_turn_silence_when_confident': 800,
+            'max_turn_silence': 3600,
+            'description': 'Thoughtful, complex speech with longer pauses'
+        }
+        use_cases = "Technical support, healthcare, legal consultations, troubleshooting"
+    
+    print(f"\nSelected Configuration: {config['name']}")
+    print(f"   Reasoning: Average gap of {avg_gap:.0f}ms indicates {config['description']}")
+    print(f"\nConfiguration Parameters:")
+    print(f"   • end_of_turn_confidence_threshold:        {config['end_of_turn_confidence_threshold']}")
+    print(f"   • min_end_of_turn_silence_when_confident:  {config['min_end_of_turn_silence_when_confident']} ms")
+    print(f"   • max_turn_silence:                        {config['max_turn_silence']} ms")
+    print(f"\nRecommended use cases: {use_cases}")
+    
+    return config
+
+
+#  WEBSOCKET HANDLERS WITH OPTIMIZED SETTINGS
+
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Using optimized {OPTIMIZED_CONFIG['name']} configuration")
+
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}")
+            print(f"   Expires at: {datetime.fromtimestamp(expires_at)}")
+            print(f"   Configuration: {OPTIMIZED_CONFIG['name']}")
+            print("\nSpeak now... (Press Ctrl+C to stop)\n")
+            
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(f"FINAL: {transcript}")
+            else:
+                print(f"\r  partial: {transcript}", end='')
+                
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio={audio_duration}s, Session={session_duration}s")
+            
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+
+# RUN STREAMING WITH OPTIMIZED CONFIGURATION
+
+def run_streaming(config):
+    """
+    Runs the streaming transcription with optimized turn detection settings.
+    """
+    global audio, stream, ws_app, OPTIMIZED_CONFIG
+    
+    OPTIMIZED_CONFIG = config
+    
+    print("\n" + "=" * 70)
+    print("STARTING REAL-TIME STREAMING")
+    print("=" * 70)
+    
+    # Build connection parameters with optimized settings
+    CONNECTION_PARAMS = {
+        "sample_rate": SAMPLE_RATE,
+        "format_turns": True,
+        "end_of_turn_confidence_threshold": config['end_of_turn_confidence_threshold'],
+        "min_end_of_turn_silence_when_confident": str(config['min_end_of_turn_silence_when_confident']),
+        "max_turn_silence": str(config['max_turn_silence'])
+    }
+    
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+    
+    print(f"\nWebSocket Endpoint: {API_ENDPOINT_BASE_URL}")
+    print(f"\nApplied Configuration:")
+    for key, value in CONNECTION_PARAMS.items():
+        print(f"   • {key}: {value}")
+    
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("\nMicrophone stream opened successfully.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message...")
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(1)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+
+# MAIN WORKFLOW
+
+def main():
+    """
+    Main workflow: Analyze -> Configure -> Run Streaming
+    """
+    
+    try:
+        # Step 1: Analyze pre-recorded audio
+        gap_stats = analyze_utterance_gaps(AUDIO_FILE_PATH, YOUR_API_KEY)
+        
+        # Step 2: Determine optimal configuration
+        streaming_config = determine_streaming_config(gap_stats)
+        
+        # Step 3: Run streaming with optimized settings
+        run_streaming(streaming_config)
+        
+    except Exception as e:
+        print(f"\nError in workflow: {str(e)}")
+        raise
+
+
+# EXECUTION
+
+if __name__ == "__main__":
+    main()
+```
+
+### Install/import Packages & Set API Key
+
+Install the packages.
+
+```bash
+pip install requests pyaudio websocket-client
+```
+
+Import packages and set your API key.
+
+```python
+import requests
+import time
+import json
+import pyaudio
+import websocket
+import threading
+from urllib.parse import urlencode
+from datetime import datetime
+import wave
+
+YOUR_API_KEY = "<YOUR-API-KEY>"  # Replace with your API key
+```
+
+### Audio Configuration & Global Variables
+
+Set all of your audio URL, configurations, and global variables. 
+
+```python
+AUDIO_FILE_PATH = "files/your_audio_file.mp3"  # Or use a URL for gap analysis
+
+# Audio Configuration
+SAMPLE_RATE = 16000
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+recorded_frames = []
+recording_lock = threading.Lock()
+
+# Store the optimized configuration
+OPTIMIZED_CONFIG = {}
+```
+
+### Create Function to Transcribe File and Analyze Utterance Gaps
+
+```python
+def analyze_utterance_gaps(audio_file, api_key):
+    """
+    Analyzes a pre-recorded audio file to calculate average time between utterances.
+    Returns gap statistics that will inform streaming configuration.
+    """
+    print("=" * 70)
+    print("ANALYZING PRE-RECORDED AUDIO")
+    print("=" * 70)
+    
+    base_url = "https://api.assemblyai.com"
+    headers = {"authorization": api_key}
+    
+    # Upload audio file
+    print(f"\nUploading audio file: {audio_file}")
+    
+    if audio_file.startswith("http"):
+        upload_url = audio_file
+        print("Using provided URL")
+    else:
+        with open(audio_file, "rb") as f:
+            response = requests.post(
+                base_url + "/v2/upload",
+                headers=headers,
+                data=f
+            )
+        upload_url = response.json()["upload_url"]
+        print(f"Upload complete")
+    
+    # Enable Speaker Labels
+    data = {
+        "audio_url": upload_url,
+        "speaker_labels": True
+    }
+    
+    response = requests.post(
+        base_url + "/v2/transcript",
+        json=data,
+        headers=headers
+    )
+    transcript_id = response.json()['id']
+    print(f"Transcript ID: {transcript_id}")
+    
+    # Poll for completion
+    print("\nWaiting for transcription to complete...")
+    polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+    
+    while True:
+        transcription_result = requests.get(polling_endpoint, headers=headers).json()
+        
+        if transcription_result['status'] == 'completed':
+            print("Transcription completed!")
+            break
+        elif transcription_result['status'] == 'error':
+            raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+        else:
+            time.sleep(3)
+    
+    # Calculate gaps
+    utterances = transcription_result['utterances']
+    
+    if len(utterances) < 2:
+        print("\nNot enough utterances to analyze gaps (need at least 2)")
+        return None
+    
+    gaps = []
+    for i in range(len(utterances) - 1):
+        current_end = utterances[i]['end']
+        next_start = utterances[i + 1]['start']
+        gap = next_start - current_end
+        
+        if gap > 0:
+            gaps.append(gap)
+    
+    if not gaps:
+        print("\n No gaps found between utterances (all speech overlaps)")
+        return None
+    
+    # Calculate statistics
+    stats = {
+        'average_gap_ms': sum(gaps) / len(gaps),
+        'min_gap_ms': min(gaps),
+        'max_gap_ms': max(gaps),
+        'median_gap_ms': sorted(gaps)[len(gaps) // 2],
+        'total_utterances': len(utterances),
+        'total_gaps': len(gaps)
+    }
+    
+    print("\n" + "=" * 70)
+    print("GAP ANALYSIS RESULTS")
+    print("=" * 70)
+    print(f"Total utterances:            {stats['total_utterances']}")
+    print(f"Total gaps analyzed:         {stats['total_gaps']}")
+    print(f"Average gap:                 {stats['average_gap_ms']:.0f} ms ({stats['average_gap_ms']/1000:.2f} seconds)")
+    print(f"Median gap:                  {stats['median_gap_ms']:.0f} ms")
+    print(f"Minimum gap:                 {stats['min_gap_ms']:.0f} ms")
+    print(f"Maximum gap:                 {stats['max_gap_ms']:.0f} ms")
+    
+    # Determine variability
+    variability_ratio = stats['max_gap_ms'] / stats['average_gap_ms']
+    print(f"Variability ratio:           {variability_ratio:.2f}x")
+    
+    if variability_ratio > 3:
+        print("└─> HIGH variability - mixed conversation patterns")
+    elif variability_ratio > 2:
+        print("└─> MODERATE variability - some pattern variation")
+    else:
+        print("└─> LOW variability - consistent conversation rhythm")
+    
+    # Save transcript JSON to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_filename = f"transcript_{timestamp}.json"
+    
+    try:
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(transcription_result, f, indent=2, ensure_ascii=False)
+        print(f"\nTranscript JSON saved to: {json_filename}")
+    except Exception as e:
+        print(f"\nError saving transcript JSON: {e}")
+    
+    return stats
+```
+
+### Create Function to Determine Ideal Streaming Settings
+
+```python
+def determine_streaming_config(gap_stats):
+    """
+    Determines optimal Universal-Streaming configuration based on gap analysis.
+    Returns WebSocket connection parameters.
+    """
+    if gap_stats is None:
+        print("\nUsing default balanced configuration (no gap data available)")
+        return {
+            'name': 'Balanced (Default)',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 400,
+            'max_turn_silence': 1280,
+            'description': 'Standard configuration for general use'
+        }
+    
+    print("\n" + "=" * 70)
+    print("DETERMINING OPTIMAL STREAMING CONFIGURATION")
+    print("=" * 70)
+    
+    avg_gap = gap_stats['average_gap_ms']
+    
+    # Determine configuration based on average gap
+    if avg_gap < 500:
+        config = {
+            'name': 'Aggressive',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 160,
+            'max_turn_silence': 400,
+            'description': 'Fast-paced conversation with quick turn-taking'
+        }
+        use_cases = "IVR systems, order confirmations, yes/no queries, retail support"
+    elif avg_gap < 1000:
+        config = {
+            'name': 'Balanced',
+            'end_of_turn_confidence_threshold': 0.4,
+            'min_end_of_turn_silence_when_confident': 400,
+            'max_turn_silence': 1280,
+            'description': 'Natural conversation pacing'
+        }
+        use_cases = "General customer support, consultations, standard voice agents"
+    else:
+        config = {
+            'name': 'Conservative',
+            'end_of_turn_confidence_threshold': 0.7,
+            'min_end_of_turn_silence_when_confident': 800,
+            'max_turn_silence': 3600,
+            'description': 'Thoughtful, complex speech with longer pauses'
+        }
+        use_cases = "Technical support, healthcare, legal consultations, troubleshooting"
+    
+    print(f"\nSelected Configuration: {config['name']}")
+    print(f"   Reasoning: Average gap of {avg_gap:.0f}ms indicates {config['description']}")
+    print(f"\nConfiguration Parameters:")
+    print(f"   • end_of_turn_confidence_threshold:        {config['end_of_turn_confidence_threshold']}")
+    print(f"   • min_end_of_turn_silence_when_confident:  {config['min_end_of_turn_silence_when_confident']} ms")
+    print(f"   • max_turn_silence:                        {config['max_turn_silence']} ms")
+    print(f"\nRecommended use cases: {use_cases}")
+    
+    return config
+```
+
+### Websocket Event Handlers
+
+#### Open Websocket
+
+```python
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Using optimized {OPTIMIZED_CONFIG['name']} configuration")
+
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+                
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+```
+
+#### Handle Websocket Messages
+
+```python
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}")
+            print(f"   Expires at: {datetime.fromtimestamp(expires_at)}")
+            print(f"   Configuration: {OPTIMIZED_CONFIG['name']}")
+            print("\nSpeak now... (Press Ctrl+C to stop)\n")
+            
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(f"FINAL: {transcript}")
+            else:
+                print(f"\r  partial: {transcript}", end='')
+                
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio={audio_duration}s, Session={session_duration}s")
+            
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+```
+
+#### Websocket Error Handling
+
+```python
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+```
+
+#### Close Websocket
+
+```python
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    
+    # save_wav_file()
+    
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+```
+
+### Create Function to Run Streaming with Optimized Configuration
+
+```python
+def run_streaming(config):
+    """
+    Runs the streaming transcription with optimized turn detection settings.
+    """
+    global audio, stream, ws_app, OPTIMIZED_CONFIG
+    
+    OPTIMIZED_CONFIG = config
+    
+    print("\n" + "=" * 70)
+    print("STARTING REAL-TIME STREAMING")
+    print("=" * 70)
+    
+    # Build connection parameters with optimized settings
+    CONNECTION_PARAMS = {
+        "sample_rate": SAMPLE_RATE,
+        "format_turns": True,
+        "end_of_turn_confidence_threshold": config['end_of_turn_confidence_threshold'],
+        "min_end_of_turn_silence_when_confident": str(config['min_end_of_turn_silence_when_confident']),
+        "max_turn_silence": str(config['max_turn_silence'])
+    }
+    
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+    
+    print(f"\nWebSocket Endpoint: {API_ENDPOINT_BASE_URL}")
+    print(f"\nApplied Configuration:")
+    for key, value in CONNECTION_PARAMS.items():
+        print(f"   • {key}: {value}")
+    
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open microphone stream
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("\nMicrophone stream opened successfully.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    # Create WebSocketApp
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    # Run WebSocketApp in a separate thread
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message...")
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(1)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+```
