@@ -22,7 +22,81 @@ Speaker Identification allows you to identify speakers by their actual names or 
 
 ## Quickstart
 
-Here is how you can use the Speech Understanding API to map generic speaker labels to actual speaker names.
+There are two ways to use Speaker Identification:
+
+1. **Transcribe and identify in one request** - Best when you're starting a new transcription and want speaker identification included automatically
+2. **Transcribe and identify in separate requests** - Best when you already have a completed transcript or for more complicated workflows where you might want to perform other tasks between the transcription and speaker identification process
+
+### Method 1: Transcribe and identify in one request
+
+This method is ideal when you're starting fresh and want both transcription and speaker identification in a single workflow.
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+## Use this section and comment out lines 17 and 18 to transcribe a local file
+# with open("./my-audio.mp3", "rb") as f:
+# response = requests.post(base_url + "/v2/upload",
+# headers=headers,
+# data=f)
+# upload_url = response.json()["upload_url"]
+
+# Or use a publicly-accessible URL:
+upload_url = "https://assembly.ai/wildfires.mp3"
+
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "name",
+        "known_values": ["Michel Martin", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
+      }
+    }
+  }
+}
+
+# transcribe file
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# poll for transcription results
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcript["status"] == "completed":
+    break
+
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+  else:
+    time.sleep(3)
+
+# Access the results and print utterances to the terminal
+for utterance in transcript["utterances"]:
+  print(f"{utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+</Tabs>
+
+### Method 2: Transcribe and identify in separate requests
+
+This method is useful for more complicated workflows where you need to separate transcription from speaker identification.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -62,14 +136,14 @@ polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
-    if transcript["status"] == "completed":
-      break
+  if transcript["status"] == "completed":
+    break
 
-    elif transcript["status"] == "error":
-      raise RuntimeError(f"Transcription failed: {transcript['error']}")
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
 
-    else:
-      time.sleep(3)
+  else:
+    time.sleep(3)
 
 # Add speaker identification request to the transcript
 transcript["speech_understanding"] = {
@@ -90,7 +164,7 @@ result = requests.post(
 
 # Access the results and print utterances to the terminal
 for utterance in result["utterances"]:
-    print(f"{utterance['speaker']}: {utterance['text']}")
+  print(f"{utterance['speaker']}: {utterance['text']}")
 ```
 
 </Tab>
@@ -122,12 +196,26 @@ Instead of identifying speakers by name as shown in the example above, you can a
 
 This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
 
-To identify speakers by role, use the `speaker_type` parameter with a value of "role"
+To identify speakers by role, use the `speaker_type` parameter with a value of "role":
 
 ### Example
 
 ```python
-# Add speaker identification request to the transcript
+# For Method 1 (transcribe and identify in one request):
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "role",
+        "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
+      }
+    }
+  }
+}
+
+# For Method 2 (add identification to existing transcript):
 transcript["speech_understanding"] = {
   "request": {
     "speaker_identification": {
@@ -175,7 +263,32 @@ Interviewee: Well, there's a couple of things. The season has been pretty dry al
 
 ### Request
 
-The Speech Understanding API requires a previously completed transcript so the request below shows how to retrieve a completed transcript using the transcript id and how to use that completed transcript in a request to the Speech Understanding API.
+#### Method 1: Transcribe and identify in one request
+
+When creating a new transcription, include the `speech_understanding` parameter directly in your transcription request:
+
+```bash
+curl -X POST \
+  "https://api.assemblyai.com/v2/transcript" \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_url": "https://assembly.ai/wildfires.mp3",
+    "speaker_labels": true,
+    "speech_understanding": {
+      "request": {
+        "speaker_identification": {
+          "speaker_type": "name",
+          "known_values": ["Michel Martin", "Peter DeCarlo"]
+        }
+      }
+    }
+  }'
+```
+
+#### Method 2: Add identification to existing transcripts
+
+For existing transcripts, retrieve the completed transcript and send it to the Speech Understanding API:
 
 ```bash {6} maxLines=15
 # Step 1: Get the completed transcript
