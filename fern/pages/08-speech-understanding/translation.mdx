@@ -443,6 +443,200 @@ for language_code, translated_text in result['translated_texts'].items():
 ```
 
 </Tab>
+
+<Tab language="javascript-http" title="JavaScript">
+
+```javascript
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  "authorization": "",
+  "content-type": "application/json"
+};
+
+// Or use a publicly-accessible URL
+const audioUrl = "https://assembly.ai/wildfires.mp3";
+
+async function translateTranscript() {
+  // Step 1: Submit transcription request (without translation)
+  const data = {
+    audio_url: audioUrl,
+    speaker_labels: true  // Optional: enable speaker diarization
+  };
+
+  let response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data)
+  });
+
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  console.log(`Transcription started. ID: ${transcriptId}`);
+
+  // Step 2: Poll for transcription completion
+  let transcript;
+  while (true) {
+    response = await fetch(pollingEndpoint, { headers });
+    transcript = await response.json();
+
+    if (transcript.status === "completed") {
+      console.log("Transcription completed!");
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      console.log(`Status: ${transcript.status}. Waiting...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  // Step 3: Add translation configuration to the completed transcript
+  transcript.speech_understanding = {
+    request: {
+      translation: {
+        target_languages: ["es", "de"],  // Translate to Spanish and German
+        formal: true  // Use formal language style
+      }
+    }
+  };
+
+  console.log("Requesting translations...");
+
+  // Step 4: Send to Speech Understanding API for translation
+  response = await fetch("https://llm-gateway.assemblyai.com/v1/understanding", {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(transcript)
+  });
+
+  const result = await response.json();
+  console.log("Translation completed!");
+
+  // Access and display results
+  console.log("\n--- Original Transcript ---");
+  console.log(result.text.substring(0, 200) + "...");
+
+  console.log("\n--- Translations ---");
+  for (const [languageCode, translatedText] of Object.entries(result.translated_texts)) {
+    console.log(`\n${languageCode.toUpperCase()}:`);
+    console.log(translatedText.substring(0, 200) + "...");
+  }
+}
+
+translateTranscript().catch(console.error);
+```
+
+</Tab>
+
+<Tab language="python-sdk" title="Python SDK">
+
+```python
+import assemblyai as aai
+
+# Set your API key
+aai.settings.api_key = ""
+
+# Or use a publicly-accessible URL
+audio_url = "https://assembly.ai/wildfires.mp3"
+
+# Step 1: Configure and create transcriber
+config = aai.TranscriptionConfig(
+  speaker_labels=True  # Optional: enable speaker diarization
+)
+
+transcriber = aai.Transcriber(config=config)
+
+print("Starting transcription...")
+
+# Step 2: Transcribe the audio
+transcript = transcriber.transcribe(audio_url)
+
+if transcript.status == aai.TranscriptStatus.error:
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print("Transcription completed!")
+
+# Step 3: Request translation using Speech Understanding
+print("Requesting translations...")
+
+result = transcript.speech_understanding(
+  translation={
+    "target_languages": ["es", "de"],  # Translate to Spanish and German
+    "formal": True  # Use formal language style
+  }
+)
+
+print("Translation completed!")
+
+# Access and display results
+print("\n--- Original Transcript ---")
+print(result.text[:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in result.translated_texts.items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
+```
+
+</Tab>
+
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { AssemblyAI } from 'assemblyai';
+
+// Set your API key
+const client = new AssemblyAI({
+  apiKey: ""
+});
+
+// Or use a publicly-accessible URL
+const audioUrl = "https://assembly.ai/wildfires.mp3";
+
+async function translateTranscript() {
+  // Step 1: Configure and transcribe the audio
+  console.log("Starting transcription...");
+
+  const transcript = await client.transcripts.transcribe({
+    audio: audioUrl,
+    speaker_labels: true  // Optional: enable speaker diarization
+  });
+
+  if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  }
+
+  console.log("Transcription completed!");
+
+  // Step 2: Request translation using Speech Understanding
+  console.log("Requesting translations...");
+
+  const result = await transcript.speechUnderstanding({
+    translation: {
+      target_languages: ["es", "de"],  // Translate to Spanish and German
+      formal: true  // Use formal language style
+    }
+  });
+
+  console.log("Translation completed!");
+
+  // Access and display results
+  console.log("\n--- Original Transcript ---");
+  console.log(result.text.substring(0, 200) + "...");
+
+  console.log("\n--- Translations ---");
+  for (const [languageCode, translatedText] of Object.entries(result.translated_texts)) {
+    console.log(`\n${languageCode.toUpperCase()}:`);
+    console.log(translatedText.substring(0, 200) + "...");
+  }
+}
+
+translateTranscript().catch(console.error);
+```
+
+</Tab>
 </Tabs>
 
 **Expected output:**
