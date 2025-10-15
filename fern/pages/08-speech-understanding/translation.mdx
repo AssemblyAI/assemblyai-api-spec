@@ -121,7 +121,22 @@ import { LanguageTable } from "../../assets/components/LanguagesTable";
 
 </AccordionGroup>
 
-Our Translation model lets you convert transcript text or spoken audio in one language to another language or languages of your choosing.
+## Overview
+
+The Translation feature automatically converts your transcribed audio content from one language to another, enabling you to reach global audiences without manual translation work. You can translate transcripts into over 100 languages with a single API request.
+
+**Key capabilities:**
+- Translate to multiple target languages simultaneously
+- Choose between formal and informal translation styles
+- Translate during transcription or add translations to existing transcripts
+- Get full-text translations that preserve the original meaning and context
+
+**Common use cases:**
+- Creating multilingual subtitles for video content
+- Translating customer support calls for international teams
+- Localizing podcast episodes for different markets
+- Making educational content accessible in multiple languages
+- Generating multilingual meeting summaries
 
 ## Quickstart
 
@@ -144,38 +159,36 @@ import time
 base_url = "https://api.assemblyai.com"
 
 headers = {
-  "authorization": "<YOUR_API_KEY>"
+  "authorization": "YOUR_API_KEY"
 }
 
-## Use this section and comment out lines 17 and 18 to transcribe a local file
+# Upload your audio file (optional - skip if using a public URL)
 # with open("./my-audio.mp3", "rb") as f:
-# response = requests.post(base_url + "/v2/upload",
-# headers=headers,
-# data=f)
-# upload_url = response.json()["upload_url"]
+#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#   audio_url = response.json()["upload_url"]
 
-# Or use a publicly-accessible URL:
-upload_url = "https://assembly.ai/wildfires.mp3"
+# Or use a publicly-accessible URL
+audio_url = "https://assembly.ai/wildfires.mp3"
 
+# Configure transcription with translation
 data = {
-  "audio_url": upload_url,
+  "audio_url": audio_url,
   "speech_understanding": {
     "request": {
       "translation": {
-        "target_languages": ["es"],
-        "formal": True
+        "target_languages": ["es", "de"],  # Translate to Spanish and German
+        "formal": True  # Use formal language style
       }
     }
   }
 }
 
-# transcribe file
+# Submit transcription request
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-# poll for transcription results
+# Poll transcription results
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
@@ -188,9 +201,32 @@ while True:
   else:
     time.sleep(3)
 
-# Access the results and print the translated text(s) to the terminal
-for language_code, text in transcript['translated_texts'].items():
-  print(f'"{language_code}": "{text}"')
+# Access and display results
+print("\n--- Original Transcript ---")
+print(transcript['text'][:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in transcript['translated_texts'].items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
+```
+
+**Expected output:**
+```
+Transcription started. ID: 735d90b6-2e8b-4748-b75d-d02b78eb7811
+Status: processing. Waiting...
+Transcription and translation completed!
+
+--- Original Transcript ---
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US...
+
+--- Translations ---
+
+ES:
+El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire...
+
+DE:
+Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus...
 ```
 
 </Tab>
@@ -198,7 +234,7 @@ for language_code, text in transcript['translated_texts'].items():
 
 ### Method 2: Transcribe and translate in separate requests
 
-This method is useful when you already have text that you would like to translate or for more complicated workflows where you want to separate the transcription and translation tasks
+This method is useful when you already have text that you would like to translate or for more complicated workflows where you want to separate the transcription and translation tasks.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -210,64 +246,234 @@ import time
 base_url = "https://api.assemblyai.com"
 
 headers = {
-  "authorization": "<YOUR_API_KEY>"
+  "authorization": ""
 }
 
-## Use this section and comment out lines 17 and 18 to transcribe a local file
+# Upload your audio file (optional - skip if using a public URL)
 # with open("./my-audio.mp3", "rb") as f:
-# response = requests.post(base_url + "/v2/upload",
-# headers=headers,
-# data=f)
-# upload_url = response.json()["upload_url"]
+#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#   audio_url = response.json()["upload_url"]
 
-# Or use a publicly-accessible URL:
-upload_url = "https://assembly.ai/wildfires.mp3"
+# Or use a publicly-accessible URL
+audio_url = "https://assembly.ai/wildfires.mp3"
 
+# Step 1: Submit transcription request (without translation)
 data = {
-  "audio_url": upload_url,
-  "speaker_labels": True
+  "audio_url": audio_url,
+  "speaker_labels": True  # Optional: enable speaker diarization
 }
 
-# transcribe file
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-# poll for transcription results
+print(f"Transcription started. ID: {transcript_id}")
+
+# Step 2: Poll for transcription completion
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
   if transcript["status"] == "completed":
+    print("Transcription completed!")
     break
 
   elif transcript["status"] == "error":
     raise RuntimeError(f"Transcription failed: {transcript['error']}")
 
   else:
+    print(f"Status: {transcript['status']}. Waiting...")
     time.sleep(3)
 
-# Enable translation
+# Step 3: Add translation configuration to the completed transcript
 transcript["speech_understanding"] = {
   "request": {
     "translation": {
-        "target_languages": ["es"],
-        "formal": True
+      "target_languages": ["es", "de"],  # Translate to Spanish and German
+      "formal": True  # Use formal language style
     }
   }
 }
 
-# Send the modified transcript to the Speech Understanding API
+print("Requesting translations...")
+
+# Step 4: Send to Speech Understanding API for translation
 result = requests.post(
   "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers = headers,
-  json = transcript
+  headers=headers,
+  json=transcript
 ).json()
 
-# Access the results and print the translated text(s) to the terminal
-for language_code, text in result['translated_texts'].items():
-  print(f'"{language_code}": "{text}"')
+print("Translation completed!")
+
+# Access and display results
+print("\n--- Original Transcript ---")
+print(result['text'][:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in result['translated_texts'].items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
+```
+
+**Expected output:**
+```
+Transcription started. ID: 735d90b6-2e8b-4748-b75d-d02b78eb7811
+Status: processing. Waiting...
+Transcription completed!
+Requesting translations...
+Translation completed!
+
+--- Original Transcript ---
+Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US...
+
+--- Translations ---
+
+ES:
+El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire...
+
+DE:
+Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus...
 ```
 
 </Tab>
 </Tabs>
+
+## Output format
+
+The Translation API returns translations in the `translated_texts` key of the response. This key contains an object where each property is a language code corresponding to one of your target languages, and the value is the full translated text.
+
+**Example response structure:**
+
+```json
+{
+  "id": "735d90b6-2e8b-4748-b75d-d02b78eb7811",
+  "status": "completed",
+  "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts...",
+  "translated_texts": {
+    "es": "El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire...",
+    "de": "Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus..."
+  },
+  "speech_understanding": {
+    "request": {
+      "translation": {
+        "formal": true,
+        "target_languages": ["es", "de"]
+      }
+    },
+    "response": {
+      "translation": {
+        "status": "success"
+      }
+    }
+  }
+}
+```
+
+## API reference
+
+### Request
+
+#### Method 1: Transcribe and translate in one request
+
+When creating a new transcription, include the `speech_understanding` parameter directly in your transcription request:
+
+```bash
+curl -X POST \
+  "https://api.assemblyai.com/v2/transcript" \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_url": "https://assembly.ai/wildfires.mp3",
+    "speech_understanding": {
+      "request": {
+        "translation": {
+          "target_languages": ["es", "de"],
+          "formal": true
+        }
+      }
+    }
+  }'
+```
+
+#### Method 2: Add translation to existing transcripts
+
+For existing transcripts, retrieve the completed transcript and send it to the Speech Understanding API:
+
+```bash {6} maxLines=15
+# Step 1: Get the completed transcript
+transcript=$(curl -s -X GET \
+  "https://api.assemblyai.com/v2/transcript/YOUR_TRANSCRIPT_ID" \
+  -H "Authorization: YOUR_API_KEY")
+
+# Step 2: Add translation and send to Speech Understanding API
+curl -X POST \
+  "https://llm-gateway.assemblyai.com/v1/understanding" \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "$(echo "$transcript" | jq '. + {
+    "speech_understanding": {
+      "request": {
+        "translation": {
+          "target_languages": ["es", "de"],
+          "formal": true
+        }
+      }
+    }
+  }')"
+```
+
+| Key                                          | Type    | Required? | Description                                                                                                                      |
+| -------------------------------------------- | ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `speech_understanding`                       | object  | Yes       | Container for speech understanding requests.                                                                                     |
+| `speech_understanding.request`               | object  | Yes       | The understanding request configuration.                                                                                         |
+| `speech_understanding.request.translation`   | object  | Yes       | Translation configuration.                                                                                                       |
+| `translation.target_languages`               | array   | Yes       | Array of language codes to translate the transcript into. See the supported languages table for available language codes.        |
+| `translation.formal`                         | boolean | No        | Whether to use formal language in translations. Defaults to `false`. When `true`, uses formal pronouns and grammatical forms.    |
+
+### Response
+
+The Translation API returns your original transcript response with an additional `translated_texts` key containing the translations.
+
+```json
+{
+  "id": "735d90b6-2e8b-4748-b75d-d02b78eb7811",
+  "status": "completed",
+  "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US...",
+  "translated_texts": {
+    "es": "El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire en todo Estados Unidos...",
+    "de": "Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus..."
+  },
+  "speech_understanding": {
+    "request": {
+      "translation": {
+        "formal": true,
+        "target_languages": ["es", "de"]
+      }
+    },
+    "response": {
+      "translation": {
+        "status": "success"
+      }
+    }
+  }
+}
+```
+
+| Key                                           | Type   | Description                                                                                                                          |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `translated_texts`                            | object | An object containing the translated texts, where each key is a language code and each value is the full translated transcript text. |
+| `speech_understanding`                        | object | Container for speech understanding request and response information.                                                                 |
+| `speech_understanding.request`                | object | The original translation request configuration that was submitted.                                                                   |
+| `speech_understanding.request.translation`    | object | The translation parameters that were used.                                                                                           |
+| `speech_understanding.response`               | object | The response information from the translation process.                                                                               |
+| `speech_understanding.response.translation`   | object | Status information about the translation.                                                                                            |
+| `speech_understanding.response.translation.status` | string | The status of the translation. Will be `"success"` when translation completes successfully.                                          |
+
+#### Key differences from standard transcription
+
+| Field | Standard Transcription | With Translation |
+|-------|------------------------|------------------|
+| `translated_texts` | Not present | Object with language codes as keys and translated texts as values |
+| `speech_understanding` | Not present | Object containing the translation request and response details |
+
+All other fields from the original transcript (`text`, `words`, `utterances`, `confidence`, etc.) remain unchanged.

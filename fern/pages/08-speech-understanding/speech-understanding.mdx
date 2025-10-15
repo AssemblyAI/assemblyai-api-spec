@@ -12,20 +12,73 @@ hidden: true
 
 </AccordionGroup>
 
-Speaker Identification allows you to identify speakers by their actual names or roles, by mapping over generic labels like "Speaker A" or "Speaker B" and replacing them with the speaker names and roles that you provided.
+## Overview
+
+Speaker Identification allows you to identify speakers by their actual names or roles, transforming generic labels like "Speaker A" or "Speaker B" into meaningful identifiers that you provide.
+
+### What you'll get
+
+Speaker Identification transforms your transcripts from generic labels to meaningful identifiers:
+
+| Without Speaker Identification | With Speaker Identification |
+|-------------------------------|----------------------------|
+| Speaker A, Speaker B, Speaker C | Michel Martin, Peter DeCarlo, John Smith |
+| Generic labels throughout entire transcript | Actual names or roles for each speaker |
+| Requires manual post-processing | Automatic identification |
+| Difficult to follow multi-speaker conversations | Clear attribution for each utterance |
+
+**Example transformation:**
+
+**Before:**
+```txt
+Speaker A: Good morning, and welcome to the show.
+Speaker B: Thanks for having me.
+Speaker A: Let's dive into today's topic...
+```
+
+**After:**
+```txt
+Michel Martin: Good morning, and welcome to the show.
+Peter DeCarlo: Thanks for having me.
+Michel Martin: Let's dive into today's topic...
+```
+
+## Prerequisites
 
 <Note>
   Speaker Identification requires that a file be transcribed with Speaker Diarization enabled. See [this section](/docs/speech-to-text/speaker-diarization) of our documentation if you would like to learn more about the Speaker Diarization feature.
 
-  To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice, which will have a downstream affect on the quality of Speaker Identification.
+  To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice, which will have a downstream effect on the quality of Speaker Identification.
 </Note>
 
-## Quickstart
+**Requirements checklist:**
+- Audio file with multiple speakers
+- Speaker Diarization enabled (`speaker_labels: true`)
+- Clear, distinguishable voices in the audio
+- Sufficient spoken audio from each speaker (recommended: at least 30 seconds per speaker)
+
+## When to use Speaker Identification
+
+Speaker Identification is ideal for scenarios where knowing who said what is important:
+
+**By name:**
+- **Podcast transcription**: Automatically label hosts and guests by their actual names
+- **Meeting transcription**: Identify participants by name for accurate meeting minutes
+- **Interview recordings**: Distinguish between interviewer and specific interviewees
+- **Panel discussions**: Track contributions from individual panelists
+
+**By role:**
+- **Customer service calls**: Distinguish between Agent and Customer
+- **AI interactions**: Separate AI Assistant responses from User queries
+- **Technical support**: Identify Support staff versus Customer
+- **Research interviews**: Label Researcher and Participant
+
+## How to use Speaker Identification
 
 There are two ways to use Speaker Identification:
 
 1. **Transcribe and identify in one request** - Best when you're starting a new transcription and want speaker identification included automatically
-2. **Transcribe and identify in separate requests** - Best when you already have a completed transcript or for more complicated workflows where you might want to perform other tasks between the transcription and speaker identification process
+2. **Transcribe and identify in separate requests** - Best when you already have a completed transcript or for more complex workflows where you might want to perform other tasks between the transcription and speaker identification process
 
 ### Method 1: Transcribe and identify in one request
 
@@ -44,16 +97,15 @@ headers = {
   "authorization": "<YOUR_API_KEY>"
 }
 
-## Use this section and comment out lines 17 and 18 to transcribe a local file
+# Upload your audio file (optional - skip if using a public URL)
 # with open("./my-audio.mp3", "rb") as f:
-# response = requests.post(base_url + "/v2/upload",
-# headers=headers,
-# data=f)
-# upload_url = response.json()["upload_url"]
+#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#   audio_url = response.json()["upload_url"]
 
-# Or use a publicly-accessible URL:
+# Or use a publicly-accessible URL
 upload_url = "https://assembly.ai/wildfires.mp3"
 
+# Configure transcript with speaker identification
 data = {
   "audio_url": upload_url,
   "speaker_labels": True,
@@ -67,13 +119,12 @@ data = {
   }
 }
 
-# transcribe file
+# Submit the transcription request
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-# poll for transcription results
+# Poll for transcription results
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
@@ -96,7 +147,7 @@ for utterance in transcript["utterances"]:
 
 ### Method 2: Transcribe and identify in separate requests
 
-This method is useful for more complicated workflows where you need to separate transcription from speaker identification.
+This method is useful for more complex workflows where you need to separate transcription from speaker identification.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -111,14 +162,7 @@ headers = {
   "authorization": "<YOUR_API_KEY>"
 }
 
-## Use this section and comment out lines 17 and 18 to transcribe a local file
-# with open("./my-audio.mp3", "rb") as f:
-# response = requests.post(base_url + "/v2/upload",
-# headers=headers,
-# data=f)
-# upload_url = response.json()["upload_url"]
-
-# Or use a publicly-accessible URL:
+# Use a publicly-accessible URL
 upload_url = "https://assembly.ai/wildfires.mp3"
 
 data = {
@@ -126,13 +170,13 @@ data = {
   "speaker_labels": True
 }
 
-# transcribe file
+# Transcribe file
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-# poll for transcription results
+# Poll for transcription results
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
@@ -170,35 +214,17 @@ for utterance in result["utterances"]:
 </Tab>
 </Tabs>
 
-## Output format
+## Advanced usage
 
-The Speech Understanding API transforms generic speaker labels into specific names or roles. Here is how the structure of the utterances in the `utterances` key differs when Speaker Diarization is used versus when Speaker Identification is used:
+### Identifying speakers by role
 
-**Before (Speaker Diarization):**
-```txt wordWrap
-Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Speaker B: Good morning.
-Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-**After (Speaker Identification):**
-```txt wordWrap
-Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Peter DeCarlo: Good morning.
-Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-## Identifying speakers by role
-
-Instead of identifying speakers by name as shown in the example above, you can also identify speakers by role.
+Instead of identifying speakers by name as shown in the examples above, you can also identify speakers by role.
 
 This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
 
 To identify speakers by role, use the `speaker_type` parameter with a value of "role":
 
-### Example
+#### Example
 
 ```python
 # For Method 1 (transcribe and identify in one request):
@@ -233,11 +259,34 @@ result = requests.post(
 ).json()
 ```
 
-**Common role combinations:**
+#### Common role combinations
+
 - `["Agent", "Customer"]` - Customer service calls
 - `["AI Assistant", "User"]` - AI chatbot interactions
 - `["Support", "Customer"]` - Technical support calls
 - `["Interviewer", "Interviewee"]` - Interview recordings
+- `["Host", "Guest"]` - Podcast or show recordings
+- `["Moderator", "Panelist"]` - Panel discussions
+
+### Output format details
+
+The Speech Understanding API transforms generic speaker labels into specific names or roles. Here is how the structure of the utterances in the `utterances` key differs when Speaker Diarization is used versus when Speaker Identification is used:
+
+**Before (Speaker Diarization only):**
+```txt wordWrap
+Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Speaker B: Good morning.
+Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
+```
+
+**After (with Speaker Identification):**
+```txt wordWrap
+Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
+Peter DeCarlo: Good morning.
+Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
+Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
+```
 
 ## API reference
 
@@ -293,13 +342,15 @@ curl -X POST \
   }')"
 ```
 
+#### Request parameters
+
 | Key                                                | Type   | Required? | Description                                                                                |
 | -------------------------------------------------- | ------ | --------- | ------------------------------------------------------------------------------------------ |
 | `speech_understanding`                             | object | Yes       | Container for speech understanding requests.                                               |
 | `speech_understanding.request`                     | object | Yes       | The understanding request configuration.                                                   |
 | `speech_understanding.request.speaker_identification` | object | Yes       | Speaker identification configuration.                                                   |
 | `speaker_identification.speaker_type`              | string | Yes       | The type of speakers being identified, "name" for actual names or "role" for roles/titles. |
-| `speaker_identification.known_values`              | array  | Optional* | List of speaker names or roles to identify in the audio. Required if `speaker_type` is "role".                                   |
+| `speaker_identification.known_values`              | array  | Conditional | List of speaker names or roles. Required when using speaker identification, but the API will attempt identification even with an empty array based on context. |
 
 ### Response
 
@@ -316,12 +367,12 @@ The Speaker Identification API returns a modified version of your transcript wit
       "confidence": 0.9815734,
       "words": [
         {
-          "text": "Smoke"
+          "text": "Smoke",
           "start": 240,
           "end": 640,
           "confidence": 0.90152997,
-          "speaker": "Michel Martin",
-        },
+          "speaker": "Michel Martin"
+        }
         // ... more words
       ]
     },
@@ -338,13 +389,15 @@ The Speaker Identification API returns a modified version of your transcript wit
           "end": 28260,
           "confidence": 0.96484375,
           "speaker": "Peter DeCarlo"
-        },
+        }
         // ... more words
       ]
     }
   ]
 }
 ```
+
+#### Response fields
 
 | Key                                 | Type   | Description                                                                                                                                                |
 | ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
