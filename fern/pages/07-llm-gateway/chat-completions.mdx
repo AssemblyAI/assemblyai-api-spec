@@ -1,0 +1,160 @@
+---
+title: "Basic Chat Completions"
+description: "Send simple messages and receive responses from LLM models"
+hidden: true
+---
+
+## Overview
+
+Basic chat completions allow you to send a message and receive a response from the model. This is the simplest way to interact with the LLM Gateway.
+
+## Getting started
+
+Send a message and receive a response:
+
+```python
+import requests
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers = headers,
+    json = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+        "max_tokens": 1000
+    }
+)
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])
+```
+
+## API Reference
+
+### Request
+
+The LLM Gateway accepts POST requests to `https://llm-gateway.assemblyai.com/v1/chat/completions` with the following parameters:
+
+```bash
+curl -X POST \
+  "https://llm-gateway.assemblyai.com/v1/chat/completions" \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of France?"
+      }
+    ],
+    "max_tokens": 1000
+  }'
+```
+
+#### Request parameters
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `model` | string | Yes | The model to use for completion. See [Available models](/docs/llm-gateway/overview#available-models) section for supported values. |
+| `messages` | array | Yes* | An array of message objects representing the conversation history. Either `messages` or `prompt` is required. |
+| `prompt` | string | Yes* | A simple string prompt for single request/response interactions. Either `messages` or `prompt` is required. |
+| `max_tokens` | number | No | The maximum number of tokens to generate. Range: [1, context_length). |
+| `temperature` | number | No | Controls randomness in the output. Higher values make output more random. Range: [0, 2]. |
+
+#### Message object
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `role` | string | Yes | The role of the message sender. Valid values: `"user"`, `"assistant"`, `"system"`, or `"tool"`. |
+| `content` | string or array | Yes | The message content. Can be a string or an array of content parts for the `"user"` role. |
+| `name` | string | No | An optional name for the message sender. For non-OpenAI models, this will be prepended as `{name}: {content}`. |
+
+#### Content part object
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `type` | string | Yes | The type of content. Currently only `"text"` is supported. |
+| `text` | string | Yes | The text content. |
+
+### Response
+
+The API returns a JSON response with the model's completion:
+
+```json
+{
+  "request_id": "abc123",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "The capital of France is Paris."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "request": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 1000
+  },
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 8,
+    "total_tokens": 23
+  }
+}
+```
+
+#### Response fields
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `request_id` | string | A unique identifier for the request. |
+| `choices` | array | An array of completion choices. Typically contains one choice. |
+| `choices[i].message` | object | The message object containing the model's response. |
+| `choices[i].message.role` | string | The role of the message, typically `"assistant"`. |
+| `choices[i].message.content` | string | The text content of the model's response. |
+| `choices[i].finish_reason` | string | The reason the model stopped generating. Common values: `"stop"`, `"length"`. |
+| `request` | object | Echo of the request parameters (excluding `prompt` and `messages`). |
+| `usage` | object | Token usage statistics for the request. |
+| `usage.prompt_tokens` | number | Number of tokens in the prompt. |
+| `usage.completion_tokens` | number | Number of tokens in the completion. |
+| `usage.total_tokens` | number | Total tokens used (prompt + completion). |
+
+### Error response
+
+If an error occurs, the API returns an error response:
+
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "Invalid request: missing required field 'model'",
+    "metadata": {}
+  }
+}
+```
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `error` | object | Container for error information. |
+| `error.code` | number | HTTP status code for the error. |
+| `error.message` | string | A human-readable description of the error. |
+| `error.metadata` | object | Optional additional error context. |
+
+#### Common error codes
+
+| Code | Description |
+|------|-------------|
+| 400 | Bad Request - Invalid request parameters |
+| 401 | Unauthorized - Invalid or missing API key |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Invalid endpoint or model |
+| 429 | Too Many Requests - Rate limit exceeded |
+| 500 | Internal Server Error - Server-side error |
