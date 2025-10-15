@@ -212,92 +212,6 @@ for language_code, translated_text in transcript['translated_texts'].items():
 ```
 
 </Tab>
-</Tabs>
-
-### Method 2: Transcribe and translate in separate requests
-
-This method is useful when you already have text that you would like to translate or for more complicated workflows where you want to separate the transcription and translation tasks.
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-  "authorization": ""
-}
-
-# Upload your audio file (optional - skip if using a public URL)
-# with open("./my-audio.mp3", "rb") as f:
-#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-#   audio_url = response.json()["upload_url"]
-
-# Or use a publicly-accessible URL
-audio_url = "https://assembly.ai/wildfires.mp3"
-
-# Step 1: Submit transcription request (without translation)
-data = {
-  "audio_url": audio_url,
-  "speaker_labels": True  # Optional: enable speaker diarization
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-transcript_id = response.json()["id"]
-polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
-
-print(f"Transcription started. ID: {transcript_id}")
-
-# Step 2: Poll for transcription completion
-while True:
-  transcript = requests.get(polling_endpoint, headers=headers).json()
-
-  if transcript["status"] == "completed":
-    print("Transcription completed!")
-    break
-
-  elif transcript["status"] == "error":
-    raise RuntimeError(f"Transcription failed: {transcript['error']}")
-
-  else:
-    print(f"Status: {transcript['status']}. Waiting...")
-    time.sleep(3)
-
-# Step 3: Add translation configuration to the completed transcript
-transcript["speech_understanding"] = {
-  "request": {
-    "translation": {
-      "target_languages": ["es", "de"],  # Translate to Spanish and German
-      "formal": True  # Use formal language style
-    }
-  }
-}
-
-print("Requesting translations...")
-
-# Step 4: Send to Speech Understanding API for translation
-result = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers=headers,
-  json=transcript
-).json()
-
-print("Translation completed!")
-
-# Access and display results
-print("\n--- Original Transcript ---")
-print(result['text'][:200] + "...")
-
-print("\n--- Translations ---")
-for language_code, translated_text in result['translated_texts'].items():
-  print(f"\n{language_code.upper()}:")
-  print(translated_text[:200] + "...")
-```
-
-</Tab>
 <Tab language="javascript" title="JavaScript" default>
 
 ```javascript
@@ -440,6 +354,92 @@ if (transcript.translated_texts) {
     console.log(translatedText.substring(0, 200) + '...');
   }
 }
+```
+
+</Tab>
+</Tabs>
+
+### Method 2: Transcribe and translate in separate requests
+
+This method is useful when you already have text that you would like to translate or for more complicated workflows where you want to separate the transcription and translation tasks.
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": ""
+}
+
+# Upload your audio file (optional - skip if using a public URL)
+# with open("./my-audio.mp3", "rb") as f:
+#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#   audio_url = response.json()["upload_url"]
+
+# Or use a publicly-accessible URL
+audio_url = "https://assembly.ai/wildfires.mp3"
+
+# Step 1: Submit transcription request (without translation)
+data = {
+  "audio_url": audio_url,
+  "speaker_labels": True  # Optional: enable speaker diarization
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+print(f"Transcription started. ID: {transcript_id}")
+
+# Step 2: Poll for transcription completion
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcript["status"] == "completed":
+    print("Transcription completed!")
+    break
+
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+  else:
+    print(f"Status: {transcript['status']}. Waiting...")
+    time.sleep(3)
+
+# Step 3: Add translation configuration to the completed transcript
+transcript["speech_understanding"] = {
+  "request": {
+    "translation": {
+      "target_languages": ["es", "de"],  # Translate to Spanish and German
+      "formal": True  # Use formal language style
+    }
+  }
+}
+
+print("Requesting translations...")
+
+# Step 4: Send to Speech Understanding API for translation
+result = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/understanding",
+  headers=headers,
+  json=transcript
+).json()
+
+print("Translation completed!")
+
+# Access and display results
+print("\n--- Original Transcript ---")
+print(result['text'][:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in result['translated_texts'].items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
 ```
 
 </Tab>
