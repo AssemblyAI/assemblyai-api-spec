@@ -211,20 +211,6 @@ for language_code, translated_text in transcript['translated_texts'].items():
   print(translated_text[:200] + "...")
 ```
 
-**Expected output:**
-```
---- Original Transcript ---
-Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US...
-
---- Translations ---
-
-ES:
-El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire...
-
-DE:
-Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus...
-```
-
 </Tab>
 </Tabs>
 
@@ -311,14 +297,156 @@ for language_code, translated_text in result['translated_texts'].items():
   print(translated_text[:200] + "...")
 ```
 
+</Tab>
+<Tab language="javascript" title="JavaScript" default>
+
+```javascript
+const fetch = require('node-fetch');
+
+const baseUrl = 'https://api.assemblyai.com';
+const headers = {
+  authorization: 'YOUR_API_KEY'
+};
+
+const audioUrl = 'https://assembly.ai/wildfires.mp3';
+
+// Configure transcription with translation
+const data = {
+  audio_url: audioUrl,
+  speech_understanding: {
+    request: {
+      translation: {
+        target_languages: ['es', 'de'],  // Translate to Spanish and German
+        formal: true  // Use formal language style
+      }
+    }
+  }
+};
+
+// Submit transcription request
+async function transcribeAndTranslate() {
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+
+  const transcript = await response.json();
+  const transcriptId = transcript.id;
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcriptResult = await pollingResponse.json();
+
+    if (transcriptResult.status === 'completed') {
+      // Access and display results
+      console.log('\n--- Original Transcript ---');
+      console.log(transcriptResult.text.substring(0, 200) + '...');
+
+      console.log('\n--- Translations ---');
+      for (const [languageCode, translatedText] of Object.entries(transcriptResult.translated_texts)) {
+        console.log(`\n${languageCode.toUpperCase()}:`);
+        console.log(translatedText.substring(0, 200) + '...');
+      }
+      break;
+    } else if (transcriptResult.status === 'error') {
+      throw new Error(`Transcription failed: ${transcriptResult.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+}
+
+transcribeAndTranslate();
+```
+
+</Tab>
+
+<Tab language="python" title="Python SDK">
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+
+transcriber = aai.Transcriber()
+
+# Configure transcription with translation
+config = aai.TranscriptionConfig(
+  speech_understanding=aai.SpeechUnderstandingConfig(
+    translation=aai.TranslationConfig(
+      target_languages=['es', 'de'],  # Translate to Spanish and German
+      formal=True  # Use formal language style
+    )
+  )
+)
+
+# Submit transcription request
+transcript = transcriber.transcribe(
+  "https://assembly.ai/wildfires.mp3",
+  config=config
+)
+
+# Access and display results
+print("\n--- Original Transcript ---")
+print(transcript.text[:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in transcript.translated_texts.items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
+```
+
+</Tab>
+
+<Tab language="typescript" title="JavaScript SDK">
+
+```typescript
+import { AssemblyAI } from 'assemblyai';
+
+const client = new AssemblyAI({
+  apiKey: 'YOUR_API_KEY'
+});
+
+// Configure transcription with translation
+const config = {
+  audio_url: 'https://assembly.ai/wildfires.mp3',
+  speech_understanding: {
+    request: {
+      translation: {
+        target_languages: ['es', 'de'],  // Translate to Spanish and German
+        formal: true  // Use formal language style
+      }
+    }
+  }
+};
+
+// Submit transcription request
+const transcript = await client.transcripts.transcribe(config);
+
+// Access and display results
+console.log('\n--- Original Transcript ---');
+console.log(transcript.text?.substring(0, 200) + '...');
+
+console.log('\n--- Translations ---');
+if (transcript.translated_texts) {
+  for (const [languageCode, translatedText] of Object.entries(transcript.translated_texts)) {
+    console.log(`\n${languageCode.toUpperCase()}:`);
+    console.log(translatedText.substring(0, 200) + '...');
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
 **Expected output:**
 ```
-Transcription started. ID: 735d90b6-2e8b-4748-b75d-d02b78eb7811
-Status: processing. Waiting...
-Transcription completed!
-Requesting translations...
-Translation completed!
-
 --- Original Transcript ---
 Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US...
 
@@ -330,9 +458,6 @@ El humo de cientos de incendios forestales en Canadá está provocando alertas d
 DE:
 Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus...
 ```
-
-</Tab>
-</Tabs>
 
 ## Output format
 
