@@ -173,12 +173,7 @@ headers = {
   "authorization": "YOUR_API_KEY"
 }
 
-# Upload your audio file (optional - skip if using a public URL)
-# with open("./my-audio.mp3", "rb") as f:
-#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-#   audio_url = response.json()["upload_url"]
-
-# Or use a publicly-accessible URL
+# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 audio_url = "https://assembly.ai/wildfires.mp3"
 
 # Configure transcription with translation
@@ -223,6 +218,42 @@ for language_code, translated_text in transcript['translated_texts'].items():
 ```
 
 </Tab>
+<Tab language="python" title="Python SDK">
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+
+transcriber = aai.Transcriber()
+
+# Configure transcription with translation
+config = aai.TranscriptionConfig(
+  speech_understanding=aai.SpeechUnderstandingConfig(
+    translation=aai.TranslationConfig(
+      target_languages=['es', 'de'],  # Translate to Spanish and German
+      formal=True  # Use formal language style
+    )
+  )
+)
+
+# Submit transcription request
+transcript = transcriber.transcribe(
+  "https://assembly.ai/wildfires.mp3",
+  config=config
+)
+
+# Access and display results
+print("\n--- Original Transcript ---")
+print(transcript.text[:200] + "...")
+
+print("\n--- Translations ---")
+for language_code, translated_text in transcript.translated_texts.items():
+  print(f"\n{language_code.upper()}:")
+  print(translated_text[:200] + "...")
+```
+
+</Tab>
 <Tab language="javascript" title="JavaScript" default>
 
 ```javascript
@@ -233,6 +264,7 @@ const headers = {
   authorization: 'YOUR_API_KEY'
 };
 
+// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 const audioUrl = 'https://assembly.ai/wildfires.mp3';
 
 // Configure transcription with translation
@@ -291,44 +323,6 @@ transcribeAndTranslate();
 ```
 
 </Tab>
-
-<Tab language="python" title="Python SDK">
-
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "YOUR_API_KEY"
-
-transcriber = aai.Transcriber()
-
-# Configure transcription with translation
-config = aai.TranscriptionConfig(
-  speech_understanding=aai.SpeechUnderstandingConfig(
-    translation=aai.TranslationConfig(
-      target_languages=['es', 'de'],  # Translate to Spanish and German
-      formal=True  # Use formal language style
-    )
-  )
-)
-
-# Submit transcription request
-transcript = transcriber.transcribe(
-  "https://assembly.ai/wildfires.mp3",
-  config=config
-)
-
-# Access and display results
-print("\n--- Original Transcript ---")
-print(transcript.text[:200] + "...")
-
-print("\n--- Translations ---")
-for language_code, translated_text in transcript.translated_texts.items():
-  print(f"\n{language_code.upper()}:")
-  print(translated_text[:200] + "...")
-```
-
-</Tab>
-
 <Tab language="typescript" title="JavaScript SDK">
 
 ```typescript
@@ -387,27 +381,22 @@ headers = {
   "authorization": ""
 }
 
-# Upload your audio file (optional - skip if using a public URL)
-# with open("./my-audio.mp3", "rb") as f:
-#   response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-#   audio_url = response.json()["upload_url"]
-
-# Or use a publicly-accessible URL
+# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 audio_url = "https://assembly.ai/wildfires.mp3"
 
-# Step 1: Submit transcription request (without translation)
+# Submit transcription request (without translation)
 data = {
-  "audio_url": audio_url,
-  "speaker_labels": True  # Optional: enable speaker diarization
+  "audio_url": audio_url
 }
 
+# Transcribe file
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
 print(f"Transcription started. ID: {transcript_id}")
 
-# Step 2: Poll for transcription completion
+# Poll for transcription completion
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
 
@@ -422,23 +411,26 @@ while True:
     print(f"Status: {transcript['status']}. Waiting...")
     time.sleep(3)
 
-# Step 3: Add translation configuration to the completed transcript
-transcript["speech_understanding"] = {
-  "request": {
-    "translation": {
+# Add translation configuration to the completed transcript
+understanding_body = {
+  "transcript_id": transcript_id,
+  "speech_understanding": {
+    "request": {
+      "translation": {
       "target_languages": ["es", "de"],  # Translate to Spanish and German
       "formal": True  # Use formal language style
+      }
     }
   }
 }
 
 print("Requesting translations...")
 
-# Step 4: Send to Speech Understanding API for translation
+# Send to Speech Understanding API for translation
 result = requests.post(
   "https://llm-gateway.assemblyai.com/v1/understanding",
   headers=headers,
-  json=transcript
+  json=understanding_body
 ).json()
 
 print("Translation completed!")
@@ -455,113 +447,25 @@ for language_code, translated_text in result['translated_texts'].items():
 
 </Tab>
 
-<Tab language="javascript-http" title="JavaScript">
-
-```javascript
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  "authorization": "",
-  "content-type": "application/json"
-};
-
-// Or use a publicly-accessible URL
-const audioUrl = "https://assembly.ai/wildfires.mp3";
-
-async function translateTranscript() {
-  // Step 1: Submit transcription request (without translation)
-  const data = {
-    audio_url: audioUrl,
-    speaker_labels: true  // Optional: enable speaker diarization
-  };
-
-  let response = await fetch(`${baseUrl}/v2/transcript`, {
-    method: "POST",
-    headers: headers,
-    body: JSON.stringify(data)
-  });
-
-  const { id: transcriptId } = await response.json();
-  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-  console.log(`Transcription started. ID: ${transcriptId}`);
-
-  // Step 2: Poll for transcription completion
-  let transcript;
-  while (true) {
-    response = await fetch(pollingEndpoint, { headers });
-    transcript = await response.json();
-
-    if (transcript.status === "completed") {
-      console.log("Transcription completed!");
-      break;
-    } else if (transcript.status === "error") {
-      throw new Error(`Transcription failed: ${transcript.error}`);
-    } else {
-      console.log(`Status: ${transcript.status}. Waiting...`);
-      await new Promise(resolve => setTimeout(resolve, 3000));
-    }
-  }
-
-  // Step 3: Add translation configuration to the completed transcript
-  transcript.speech_understanding = {
-    request: {
-      translation: {
-        target_languages: ["es", "de"],  // Translate to Spanish and German
-        formal: true  // Use formal language style
-      }
-    }
-  };
-
-  console.log("Requesting translations...");
-
-  // Step 4: Send to Speech Understanding API for translation
-  response = await fetch("https://llm-gateway.assemblyai.com/v1/understanding", {
-    method: "POST",
-    headers: headers,
-    body: JSON.stringify(transcript)
-  });
-
-  const result = await response.json();
-  console.log("Translation completed!");
-
-  // Access and display results
-  console.log("\n--- Original Transcript ---");
-  console.log(result.text.substring(0, 200) + "...");
-
-  console.log("\n--- Translations ---");
-  for (const [languageCode, translatedText] of Object.entries(result.translated_texts)) {
-    console.log(`\n${languageCode.toUpperCase()}:`);
-    console.log(translatedText.substring(0, 200) + "...");
-  }
-}
-
-translateTranscript().catch(console.error);
-```
-
-</Tab>
-
 <Tab language="python-sdk" title="Python SDK">
 
 ```python
 import assemblyai as aai
 
 # Set your API key
-aai.settings.api_key = ""
+aai.settings.api_key = "<YOUR_API_KEY>"
 
-# Or use a publicly-accessible URL
+# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 audio_url = "https://assembly.ai/wildfires.mp3"
 
-# Step 1: Configure and create transcriber
-config = aai.TranscriptionConfig(
-  speaker_labels=True  # Optional: enable speaker diarization
-)
+# Configure and create transcriber
+config = aai.TranscriptionConfig()
 
 transcriber = aai.Transcriber(config=config)
 
 print("Starting transcription...")
 
-# Step 2: Transcribe the audio
+# Transcribe the audio
 transcript = transcriber.transcribe(audio_url)
 
 if transcript.status == aai.TranscriptStatus.error:
@@ -569,7 +473,7 @@ if transcript.status == aai.TranscriptStatus.error:
 
 print("Transcription completed!")
 
-# Step 3: Request translation using Speech Understanding
+# Request translation using Speech Understanding
 print("Requesting translations...")
 
 result = transcript.speech_understanding(
@@ -593,6 +497,104 @@ for language_code, translated_text in result.translated_texts.items():
 
 </Tab>
 
+<Tab language="javascript-http" title="JavaScript">
+
+```javascript
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  "authorization": "<YOUR_API_KEY>",
+  "content-type": "application/json"
+};
+
+// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
+const audioUrl = "https://assembly.ai/wildfires.mp3";
+
+async function translateTranscript() {
+  // Submit transcription request (without translation)
+  const data = {
+    audio_url: audioUrl
+  };
+
+  let response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data)
+  });
+
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  console.log(`Transcription started. ID: ${transcriptId}`);
+
+  // Poll for transcription completion
+  let transcript;
+  while (true) {
+    response = await fetch(pollingEndpoint, { headers });
+    transcript = await response.json();
+
+    if (transcript.status === "completed") {
+      console.log("Transcription completed!");
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      console.log(`Status: ${transcript.status}. Waiting...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  // Add translation configuration to the completed transcript
+  transcript.speech_understanding = {
+    request: {
+      translation: {
+        target_languages: ["es", "de"],  // Translate to Spanish and German
+        formal: true  // Use formal language style
+      }
+    }
+  };
+
+  // Enable translation
+  const understandingBody = {
+    transcript_id: transcriptId,
+    speech_understanding: {
+      request: {
+        translation: {
+        target_languages: ["es", "de"],  // Translate to Spanish and German
+        formal: true  // Use formal language style
+        }
+      }
+    }
+  };
+
+  console.log("Requesting translations...");
+
+  // Send to Speech Understanding API for translation
+  response = await fetch("https://llm-gateway.assemblyai.com/v1/understanding", {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(understandingBody)
+  });
+
+  const result = await response.json();
+  console.log("Translation completed!");
+
+  // Access and display results
+  console.log("\n--- Original Transcript ---");
+  console.log(result.text.substring(0, 200) + "...");
+
+  console.log("\n--- Translations ---");
+  for (const [languageCode, translatedText] of Object.entries(result.translated_texts)) {
+    console.log(`\n${languageCode.toUpperCase()}:`);
+    console.log(translatedText.substring(0, 200) + "...");
+  }
+}
+
+translateTranscript().catch(console.error);
+```
+
+</Tab>
+
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
@@ -600,14 +602,14 @@ import { AssemblyAI } from 'assemblyai';
 
 // Set your API key
 const client = new AssemblyAI({
-  apiKey: ""
+  apiKey: "<YOUR_API_KEY>"
 });
 
 // Or use a publicly-accessible URL
 const audioUrl = "https://assembly.ai/wildfires.mp3";
 
 async function translateTranscript() {
-  // Step 1: Configure and transcribe the audio
+  // Configure and transcribe the audio
   console.log("Starting transcription...");
 
   const transcript = await client.transcripts.transcribe({
@@ -621,7 +623,7 @@ async function translateTranscript() {
 
   console.log("Transcription completed!");
 
-  // Step 2: Request translation using Speech Understanding
+  // Request translation using Speech Understanding
   console.log("Requesting translations...");
 
   const result = await transcript.speechUnderstanding({
@@ -736,7 +738,8 @@ curl -X POST \
   "https://llm-gateway.assemblyai.com/v1/understanding" \
   -H "Authorization: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "$(echo "$transcript" | jq '. + {
+  -d '{
+    "transcript_id": "{transcript_id}",
     "speech_understanding": {
       "request": {
         "translation": {
@@ -745,7 +748,7 @@ curl -X POST \
         }
       }
     }
-  }')"
+  }'
 ```
 
 | Key                                          | Type    | Required? | Description                                                                                                                      |
