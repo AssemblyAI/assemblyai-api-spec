@@ -313,33 +313,37 @@ const data = {
   }
 };
 
-// Submit the transcription request
-const response = await fetch(`${baseUrl}/v2/transcript`, {
-  method: "POST",
-  headers: headers,
-  body: JSON.stringify(data)
-});
+async function main() {
+  // Submit the transcription request
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data)
+  });
 
-const { id: transcriptId } = await response.json();
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
-// Poll for transcription results
-while (true) {
-  const pollingResponse = await fetch(pollingEndpoint, { headers });
-  const transcript = await pollingResponse.json();
+  // Poll for transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcript = await pollingResponse.json();
 
-  if (transcript.status === "completed") {
-    // Access the results and print utterances to the console
-    for (const utterance of transcript.utterances) {
-      console.log(`${utterance.speaker}: ${utterance.text}`);
+    if (transcript.status === "completed") {
+      // Access the results and print utterances to the console
+      for (const utterance of transcript.utterances) {
+        console.log(`${utterance.speaker}: ${utterance.text}`);
+      }
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
-    break;
-  } else if (transcript.status === "error") {
-    throw new Error(`Transcription failed: ${transcript.error}`);
-  } else {
-    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 }
+
+main().catch(console.error);
 ```
 
 </Tab>
