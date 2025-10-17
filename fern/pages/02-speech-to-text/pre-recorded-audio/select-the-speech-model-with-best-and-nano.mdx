@@ -2,32 +2,37 @@
 title: "Select the Speech Model"
 ---
 
-We use a combination of models to produce your results. You can select the class of models to use in order to make cost-performance tradeoffs best suited for your application.
-You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">pricing page</a> for more information on our model tiers.
+We use a combination of models to produce your results. With the `speech_models` parameter, you can list multiple speech models in priority order, allowing our system to automatically route your audio to the best available option. You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">pricing page</a> for more information on our model tiers.
+
+**Model routing behavior:** The system uses the priority order to determine which model to use based on the request characteristics. For example, with `["universal-pro", "universal"]`, the system will try to use universal-pro first, but fall back to universal for non-English audio since universal-pro only supports English
+
+<Tip title="Identifying the Model Used in Your Request">
+  The API returns a field called `speech_model_used` that tells you which specific model was actually used to process your request.
+</Tip>
 
 <Tabs>
 <Tab language="python-sdk" title="Python SDK">
 
 | Name                    | SDK Parameter               | Description                                                                           |
 | ----------------------- | --------------------------- | ------------------------------------------------------------------------------------- |
-| **Universal** (default) | `aai.SpeechModel.universal` | Use our fastest, most robust models with the broadest language support.          |
-| **Slam-1** (beta)       | `aai.SpeechModel.slam_1`    | Use our most customizable model for your transcription (English only).                |
+| **Universal 3** (default) | `aai.SpeechModel.universal` | Use our fastest, most robust models with the broadest [language support](/docs/speech-to-text/pre-recorded-audio/supported-languages).          |
+| **Universal 3 Pro**      | `aai.SpeechModel.universal-pro`    | Use our most customizable model for your transcription (English only).                |
 
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 | Name                    | SDK Parameter | Description                                                                           |
 | ----------------------- | ------------- | ------------------------------------------------------------------------------------- |
-| **Universal** (default) | `'universal'` | Use our fastest, most robust models with the broadest language support.          |
-| **Slam-1** (beta)       | `'slam-1'`    | Use our most customizable model for your transcription (English only).                |
+| **Universal 3** (default) | `['universal']` | Use our fastest, most robust models with the broadest [language support](/docs/speech-to-text/pre-recorded-audio/supported-languages).          |
+| **Universal 3 Pro**       | `['universal-pro']`    | Use our most customizable model for your transcription (English only).                |
 
 </Tab>
 <Tab language="api" title="API">
 
 | Name                    | API Parameter                | Description                                                                           |
 | ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
-| **Universal** (default) | `"speech_model":"universal"` | Use our fastest, most robust models with the best results for most languages.          |
-| **Slam-1** (beta)       | `"speech_model":"slam-1"`    | Use our most customizable model for your transcription (English only).                |
+| **Universal 3** (default) | `"speech_models":["universal"]` |  Use our fastest, most robust models with the broadest [language support](/docs/speech-to-text/pre-recorded-audio/supported-languages)          |
+| **Universal 3 Pro**      | `"speech_models": ["universal-pro"]`    | Use our most customizable model for your transcription (English only).                |
 
 </Tab>
 </Tabs>
@@ -36,7 +41,7 @@ You can visit our <a href="https://www.assemblyai.com/pricing" target="_blank">p
 <Tabs>
 <Tab language="python-sdk" title="Python SDK" default>
 
-You can change the model by setting the `speech_model` in the transcription config:
+You can change the model by setting the `speech_models` in the transcription config:
 
 ```python highlight={11} maxLines=15
 import assemblyai as aai
@@ -49,13 +54,13 @@ aai.settings.api_key = "<YOUR_API_KEY>"
 audio_file = "https://assembly.ai/wildfires.mp3"
 
 # By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-# config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.slam_1)
+# config = aai.TranscriptionConfig(speech_models=aai.SpeechModel.slam_1)
 
 # Default: Universal model
 transcript = aai.Transcriber().transcribe(audio_file)
 
 # Optional: To use Slam-1 model instead, uncomment both lines below:
-# config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.slam_1)
+# config = aai.TranscriptionConfig(speech_models=aai.SpeechModel.slam_1)
 # transcript = aai.Transcriber(config=config).transcribe(audio_file)
 
 if transcript.status == "error":
@@ -67,7 +72,7 @@ print(transcript.text)
 </Tab>
 <Tab language="python" title="Python">
 
-You can change the model by setting the `speech_model` in the POST request body:
+You can change the model by setting the `speech_models` in the POST request body:
 
 ```python highlight={20} maxLines=15
 import requests
@@ -89,7 +94,7 @@ upload_url = response.json()["upload_url"]
 data = {
     "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
     # By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-    # "speech_model": "slam-1"
+    # "speech_models": "slam-1"
 }
 
 url = base_url + "/v2/transcript"
@@ -116,7 +121,7 @@ while True:
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-You can change the model by setting the `speech_model` in the transcript parameters:
+You can change the model by setting the `speech_models` in the transcript parameters:
 
 ```javascript highlight={16} maxLines=15
 import { AssemblyAI } from "assemblyai";
@@ -134,7 +139,7 @@ const audioFile = "https://assembly.ai/wildfires.mp3";
 const params = {
   audio: audioFile,
   // By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-  // speech_model: "slam-1",
+  // speech_models: "slam-1",
 };
 
 const run = async () => {
@@ -149,7 +154,7 @@ run();
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
-You can change the model by setting the `speech_model` in the POST request body:
+You can change the model by setting the `speech_models` in the POST request body:
 
 ```javascript highlight={20} maxLines=15
 import axios from "axios";
@@ -171,7 +176,7 @@ const uploadUrl = uploadResponse.data.upload_url;
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
   // By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-  // speech_model: "slam-1",
+  // speech_models: "slam-1",
 };
 
 const url = `${baseUrl}/v2/transcript`;
@@ -200,7 +205,7 @@ while (true) {
 </Tab>
 <Tab language="csharp" title="C#">
 
-You can change the model by setting the `speech_model` in the POST request body:
+You can change the model by setting the `speech_models` in the POST request body:
 
 ```csharp highlight={70} maxLines=15
 using System;
@@ -239,7 +244,7 @@ class Program
             Console.WriteLine("Uploading file...");
             var uploadUrl = await UploadFileAsync(localFilePath, httpClient);
 
-            Console.WriteLine("Creating transcript with speech_model...");
+            Console.WriteLine("Creating transcript with speech_models...");
             var transcript = await CreateTranscriptAsync(uploadUrl, httpClient);
 
             Console.WriteLine("Waiting for transcript...");
@@ -272,7 +277,7 @@ class Program
         {
             audio_url = audioUrl,
             // By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-            // speech_model = "slam-1"
+            // speech_models = "slam-1"
         };
 
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
@@ -315,7 +320,7 @@ class Program
 </Tab>
 <Tab language="ruby" title="Ruby">
 
-You can change the model by setting the `speech_model` in the POST request body:
+You can change the model by setting the `speech_models` in the POST request body:
 
 ```ruby highlight={24} maxLines=15
 require 'net/http'
@@ -341,7 +346,7 @@ upload_url = JSON.parse(upload_response.body)["upload_url"]
 data = {
     "audio_url" => upload_url, # You can also use a URL to an audio or video file on the web
     # By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-    # "speech_model" => "slam-1"
+    # "speech_models" => "slam-1"
 }
 
 uri = URI.parse("#{base_url}/v2/transcript")
@@ -386,7 +391,7 @@ end
 </Tab>
 <Tab language="php" title="PHP">
 
-You can change the model by setting the `speech_model` in the POST request body:
+You can change the model by setting the `speech_models` in the POST request body:
 
 ```php highlight={31} maxLines=15
 <?php
@@ -419,7 +424,7 @@ curl_close($ch);
 $data = array(
     "audio_url" => $upload_url, // You can also use a URL to an audio or video file on the web
     // By default our Universal model is used, comment in the code below if you would like to use our Slam-1 model
-    // "speech_model" => "slam-1"
+    // "speech_models" => "slam-1"
 );
 
 $url = $base_url . "/v2/transcript";
@@ -463,5 +468,3 @@ $polling_response = curl_init($polling_endpoint);
 
 </Tab>
 </Tabs>
-
-For a list of the supported languages for each model, see [Supported languages](/docs/speech-to-text/pre-recorded-audio/supported-languages).
