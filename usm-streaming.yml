@@ -31,9 +31,13 @@ channels:
         enum: ["pcm_s16le", "pcm_mulaw"]
         default: "pcm_s16le"
 
-      token:
-        description: API token for authentication
-        location: $message.payload#/token
+      end_of_turn_confidence_threshold:
+        description: The confidence threshold (0.0 to 1.0) to use when determining if the end of a turn has been reached
+        location: $message.payload#/end_of_turn_confidence_threshold
+        examples:
+          - "0.4"
+          - "0.7"
+        default: "0.4"
 
       format_turns:
         description: Whether to return formatted final transcripts
@@ -41,13 +45,20 @@ channels:
         enum: ["true", "false"]
         default: "false"
 
-      end_of_turn_confidence_threshold:
-        description: The confidence threshold (0.0 to 1.0) to use when determining if the end of a turn has been reached
-        location: $message.payload#/end_of_turn_confidence_threshold
-        examples:
-          - "0.4"
-          - "0.7"
-        default: "0.7"
+      keyterms_prompt:
+        description: A list of words and phrases to improve recognition accuracy for.
+        location: $message.payload#/keyterms_prompt
+        schema:
+          type: array
+          items:
+            x-label: Word
+            type: string
+
+      language:
+        description: The language of your audio stream.
+        location: $message.payload#/language
+        enum: ["en", "multi"]
+        default: "en"
 
       min_end_of_turn_silence_when_confident:
         description: The minimum amount of silence in milliseconds required to detect end of turn when confident
@@ -55,7 +66,7 @@ channels:
         examples:
           - "480"
           - "600"
-        default: "160"
+        default: "400"
         format: ms
 
       max_turn_silence:
@@ -64,14 +75,16 @@ channels:
         examples:
           - "700"
           - "1000"
-        default: "2400"
+        default: "1280"
         format: ms
-
       filter_profanity:
         description: Filter profanity from the transcribed text, can be true or false.
         location: $message.payload#/filter_profanity
         enum: ["true", "false"]
         default: "false"
+      token:
+        description: API token for authentication
+        location: $message.payload#/token
 
       ApiKey:
         description: >-
@@ -194,6 +207,9 @@ components:
       summary: Client sends audio data as a base64-encoded string within a JSON object.
       type: string
       format: base64
+      payload:
+        type: string
+        format: base64
       examples:
         - payload: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
 
@@ -330,6 +346,9 @@ components:
         transcript:
           type: string
           description: Transcript of all finalized words in the turn.
+        utterance:
+          type: string
+          description: Transcript of all finalized words when an utterance is complete. Can be multiple utterances in a turn.
         end_of_turn_confidence:
           type: number
           format: float

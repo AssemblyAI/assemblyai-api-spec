@@ -1,0 +1,776 @@
+---
+title: "Self-Hosted Streaming"
+hide-nav-links: true
+description: "Deploy AssemblyAI's streaming transcription solution within your own infrastructure"
+---
+
+The **AssemblyAI Self-Hosted Streaming Solution** provides a secure, low-latency real-time transcription solution that can be deployed within your own infrastructure. This early access version is designed for design partners to evaluate and provide feedback on our self-hosted offering.
+
+## Getting the latest instructions
+
+The most up-to-date deployment instructions, configuration files, and example scripts are maintained in our private GitHub repository:
+
+**https://github.com/AssemblyAI/streaming-self-hosting-stack**
+
+Design partners are encouraged to provide their GitHub username to gain access to the repository. Please contact the AssemblyAI team directly to request access.
+
+## Core principle
+
+- **Complete data isolation**: No audio data, transcript data, or personally identifiable information (PII) will ever be sent to AssemblyAI servers. Only usage metadata and licensing information is transmitted.
+
+## System requirements
+
+### Hardware requirements
+
+- **GPU**: NVIDIA GPU support required (any NVIDIA GPU model will work, T4 or newer recommended)
+
+### Software requirements
+
+- **Operating System**: Linux
+- **Container Runtime**: Docker and Docker Compose required
+- **AWS Account**: Required for pulling container images from our ECR registry
+
+## Architecture
+
+The streaming solution consists of three AssemblyAI Docker images plus a standard nginx container:
+
+1. **API Service** (`streaming-api`) - Gateway API service handling WebSocket connections
+2. **English ASR Service** (`streaming-asr-english`) - English speech recognition model service
+3. **Multilingual ASR Service** (`streaming-asr-multilang`) - Multilingual speech recognition model service
+4. **ASR Load Balancer** (`streaming-asr-lb`) - Standard nginx:alpine container with header-based routing between ASR services
+
+### Connection flow
+
+```
+External Request → streaming-api:8080 (WebSocket) → streaming-asr-lb:80 → Header-based routing (X-Model-Version):
+                                                                        ├── en-default → streaming-asr-english:50051 (gRPC)
+                                                                        └── ml-default → streaming-asr-multilang:50051 (gRPC)
+```
+
+## Prerequisites
+
+- Active enterprise contract with AssemblyAI
+- AWS account for container registry access
+- Linux environment with Docker and Docker Compose installed
+- NVIDIA Container Toolkit for GPU support
+
+## Setup and deployment
+
+### 1. Docker runtime with GPU support
+
+**1.1** Verify NVIDIA drivers are installed:
+```bash
+nvidia-smi
+```
+
+**1.2** Install NVIDIA Container Toolkit:
+
+Follow the [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) to set up GPU support for Docker.
+
+**1.3** Verify the Docker runtime has GPU access:
+```bash
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+
+### 2. Obtain credentials
+
+**AWS ECR Access**: We will manually provision AWS account credentials for your team to pull container images from our private Amazon ECR registry.
+
+### 3. AWS ECR authentication
+
+Authenticate with AWS ECR using provided credentials:
+
+```bash
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 344839248844.dkr.ecr.us-west-2.amazonaws.com
+```
+
+### 4. Configure container images
+
+Create a `.env` file with container image references:
+
+```bash
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.1.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.1.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.1.0
+```
+
+### 5. Deploy with Docker Compose
+
+Start all services:
+
+```bash
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Check service status
+docker compose ps
+```
+
+The ASR service containers include built-in model weights - no separate model download required.
+
+## Configuration
+
+### Docker Compose configuration
+
+The `docker-compose.yml` file defines the service architecture:
+
+```yaml
+services:
+  streaming-api:
+    image: ${STREAMING_API_IMAGE}
+    ports:
+      - "8080:8080"
+    environment:
+      - AAI_WSS_PORT=8080
+      - AAI_ASR_ENDPOINT=streaming-asr-lb:80
+      - AAI_STREAMING_ASR_ENDPOINT=streaming-asr-lb:80
+      - AAI_USE_SECURE_CHANNEL_TO_ASR_SERVICE=False
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/health"]
+      interval: 10s
+      timeout: 2s
+      retries: 2
+      start_period: 5s
+    depends_on:
+      - streaming-asr-lb
+    networks:
+      - streaming-network
+
+  streaming-asr-lb:
+    image: nginx:alpine
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: [ "CMD", "curl", "-fsS", "http://localhost:80/nginx_health" ]
+      interval: 10s
+      timeout: 2s
+      retries: 2
+      start_period: 10s
+    volumes:
+      - ./nginx_streaming_asr.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - streaming-asr-english
+      - streaming-asr-multilang
+    networks:
+      - streaming-network
+
+  streaming-asr-english:
+    image: ${STREAMING_ASR_ENGLISH_IMAGE}
+    ports:
+      - "50051:50051"
+    environment:
+      - SERVER_PORT=50051
+      - LOGGING_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 120s
+    networks:
+      - streaming-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ "gpu" ]
+
+  streaming-asr-multilang:
+    image: ${STREAMING_ASR_MULTILANG_IMAGE}
+    ports:
+      - "50052:50051"
+    environment:
+      - SERVER_PORT=50051
+      - LOGGING_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 120s
+    networks:
+      - streaming-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ "gpu" ]
+
+networks:
+  streaming-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+```
+
+### Nginx configuration
+
+The ASR load balancer uses header-based routing to direct requests to the appropriate model service based on the `X-Model-Version` header:
+
+**`nginx_streaming_asr.conf`**
+
+```nginx
+events { worker_connections 1024; }
+
+http {
+  access_log /dev/stdout;
+  error_log  /dev/stderr info;
+
+  upstream streaming_asr_english   { server streaming-asr-english:50051; }
+  upstream streaming_asr_multilang { server streaming-asr-multilang:50051; }
+
+  map $http_x_model_version $asr_backend {
+    default    streaming_asr_english;
+    en-default streaming_asr_english;
+    ml-default streaming_asr_multilang;
+  }
+
+  keepalive_timeout     10h;
+  client_header_timeout 10h;
+  send_timeout          10h;
+
+  server {
+    listen 80;
+    http2 on;
+    client_max_body_size 0;
+
+    # Health endpoint (NGINX itself)
+    location = /nginx_health {
+      access_log off;
+      default_type text/plain;
+      return 200 "OK\n";
+    }
+
+    location / {
+      grpc_pass grpc://$asr_backend;
+      grpc_connect_timeout 75s;
+      grpc_read_timeout    10h;
+      grpc_send_timeout    10h;
+      grpc_socket_keepalive on;
+    }
+  }
+}
+```
+
+## Service endpoints
+
+- **WebSocket**: `ws://localhost:8080`
+
+## Running the streaming example
+
+A Python example script is provided to demonstrate how to stream a pre-recorded audio file to the self-hosted stack.
+
+**Note**: You can initiate a session as soon as the `streaming-asr-english` and `streaming-asr-multilang` containers are healthy, which happens after they output a `"Ready to serve!"` log line.
+
+### Setup
+
+Change to the `streaming_example` directory:
+```bash
+cd streaming_example
+```
+
+Create a fresh Python virtual environment and activate it:
+```bash
+python -m venv streaming_venv
+source streaming_venv/bin/activate
+```
+
+Install the required packages:
+```bash
+pip install -r requirements.txt
+```
+
+### Usage
+
+The example script (`example_with_prerecorded_audio_file.py`) requires a PCM 16-bit WAV file (mono channel, 16kHz sample rate).
+
+**Note on language parameter:**
+- Use `"en"` or omit the `--language` parameter for English transcription (routes to English ASR service)
+- Use `"multi"` or any non-English language code for multilingual transcription (routes to multilingual ASR service)
+
+**Basic usage:**
+```bash
+python example_with_prerecorded_audio_file.py --audio-file example_audio_file.wav
+```
+
+**Example with multilingual transcription:**
+```bash
+python example_with_prerecorded_audio_file.py \
+  --audio-file example_audio_file.wav \
+  --endpoint ws://localhost:8080 \
+  --language multi
+```
+
+**Command-line arguments:**
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--audio-file` | Path to the audio file to transcribe (must be PCM 16-bit WAV, mono, 16kHz) | `example_audio_file.wav` |
+| `--endpoint` | WebSocket endpoint URL | `ws://localhost:8080` |
+| `--language` | Language code for transcription. Use `"en"` for English or omit for English (default). Use `"multi"` for multilingual | `"en"` |
+
+**View help:**
+```bash
+python example_with_prerecorded_audio_file.py --help
+```
+
+## Live microphone streaming example
+
+This example demonstrates real-time microphone transcription using a remote self-hosted deployment. This is useful for testing your self-hosted instance from a local machine.
+
+### Setup
+
+Install the required packages:
+```bash
+pip install websockets pyaudio
+```
+
+### Python script
+
+Save this as `live_microphone_streaming.py`:
+
+```python
+import asyncio
+import websockets
+import pyaudio
+import json
+
+# Replace with your server's IP address or use 'localhost' for local testing
+SERVER_IP = "your.server.ip.address"
+
+async def stream_audio(language="en"):
+    # Build WebSocket URL with query parameters
+    params = f"sample_rate=16000&language={language}"
+    WS_URL = f"ws://{SERVER_IP}:8080/v3/ws?{params}"
+    
+    # Add authorization header (required for self-hosted)
+    headers = {"Authorization": "self-hosted"}
+    
+    print(f"Connecting to {WS_URL}...")
+    
+    async with websockets.connect(WS_URL, extra_headers=headers) as ws:
+        print("Connected! Starting to stream audio...")
+        
+        # Set up audio stream from microphone
+        p = pyaudio.PyAudio()
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=16000,
+            input=True,
+            frames_per_buffer=3200  # 100ms chunks at 16kHz
+        )
+        
+        print(f"\n🎤 Listening with language={language}... speak into your microphone!")
+        print("Press Ctrl+C to stop\n")
+        
+        # Function to send audio
+        async def send_audio():
+            try:
+                while True:
+                    data = stream.read(3200, exception_on_overflow=False)
+                    await ws.send(data)
+                    await asyncio.sleep(0.1)  # 100ms chunks
+            except KeyboardInterrupt:
+                await ws.send(json.dumps({"type": "Terminate"}))
+                print("\nStopping...")
+            finally:
+                stream.stop_stream()
+                stream.close()
+                p.terminate()
+        
+        # Function to receive transcripts
+        async def receive_transcripts():
+            try:
+                async for message in ws:
+                    data = json.loads(message)
+                    
+                    if data.get("type") == "Begin":
+                        print(f"✅ Session started! ID: {data.get('id')}")
+                    
+                    elif data.get("type") == "Turn":
+                        if data.get("words"):
+                            text = " ".join([word["text"] for word in data["words"]])
+                            end_of_turn = "[FINAL]" if data.get("end_of_turn") else ""
+                            print(f"📝 {text} {end_of_turn}")
+                    
+                    elif data.get("type") == "Termination":
+                        print(f"✅ Session completed. Duration: {data.get('session_duration_seconds')}s")
+                        break
+                    
+            except Exception as e:
+                print(f"Error receiving: {e}")
+        
+        # Run both tasks concurrently
+        await asyncio.gather(send_audio(), receive_transcripts())
+
+if __name__ == "__main__":
+    import sys
+    
+    # Usage: python live_microphone_streaming.py [language]
+    # Examples:
+    #   python live_microphone_streaming.py en       # English
+    #   python live_microphone_streaming.py multi    # Multilingual with auto-detect
+    #   python live_microphone_streaming.py es       # Spanish
+    language = sys.argv[1] if len(sys.argv) > 1 else "en"
+    
+    try:
+        asyncio.run(stream_audio(language))
+    except KeyboardInterrupt:
+        print("\nStopped by user")
+```
+
+### Usage
+
+**Basic usage (English):**
+```bash
+python live_microphone_streaming.py
+```
+
+**Multilingual transcription:**
+```bash
+python live_microphone_streaming.py multi
+```
+
+**Specific language (e.g., Spanish):**
+```bash
+python live_microphone_streaming.py es
+```
+
+**Note:** 
+- Make sure to replace `SERVER_IP` in the script with your actual server IP address
+- If testing locally on the same machine as the server, use `localhost` or `127.0.0.1`
+- The `Authorization: self-hosted` header is required for all connections
+- Language routing: `"en"` routes to English ASR service, any other code (including `"multi"`) routes to multilingual ASR service
+
+## Updating services
+
+### Model updates
+
+To update to a new model version:
+
+1. Pull the new container images from ECR
+2. Update your `.env` file with the new image references
+3. Restart the services using Docker Compose
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+## Monitoring and debugging
+
+### View service logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f streaming-api
+```
+
+### Check service status
+
+```bash
+# Container status
+docker compose ps
+
+# Resource usage
+docker stats
+```
+
+## Troubleshooting
+
+### Debug commands
+
+```bash
+# Check nginx configuration
+docker compose exec streaming-asr-lb nginx -t
+
+# Restart specific service
+docker compose restart streaming-api
+docker compose restart streaming-asr-english
+docker compose restart streaming-asr-multilang
+```
+
+### Common issues
+
+- **GPU not detected**: Verify NVIDIA Container Toolkit is properly installed and Docker has GPU access.
+
+- **Services not starting**: Check logs for specific error messages using `docker compose logs -f [service-name]`.
+
+- **Connection refused**: Ensure all services are healthy by checking `docker compose ps` and reviewing health check status.
+
+## Current limitations
+
+As a design partner, please be aware of these current limitations:
+
+- Text formatting is not included (coming in future streaming model release)
+- Manual credential provisioning (no self-service dashboard yet)
+- Docker Compose deployment example only (production orchestration templates coming later)
+
+## Design partner support
+
+### What we provide
+
+- Docker Compose configuration file
+- Manual credential provisioning
+- Direct engineering support for deployment
+- Regular model updates
+
+### What we need from you
+
+- Feedback on deployment experience
+- Performance metrics in your environment
+- Feature requests and prioritization input
+- Use case validation
+
+## AWS deployment guide
+
+This section provides step-by-step instructions for deploying the self-hosted streaming solution on AWS EC2, designed for users who may not be familiar with AWS infrastructure.
+
+### AWS prerequisites
+
+Before you begin, ensure you have:
+- An AWS account with billing enabled
+- AWS CLI installed and configured on your local machine
+- Basic familiarity with SSH and command-line operations
+
+### EC2 instance setup
+
+#### 1. Request GPU quota increase
+
+By default, AWS accounts have limited or zero quota for GPU instances. You'll need to request an increase:
+
+1. Navigate to the [AWS Service Quotas console](https://console.aws.amazon.com/servicequotas/)
+2. Search for "EC2"
+3. Find "Running On-Demand G and VT instances" (for g4dn, g5, or similar GPU instances)
+4. Click "Request quota increase"
+5. Request at least **4 vCPUs** (minimum for a g4dn.xlarge instance)
+6. Provide a use case description: "Self-hosted AI transcription service requiring GPU acceleration"
+7. Submit the request
+
+**Note:** Quota requests typically take 24-48 hours to process. Plan accordingly.
+
+#### 2. Choose the right instance type
+
+Recommended instance types based on your needs:
+
+| Instance Type | vCPUs | GPU | Memory | Use Case | Approximate Cost/Hour |
+|--------------|-------|-----|---------|----------|----------------------|
+| g4dn.xlarge | 4 | 1x T4 (16GB) | 16 GB | Development/Testing | ~$0.526 |
+| g4dn.2xlarge | 8 | 1x T4 (16GB) | 32 GB | Light Production | ~$0.752 |
+| g5.xlarge | 4 | 1x A10G (24GB) | 16 GB | Production (Higher Performance) | ~$1.006 |
+| g5.2xlarge | 8 | 1x A10G (24GB) | 32 GB | Production (High Throughput) | ~$1.212 |
+
+**Recommendation:** Start with **g4dn.xlarge** for evaluation, then scale to g4dn.2xlarge or g5 instances for production workloads.
+
+#### 3. Launch EC2 instance with recommended AMI
+
+**3.1** Navigate to the EC2 console and click "Launch Instance"
+
+**3.2** Configure instance settings:
+
+- **Name:** `assemblyai-self-hosted-streaming`
+- **AMI:** Search for and select **"AWS Deep Learning AMI GPU PyTorch 2.0.1 (Ubuntu 20.04)"**
+  - AMI ID format: `ami-xxxxxxxxx` (varies by region)
+  - This AMI includes pre-installed NVIDIA drivers, CUDA toolkit, and Docker with GPU support
+- **Instance type:** Select `g4dn.xlarge` (or your chosen instance type)
+- **Key pair:** Create a new key pair or select an existing one
+  - If creating new: Download the `.pem` file and save it securely
+  - Set permissions: `chmod 400 your-key.pem`
+
+**3.3** Configure storage:
+- **Root volume:** Increase to at least **100 GB gp3** (model weights and containers require significant space)
+- The default 8 GB is insufficient
+
+**3.4** Configure security group (Network settings):
+
+Create a new security group with the following inbound rules:
+
+| Type | Protocol | Port Range | Source | Description |
+|------|----------|------------|--------|-------------|
+| SSH | TCP | 22 | Your IP/0.0.0.0/0 | SSH access for management |
+| Custom TCP | TCP | 8080 | Your IP/0.0.0.0/0 | WebSocket endpoint |
+| Custom TCP | TCP | 8081 | Your IP/0.0.0.0/0 | Health check endpoint (optional) |
+
+**Security recommendations:**
+- For production: Restrict Source to your specific IP addresses or VPC CIDR ranges
+- For development/testing: You can use `0.0.0.0/0` but understand this allows public access
+- Consider using AWS VPN or Direct Connect for enhanced security
+- Enable AWS CloudTrail for audit logging
+
+**3.5** Launch the instance and wait for it to reach "Running" state
+
+#### 4. Connect to your EC2 instance
+
+```bash
+# Replace with your instance's public IP and key file
+ssh -i your-key.pem ubuntu@<EC2_PUBLIC_IP>
+```
+
+#### 5. Verify GPU and Docker setup
+
+Once connected, verify the pre-installed components:
+
+```bash
+# Verify NVIDIA drivers
+nvidia-smi
+
+# Verify Docker
+docker --version
+
+# Verify Docker Compose (v2 syntax)
+docker compose version
+
+# If the above fails, you may need to install Docker Compose v2
+# Remove old version if present
+sudo apt-get remove docker-compose
+
+# Install Docker Compose v2 (plugin)
+sudo apt-get update
+sudo apt-get install docker-compose-plugin
+
+# Verify installation
+docker compose version
+
+# Verify GPU access in Docker
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+
+<Warning>
+**Important:** This setup uses **Docker Compose v2**, which uses the command `docker compose` (space, no hyphen) instead of the older `docker-compose` (hyphen). All commands in this guide use the v2 syntax.
+</Warning>
+
+#### 6. Configure AWS credentials on the instance
+
+Set up AWS credentials to pull container images from ECR:
+
+```bash
+# Install AWS CLI if not already installed
+sudo apt-get update
+sudo apt-get install -y awscli
+
+# Configure AWS credentials (use the credentials provided by AssemblyAI)
+aws configure
+```
+
+You'll be prompted to enter:
+- AWS Access Key ID
+- AWS Secret Access Key
+- Default region: `us-west-2`
+- Default output format: `json`
+
+#### 7. Deploy the self-hosted streaming solution
+
+Follow the standard deployment instructions from the "Setup and deployment" section above:
+
+```bash
+# Authenticate with ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 344839248844.dkr.ecr.us-west-2.amazonaws.com
+
+# Create project directory
+mkdir -p ~/assemblyai-streaming
+cd ~/assemblyai-streaming
+
+# Create .env file with image references
+cat > .env << 'EOF'
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.1.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.1.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.1.0
+EOF
+
+# Create docker-compose.yml file
+# Copy the complete docker-compose.yml content from the Configuration section above and save it
+# Or download it from the GitHub repository
+
+# Create nginx configuration file
+# Copy the nginx_streaming_asr.conf content from the Configuration section above and save it
+# Or download it from the GitHub repository
+
+# Start services
+docker compose up -d
+
+# Monitor logs (services may take 2-3 minutes to fully start)
+docker compose logs -f
+```
+
+**Important startup notes:**
+- The ASR services (`streaming-asr-english` and `streaming-asr-multilang`) take approximately **2-3 minutes** to fully initialize
+- You'll see `"Ready to serve!"` in the logs when each ASR service is ready
+- Health checks may show "unhealthy" during startup - this is normal
+- Wait until both ASR services show `"Ready to serve!"` before attempting to use the API
+
+#### 8. Test the deployment
+
+From your local machine, test the connection using the live microphone example (see the [Live microphone streaming example](/docs/deployment/self-hosted-streaming#live-microphone-streaming-example) section above).
+
+<Warning>
+**Important:** Replace `SERVER_IP` in the example script with your EC2 instance's **public IP address**, which you can find in the EC2 console under your instance details.
+</Warning>
+
+### AWS cost optimization tips
+
+- **Use Spot Instances:** Save up to 70% for non-critical workloads (may be interrupted)
+- **Stop instances when not in use:** GPU instances are expensive; stop them during off-hours
+- **Use CloudWatch alarms:** Set up billing alerts to avoid unexpected costs
+- **Consider Reserved Instances:** Save up to 60% with 1 or 3-year commitments for production workloads
+- **Right-size your instance:** Monitor GPU utilization and downgrade if consistently underutilized
+
+### Security best practices
+
+1. **Enable AWS Systems Manager Session Manager** for SSH-less access
+2. **Use IAM roles** instead of hardcoded credentials where possible
+3. **Enable VPC Flow Logs** for network monitoring
+4. **Regular security updates:** `sudo apt update && sudo apt upgrade -y`
+5. **Use AWS Secrets Manager** to store sensitive configuration
+6. **Enable EBS encryption** for data at rest
+7. **Configure CloudWatch Logs** for centralized logging
+8. **Implement least privilege access** with security groups and NACLs
+
+### Troubleshooting AWS-specific issues
+
+**Issue: "InsufficientInstanceCapacity" error when launching**
+- Solution: Try a different availability zone within your region or a different instance type
+
+**Issue: Quota request denied or pending**
+- Solution: Contact AWS Support through the console with your use case details
+
+**Issue: Cannot connect to EC2 instance**
+- Solution: Verify security group allows SSH (port 22) from your IP
+- Solution: Check that you're using the correct key pair and username (`ubuntu` for Ubuntu AMIs)
+
+**Issue: Docker containers fail to start with GPU errors**
+- Solution: Verify NVIDIA Container Toolkit is properly configured
+- Solution: Check that the instance type has GPU resources
+
+**Issue: Services show "unhealthy" status**
+- Solution: ASR services take 2-3 minutes to fully initialize - wait for "Ready to serve!" log messages
+- Solution: Health checks may fail during startup - this is normal and will resolve once services are ready
+
+**Issue: Connection refused when testing from local machine**
+- Solution: Ensure you're using the instance's **public IP address**, not the private IP
+- Solution: Verify security group allows inbound traffic on port 8080 from your IP
+- Solution: Check that services are fully started with `docker compose logs -f`
+
+**Issue: "Authorization" header missing error**
+- Solution: All WebSocket connections must include the header `Authorization: self-hosted`
+
+**Issue: Need to transfer files to EC2 instance (e.g., audio files)**
+- Solution: Use SCP from your local machine:
+  ```bash
+  scp -i your-key.pem local-file.wav ubuntu@<EC2_PUBLIC_IP>:~/destination/
+  ```
+
+**Issue: High costs**
+- Solution: Stop the instance when not in use
+- Solution: Review CloudWatch metrics to ensure you're using the right instance size

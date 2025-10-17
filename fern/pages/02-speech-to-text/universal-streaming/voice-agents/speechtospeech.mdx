@@ -1,0 +1,770 @@
+---
+title: "Speech-to-Speech"
+description: "Speech-to-speech API docs"
+---
+
+Real-time voice AI over WebSocket with speech-to-text, language model processing, and text-to-speech.
+
+---
+
+## Endpoint
+
+```
+wss://aai.up.railway.app/ws
+```
+
+Connect to establish a voice agent session.
+
+---
+
+## Client Events
+
+### session.update
+
+Initialize or update session configuration.
+
+**Request**
+
+```json
+{
+  "type": "session.update",
+  "session": {
+    "instructions": "You are a helpful voice assistant.",
+    "temperature": 0.8,
+    "max_tokens": 4096,
+    "llm": {
+      "model": "llama-4-scout-17b-16e-instruct"
+    },
+    "tools": [],
+    "audio": {
+      "input": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 16000
+        },
+        "language": "multi",
+        "turn_detection": {
+          "type": "assemblyai"
+        }
+      },
+      "output": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 24000
+        },
+        "voice": "rex",
+        "speed": 1
+      }
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Event type: `"session.update"` |
+| `session` | object | Yes | Session configuration |
+| `session.instructions` | string | No | System instructions for AI (default: elementary teacher prompt) |
+| `session.temperature` | number | No | LLM temperature 0-1 (default: `0.8`) |
+| `session.max_tokens` | number | No | Max output tokens (default: `4096`) |
+| `session.llm` | object | No | LLM configuration |
+| `session.llm.model` | string | No | Model name (default: `"llama-4-scout-17b-16e-instruct"`) |
+| `session.tools` | array | No | Function calling tools (default: `[]`) |
+| `session.audio` | object | No | Audio configuration |
+| `session.audio.input` | object | No | Input audio settings |
+| `session.audio.input.format` | object | No | Audio format |
+| `session.audio.input.format.type` | string | No | Format type (default: `"audio/pcm"`) |
+| `session.audio.input.format.rate` | number | No | Sample rate in Hz (default: `16000`) |
+| `session.audio.input.language` | string | No | Language code or `"multi"` for auto-detect (default: `"multi"`) |
+| `session.audio.input.turn_detection` | object | No | VAD configuration |
+| `session.audio.input.turn_detection.type` | string | No | VAD provider (default: `"assemblyai"`) |
+| `session.audio.output` | object | No | Output audio settings |
+| `session.audio.output.format` | object | No | Audio format |
+| `session.audio.output.format.type` | string | No | Format type (default: `"audio/pcm"`) |
+| `session.audio.output.format.rate` | number | No | Sample rate in Hz (default: `24000`) |
+| `session.audio.output.voice` | string | No | Voice ID (default: `"rex"`) |
+| `session.audio.output.speed` | number | No | Speech speed multiplier (default: `1`) |
+
+### Audio Stream
+
+Send raw PCM audio as binary WebSocket frames.
+
+**Format**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample Rate: Must match `audio.input.format.rate`
+- Channels: 1 (mono)
+- Recommended chunk size: 4096 samples
+
+---
+
+## Server Events
+
+### session.updated
+
+Confirmation of session configuration.
+
+**Response**
+
+```json
+{
+  "type": "session.updated",
+  "session": {
+    "id": "session_abc123def456",
+    "llm": {
+      "model": "llama-4-scout-17b-16e-instruct"
+    },
+    "instructions": "You are a helpful voice assistant.",
+    "tools": [],
+    "tool_choice": "auto",
+    "max_output_tokens": 4096,
+    "temperature": 0.8,
+    "audio": {
+      "input": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 16000
+        },
+        "language": "multi",
+        "turn_detection": {
+          "type": "assemblyai"
+        }
+      },
+      "output": {
+        "format": {
+          "type": "audio/pcm",
+          "rate": 24000
+        },
+        "voice": "rex",
+        "speed": 1
+      }
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"session.updated"` |
+| `session` | object | Complete session state |
+| `session.id` | string | Unique session identifier |
+| `session.llm` | object | LLM configuration |
+| `session.instructions` | string | System instructions |
+| `session.tools` | array | Available tools |
+| `session.tool_choice` | string | Tool selection mode |
+| `session.max_output_tokens` | number | Max output tokens |
+| `session.temperature` | number | LLM temperature |
+| `session.audio` | object | Audio configuration (mirrors request) |
+
+### conversation.item.done
+
+Notification when a conversation turn completes.
+
+**Response**
+
+```json
+{
+  "type": "conversation.item.done",
+  "event_id": "evt_789xyz",
+  "previous_item_id": null,
+  "item": {
+    "id": "msg_456def",
+    "type": "message",
+    "status": "completed",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "What's the weather like?"
+      }
+    ]
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"conversation.item.done"` |
+| `event_id` | string | Unique event identifier |
+| `previous_item_id` | string \| null | Previous item ID in conversation |
+| `item` | object | Conversation item |
+| `item.id` | string | Item identifier |
+| `item.type` | string | Item type: `"message"` |
+| `item.status` | string | Status: `"completed"` |
+| `item.role` | string | `"user"` or `"assistant"` |
+| `item.content` | array | Content parts |
+| `item.content[].type` | string | `"input_text"` (user) or `"text"` (assistant) |
+| `item.content[].text` | string | Transcript text |
+
+### tool_call
+
+Function call request from AI agent.
+
+**Response**
+
+```json
+{
+  "type": "tool_call",
+  "tool_call": {
+    "id": "call_abc123",
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "arguments": "{\"location\":\"San Francisco\"}"
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | Event type: `"tool_call"` |
+| `tool_call` | object | Tool call request |
+| `tool_call.id` | string | Unique call identifier |
+| `tool_call.type` | string | Type: `"function"` |
+| `tool_call.function` | object | Function details |
+| `tool_call.function.name` | string | Function name |
+| `tool_call.function.arguments` | string | JSON-encoded arguments |
+
+### Audio Stream
+
+Raw PCM audio response as binary WebSocket frames.
+
+**Format**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample Rate: Matches `audio.output.format.rate`
+- Channels: 1 (mono)
+
+---
+
+## Tools / Function Calling
+
+Define tools in `session.tools`:
+
+**Tool Schema**
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "get_weather",
+    "description": "Get current weather for a location",
+    "callback": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "City name"
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["celsius", "fahrenheit"]
+        }
+      },
+      "required": ["location"]
+    }
+  }
+}
+```
+
+**Properties**
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Must be `"function"` |
+| `function` | object | Yes | Function definition |
+| `function.name` | string | Yes | Function name |
+| `function.description` | string | Yes | Human-readable description |
+| `function.callback` | boolean | No | If `true`, agent waits for client to send function result before continuing (default: `false`) |
+| `function.parameters` | object | Yes | JSON Schema for parameters |
+| `function.parameters.type` | string | Yes | Must be `"object"` |
+| `function.parameters.properties` | object | Yes | Object defining each parameter |
+| `function.parameters.properties.<param>` | object | Yes | Individual parameter definition |
+| `function.parameters.properties.<param>.type` | string | Yes | JSON type: `"string"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
+| `function.parameters.properties.<param>.description` | string | No | Human-readable parameter description |
+| `function.parameters.properties.<param>.enum` | array | No | Valid values for the parameter |
+| `function.parameters.required` | array | No | List of required parameter names |
+
+**Handling Callbacks**
+
+When `callback: true` is set, the agent waits for your client to execute the function and return results before continuing the conversation.
+
+1. **Receive tool call** - Server sends `tool_call` event with function name and arguments
+2. **Execute function** - Your client runs the business logic
+3. **Send result** - Client sends `conversation.item.create` with the function output
+
+**Callback Response Format**
+
+```json
+{
+  "type": "conversation.item.create",
+  "item": {
+    "type": "function_call_output",
+    "call_id": "call_abc123",
+    "output": "{\"result\": \"data\"}"
+  }
+}
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `type` | string | Yes | Must be `"conversation.item.create"` |
+| `item` | object | Yes | Item to add to conversation |
+| `item.type` | string | Yes | Must be `"function_call_output"` |
+| `item.call_id` | string | Yes | Must match the `id` from the `tool_call` event |
+| `item.output` | string | Yes | JSON-encoded function result |
+
+---
+
+## Supported Languages
+
+Values for `audio.input.language`:
+
+| Code | Language |
+|------|----------|
+| `multi` | Auto-detect (default) |
+| `en` | English |
+
+
+---
+
+## Available Voices
+
+Values for `audio.output.voice` (Rime TTS):
+
+| Voice ID | Description |
+|----------|-------------|
+| `rex` | Default male voice |
+
+Additional voices available via Rime API.
+
+---
+
+## Examples
+
+This example demonstrates a full-featured customer service voice agent for a car dealership called Assembly Cars. The agent uses function calling with callbacks to handle real-time inventory queries, test drive scheduling, and financing calculations. It includes complete microphone input and audio output handling for immediate testing.
+
+### Python
+
+**Installation**
+
+```bash
+pip install websockets sounddevice numpy
+```
+
+**Code**
+
+```python
+import asyncio
+import json
+import websockets
+import sounddevice as sd
+import numpy as np
+import contextlib
+
+
+URI = "wss://aai.up.railway.app/ws"
+INSTRUCTIONS = """
+You are a helpful voice assistant, simulate a customer service agent in a phone call for a car dealership called Assembly Cars. Your output will be converted to audio so don't include special characters in your answers.
+
+You have access to tools to help customers. Use them when appropriate:
+- Use get_car_inventory to check what cars we have available
+- Use schedule_test_drive to book appointments for customers
+- Use get_financing_options to help with car loans
+
+Always be helpful and use the tools to provide accurate, real-time information.
+"""
+
+# Sample car inventory for testing
+SAMPLE_INVENTORY = [
+    {"make": "Toyota", "model": "Camry", "year": 2024, "price": 28000, "color": "Silver", "stock": 3},
+    {"make": "Toyota", "model": "RAV4", "year": 2024, "price": 32000, "color": "Blue", "stock": 2},
+    {"make": "Honda", "model": "Civic", "year": 2024, "price": 25000, "color": "Red", "stock": 5},
+    {"make": "Honda", "model": "Accord", "year": 2024, "price": 30000, "color": "Black", "stock": 1},
+    {"make": "Ford", "model": "F-150", "year": 2024, "price": 45000, "color": "White", "stock": 2},
+]
+
+async def voice_chat():
+    queue = asyncio.Queue(maxsize=100)  # larger buffer for better performance
+    session_ready = False
+
+    async with websockets.connect(URI, ping_interval=10, ping_timeout=20) as websocket:
+        print(f"Connected to {URI}")
+
+        # Task that pulls from the queue and sends over WebSocket
+        async def sender():
+            audio_count = 0
+            while True:
+                try:
+                    data = await queue.get()
+                    if session_ready:  # Only send audio after session is ready
+                        await websocket.send(data)
+                        audio_count += 1
+                finally:
+                    queue.task_done()
+
+        sender_task = asyncio.create_task(sender())
+
+        # Set up microphone & speaker with better error handling
+        loop = asyncio.get_running_loop()
+        
+        def mic_callback(indata, frames, time, status):
+            if status.input_overflow:
+                print("Audio buffer overflow!")
+            # Copy bytes immediately so we can return from callback quickly
+            pcm_bytes = bytes(indata)
+            
+            def safe_put(item):
+                if not queue.full():
+                    queue.put_nowait(item)
+                # If queue is full, just drop the audio chunk (back-pressure handling)
+            
+            loop.call_soon_threadsafe(safe_put, pcm_bytes)
+
+        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=mic_callback), \
+             sd.OutputStream(samplerate=24000, channels=1, dtype='int16') as speaker:
+            
+            print("Waiting for session to be ready...")
+            response_count = 0
+            
+            try:
+                while True:
+                    try:
+                        response_data = await websocket.recv()
+                        
+                        if isinstance(response_data, (bytes, bytearray)) and len(response_data):
+                            # Handle audio response
+                            speaker.write(np.frombuffer(response_data, dtype=np.int16))
+                            response_count += 1
+                            
+                        elif isinstance(response_data, str):
+                            # Handle JSON messages
+                            try:
+                                message = json.loads(response_data)
+                                await handle_session_message(message, websocket)
+                                
+                                if message.get("type") == "session.created":
+                                    print("Session created, configuring...")
+                                elif message.get("type") == "session.updated":
+                                    print("Session updated, voice chat is now active. Press Ctrl+C to quit.")
+                                    print("Try asking: 'What Toyota cars do you have?' or 'Can I schedule a test drive?'")
+                                    session_ready = True
+                                elif message.get("type") == "conversation.item.done":
+                                    item = message.get("item", {})
+                                    role = item.get("role", "unknown")
+                                    content = item.get("content", [])
+                                    if content and len(content) > 0:
+                                        text = content[0].get("text", "")
+                                        print(f"Transcript [{role}]: {text}")
+                                elif message.get("type") == "tool_call":
+                                    # Handle function calls from the AI
+                                    await handle_tool_call(message.get("tool_call", {}), websocket)
+                                        
+                            except json.JSONDecodeError:
+                                print(f"Received non-JSON text message: {response_data}")
+                                
+                    except websockets.exceptions.ConnectionClosedOK:
+                        print("Server closed connection cleanly.")
+                        break
+                        
+            except asyncio.CancelledError:
+                pass
+            except KeyboardInterrupt:
+                print("\nDisconnecting...")
+
+        sender_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sender_task
+
+
+async def handle_session_message(message, websocket):
+    """Handle session management messages from server."""
+    message_type = message.get("type")
+    
+    if message_type == "session.created":
+        # Send session.update to configure the bot with tools
+        session_update = {
+            "type": "session.update",
+            "session": {
+                "instructions": INSTRUCTIONS,
+                "temperature": 0.8,
+                "max_tokens": 4096,
+                "llm": {
+                    "model": "llama-4-scout-17b-16e-instruct"
+                },
+                "audio": {
+                    "input": {
+                        "format": {
+                            "type": "audio/pcm",
+                            "rate": 16000
+                        },
+                        "language": "en",
+                        "turn_detection": {
+                            "type": "assemblyai"
+                        }
+                    },
+                    "output": {
+                        "format": {
+                            "type": "audio/pcm",
+                            "rate": 24000
+                        },
+                        "voice": "rex",
+                        "speed": 1
+                    }
+                },
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_car_inventory",
+                            "description": "Get available cars in inventory. Can filter by make, model, or other criteria.",
+                            "callback": True,
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "make": {
+                                        "type": "string",
+                                        "description": "Car manufacturer (e.g., Toyota, Honda, Ford)"
+                                    },
+                                    "model": {
+                                        "type": "string", 
+                                        "description": "Car model (e.g., Camry, Civic, F-150)"
+                                    },
+                                    "max_price": {
+                                        "type": "number",
+                                        "description": "Maximum price filter"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "schedule_test_drive",
+                            "description": "Schedule a test drive appointment for a customer",
+                            "callback": True,
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "customer_name": {
+                                        "type": "string",
+                                        "description": "Customer's full name"
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "description": "Customer's phone number"
+                                    },
+                                    "car_make": {
+                                        "type": "string",
+                                        "description": "Make of car to test drive"
+                                    },
+                                    "car_model": {
+                                        "type": "string",
+                                        "description": "Model of car to test drive"
+                                    },
+                                    "preferred_date": {
+                                        "type": "string",
+                                        "description": "Preferred date for test drive"
+                                    }
+                                },
+                                "required": ["customer_name", "phone", "car_make", "car_model"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_financing_options",
+                            "description": "Get financing options for a car purchase",
+                            "callback": True,
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "car_price": {
+                                        "type": "number",
+                                        "description": "Price of the car"
+                                    },
+                                    "down_payment": {
+                                        "type": "number",
+                                        "description": "Down payment amount"
+                                    },
+                                    "credit_score": {
+                                        "type": "string",
+                                        "description": "Customer's credit score range (excellent, good, fair, poor)"
+                                    }
+                                },
+                                "required": ["car_price"]
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        await websocket.send(json.dumps(session_update))
+        print("Sent session configuration with tools")
+        
+    elif message_type == "session.updated":
+        print("Session configuration updated successfully")
+        
+    elif message_type == "conversation.item.done":
+        # Transcript message - handled in main loop
+        pass
+
+
+async def handle_tool_call(tool_call, websocket):
+    """Handle function calls from the AI and execute business logic."""
+    call_id = tool_call.get("id")
+    function_info = tool_call.get("function", {})
+    function_name = function_info.get("name")
+    arguments_raw = function_info.get("arguments", "{}")
+    
+    # Parse the JSON arguments (handle both string and dict)
+    if isinstance(arguments_raw, str):
+        try:
+            arguments = json.loads(arguments_raw)
+        except json.JSONDecodeError:
+            arguments = {}
+    elif isinstance(arguments_raw, dict):
+        arguments = arguments_raw
+    else:
+        arguments = {}
+    
+    print(f"\n🔧 Tool Call: {function_name}")
+    print(f"   Arguments: {arguments}")
+    
+    # Execute the appropriate function
+    result = None
+    
+    if function_name == "get_car_inventory":
+        result = get_car_inventory(arguments)
+    elif function_name == "schedule_test_drive":
+        result = schedule_test_drive(arguments)
+    elif function_name == "get_financing_options":
+        result = get_financing_options(arguments)
+    else:
+        result = {"error": f"Unknown function: {function_name}"}
+    
+    print(f"   Result: {result}")
+    
+    # Send the result back to the server
+    response = {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps(result)
+        }
+    }
+    
+    await websocket.send(json.dumps(response))
+    print(f"   ✓ Sent result back to agent")
+
+
+def get_car_inventory(args):
+    """Simulate getting car inventory from database."""
+    make_filter = (args.get("make") or "").lower()
+    model_filter = (args.get("model") or "").lower()
+    max_price = args.get("max_price")
+    
+    filtered_cars = SAMPLE_INVENTORY.copy()
+    
+    if make_filter:
+        filtered_cars = [car for car in filtered_cars if make_filter in car["make"].lower()]
+    
+    if model_filter:
+        filtered_cars = [car for car in filtered_cars if model_filter in car["model"].lower()]
+    
+    if max_price:
+        filtered_cars = [car for car in filtered_cars if car["price"] <= max_price]
+    
+    return {
+        "cars": filtered_cars,
+        "total_found": len(filtered_cars),
+        "filters_applied": {
+            "make": make_filter or "any",
+            "model": model_filter or "any", 
+            "max_price": max_price or "no limit"
+        }
+    }
+
+
+def schedule_test_drive(args):
+    """Simulate scheduling a test drive."""
+    customer_name = args.get("customer_name")
+    phone = args.get("phone")
+    car_make = args.get("car_make")
+    car_model = args.get("car_model")
+    preferred_date = args.get("preferred_date", "Next available")
+    
+    # Generate a fake appointment ID
+    import random
+    appointment_id = f"TD-{random.randint(1000, 9999)}"
+    
+    return {
+        "appointment_id": appointment_id,
+        "customer_name": customer_name,
+        "phone": phone,
+        "car": f"{car_make} {car_model}",
+        "scheduled_date": preferred_date,
+        "status": "confirmed",
+        "message": f"Test drive scheduled for {customer_name} on {preferred_date}"
+    }
+
+
+def get_financing_options(args):
+    """Simulate getting financing options."""
+    car_price = args.get("car_price")
+    down_payment = args.get("down_payment", 0)
+    credit_score = args.get("credit_score", "good")
+    
+    loan_amount = car_price - down_payment
+    
+    # Simulate different rates based on credit score
+    rates = {
+        "excellent": 3.5,
+        "good": 4.5,
+        "fair": 6.5,
+        "poor": 9.5
+    }
+    
+    rate = rates.get(credit_score.lower(), 4.5)
+    
+    # Calculate monthly payments for different terms
+    options = []
+    for months in [36, 48, 60, 72]:
+        monthly_rate = rate / 100 / 12
+        monthly_payment = (loan_amount * monthly_rate * (1 + monthly_rate)**months) / ((1 + monthly_rate)**months - 1)
+        
+        options.append({
+            "term_months": months,
+            "monthly_payment": round(monthly_payment, 2),
+            "total_interest": round((monthly_payment * months) - loan_amount, 2),
+            "apr": rate
+        })
+    
+    return {
+        "car_price": car_price,
+        "down_payment": down_payment,
+        "loan_amount": loan_amount,
+        "credit_score": credit_score,
+        "financing_options": options
+    }
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(voice_chat())
+    except KeyboardInterrupt:
+        print("\nExiting...")
+
+```
+

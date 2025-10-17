@@ -5,37 +5,74 @@ description: "Intelligent turn detection with Streaming Speech-to-Text"
 
 ### Overview
 
-AssemblyAI's end-of-turn detection functionality is integrated into our Streaming STT model, leveraging both acoustic and semantic features, and is coupled with a traditional silence-based heuristic approach. Both mechanisms work jointly and either can trigger end-of-turn detection throughout the audio stream. This joint approach significantly enhances the speed and accuracy of end-of-turn detection while allowing this functionality to fall back to the traditional method when the model makes a misprediction.
+AssemblyAI's turn detection model uses a neural network to detect when someone has finished speaking. Unlike traditional voice activity detection that only listens for silence, our model understands the meaning and flow of speech to make better decisions about when a turn has ended.
 
-This functionality is built natively into the STT model, making it ideal for addressing two common problems voice agent developers face: awkward pauses (long silence) or the risk of making premature interruptions (short silence), both of which disrupt the natural flow of conversation.
+The model has two ways to detect end-of-turn:
+1. **Semantic detection** - The model predicts when speech naturally ends based on meaning and context
+2. **Acoustic detection** - Traditional silence-based detection as a backup using VAD
 
-This approach allows for:
+When either method detects an end-of-turn, the model returns `end_of_turn=True` in the response.
 
-- Semantic understanding of natural speech patterns rather than simple silence thresholds
-- Support for natural pauses and thinking time without premature responses
-- Smooth conversation flow without awkward interruptions or artificial delays
+This approach solves common voice agent problems:
+- No more awkward long pauses waiting for silence thresholds
+- No more cutting people off mid-sentence during natural pauses
+- Better handling of "um" and thinking pauses
+- Easily fine tune the model to your use case
 
-<Note>
-  End-of-turn and end-of-utterances refer to the same thing and may be used
-  interchangeably in these docs.
-</Note>
+### Quick start configurations
 
-### Model-based detection
+#### Aggressive
+
+Ends turns very quickly, optimized for short responses and rapid back-and-forth.
+```json
+"end_of_turn_confidence_threshold": 0.4,
+"min_end_of_turn_silence_when_confident": 160,
+"max_turn_silence": 400
+```
+<Tip>Recommended use cases: Agent Assist, IVR replacements, Retail/E-commerce (order confirmations, delivery status), Telecom (outage reporting, yes/no checks)</Tip>
+
+
+#### Balanced
+Provides a natural middle ground, allowing enough pause for most conversational turns without feeling sluggish or overly eager. 
+```json
+"end_of_turn_confidence_threshold": 0.4,
+"min_end_of_turn_silence_when_confident": 400,
+"max_turn_silence": 1280
+```
+<Tip>Recommended use cases: Customer Support, Tech Support/SaaS, Financial Services (account inquiries, balance checks), Travel & Hospitality, Education, Government Services</Tip>
+
+#### Conservative
+Holds the floor longer, optimized for reflective or complex speech where users may pause to think before finishing.
+```json
+"end_of_turn_confidence_threshold": 0.7,
+"min_end_of_turn_silence_when_confident": 800,
+"max_turn_silence": 3600
+```
+<Tip>Recommended use cases: Healthcare, Mental Health Support, Sales & Consulting, Legal & Insurance, Language Learning</Tip>
+
+These configurations are just starting points and can be fine-tuned based on your specific use case. Reach out to [support@assemblyai.com](mailto:support@assemblyai.com) for help.
+
+### How it works
+
+The turn detection model uses a neural network to detect when someone has finished speaking. It has two ways to detect end-of-turn:
+
+<Steps>
+<Step>
+### Semantic Detection
 
 Triggers when **all** conditions are met:
 
-#### EOT token predicted
+#### Model confidence threshold
 
-- Model predicts semantic end-of-turn with a probability greater than `end_of_turn_confidence_threshold`
-- Default: `0.7` (user configurable)
+- Model predicts semantic end-of-turn confidence greater than `end_of_turn_confidence_threshold`
+- Default: `0.4` (user configurable)
 
-#### Minimum silence duration has passed
+#### Minimum silence duration
 
-- After the last non-silence word token, `min_end_of_turn_silence_when_confident` milliseconds must pass
-- Default: `160 ms` (user configurable)
-- Format: `milliseconds`
+- After the end of speech detected by VAD, `min_end_of_turn_silence_when_confident` milliseconds must pass
+- Default: `400 ms` (user configurable)
 
-#### Minimum speech duration spoken
+#### Minimum speech duration
 
 - The user must speak for at least `80 ms` since the last end-of-turn (ensures at least one word)
 - Set to `80 ms` (internal)
@@ -45,24 +82,44 @@ Triggers when **all** conditions are met:
 - Last word in `turn.words` has been finalized
 - Internal configuration
 
-### Silence-based detection
+</Step>
+<Step>
+
+### Acoustic Detection
 
 Triggers when **all** conditions are met:
 
-#### Minimum speech duration spoken
+#### Model confidence threshold
+
+- Model predicts semantic end-of-turn confidence **less than** `end_of_turn_confidence_threshold`
+- Default: `0.4` (user configurable)
+
+#### Maximum silence duration
+
+- After the end of speech detected by VAD, `max_turn_silence` milliseconds must pass
+- Default: `1280 ms` (user configurable)
+
+#### Minimum speech duration
 
 - The user must speak for at least `80 ms` since the last end-of-turn (ensures at least one word)
 - Set to `80 ms` (internal)
 
-#### Maximum silence duration has passed
+#### Word finalized
 
-- After the last non-silence word token, `max_turn_silence` milliseconds must pass
-- Default: `2400 ms` (user configurable)
-- Format: `milliseconds`
+- Last word in `turn.words` has been finalized
+- Internal configuration
+
+</Step>
+</Steps>
 
 ### Disable turn detection
 
-To disable model-based turn detection, set `end_of_turn_confidence_threshold` to 1. This will stop the model from predicting end-of-turns and will only use silence-based detection.
+To disable model-based turn detection, you have 2 options:
+- Set a VAD-based silence latency for each turn: Set `end_of_turn_confidence_threshold` to 1. This will cause the model to end a turn after a pre-determined amount of silence (based on `max_turn_silence`).
+  - Most useful when you are using the model as your VAD for silence-based turns.
+- Return turns as fast as possible on silence: Set `end_of_turn_confidence_threshold` to 0. This will cause the model to force end-of-turn as soon as silence is detected (based on `min_end_of_turn_silence_when_confident`).
+  - Most useful when you are using a custom turn detection model on top of the transcript results.
+
 If you are using your own form of turn detection (such as VAD or a custom turn detection model), you can send a `ForceEndpoint` event to the server to force the end of a turn and receive the final turn transcript.
 
 ```python

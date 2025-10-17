@@ -29,8 +29,8 @@ Python SDK
 transcript = transcriber.transcribe("https://github.com/user/audio-files/raw/main/audio.mp3")
 ```
 
-```
-Typescript SDK
+``` 
+JavaScript SDK
 
 const transcript = await client.transcripts.transcribe("https://github.com/user/audio-files/raw/main/audio.mp3")
 ```

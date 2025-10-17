@@ -172,7 +172,7 @@ paths:
       operationId: listTranscripts
       description: |
         <Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>
-        Retrieve a list of transcripts you created. 
+        Retrieve a list of transcripts you created.
         Transcripts are sorted from newest to oldest and can be retrieved for the last 90 days of usage. The previous URL always points to a page with older transcripts.
 
         If you need to retrieve transcripts from more than 90 days ago please reach out to our Support team at support@assemblyai.com.
@@ -554,7 +554,7 @@ paths:
         - transcript
       summary: Get redacted audio
       description: |
-        <Warning> Redacted audio creation is not supported on the EU endpoint. </Warning>
+        <Note>To retrieve the redacted audio on the EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com` in the `GET` request above.</Note>
         Retrieve the redacted audio object containing the status and URL to the redacted audio.
       operationId: getRedactedAudio
       x-fern-sdk-group-name: transcripts
@@ -1253,6 +1253,26 @@ components:
           type: boolean
           default: false
 
+        language_detection_options:
+          x-label: Specify options for Automatic Language Detection.
+          description: Specify options for Automatic Language Detection.
+          type: object
+          additionalProperties: false
+          properties:
+            expected_languages:
+              x-label: Minimum speakers expected
+              description: List of languages expected in the audio file. Defaults to `["all"]` when unspecified.
+              type: array
+              objects:
+                x-label: language
+                type: string
+            fallback_language:
+              x-label: Fallback language
+              description: |
+                If the detected language of the audio file is not in the list of expected languages, the `fallback_language` is used. Specify `["auto"]` to let our model choose the fallback language from `expected_languages` with the highest confidence score.
+              type: string
+              default: "auto"
+
         language_confidence_threshold:
           x-label: Language confidence threshold
           description: |
@@ -1340,21 +1360,6 @@ components:
           x-label: Audio end at
           description: The point in time, in milliseconds, to stop transcribing in your media file
           type: integer
-
-        word_boost:
-          x-label: Word boost
-          description: The list of custom vocabulary to boost transcription probability for
-          type: array
-          items:
-            x-label: Word to boost
-            type: string
-          deprecated: true
-
-        boost_param:
-          x-label: Word boost level
-          description: How much to boost specified words
-          default: default
-          $ref: "#/components/schemas/TranscriptBoostParam"
 
         filter_profanity:
           x-label: Filter profanity
@@ -1470,8 +1475,7 @@ components:
         keyterms_prompt:
           x-label: Keyterms prompt
           description: |
-            <Warning>`keyterms_prompt` is only supported when the `speech_model` is specified as `slam-1`</Warning>
-            Improve accuracy with up to 1000 domain-specific words or phrases (maximum 6 words per phrase).
+            Improve accuracy with up to 200 (for Universal) or 1000 (for Slam-1) domain-specific words or phrases (maximum 6 words per phrase).
           type: array
           items:
             x-label: Keyterm
@@ -1560,8 +1564,6 @@ components:
           auto_highlights: true,
           audio_start_from: 10,
           audio_end_at: 280,
-          word_boost: ["aws", "azure", "google cloud"],
-          boost_param: "high",
           filter_profanity: true,
           redact_pii: true,
           redact_pii_audio: true,
@@ -1620,8 +1622,6 @@ components:
           auto_highlights: true,
           audio_start_from: 10,
           audio_end_at: 280,
-          word_boost: ["aws", "azure", "google cloud"],
-          boost_param: "high",
           filter_profanity: true,
           redact_pii: true,
           redact_pii_audio: true,
@@ -2624,6 +2624,26 @@ components:
           description: Whether [Automatic language detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection) is enabled, either true or false
           type: [boolean, "null"]
 
+        language_detection_options:
+          x-label: Specify options for Automatic Language Detection.
+          description: Specify options for Automatic Language Detection.
+          type: object
+          additionalProperties: false
+          properties:
+            expected_languages:
+              x-label: Minimum speakers expected
+              description: List of languages expected in the audio file. Defaults to `["all"]` when unspecified.
+              type: array
+              objects:
+                x-label: language
+                type: string
+            fallback_language:
+              x-label: Fallback language
+              description: |
+                If the detected language of the audio file is not in the list of expected languages, the `fallback_language` is used. Specify `["auto"]` to let our model choose the fallback language from `expected_languages` with the highest confidence score.
+              type: string
+              default: "auto"
+
         language_confidence_threshold:
           x-label: Language confidence threshold
           description: |
@@ -2773,20 +2793,6 @@ components:
           description: The point in time, in milliseconds, in the file at which the transcription was terminated
           type: [integer, "null"]
 
-        word_boost:
-          x-label: Word boost
-          description: The list of custom vocabulary to boost transcription probability for
-          type: array
-          items:
-            x-label: Boosted word
-            type: string
-          deprecated: true
-
-        boost_param:
-          x-label: Boost
-          description: The word boost parameter value
-          type: [string, "null"]
-
         filter_profanity:
           x-label: Filter profanity
           description: Whether [Profanity Filtering](https://www.assemblyai.com/docs/models/speech-recognition#profanity-filtering) is enabled, either true or false
@@ -2877,7 +2883,7 @@ components:
         keyterms_prompt:
           x-label: Keyterms prompt
           description: |
-            Improve accuracy with up to 1000 domain-specific words or phrases (maximum 6 words per phrase).
+            Improve accuracy with up to 200 (for Universal) or 1000 (for Slam-1) domain-specific words or phrases (maximum 6 words per phrase).
           type: array
           items:
             x-label: Keyterm
@@ -3385,8 +3391,6 @@ components:
           auto_highlights: true,
           audio_start_from: 10,
           audio_end_at: 280,
-          word_boost: ["aws", "azure", "google cloud"],
-          boost_param: "high",
           filter_profanity: true,
           redact_pii: true,
           redact_pii_audio: true,
@@ -5605,7 +5609,7 @@ components:
           x-go-type: LeMURModel
         max_output_size:
           x-label: Maximum output size
-          description: Max output size in tokens, up to 4000
+          description: Maximum output size in tokens, up to the `final_model`'s max [(see chart)](/docs/lemur/customize-parameters#change-the-maximum-output-size).
           type: integer
           default: 2000
         temperature:
@@ -5669,7 +5673,7 @@ components:
                 - $ref: "#/components/schemas/LemurModel"
             max_output_size:
               x-label: Maximum output size
-              description: Max output size in tokens, up to 4000
+              description: Maximum output size in tokens, up to the `final_model`'s max [(see chart)](/docs/lemur/customize-parameters#change-the-maximum-output-size).
               type: integer
               default: 2000
             temperature:
@@ -5990,8 +5994,6 @@ components:
           auto_highlights: false,
           audio_start_from: null,
           audio_end_at: null,
-          word_boost: null,
-          boost_param: null,
           filter_profanity: null,
           redact_pii: false,
           redact_pii_audio: null,
