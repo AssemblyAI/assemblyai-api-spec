@@ -1,0 +1,310 @@
+---
+title: "Tool Calling"
+description: "Enable models to execute custom functions to access external data or functionality"
+hidden: true
+---
+
+## Overview
+
+Tool calling allows you to define functions that the model can call to access external data or perform actions. This enables the model to interact with databases, APIs, and other external systems.
+
+## Defining tools
+
+Define functions the model can call to access external data or functionality:
+
+```python
+import requests
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_employees",
+            "description": "Search employee database by name, department, or other criteria",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "first_name": {
+                        "type": "string",
+                        "description": "Employee's first name"
+                    },
+                    "department": {
+                        "type": "string",
+                        "description": "Department name"
+                    }
+                },
+                "required": []
+            }
+        }
+    }
+]
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers = headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": "Find employees in Engineering"}],
+        "tools": tools
+    }
+)
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])
+```
+
+## Handling tool calls
+
+Execute tools and send results back to continue the conversation:
+
+```python
+import requests
+import json
+
+headers = {
+  "authorization": "<YOUR_API_KEY>"
+}
+
+choice = response.json()["choices"][0]
+
+if choice.get("tool_calls"):
+    tool_call = choice["tool_calls"][0]
+
+    # Add function call to history
+    conversation_history.append({
+        "type": "function_call",
+        "tool_call_id": tool_call["id"],
+        "name": tool_call["function"]["name"],
+        "arguments": tool_call["function"]["arguments"]
+    })
+
+    # Execute your function
+    result = execute_function(
+        tool_call["function"]["name"],
+        json.loads(tool_call["function"]["arguments"])
+    )
+
+    # Add function output to history
+    conversation_history.append({
+        "type": "function_call_output",
+        "tool_call_id": tool_call["id"],
+        "name": tool_call["function"]["name"],
+        "output": json.dumps({"result": result})
+    })
+
+    # Continue conversation with the result
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers = headers,
+        json = {
+            "model": "claude-sonnet-4-5-20250929",
+            "messages": conversation_history,
+            "tools": tools
+        }
+    )
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])
+```
+
+## Tool call flow
+
+The complete tool calling process:
+
+1. Send user message with `tools` array defining available functions
+2. Model responds with `tool_calls` if it needs to use a tool
+3. Execute the tool in your application code
+4. Add `function_call` and `function_call_output` to conversation history
+5. Send updated history back to the API
+6. Model incorporates results and either calls more tools or provides final answer
+
+## Message types
+
+When using tools, structure your conversation history with these message types to track the complete interaction flow:
+
+- **user** - Messages from the user
+- **assistant** - Messages from the AI model
+- **system** - System instructions or context
+- **function_call** - Records a tool being called by the model
+- **function_call_output** - Records the result of executing a tool
+
+## API reference
+
+### Request
+
+The LLM Gateway accepts POST requests to `https://llm-gateway.assemblyai.com/v1/chat/completions` with the following parameters:
+
+```bash
+curl -X POST \
+  "https://llm-gateway.assemblyai.com/v1/chat/completions" \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Find employees in Engineering"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "search_employees",
+          "description": "Search employee database by name, department, or other criteria",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "department": {
+                "type": "string",
+                "description": "Department name"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "max_tokens": 1000
+  }'
+```
+
+#### Request parameters
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `model` | string | Yes | The model to use for completion. See [Available models](/docs/llm-gateway#available-models) section for supported values. |
+| `messages` | array | Yes | An array of message objects representing the conversation history. |
+| `tools` | array | Yes | An array of tool definitions that the model can call. |
+| `tool_choice` | string or object | No | Controls which tools the model can call. Options: `"none"`, `"auto"`, or an object specifying a specific function. |
+| `max_tokens` | number | No | The maximum number of tokens to generate. Range: [1, context_length). |
+| `temperature` | number | No | Controls randomness in the output. Higher values make output more random. Range: [0, 2]. |
+
+#### Message object
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `role` | string | Yes | The role of the message sender. Valid values: `"user"`, `"assistant"`, `"system"`, or `"tool"`. |
+| `content` | string or array | Yes | The message content. Can be a string or an array of content parts for the `"user"` role. |
+| `name` | string | No | An optional name for the message sender. For non-OpenAI models, this will be prepended as `{name}: {content}`. |
+| `tool_call_id` | string | No* | Required when `role` is `"tool"`. The ID of the tool call this message is responding to. |
+
+#### Tool object
+
+| Key | Type | Required? | Description |
+|-----|------|-----------|-------------|
+| `type` | string | Yes | The type of tool. Currently only `"function"` is supported. |
+| `function` | object | Yes | The function definition. |
+| `function.name` | string | Yes | The name of the function. |
+| `function.description` | string | No | A description of what the function does. |
+| `function.parameters` | object | Yes | A JSON Schema object describing the function parameters. |
+
+#### Tool choice object
+
+The `tool_choice` parameter can be:
+- `"none"` - The model will not call any tools
+- `"auto"` - The model can choose whether to call tools
+- An object with `type: "function"` and a `function.name` to force calling a specific function
+
+### Response
+
+The API returns a JSON response. When the model wants to call a tool:
+
+```json
+{
+  "request_id": "abc123",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": null
+      },
+      "finish_reason": "tool_calls",
+      "tool_calls": [
+        {
+          "id": "call_123",
+          "type": "function",
+          "function": {
+            "name": "search_employees",
+            "arguments": "{\"department\": \"Engineering\"}"
+          }
+        }
+      ]
+    }
+  ],
+  "request": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 1000
+  },
+  "usage": {
+    "prompt_tokens": 120,
+    "completion_tokens": 25,
+    "total_tokens": 145
+  }
+}
+```
+
+#### Response fields
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `request_id` | string | A unique identifier for the request. |
+| `choices` | array | An array of completion choices. Typically contains one choice. |
+| `choices[i].message` | object | The message object containing the model's response. |
+| `choices[i].message.role` | string | The role of the message, typically `"assistant"`. |
+| `choices[i].message.content` | string | The text content of the model's response. May be null when calling tools. |
+| `choices[i].finish_reason` | string | The reason the model stopped generating. Common values: `"stop"`, `"length"`, `"tool_calls"`. |
+| `choices[i].tool_calls` | array | Present when the model wants to call tools. Contains function call objects. |
+| `request` | object | Echo of the request parameters (excluding `messages`). |
+| `usage` | object | Token usage statistics for the request. |
+| `usage.prompt_tokens` | number | Number of tokens in the prompt. |
+| `usage.completion_tokens` | number | Number of tokens in the completion. |
+| `usage.total_tokens` | number | Total tokens used (prompt + completion). |
+
+#### Tool call object
+
+When the model wants to call a tool, the response includes a `tool_calls` array:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `tool_calls[i].id` | string | A unique identifier for the tool call. |
+| `tool_calls[i].type` | string | The type of tool call, always `"function"`. |
+| `tool_calls[i].function` | object | The function call details. |
+| `tool_calls[i].function.name` | string | The name of the function to call. |
+| `tool_calls[i].function.arguments` | string | A JSON string containing the function arguments. |
+
+### Error response
+
+If an error occurs, the API returns an error response:
+
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "Invalid request: missing required field 'model'",
+    "metadata": {}
+  }
+}
+```
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `error` | object | Container for error information. |
+| `error.code` | number | HTTP status code for the error. |
+| `error.message` | string | A human-readable description of the error. |
+| `error.metadata` | object | Optional additional error context. |
+
+#### Common error codes
+
+| Code | Description |
+|------|-------------|
+| 400 | Bad Request - Invalid request parameters |
+| 401 | Unauthorized - Invalid or missing API key |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Invalid endpoint or model |
+| 429 | Too Many Requests - Rate limit exceeded |
+| 500 | Internal Server Error - Server-side error |
