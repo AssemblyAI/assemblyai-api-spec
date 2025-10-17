@@ -1,0 +1,1031 @@
+---
+title: "Best Practices for building Voice Agents"
+description: "Complete guide for building voice agents with AssemblyAI"
+---
+
+## Introduction
+
+AssemblyAI's Universal-Streaming model represents a breakthrough in speech-to-text technology specifically designed for conversational AI in voice agents. Unlike traditional streaming models that force developers to choose between speed and reliability, Universal-Streaming delivers immutable transcripts in ~300ms with industry-leading accuracy.
+
+## What is Universal-Streaming?
+
+Universal-Streaming is AssemblyAI's speech-to-text model purpose-built for real-time conversational AI. It's the first streaming model to deliver:
+
+- **Immutable transcripts** that never change once received (no retroactive edits)
+- **~300ms latency** for natural conversation flow
+- **Intelligent turn detection** combining acoustic and semantic analysis
+- **Industry-leading accuracy** trained specifically for conversational speech patterns
+- **Unlimited concurrent streams** with transparent, usage-based pricing
+
+Unlike traditional streaming models that force you to choose between speed and reliability, Universal-Streaming provides both—enabling natural conversations without awkward pauses or mid-sentence interruptions.
+
+**Key innovation**: While other models send partial transcripts that constantly change (causing downstream processing issues), Universal-Streaming's immutable transcripts arrive as "finals" from the start. This enables pre-emptive LLM processing while users are still speaking, dramatically reducing response latency.
+
+## Why AssemblyAI for Voice Agents?
+
+Voice agents require critical capabilities that traditional speech-to-text solutions struggle to provide:
+
+**Speed without sacrificing accuracy**
+- Immutable transcripts in ~300ms enable instant LLM processing
+- No waiting for "final" transcripts that never arrive
+- Pre-emptive generation while users are still speaking
+
+**Natural conversation flow**
+- Intelligent turn detection understands context, not just silence
+- No more awkward long pauses or mid-sentence interruptions
+- Configurable for your specific use case
+
+**Production-ready at scale**
+- Unlimited concurrent streams from day one
+- No capacity planning or overage fees
+- Pre-built integrations with LiveKit, Pipecat, Vapi
+
+**Transparent pricing**
+- $0.15/hour based on session duration
+- Optional keyterms prompting: +$0.04/hour
+- No hidden costs or surprise bills
+
+Universal-Streaming addresses the fundamental challenges of voice agents: delivering both speed and reliability while maintaining natural conversation flow and transparent costs.
+
+## What Languages and Features Does Universal-Streaming Support?
+
+### Language Support
+
+Universal-Streaming supports two modes:
+
+**English-only mode (default)**
+- Full feature support including keyterms prompting
+- Optimized for English conversations
+- Best performance and lowest latency
+
+**Multilingual mode (beta)**
+- Supports: English, Spanish, French, German, Italian, Portuguese
+- Automatic language detection and code-switching
+- Maintains context across language changes
+- Note: Keyterms prompting not currently supported
+
+To enable multilingual mode, set `"language": "multi"` in connection parameters.
+
+### Available Features
+
+**Core Streaming Features:**
+- Turn-based immutable transcripts (no retroactive edits)
+- Real-time partial transcripts during speech
+- Word-level timestamps and confidence scores
+- Configurable endpointing (semantic + acoustic detection)
+- Force endpoint capability for manual turn control
+- Built-in VAD (Voice Activity Detection)
+
+**Accuracy Enhancements:**
+- **Keyterms Prompting** (English-only): Up to 100 custom terms per session
+  - 21% better accuracy on domain-specific terminology
+  - Word-level and turn-level boosting
+  - Cost: +$0.04/hour
+
+**Audio Processing:**
+- PCM16 and Mu-law encoding support
+- Configurable sample rates (16kHz recommended)
+- Single-channel audio
+- Automatic noise handling
+- Background noise robustness
+
+**Text Processing:**
+- Optional text formatting (punctuation, capitalization, ITN)
+- **Not recommended for voice agents** - adds ~200ms latency with no LLM benefit
+- Useful for displaying transcripts to end users
+
+**Important Limitations:**
+- Timestamps have wide variance in accuracy - use for relative timing only
+- 50ms minimum audio chunk size, 1000ms maximum
+
+### Coming Soon (Public Roadmap)
+
+- **Multi-region support**: EU deployment for lower latency in Europe
+- **Self-hosted deployment**: Docker containers for on-premise use
+- **Enhanced audio handling**: Improved performance with background noise and low-quality audio
+- **Speaker diarization**: Real-time speaker identification (limited utility for most voice agents)
+
+Check our [public roadmap](https://assemblyai.atlassian.net/jira/discovery/share/views/3c73fd70-37f9-4fb8-a4f1-d4a856a2f65d) for current development status.
+
+## How Can I Get Started with Universal-Streaming?
+
+### Basic Setup and Terminal Logging
+
+Here's a complete script that connects to Universal-Streaming and logs all JSON responses to your terminal.
+
+This script will:
+- Connect to Universal-Streaming WebSocket API
+- Capture audio from your microphone
+- Log every JSON message received (partial and final transcripts)
+- Highlight key fields like `utterance`, `end_of_turn`, and `transcript`
+- Show when utterances are complete and ready for LLM processing
+- Show when turns are predicted to have ended so your voice agent can respond
+```python
+import asyncio
+import json
+import websockets
+from urllib.parse import urlencode
+import pyaudio
+import threading
+from queue import Queue
+
+# Configuration
+API_KEY = "YOUR_API_KEY_HERE"  # Replace with your AssemblyAI API key
+SAMPLE_RATE = 16000
+CHUNK_SIZE = 1024
+
+# WebSocket connection parameters
+CONNECTION_PARAMS = {
+    "sample_rate": SAMPLE_RATE,
+    "format_turns": False,  # CRITICAL: Unformatted for fastest response (~200ms savings)
+    "end_of_turn_confidence_threshold": 0.4,  # Balanced turn detection
+    "min_end_of_turn_silence_when_confident": 160,  # ms after confident EOT
+    "max_turn_silence": 1280  # Acoustic fallback threshold
+}
+
+# Build WebSocket URL
+API_ENDPOINT_BASE = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio queue for thread-safe audio handling
+audio_queue = Queue()
+
+def audio_callback(in_data, frame_count, time_info, status):
+    """Callback for audio stream - adds audio to queue"""
+    audio_queue.put(in_data)
+    return (None, pyaudio.paContinue)
+
+async def send_audio(websocket):
+    """Send audio data to WebSocket"""
+    print("📤 Starting audio sender...")
+    while True:
+        if not audio_queue.empty():
+            audio_data = audio_queue.get()
+            await websocket.send(audio_data)
+        else:
+            await asyncio.sleep(0.01)
+
+async def receive_transcripts(websocket):
+    """Receive and log all transcripts"""
+    print("📥 Starting transcript receiver...")
+    while True:
+        try:
+            message = await websocket.recv()
+            data = json.loads(message)
+            
+            # Log complete JSON response
+            print("\n" + "="*50)
+            print("📝 RECEIVED MESSAGE:")
+            print(json.dumps(data, indent=2))
+            
+            # Highlight important fields
+            if data.get("type") == "Turn":
+                print("\n🔍 KEY FIELDS:")
+                print(f"  Turn Order: {data.get('turn_order')}")
+                print(f"  Transcript: '{data.get('transcript')}'")
+                print(f"  End of Turn: {data.get('end_of_turn')}")
+                print(f"  EOT Confidence: {data.get('end_of_turn_confidence', 0):.3f}")
+                print(f"  Utterance: {data.get('utterance')}")
+                
+                # KEY INSIGHT: Utterance field enables pre-emptive generation
+                if data.get("utterance"):
+                    print("\n✅ UTTERANCE AVAILABLE - Ready for LLM processing!")
+                    print("   💡 Start generating LLM response now, don't wait for end_of_turn")
+                
+                # KEY INSIGHT: end_of_turn signals when to respond
+                if data.get("end_of_turn"):
+                    print("\n🎯 END OF TURN - User finished speaking, agent can respond")
+                    
+        except websockets.exceptions.ConnectionClosed:
+            print("❌ Connection closed")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+async def main():
+    """Main function to coordinate streaming"""
+    print("🚀 Universal-Streaming Terminal Logger")
+    print(f"📡 Connecting to: {API_ENDPOINT_BASE}")
+    print(f"🔧 Configuration: {json.dumps(CONNECTION_PARAMS, indent=2)}")
+    print("-" * 50)
+    
+    # Set up audio stream
+    p = pyaudio.PyAudio()
+    stream = p.open(
+        format=pyaudio.paInt16,
+        channels=1,
+        rate=SAMPLE_RATE,
+        input=True,
+        frames_per_buffer=CHUNK_SIZE,
+        stream_callback=audio_callback
+    )
+    
+    # Connect to WebSocket with auth header
+    headers = {"Authorization": API_KEY}
+    
+    try:
+        async with websockets.connect(API_ENDPOINT, extra_headers=headers) as websocket:
+            print("✅ Connected to Universal-Streaming!")
+            print("🎤 Start speaking... (Press Ctrl+C to stop)\n")
+            
+            # Start audio stream
+            stream.start_stream()
+            
+            # Run send and receive concurrently
+            await asyncio.gather(
+                send_audio(websocket),
+                receive_transcripts(websocket)
+            )
+            
+    except KeyboardInterrupt:
+        print("\n👋 Stopping...")
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        print("✅ Cleaned up resources")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Installation Requirements
+```bash
+pip install websockets pyaudio
+```
+
+## How Do I Build a Voice Agent with AssemblyAI?
+
+AssemblyAI provides **speech-to-text only** today - you'll need additional providers for a complete voice agent:
+
+### Complete Voice Agent Stack
+
+1. **Speech-to-Text (STT):** AssemblyAI Universal-Streaming
+2. **Large Language Model (LLM):** OpenAI, Anthropic, Gemini, Cerebras, etc.
+3. **Text-to-Speech (TTS):** Rime, Cartesia, ElevenLabs, etc.
+4. **Orchestration:** LiveKit, Pipecat, Vapi, or custom build
+
+### Pre-Built Integrations
+
+**LiveKit Agents (Recommended Quick Start)**
+LiveKit provides the fastest path to a working voice agent with AssemblyAI:
+```python
+# LiveKit + AssemblyAI Quick Start
+from livekit import agents
+from livekit.plugins import assemblyai, openai, rime
+
+async def create_voice_agent():
+    # Initialize AssemblyAI STT
+    stt = assemblyai.STT(
+        api_key="your_assemblyai_key",
+        end_of_turn_confidence_threshold=0.4,
+        min_end_of_turn_silence_when_confident=160,
+        format_turns=False  # CRITICAL: Faster without formatting
+    )
+    
+    # Add LLM
+    llm = openai.LLM(api_key="your_openai_key")
+    
+    # Add TTS
+    tts = rime.TTS(api_key="your_rime_key")
+    
+    # Create agent
+    agent = agents.VoiceAssistant(
+        stt=stt,
+        llm=llm,
+        tts=tts,
+        turn_detection="stt"  # Use AssemblyAI's turn detection
+    )
+    
+    return agent
+```
+
+**Pipecat by Daily**
+Pipecat is an open-source framework for conversational AI which allows for maximum customizability in your voice agent:
+```python
+from pipecat.services.assemblyai import AssemblyAISTTService
+from pipecat.services.openai import OpenAILLMService
+from pipecat.services.rime import RimeTTSService
+
+# Configure services
+stt = AssemblyAISTTService(
+    api_key="your_key",
+    connection_params=AssemblyAIConnectionParams(
+        end_of_turn_confidence_threshold=0.4,
+        min_end_of_turn_silence_when_confident=160,  # ms after confident EOT
+        format_turns=False  # CRITICAL: Faster without formatting
+    ),
+    vad_force_turn_endpoint=False,  # Rely on AssemblyAI's EOT, not VAD
+)
+llm = OpenAILLMService(api_key="your_key")
+tts = RimeTTSService(api_key="your_key")
+```
+
+**Vapi**
+Vapi is a developer platform that handles voice agent backend infrastructure:
+
+1. Go to Assistants tab in Vapi dashboard
+2. Select your assistant → Transcriber tab
+3. Choose "Assembly AI" as provider
+4. Toggle on "Universal Streaming API"
+5. **Disable "Format Turns"** for best latency
+
+See our [Vapi integration guide](https://www.assemblyai.com/docs/voice-agents/vapi) for detailed setup.
+
+### Integration Resources and Full Examples
+
+- [Building a Voice Agent with LiveKit and AssemblyAI](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide)
+- [Building a Voice Agent with Pipecat and AssemblyAI](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide)
+
+## How Do I Optimize for Latency with Universal-Streaming?
+
+### Fastest Latency Configuration
+```python
+# Maximum speed configuration
+latency_optimized_params = {
+    "sample_rate": 16000,
+    "encoding": "pcm_s16le",
+    
+    # CRITICAL latency optimizations
+    "format_turns": False,  # NEVER use for voice agents - saves ~200ms
+    
+    # Aggressive turn detection for quick responses
+    "end_of_turn_confidence_threshold": 0.4,  # Lower = faster detection
+    "min_end_of_turn_silence_when_confident": 160,  # Minimal silence required
+    "max_turn_silence": 800,  # Faster fallback
+    
+    # Audio optimization
+    "chunk_size": 512  # Smaller chunks = lower latency
+}
+```
+
+### Latency Optimization Best Practices
+
+**1. Never use Text Formatting for Voice Agents**
+```python
+latency_optimized_params = {
+    "format_turns": False  # Saves ~200ms per response
+}
+```
+**Why?** LLMs don't need formatting - raw text works perfectly. Formatting adds ~200ms latency with zero benefit for voice agents. The LLM processes `"hello world"` exactly the same as `"Hello, world!"`.
+
+**When NOT to disable formatting:**
+- Displaying transcripts to end users (captions, transcription apps)
+- Recording/archiving conversations for human review
+- Any scenario where humans read the transcript directly
+
+**2. Grab the `utterance` field to process Immutable Partials for Pre-emptive Generation**
+```python
+if data.get("utterance"):  # Complete utterance ready
+    # Start LLM immediately - don't wait for end_of_turn
+    asyncio.create_task(generate_response(data["utterance"]))
+```
+This is especially powerful when using external turn detection models. By default, LiveKit and Pipecat leverage this configuration for pre-emptive generation.
+
+**3. Use Aggressive Turn Detection**
+```python
+# For rapid back-and-forth (customer service, quick confirmations)
+latency_optimized_params = {
+    "end_of_turn_confidence_threshold": 0.4,
+    "min_end_of_turn_silence_when_confident": 160
+}
+```
+Note that we recommend testing the end of turn confidence for your use case. You can find our [guide on turn detection here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection).
+
+**4. Optimize Audio Pipeline**
+- Use 16kHz sample rate (balances quality and bandwidth)
+- Send smaller audio chunks (512-1024 bytes)
+- Minimize buffering in your audio capture
+- Keep network latency low (use same region as AssemblyAI servers when possible)
+
+**5. Leverage Built-in VAD**
+AssemblyAI includes VAD in the model. You can substitute Universal-Streaming entirely for VAD by adjusting `min_end_of_turn_silence_when_confident`, though this increases latency until the silence threshold has passed. This is recommended most for custom builds where a voice agent orchestrator is not managing the VAD for you.
+
+### Voice Agent Specific Tips
+
+- **Use `end_of_turn` with VAD**: Combine the `end_of_turn` parameter with your VAD to determine if the user is continuing to speak or if you can safely interrupt
+- **Skip unnecessary features**: Avoid `format_turns` and wait for unformatted transcripts only for the fastest response
+- **Monitor `utterance`**: Use this to pre-emptively generate LLM responses while confirming a turn has ended
+- **Monitor `end_of_turn_confidence`**: Use this to fine-tune your interruption logic
+- **Configure for your use case**: Use Aggressive, Balanced, or Conservative presets based on your needs
+
+### Latency vs. Accuracy Trade-offs
+
+| Configuration | TTFT | End-to-End | Best For |
+|--------------|------|------------|----------|
+| [Aggressive](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#aggressive) | ~200ms | ~500ms | Quick confirmations, IVR |
+| [Balanced](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#balanced) | ~300ms | ~800ms | Most conversations |
+| [Conservative](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#conservative) | ~400ms | ~1200ms | Complex instructions |
+
+## How Can I Use Turn Detection in My Voice Agent?
+
+### Understanding Turn Detection
+
+Universal-Streaming uses dual detection methods for [turn detection](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection):
+
+**Semantic Detection (Primary)**
+- Neural network analyzes meaning and context
+- Triggers when `end_of_turn_confidence` > `end_of_turn_confidence_threshold`
+- Understands natural speech patterns
+- Handles "um", pauses, incomplete thoughts
+- Minimum silence: `min_end_of_turn_silence_when_confident` (default 400ms)
+
+**Acoustic Detection (Fallback)**
+- Traditional silence-based VAD
+- Triggers after `max_turn_silence` duration (default 1280ms)
+- Ensures reliability for edge cases
+- Works even when semantic model has low confidence
+
+When either method detects an end-of-turn, the model returns `end_of_turn=True` in the response.
+
+### Configuration Examples
+```python
+# Aggressive - Fast customer service
+# Best for: IVR, order confirmations, yes/no questions
+aggressive_params = {
+    "end_of_turn_confidence_threshold": 0.3,  # Lower threshold = faster detection
+    "min_end_of_turn_silence_when_confident": 160,  # Less silence needed
+    "max_turn_silence": 800  # Quick acoustic fallback
+}
+
+# Balanced - Natural conversations (DEFAULT)
+# Best for: Customer support, tech support, general conversations
+balanced_params = {
+    "end_of_turn_confidence_threshold": 0.4,
+    "min_end_of_turn_silence_when_confident": 400,
+    "max_turn_silence": 1280
+}
+
+# Conservative - Medical dictation, complex instructions
+# Best for: Healthcare, legal, detailed technical support
+conservative_params = {
+    "end_of_turn_confidence_threshold": 0.5,  # Higher threshold = more patient
+    "min_end_of_turn_silence_when_confident": 560,  # More silence before confirming
+    "max_turn_silence": 2000  # Longer acoustic fallback
+}
+```
+
+**Parameter Explanations:**
+- `end_of_turn_confidence_threshold`: Raise to wait for higher confidence before ending turn; lower for faster responses
+- `min_end_of_turn_silence_when_confident`: Amount of silence required after model is confident turn has ended
+- `max_turn_silence`: Maximum silence before forcing turn end (acoustic fallback)
+
+### Advanced Turn Control
+
+**Disable Model-Based Detection**
+```python
+# Use VAD-only mode (silence-based only)
+params = {"end_of_turn_confidence_threshold": 1.0}
+
+# Use an external turn detection model (fastest possible)
+params = {"end_of_turn_confidence_threshold": 0.01}
+```
+
+**Force Manual Turn Ending**
+```python
+# Send ForceEndpoint event to immediately end current turn
+await websocket.send(json.dumps({
+    "type": "ForceEndpoint"
+}))
+```
+
+### Monitoring Turn Detection
+```python
+def analyze_turn_detection(data):
+    eot_confidence = data.get("end_of_turn_confidence", 0)
+    
+    if eot_confidence > 0.7:
+        print("High confidence turn end - user definitely finished")
+    elif eot_confidence > 0.4:
+        print("Moderate confidence - may continue speaking")
+    else:
+        print("Low confidence - likely mid-sentence or thinking")
+```
+
+
+## How Can I Use Immutable Partials for Pre-emptive Generation?
+
+### Understanding the Utterance Field
+
+The `utterance` field in Universal-Streaming provides the **complete finalized text** when an utterance ends, even if the turn hasn't ended yet. This is crucial for pre-emptive LLM generation:
+```json
+# Example message showing utterance field usage
+{
+    "turn_order": 1,
+    "turn_is_formatted": false,
+    "end_of_turn": false,  # Turn NOT ended yet
+    "transcript": "i am a voice",
+    "end_of_turn_confidence": 0.454,
+    "utterance": "I am a voice agent.",  # Complete utterance for pre-generation!
+    "type": "Turn"
+}
+```
+
+**Key Insight**: The utterance appeared even though `end_of_turn=false`. This means you can start processing the LLM response **before** the turn officially ends, saving 200-500ms of latency.
+
+### Pre-emptive Generation Strategy
+
+When you receive a non-empty `utterance` field, you can immediately start LLM processing:
+```python
+async def handle_streaming_message(data):
+    utterance_text = data.get("utterance")
+    transcript = data.get("transcript")
+    is_final = data.get("end_of_turn")
+    turn_order = data.get("turn_order")
+    
+    # Check for utterance completion (pre-emptive opportunity)
+    if utterance_text:
+        # FASTEST: Start LLM processing on complete utterance
+        # even though turn hasn't ended
+        print(f"🚀 Pre-emptive generation for: '{utterance_text}'")
+        
+        # Start async LLM call immediately
+        llm_task = asyncio.create_task(
+            generate_llm_response(utterance_text, turn_order)
+        )
+        
+        # Cache for later use
+        utterance_cache[turn_order] = {
+            "utterance": utterance_text,
+            "llm_task": llm_task
+        }
+    
+    elif is_final:
+        # Turn has ended - use pre-computed response if available
+        if turn_order in utterance_cache:
+            # Response already computing or ready!
+            llm_response = await utterance_cache[turn_order]["llm_task"]
+            print(f"✅ Using pre-computed response (saved 200-500ms!)")
+            return llm_response
+        else:
+            # Fallback: generate response now
+            return await generate_llm_response(transcript, turn_order)
+
+async def generate_llm_response(text, turn_order):
+    """Generate LLM response for utterance"""
+    response = await llm.complete(
+        prompt=f"Respond to: {text}",
+        metadata={"turn_order": turn_order}
+    )
+    return response
+```
+
+### When Utterance Field Appears
+
+The `utterance` field appears in these scenarios:
+
+1. **End of utterance, NOT end of turn** (Most useful for pre-generation):
+```json
+{
+    "end_of_turn": false,
+    "utterance": "Hi my name is sonny",  // Complete utterance ready
+    "end_of_turn_confidence": 0.454       // Not confident enough to end turn
+}
+```
+
+2. **End of utterance AND end of turn** (Standard completion):
+```json
+{
+    "end_of_turn": true,
+    "utterance": "Hi my name is sonny",
+    "end_of_turn_confidence": 0.5005      // Confident enough to end turn
+}
+```
+
+3. **During partial transcripts** (Empty, not useful):
+```json
+{
+    "end_of_turn": false,
+    "utterance": "",  // Empty during partials
+    "transcript": "hi my"
+}
+```
+
+### Benefits of Using Utterance Field
+
+1. **Maximum Speed**: Start LLM processing before turn ends
+2. **Natural Conversations**: Handle pauses without waiting for silence
+3. **Reduced Latency**: Save 200-500ms by pre-computing responses
+4. **Better UX**: Agent responds instantly when user actually stops
+
+### Real-World Example
+```python
+# Voice agent with pre-emptive generation
+class FastVoiceAgent:
+    def __init__(self):
+        self.utterance_cache = {}
+        
+    async def process_stream(self, data):
+        turn_order = data.get("turn_order")
+        utterance = data.get("utterance")
+        
+        # Log for debugging
+        print(f"Turn {turn_order}: utterance='{utterance}' eot={data.get('end_of_turn')}")
+        
+        if utterance and not data.get("end_of_turn"):
+            # Pre-emptive path: ~300ms head start!
+            print(f"⚡ Starting pre-emptive generation for turn {turn_order}")
+            self.utterance_cache[turn_order] = asyncio.create_task(
+                self.generate_response(utterance)
+            )
+        
+        if data.get("end_of_turn"):
+            # Turn ended - use cached or generate now
+            if turn_order in self.utterance_cache:
+                response = await self.utterance_cache[turn_order]
+                print(f"🎯 Pre-computed response ready instantly!")
+            else:
+                response = await self.generate_response(data.get("transcript"))
+                print(f"⏱️ Generated response on-demand")
+            
+            return response
+```
+
+<Note>
+    Voice agent platforms like LiveKit and Pipecat automatically use the utterance field for pre-emptive generation with optimal settings configured. If you're using these platforms, this logic is already implemented for you.
+</Note>
+
+## How Do I Process Messages from the Universal-Streaming API?
+
+### Message Sequence Flow
+
+Universal-Streaming sends [messages in a specific sequence](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/message-sequence) as users speak. Here's a complete example of someone saying "Hi my name is Sonny. I am a voice agent."
+
+**1. Session Initialization**
+```json
+{
+    "type": "Begin",
+    "id": "de5d9927-73a6-4be8-b52d-b4c07be37e6b",
+    "expires_at": 1759796682
+}
+```
+
+**2. Partial Transcripts (during "Hi my name is Sonny")**
+```json
+{
+    "type": "Turn",
+    "turn_order": 0,
+    "turn_is_formatted": false,
+    "end_of_turn": false,
+    "transcript": "",  // Empty initially
+    "utterance": "",   // Empty during partials
+    "end_of_turn_confidence": 0.017,
+    "words": [
+        {
+            "text": "hi",
+            "word_is_final": false  // Still processing
+        }
+    ]
+}
+```
+
+Words progressively finalize:
+```json
+{
+    "transcript": "hi my name is",  // Growing transcript
+    "utterance": "",  // Still empty - not end of utterance yet
+    "end_of_turn": false,
+    "words": [
+        {"text": "hi", "word_is_final": true},
+        {"text": "my", "word_is_final": true},
+        {"text": "name", "word_is_final": true},
+        {"text": "is", "word_is_final": true},
+        {"text": "sonny", "word_is_final": false}  // Latest word
+    ]
+}
+```
+
+**3. End of Utterance (Key moment for pre-emptive generation!)**
+```json
+{
+    "type": "Turn",
+    "turn_order": 0,
+    "turn_is_formatted": false,
+    "end_of_turn": true,  // Turn also ends in this case
+    "transcript": "hi my name is sonny",
+    "utterance": "Hi my name is sonny",  // ⚡ COMPLETE UTTERANCE!
+    "end_of_turn_confidence": 0.5005,
+    "words": [/* all words with word_is_final: true */]
+}
+```
+
+**4. Formatted Final (if format_turns=true)**
+```json
+{
+    "turn_order": 0,
+    "turn_is_formatted": true,
+    "end_of_turn": true,
+    "transcript": "Hi, my name is Sonny.",  // Formatted with punctuation
+    "utterance": "",  // Empty after formatting
+}
+```
+
+**5. New Turn Continues ("I am a voice agent")**
+
+Sometimes the turn ends but the user keeps speaking:
+```json
+{
+    "turn_order": 1,  // New turn number
+    "end_of_turn": false,
+    "transcript": "i am a voice",
+    "utterance": "",  // Empty during partials
+}
+```
+
+**6. Utterance Completes BUT Turn Doesn't End (Pre-emptive opportunity!)**
+```json
+{
+    "turn_order": 1,
+    "end_of_turn": false,  // ⚠️ Turn NOT ended
+    "transcript": "i am a voice",
+    "utterance": "I am a voice agent.",  // ⚡ Complete utterance ready!
+    "end_of_turn_confidence": 0.454  // Not confident enough to end
+}
+```
+
+**7. Turn Finally Ends**
+```json
+{
+    "turn_order": 1,
+    "end_of_turn": true,  // Now turn ends
+    "transcript": "i am a voice agent",
+    "utterance": "",  // Empty when turn ends
+    "end_of_turn_confidence": 0.751
+}
+```
+
+### Processing Strategy
+```python
+class TranscriptProcessor:
+    def __init__(self):
+        self.current_turn = 0
+        self.pre_computed_responses = {}
+        
+    async def process_message(self, data):
+        msg_type = data.get("type")
+        
+        if msg_type == "Begin":
+            print(f"Session started: {data.get('id')}")
+            
+        elif msg_type == "Turn":
+            return await self.process_turn(data)
+            
+        elif msg_type == "Termination":
+            print(f"Session ended: {data.get('message')}")
+            
+    async def process_turn(self, data):
+        turn_order = data.get("turn_order")
+        transcript = data.get("transcript")
+        utterance = data.get("utterance")
+        is_final = data.get("end_of_turn")
+        eot_confidence = data.get("end_of_turn_confidence", 0)
+        
+        # Track turn changes
+        if turn_order != self.current_turn:
+            self.current_turn = turn_order
+            print(f"\n🔄 New turn #{turn_order}")
+        
+        # Monitor progress
+        print(f"  Confidence: {eot_confidence:.3f} | Transcript: '{transcript}'")
+        
+        # KEY: Check for utterance completion (pre-emptive opportunity)
+        if utterance:
+            print(f"  ⚡ UTTERANCE COMPLETE: '{utterance}' - Starting pre-generation!")
+            
+            # Start LLM processing immediately
+            self.pre_computed_responses[turn_order] = asyncio.create_task(
+                self.generate_response(utterance)
+            )
+        
+        # Handle turn completion
+        if is_final:
+            print(f"  ✅ TURN COMPLETE: '{transcript}'")
+            
+            # Use pre-computed response if available
+            if turn_order in self.pre_computed_responses:
+                response = await self.pre_computed_responses[turn_order]
+                print(f"  🎯 Using pre-computed response (instant!)")
+            else:
+                response = await self.generate_response(transcript)
+                print(f"  ⏱️ Generating response now")
+                
+            return response
+            
+    async def generate_response(self, text):
+        # Your LLM call
+        return f"Response to: {text}"
+```
+
+### Key Fields to Watch
+
+| Field | Purpose | When to Act |
+|-------|---------|-------------|
+| `utterance` | Complete utterance text | Non-empty = start pre-generation |
+| `end_of_turn` | Turn completion flag | true = process final response |
+| `end_of_turn_confidence` | Turn ending confidence | Monitor for debugging |
+| `word_is_final` | Word finalization | All true = utterance ending soon |
+| `turn_order` | Turn counter | Changes = new speaking turn |
+
+### Best Practices Summary
+
+**Voice Agents - Speed Above All:**
+- Grab `utterance` parameter immediately for fastest response
+- Never use `format_turns` (adds latency with no LLM benefit)
+- Use `end_of_turn` + VAD to determine safe interruption points
+- Configure Aggressive/Balanced/Conservative presets for your use case
+- Process unformatted transcripts only
+
+<Note>
+If you're using LiveKit or Pipecat, this message processing logic is already optimized and configured for you automatically. You don't need to implement it yourself.
+</Note>
+
+## How Can I Improve the Accuracy of My Transcription?
+
+### Using Keyterms Prompting
+
+[Keyterms Prompting](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting) boosts accuracy for domain-specific vocabulary—product names, people, technical terms:
+```python
+# Include keyterms in connection parameters
+keyterms = [
+    "AssemblyAI",
+    "Universal-Streaming", 
+    "Baconator",
+    "Dr. Rodriguez",
+    "iPhone 15 Pro",
+    "NASDAQ",
+    "PostgreSQL"
+]
+
+CONNECTION_PARAMS = {
+    "keyterms_prompt": json.dumps(keyterms)  # Up to 100 terms
+}
+
+# Build URL with keyterms
+API_ENDPOINT = f"{API_ENDPOINT_BASE}?{urlencode(CONNECTION_PARAMS)}"
+```
+
+### Keyterms Best Practices
+
+**DO Include:**
+- Proper names and people ("Dr. Sarah Chen", "Keanu Reeves")
+- Product names ("MacBook Pro M3", "iPhone 15 Pro", "Baconator")
+- Technical terminology ("Kubernetes", "PostgreSQL", "OAuth", "React Native")
+- Company-specific jargon ("Q3 roadmap", "OKRs", "CSAT score")
+- Menu items or SKUs ("Grande Latte", "SKU-12345")
+- Domain-specific acronyms ("HIPAA", "SOC 2", "GDPR")
+- Brand names ("AssemblyAI", "LiveKit", "Pipecat")
+- Up to 50 characters per term
+
+**DON'T Include:**
+- Common English words ("hello", "information", "important")
+- Single letters or very short terms ("a", "it", "is")
+- More than 100 terms total
+- Generic phrases ("thank you", "have a nice day")
+- Punctuation or special characters
+
+### Performance Impact
+
+With Keyterms Prompting enabled:
+- **21% better accuracy** on domain-specific terms
+- No impact on streaming latency
+- Additional cost: $0.04/hour
+- Two-stage boosting: word-level during streaming + turn-level after completion
+
+### How Keyterms Works
+
+**Word-level boosting (during streaming)**
+- Model biased during inference to recognize keyterms
+- Happens in real-time as words are emitted
+- Provides immediate accuracy improvements
+
+**Turn-level boosting (after turn ends)**
+- Additional post-processing pass with full context
+- Only available if `format_turns=true`
+- For voice agents: skip this by keeping `format_turns=false`
+
+### Example: Restaurant Ordering Bot
+```python
+# Restaurant-specific keyterms
+restaurant_terms = [
+    # Menu items
+    "Baconator",
+    "Frosty",
+    "Dave's Single",
+    "Biggie Bag",
+    "Spicy Chicken Sandwich",
+    
+    # Customizations
+    "Extra pickles",
+    "No mayo",
+    "Light ice",
+    "Well done",
+    "On the side",
+    
+    # Sizes
+    "Venti",
+    "Grande",
+    "Tall",
+    "Large combo",
+    
+    # Brands/Products
+    "Coca-Cola",
+    "Dr Pepper"
+]
+
+params = {
+    "keyterms_prompt": json.dumps(restaurant_terms)
+}
+```
+
+### Example: Healthcare Application
+```python
+# Medical terminology
+medical_terms = [
+    # Medications
+    "Lisinopril",
+    "Metformin",
+    "Atorvastatin",
+    "Levothyroxine",
+    
+    # Conditions
+    "Hypertension",
+    "Type 2 Diabetes",
+    "Hyperlipidemia",
+    "Chronic Obstructive Pulmonary Disease",
+    
+    # Procedures
+    "Colonoscopy",
+    "Echocardiogram",
+    "MRI scan",
+    
+    # Staff names
+    "Dr. Rodriguez",
+    "Nurse Patel",
+    "Dr. Sarah Chen"
+]
+
+params = {
+    "keyterms_prompt": json.dumps(medical_terms)
+}
+```
+
+## How Does the Unlimited Concurrency Work?
+
+### Unlimited Concurrent Streaming Sessions
+
+Universal-Streaming provides **genuine unlimited concurrent streams** with:
+
+- No hard caps on simultaneous connections
+- No overage fees for spike traffic
+- No pre-purchased capacity requirements
+- Automatic scaling from 5 to 50,000+ streams
+
+### How It Works
+
+**Pricing Model:**
+- $0.15/hour based on total session duration
+- Pay only for actual usage, not capacity
+- Volume discounts available for scale
+- Optional keyterms: +$0.04/hour
+
+**Rate Limits:**
+- Free users: 5 new streams per minute
+- Pay-as-you-go: 100 new streams per minute
+- **Automatic scaling**: When using 70%+ of limit, capacity increases 10% every 60 seconds
+- Example: From 100 → 146 new streams/min in 5 minutes (610 total concurrent)
+
+**Scaling Behavior:**
+Anytime you are using 70% or more of your current limit, your new sessions rate limit will automatically increase and scale up by 10% every 60 seconds. This means within 5 minutes of sustained usage, you can scale from 100 to 146 new streams per minute (for a total of 610 concurrent streams), with unlimited ceiling as your usage grows.
+
+These limits are designed to never interfere with legitimate applications - normal scaling patterns automatically get more capacity before hitting any walls, while protecting against runaway scripts or abuse. Your baseline limit is guaranteed and never decreases, so you can scale smoothly from dozens to thousands of simultaneous streams without artificial barriers or surprise fees.
+
+### No Hidden Limits
+
+**What AssemblyAI Does:**
+- Instant scaling without configuration
+- Same performance at any scale
+- No degradation under load
+- No surprise bills
+
+**The unlimited concurrency means you can:**
+- Handle viral moments without preparation
+- Scale globally without regional limits
+- Build platforms without usage anxiety
+- Focus on your product, not capacity planning
+- Handle flash sales, breaking news, or unexpected traffic spikes
+
+**Real-world example:**
+If you suddenly need to scale from 100 to 1,000 concurrent streams for a product launch, the system automatically adjusts within minutes. No manual intervention, no pre-planning, no emergency capacity requests.
+
+---
+
+## Additional Resources
+
+- [Universal-Streaming Documentation](https://www.assemblyai.com/docs/speech-to-text/universal-streaming)
+- [Getting Started Guide](https://www.assemblyai.com/docs/getting-started/transcribe-streaming-audio)
+- [Turn Detection Guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection)
+- [Message Sequence Breakdown](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/message-sequence)
+- [Keyterms Prompting Guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting)
+- [API Playground](https://www.assemblyai.com/playground/streaming)
+- [Changelog](https://www.assemblyai.com/changelog)
+- [Support](https://www.assemblyai.com/contact/support)
