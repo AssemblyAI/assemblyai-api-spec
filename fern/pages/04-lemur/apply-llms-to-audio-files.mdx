@@ -1,53 +1,26 @@
 ---
-title: "Apply LLMs to Audio Files"
-subtitle: "Learn how to leverage LLMs for speech using LeMUR."
+title: "Apply LLM Gateway to Audio Transcripts"
+subtitle: "Learn how to analyze audio transcripts using LLM Gateway."
 hide-nav-links: true
-description: "Learn how to leverage LLMs for speech using LeMUR."
+description: "Learn how to analyze audio transcripts using LLM Gateway."
 ---
 
 ## Overview
 
-A Large Language Model (LLM) is a machine learning model that uses natural language processing (NLP) to generate text. [LeMUR](https://assemblyai.com/docs/api-reference/lemur) is a framework that lets you apply LLMs to audio transcripts, for example to ask questions about a call, or to summarize a meeting.
+A Large Language Model (LLM) is a machine learning model that uses natural language processing (NLP) to generate text. [LLM Gateway](https://assemblyai.com/docs/llm-gateway/overview) is a unified API that provides access to 15+ models from Claude, GPT, and Gemini through a single interface. You can use LLM Gateway to analyze audio transcripts, for example to ask questions about a call, or to summarize a meeting.
 
-By the end of this tutorial, you'll be able to use LeMUR to summarize an audio file.
+By the end of this tutorial, you'll be able to use LLM Gateway to summarize an audio file.
 
 Here's the full sample code for what you'll build in this tutorial:
 
 <Tabs groupId="language">
-<Tab language="python-sdk" title="Python SDK" default>
-
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-transcriber = aai.Transcriber()
-
-# You can use a local filepath:
-# audio_file = "./example.mp3"
-
-# Or use a publicly-accessible URL:
-audio_file = (
-  "https://assembly.ai/sports_injuries.mp3"
-)
-transcript = transcriber.transcribe(audio_file)
-
-prompt = "Provide a brief summary of the transcript."
-
-result = transcript.lemur.task(
-  prompt, final_model=aai.LemurModel.claude_sonnet_4_20250514
-)
-
-print(result.response)
-```
-
-</Tab>
-<Tab language="python" title="Python">
+<Tab language="python" title="Python" default>
 
 ```python
 import requests
 import time
 
+# Step 1: Transcribe the audio
 base_url = "https://api.assemblyai.com"
 
 headers = {
@@ -74,7 +47,7 @@ transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
 while True:
-transcript = requests.get(polling_endpoint, headers=headers).json()
+  transcript = requests.get(polling_endpoint, headers=headers).json()
 
   if transcript["status"] == "completed":
     break
@@ -85,49 +58,23 @@ transcript = requests.get(polling_endpoint, headers=headers).json()
   else:
     time.sleep(3)
 
+# Step 2: Send transcript to LLM Gateway
 prompt = "Provide a brief summary of the transcript."
 
-lemur_data = {
-  "prompt": prompt,
-  "transcript_ids": [transcript_id],
-  "final_model": "anthropic/claude-sonnet-4-20250514",
+llm_gateway_data = {
+  "model": "claude-sonnet-4-5-20250929",
+  "messages": [
+    {"role": "user", "content": f"{prompt}\n\nTranscript: {transcript['text']}"}
+  ],
+  "max_tokens": 1000
 }
 
-result = requests.post(base_url + "/lemur/v3/generate/task", headers=headers, json=lemur_data)
-print(result.json()["response"])
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// You can use a local filepath:
-// const audioFile = "./example.mp3"
-
-// Or use a publicly-accessible URL:
-const audioFile = "https://assembly.ai/sports_injuries.mp3";
-
-const run = async () => {
-  const transcript = await client.transcripts.transcribe({ audio: audioFile });
-
-  const prompt = "Provide a brief summary of the transcript.";
-
-  const { response } = await client.lemur.task({
-    transcript_ids: [transcript.id],
-    prompt,
-    final_model: "anthropic/claude-sonnet-4-20250514",
-  });
-
-  console.log(response);
-};
-
-run();
+response = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json=llm_gateway_data
+)
+print(response.json()["choices"][0]["message"]["content"])
 ```
 
 </Tab>
@@ -137,6 +84,7 @@ run();
 import axios from "axios";
 import fs from "fs-extra";
 
+// Step 1: Transcribe the audio
 const base_url = "https://api.assemblyai.com";
 
 const headers = {
@@ -162,8 +110,9 @@ const response = await axios.post(base_url + "/v2/transcript", data, {
 const transcript_id = response.data.id;
 const polling_endpoint = base_url + `/v2/transcript/${transcript_id}`;
 
+let transcript;
 while (true) {
-  const transcript = (await axios.get(polling_endpoint, { headers })).data;
+  transcript = (await axios.get(polling_endpoint, { headers })).data;
 
   if (transcript.status === "completed") {
     break;
@@ -174,20 +123,23 @@ while (true) {
   }
 }
 
+// Step 2: Send transcript to LLM Gateway
 const prompt = "Provide a brief summary of the transcript.";
 
-const lemur_data = {
-  prompt: prompt,
-  transcript_ids: [transcript_id],
-  final_model: "anthropic/claude-sonnet-4-20250514",
+const llm_gateway_data = {
+  model: "claude-sonnet-4-5-20250929",
+  messages: [
+    { role: "user", content: `${prompt}\n\nTranscript: ${transcript.text}` },
+  ],
+  max_tokens: 1000,
 };
 
 const result = await axios.post(
-  base_url + "/lemur/v3/generate/task",
-  lemur_data,
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  llm_gateway_data,
   { headers }
 );
-console.log(result.data.response);
+console.log(result.data.choices[0].message.content);
 ```
 
 </Tab>
@@ -202,6 +154,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 public class Transcript
 {
@@ -215,23 +168,19 @@ public class Transcript
  public string Error { get; set; }
 }
 
-public class LemurResponse
+public class LlmGatewayResponse
 {
-[JsonPropertyName("request_id")]
-public string RequestId { get; set; }
-
-public string Response { get; set; }
-
-public Usage Usage { get; set; }
+ public List<Choice> Choices { get; set; }
 }
 
-public class Usage
+public class Choice
 {
-[JsonPropertyName("input_tokens")]
-public int InputTokens { get; set; }
+ public Message Message { get; set; }
+}
 
-[JsonPropertyName("output_tokens")]
-public int OutputTokens { get; set; }
+public class Message
+{
+ public string Content { get; set; }
 }
 
 private static async Task<string> UploadFileAsync(string filePath, HttpClient httpClient)
@@ -249,7 +198,6 @@ private static async Task<string> UploadFileAsync(string filePath, HttpClient ht
       }
   }
 }
-
 
 private static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
 {
@@ -287,20 +235,23 @@ private static async Task<Transcript> WaitForTranscriptToProcess(Transcript tran
  }
 }
 
-private static async Task<LemurResponse> GenerateTaskAsync(string prompt, List<string> transcriptIds, HttpClient httpClient)
+private static async Task<LlmGatewayResponse> SendToLlmGatewayAsync(string prompt, string transcriptText, HttpClient httpClient)
 {
  var data = new
  {
-     transcript_ids = transcriptIds,
-     prompt,
-     final_model = "anthropic/claude-sonnet-4-20250514"
+     model = "claude-sonnet-4-5-20250929",
+     messages = new[]
+     {
+         new { role = "user", content = $"{prompt}\n\nTranscript: {transcriptText}" }
+     },
+     max_tokens = 1000
  };
 
  var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
- using var response = await httpClient.PostAsync("https://api.assemblyai.com/lemur/v3/generate/task", content);
+ using var response = await httpClient.PostAsync("https://llm-gateway.assemblyai.com/v1/chat/completions", content);
  response.EnsureSuccessStatusCode();
- return await response.Content.ReadFromJsonAsync<LemurResponse>();
+ return await response.Content.ReadFromJsonAsync<LlmGatewayResponse>();
 }
 
 using (var httpClient = new HttpClient())
@@ -310,14 +261,15 @@ using (var httpClient = new HttpClient())
 
  const string prompt = "Provide a brief summary of the transcript.";
 
+ // Step 1: Transcribe the audio
  var uploadUrl = await UploadFileAsync("/my_audio.mp3", httpClient);
  var transcript = await CreateTranscriptAsync(uploadUrl, httpClient); // You can also replace uploadUrl with an audio file URL
  transcript = await WaitForTranscriptToProcess(transcript, httpClient);
 
- var transcriptIds = new List<string> { transcript.Id };
- var lemurResponse = await GenerateTaskAsync(prompt, transcriptIds, httpClient);
+ // Step 2: Send transcript to LLM Gateway
+ var llmGatewayResponse = await SendToLlmGatewayAsync(prompt, transcript.Text, httpClient);
 
- Console.WriteLine(lemurResponse.Response);
+ Console.WriteLine(llmGatewayResponse.Choices[0].Message.Content);
 }
 ```
 
@@ -328,6 +280,7 @@ using (var httpClient = new HttpClient())
 require 'net/http'
 require 'json'
 
+# Step 1: Transcribe the audio
 base_url = "https://api.assemblyai.com"
 headers = {
    "authorization" => "<YOUR_API_KEY>",
@@ -367,19 +320,24 @@ while true
    end
 end
 
+# Step 2: Send transcript to LLM Gateway
 prompt = "Provide a brief summary of the transcript."
 
-lemur_uri = URI("#{base_url}/lemur/v3/generate/task")
-lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
-lemur_request.body = {
-  final_model: "anthropic/claude-sonnet-4-20250514",
-  prompt: prompt,
-  transcript_ids: [transcript_id]
+llm_gateway_uri = URI("https://llm-gateway.assemblyai.com/v1/chat/completions")
+llm_gateway_request = Net::HTTP::Post.new(llm_gateway_uri, headers)
+llm_gateway_request.body = {
+  model: "claude-sonnet-4-5-20250929",
+  messages: [
+    { role: "user", content: "#{prompt}\n\nTranscript: #{transcription_result['text']}" }
+  ],
+  max_tokens: 1000
 }.to_json
 
-lemur_response = http.request(lemur_request)
-lemur_result = JSON.parse(lemur_response.body)
-puts lemur_result["response"]
+llm_gateway_http = Net::HTTP.new(llm_gateway_uri.host, llm_gateway_uri.port)
+llm_gateway_http.use_ssl = true
+llm_gateway_response = llm_gateway_http.request(llm_gateway_request)
+llm_gateway_result = JSON.parse(llm_gateway_response.body)
+puts llm_gateway_result["choices"][0]["message"]["content"]
 ```
 
 </Tab>
@@ -387,6 +345,7 @@ puts lemur_result["response"]
 
 ```php
 <?php
+// Step 1: Transcribe the audio
 $base_url = "https://api.assemblyai.com";
 $headers = array(
     "authorization: <YOUR_API_KEY>",
@@ -438,23 +397,26 @@ while (true) {
     sleep(3);
 }
 
-$prompt = 'Provide a brief summary of the transcript.'
+// Step 2: Send transcript to LLM Gateway
+$prompt = 'Provide a brief summary of the transcript.';
 
-$ch = curl_init($base_url . "/lemur/v3/generate/task");
+$ch = curl_init("https://llm-gateway.assemblyai.com/v1/chat/completions");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => $headers,
     CURLOPT_POSTFIELDS => json_encode([
-        'final_model' => 'anthropic/claude-sonnet-4-20250514',
-        'prompt' => $prompt,
-        'transcript_ids' => [$transcript_id]
+        'model' => 'claude-sonnet-4-5-20250929',
+        'messages' => [
+            ['role' => 'user', 'content' => $prompt . "\n\nTranscript: " . $transcription_result['text']]
+        ],
+        'max_tokens' => 1000
     ])
 ]);
 
 $response = curl_exec($ch);
 $result = json_decode($response, true);
-echo $result['response'];
+echo $result['choices'][0]['message']['content'];
 curl_close($ch);
 ```
 
@@ -484,30 +446,11 @@ To complete this tutorial, you need:
 
 <Tabs groupId="language">
 
-<Tab language="python-sdk" title="Python SDK" default>
-
-Install the package via pip:
-
-```bash
-pip install assemblyai
-```
-
-</Tab>
-
-<Tab language="python" title="Python">
+<Tab language="python" title="Python" default>
 Install the package via pip:
 
 ```bash
 pip install requests
-```
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-Install the package via NPM:
-
-```bash
-npm install assemblyai
 ```
 
 </Tab>
@@ -543,33 +486,11 @@ No additional packages required - uses built-in cURL functions
 
 ## Step 2: Transcribe an audio file
 
-LeMUR uses one or more transcripts as input to generate text output. In this step, you'll transcribe an audio file that you can later use to create a prompt for.
+LLM Gateway uses transcript text as input to generate text output. In this step, you'll transcribe an audio file that you can later use with LLM Gateway.
 
 For more information about transcribing audio, see [Transcribe an audio file](/docs/getting-started/transcribe-an-audio-file).
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK" default>
-
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-transcriber = aai.Transcriber()
-
-# You can use a local filepath:
-# audio_file = "./example.mp3"
-
-# Or use a publicly-accessible URL:
-audio_file = (
-  "https://assembly.ai/sports_injuries.mp3"
-)
-
-transcript = transcriber.transcribe(audio_file)
-```
-
-</Tab>
 
 <Tab language="python" title="Python" default>
 
@@ -607,30 +528,6 @@ while True:
 
     else:
         time.sleep(3)
-```
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// You can use a local filepath:
-// const audioFile = "./example.mp3"
-
-// Or use a publicly-accessible URL:
-const audioUrl = "https://assembly.ai/sports_injuries.mp3";
-
-const run = async () => {
-  const transcript = await client.transcripts.transcribe({ audio: audioUrl });
-};
-
-run();
 ```
 
 </Tab>
@@ -876,15 +773,7 @@ If you've already transcribed an audio file you want to use, you can get an exis
 
 <Tabs groupId="language">
 
-<Tab language="python-sdk" title="Python SDK" default>
-
-```python
-transcript = aai.Transcript.get_by_id("YOUR_TRANSCRIPT_ID")
-```
-
-</Tab>
-
-<Tab language="python" title="Python">
+<Tab language="python" title="Python" default>
 
 ```python
 transcript = requests.get("https://api.assemblyai.com/v2/transcript/YOUR_TRANSCRIPT_ID", headers=headers).json()
@@ -892,13 +781,6 @@ transcript = requests.get("https://api.assemblyai.com/v2/transcript/YOUR_TRANSCR
 
 </Tab>
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript
-const transcript = await client.transcripts.get("YOUR_TRANSCRIPT_ID");
-```
-
-</Tab>
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
@@ -939,13 +821,11 @@ $transcription_result = json_decode(file_get_contents($base_url . "/v2/transcrip
 
 </Tip>
 
-## Step 3: Prompt LeMUR to generate text output
+## Step 3: Send transcript to LLM Gateway
 
-In this step, you'll create a [Custom task](https://assemblyai.com/docs/api-reference/lemur/task) with LeMUR and use the transcript you created in the previous step as input.
+In this step, you'll send the transcript text to LLM Gateway along with a prompt to generate text output.
 
-The input to a custom task is called a _prompt_. A prompt is a text string that provides LeMUR with instructions on how to generate the text output.
-
-For more techniques on how to build prompts, see [Improving your prompt](/docs/lemur/improving-your-prompt).
+The prompt is a text string that provides the LLM with instructions on how to generate the text output. You'll combine the prompt with the transcript text and send it to LLM Gateway using the chat completions API.
 
 <Steps>
 
@@ -953,19 +833,9 @@ For more techniques on how to build prompts, see [Improving your prompt](/docs/l
 
 <Tabs groupId="language">
 
-<Tab language="python-sdk" title="Python SDK" default>
+<Tab language="python" title="Python" default>
 
-Write a prompt with instructions on how LeMUR should generate the text output.
-
-```python
-prompt = "Provide a brief summary of the transcript."
-```
-
-</Tab>
-
-<Tab language="python" title="Python">
-
-Write a prompt with instructions on how LeMUR should generate the text output.
+Write a prompt with instructions on how the LLM should generate the text output.
 
 ```python
 prompt = "Provide a brief summary of the transcript."
@@ -973,18 +843,9 @@ prompt = "Provide a brief summary of the transcript."
 
 </Tab>
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-Write a prompt with instructions on how LeMUR should generate the text output.
-
-```javascript
-const prompt = "Provide a brief summary of the transcript.";
-```
-
-</Tab>
 <Tab language="javascript" title="JavaScript">
 
-Write a prompt with instructions on how LeMUR should generate the text output.
+Write a prompt with instructions on how the LLM should generate the text output.
 
 ```javascript
 const prompt = "Provide a brief summary of the transcript.";
@@ -994,7 +855,7 @@ const prompt = "Provide a brief summary of the transcript.";
 
 <Tab language="csharp" title="C#">
 
-Write a prompt with instructions on how LeMUR should generate the text output.
+Write a prompt with instructions on how the LLM should generate the text output.
 
 ```csharp
 const string prompt = "Provide a brief summary of the transcript.";
@@ -1003,7 +864,7 @@ const string prompt = "Provide a brief summary of the transcript.";
 </Tab>
 <Tab language="ruby" title="Ruby">
 
-Write a prompt with instructions on how LeMUR should generate the text output.
+Write a prompt with instructions on how the LLM should generate the text output.
 
 ```ruby
 prompt = 'Provide a brief summary of the transcript.'
@@ -1013,7 +874,7 @@ prompt = 'Provide a brief summary of the transcript.'
 
 <Tab language="php" title="PHP">
 
-Write a prompt with instructions on how LeMUR should generate the text output.
+Write a prompt with instructions on how the LLM should generate the text output.
 
 ```php
 $prompt = 'Provide a brief summary of the transcript.'
@@ -1027,61 +888,44 @@ $prompt = 'Provide a brief summary of the transcript.'
 
 <Tabs groupId="language">
 
-<Tab language="python-sdk" title="Python SDK" default>
+<Tab language="python" title="Python" default>
 
-Create a custom task with LeMUR, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
+Send the transcript text and prompt to LLM Gateway. The model parameter defines which LLM to use. For available models, see [LLM Gateway Overview](/docs/llm-gateway/overview).
 
 ```python
-result = transcript.lemur.task(
-    prompt, final_model=aai.LemurModel.claude_sonnet_4_20250514
+llm_gateway_data = {
+  "model": "claude-sonnet-4-5-20250929",
+  "messages": [
+    {"role": "user", "content": f"{prompt}\n\nTranscript: {transcript['text']}"}
+  ],
+  "max_tokens": 1000
+}
+
+result = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json=llm_gateway_data
 )
 ```
 
 </Tab>
 
-<Tab language="python" title="Python">
-
-Create a custom LeMUR task request, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
-
-```python
-lemur_data = {
-  "prompt": prompt,
-  "transcript_ids": [transcript_id],
-  "final_model": "anthropic/claude-sonnet-4-20250514",
-}
-
-result = requests.post(base_url + "/lemur/v3/generate/task", headers=headers, json=lemur_data)
-```
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-Create a custom task with LeMUR, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
-
-```javascript
-const { response } = await client.lemur.task({
-  transcript_ids: [transcript.id],
-  prompt,
-  final_model: "anthropic/claude-sonnet-4-20250514",
-});
-```
-
-</Tab>
 <Tab language="javascript" title="JavaScript">
 
-Create a custom LeMUR task request, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
+Send the transcript text and prompt to LLM Gateway. The model parameter defines which LLM to use. For available models, see [LLM Gateway Overview](/docs/llm-gateway/overview).
 
 ```javascript
-const lemur_data = {
-  prompt: prompt,
-  transcript_ids: [transcript_id],
-  final_model: "anthropic/claude-sonnet-4-20250514",
+const llm_gateway_data = {
+  model: "claude-sonnet-4-5-20250929",
+  messages: [
+    { role: "user", content: `${prompt}\n\nTranscript: ${transcript.text}` },
+  ],
+  max_tokens: 1000,
 };
 
 const result = await axios.post(
-  base_url + "/lemur/v3/generate/task",
-  lemur_data,
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  llm_gateway_data,
   { headers }
 );
 ```
@@ -1090,82 +934,86 @@ const result = await axios.post(
 
 <Tab language="csharp" title="C#">
 
-Create a custom LeMUR task request, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
+Send the transcript text and prompt to LLM Gateway. The model parameter defines which LLM to use. For available models, see [LLM Gateway Overview](/docs/llm-gateway/overview).
 
 ```csharp
-public class LemurResponse
+public class LlmGatewayResponse
 {
-  [JsonPropertyName("request_id")]
-  public string RequestId { get; set; }
-
-  public string Response { get; set; }
-
-  public Usage Usage { get; set; }
+  public List<Choice> Choices { get; set; }
 }
 
-public class Usage
+public class Choice
 {
-  [JsonPropertyName("input_tokens")]
-  public int InputTokens { get; set; }
-
-  [JsonPropertyName("output_tokens")]
-  public int OutputTokens { get; set; }
+  public Message Message { get; set; }
 }
 
-private static async Task<LemurResponse> GenerateTaskAsync(string prompt, List<string> transcriptIds, HttpClient httpClient)
+public class Message
+{
+  public string Content { get; set; }
+}
+
+private static async Task<LlmGatewayResponse> SendToLlmGatewayAsync(string prompt, string transcriptText, HttpClient httpClient)
 {
    var data = new
    {
-       transcript_ids = transcriptIds,
-       prompt,
-       final_model = "anthropic/claude-sonnet-4-20250514"
+       model = "claude-sonnet-4-5-20250929",
+       messages = new[]
+       {
+           new { role = "user", content = $"{prompt}\n\nTranscript: {transcriptText}" }
+       },
+       max_tokens = 1000
    };
    var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
-   using var response = await httpClient.PostAsync("https://api.assemblyai.com/lemur/v3/generate/task", content);
+   using var response = await httpClient.PostAsync("https://llm-gateway.assemblyai.com/v1/chat/completions", content);
    response.EnsureSuccessStatusCode();
-   return await response.Content.ReadFromJsonAsync<LemurResponse>();
+   return await response.Content.ReadFromJsonAsync<LlmGatewayResponse>();
 }
 
-var transcriptIds = new List<string> { transcript.Id };
-var lemurResponse = await GenerateTaskAsync(prompt, transcriptIds, httpClient);
+var llmGatewayResponse = await SendToLlmGatewayAsync(prompt, transcript.Text, httpClient);
 ```
 
 </Tab>
 
 <Tab language="ruby" title="Ruby">
 
-Create a custom LeMUR task request, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
+Send the transcript text and prompt to LLM Gateway. The model parameter defines which LLM to use. For available models, see [LLM Gateway Overview](/docs/llm-gateway/overview).
 
 ```ruby
-lemur_uri = URI("#{base_url}/lemur/v3/generate/task")
-lemur_request = Net::HTTP::Post.new(lemur_uri, headers)
-lemur_request.body = {
-  final_model: "anthropic/claude-sonnet-4-20250514",
-  prompt: prompt,
-  transcript_ids: [transcript_id]
+llm_gateway_uri = URI("https://llm-gateway.assemblyai.com/v1/chat/completions")
+llm_gateway_request = Net::HTTP::Post.new(llm_gateway_uri, headers)
+llm_gateway_request.body = {
+  model: "claude-sonnet-4-5-20250929",
+  messages: [
+    { role: "user", content: "#{prompt}\n\nTranscript: #{transcription_result['text']}" }
+  ],
+  max_tokens: 1000
 }.to_json
 
-lemur_response = http.request(lemur_request)
-lemur_result = JSON.parse(lemur_response.body)
+llm_gateway_http = Net::HTTP.new(llm_gateway_uri.host, llm_gateway_uri.port)
+llm_gateway_http.use_ssl = true
+llm_gateway_response = llm_gateway_http.request(llm_gateway_request)
+llm_gateway_result = JSON.parse(llm_gateway_response.body)
 ```
 
 </Tab>
 
 <Tab language="php" title="PHP">
 
-Create a custom LeMUR task request, using the transcript and prompt as input. The final model defines the LLM to use to process the task. For available models to choose from, see [Change the model type](/docs/lemur/customize-parameters#change-the-model-type).
+Send the transcript text and prompt to LLM Gateway. The model parameter defines which LLM to use. For available models, see [LLM Gateway Overview](/docs/llm-gateway/overview).
 
 ```php
-$ch = curl_init($base_url . "/lemur/v3/generate/task");
+$ch = curl_init("https://llm-gateway.assemblyai.com/v1/chat/completions");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => $headers,
     CURLOPT_POSTFIELDS => json_encode([
-        'final_model' => 'anthropic/claude-sonnet-4-20250514',
-        'prompt' => $prompt,
-        'transcript_ids' => [$transcript_id]
+        'model' => 'claude-sonnet-4-5-20250929',
+        'messages' => [
+            ['role' => 'user', 'content' => $prompt . "\n\nTranscript: " . $transcription_result['text']]
+        ],
+        'max_tokens' => 1000
     ])
 ]);
 
@@ -1184,32 +1032,17 @@ Print the result.
 
 <Tabs groupId="language">
 
-<Tab language="python-sdk" title="Python SDK" default>
+<Tab language="python" title="Python" default>
 
 ```python
-print(result.response)
-```
-
-</Tab>
-
-<Tab language="python" title="Python">
-
-```python
-print(result.json()["response"])
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript
-console.log(response);
+print(result.json()["choices"][0]["message"]["content"])
 ```
 
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
-console.log(result.data.response);
+console.log(result.data.choices[0].message.content);
 ```
 
 </Tab>
@@ -1217,7 +1050,7 @@ console.log(result.data.response);
 <Tab language="csharp" title="C#">
 
 ```csharp
-Console.WriteLine(lemurResponse.Response);
+Console.WriteLine(llmGatewayResponse.Choices[0].Message.Content);
 ```
 
 </Tab>
@@ -1225,7 +1058,7 @@ Console.WriteLine(lemurResponse.Response);
 <Tab language="ruby" title="Ruby">
 
 ```ruby
-puts lemur_result["response"]
+puts llm_gateway_result["choices"][0]["message"]["content"]
 ```
 
 </Tab>
@@ -1233,7 +1066,7 @@ puts lemur_result["response"]
 <Tab language="php" title="PHP">
 
 ```php
-echo $result['response'];
+echo $result['choices'][0]['message']['content'];
 curl_close($ch);
 ```
 
@@ -1258,21 +1091,17 @@ The output will look something like this:
 
 ## Next steps
 
-In this tutorial, you've learned how to generate LLM output based on your audio transcripts. The type of output depends on your prompt, so try exploring different prompts to see how they affect the output. Here's a few more prompts to try.
+In this tutorial, you've learned how to generate LLM output based on your audio transcripts using LLM Gateway. The type of output depends on your prompt, so try exploring different prompts to see how they affect the output. Here's a few more prompts to try.
 
 - "Provide an analysis of the transcript and offer areas to improve with exact quotes."
 - "What's the main take-away from the transcript?"
 - "Generate a set of action items from this transcript."
 
-To learn more about how to apply LLMs to your transcripts, see the following resources:
+To learn more about LLM Gateway and working with different models, see the following resources:
 
-- [Ask questions about your audio data using LeMUR](/docs/lemur/ask-questions)
-- [Writing good prompts](/docs/lemur/improving-your-prompt)
-
-<Warning title="Deploying LeMUR to production?" icon="rocket">
-  Be sure to adhere to LeMUR's rate limit of 30RPM or reach out to our support
-  team at support@assemblyai.com to increase your rate limit.
-</Warning>
+- [LLM Gateway Overview](/docs/llm-gateway/overview)
+- [Basic Chat Completions](/docs/llm-gateway/chat-completions)
+- [Multi-turn Conversations](/docs/llm-gateway/conversations)
 
 ## Need some help?
 
