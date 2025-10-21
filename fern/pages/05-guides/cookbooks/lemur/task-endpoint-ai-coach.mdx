@@ -1,61 +1,111 @@
 ---
-title: "Setup An AI Coach With LeMUR"
+title: "Setup An AI Coach With LLM Gateway"
 ---
 
-This tutorial will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to get AI coaching using the Task endpoint.
+This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to receive AI coaching.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "YOUR_API_KEY"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+# Use a publicly-accessible URL:
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-transcript = aai.Transcriber().transcribe(audio_url)
+# with open("/your_audio_file.mp3", "rb") as f:
+#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#     if response.status_code != 200:
+#         print(f"Error: {response.status_code}, Response: {response.text}")
+#         response.raise_for_status()
+#     upload_json = response.json()
+#     audio_url = upload_json["upload_url"]
 
-prompt = f"""
-- You are an expert at providing valuable feedback to individuals.
-- You possess exceptionally high emotional intelligence.
-- You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
-- You emphasize constructive criticism in your feedback.
-- The feedback focuses on how people can better achieve their objectives.
-- You avoid providing unjustified or unfounded feedback.
-- Your communication is clear, accurate and concise, and you write with perfect English.
-- Directly start with the feedback without any preamble or introduction.
-"""
+data = {
+    "audio_url": audio_url,
+}
 
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+
+transcript_json = response.json()
+transcript_id = transcript_json["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript['id'])
+        print(f" \nFull Transcript: \n\n{transcript['text']}\n")
+
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+
+response = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json={
+    "model": "gemini-2.5-pro",
+    "messages": [
+      {
+        "role": "system",
+        "content": f"""
+        - You are an expert at providing valuable feedback to individuals.
+        - You possess exceptionally high emotional intelligence.
+        - You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
+        - You emphasize constructive criticism in your feedback.
+        - The feedback focuses on how people can better achieve their objectives.
+        - You avoid providing unjustified or unfounded feedback.
+        - Your communication is clear, accurate and concise, and you write with perfect English.
+        - Directly start with the feedback without any preamble or introduction.
+        """
+      },
+      {
+        "role": "user",
+        "content": f"Please provide feedback for this transcript: \n\n{transcript["text"]}"
+      }
+    ],
+    "max_tokens": 4000,
+    "temperature": 0
+  },
 )
 
-response = result.response
-print(response)
+result = response.json()
+
+if "error" in result:
+    print(f"\nError from LLM Gateway: {result['error']}")
+else:
+    response_text = result['choices'][0]['message']['content']
+    print(f"\nResponse ID: {result["request_id"]}\n")
+    print(response_text)
 ```
 
 ## Getting Started
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LeMUR.
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
-Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR).
+Find more details on the current LLM Gateway pricing on the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
 
 ## Step-by-Step Instructions
 
-In this guide, we'll prompt LeMUR to perform some AI coaching.
+In this guide, we'll prompt LLM Gateway to perform some AI coaching.
 
-First, let's install the AssemblyAI SDK.
-
-```bash
-pip install -U assemblyai
-```
-
-Then we'll import the SDK and set our AssemblyAI API key.
+First we will import the required pagackes and set the base URL and headers.
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 ```
 
 Next, we'll use AssemblyAI to transcribe a file and save our transcript.
@@ -63,32 +113,81 @@ Next, we'll use AssemblyAI to transcribe a file and save our transcript.
 ```python
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-transcript = aai.Transcriber().transcribe(audio_url)
-```
+# with open("/your_audio_file.mp3", "rb") as f:
+#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#     if response.status_code != 200:
+#         print(f"Error: {response.status_code}, Response: {response.text}")
+#         response.raise_for_status()
+#     upload_json = response.json()
+#     audio_url = upload_json["upload_url"]
 
-Provide detailed instructions to prompt LeMUR to provide feedback on your sales call, meeting, or other content.
+data = {
+    "audio_url": audio_url,
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+
+transcript_json = response.json()
+transcript_id = transcript_json["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript['id'])
+        print(f" \nFull Transcript: \n\n{transcript['text']}\n")
+
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+Then we'll provide detailed instructions to prompt LLM Gateway using the chat completions endpoint to give feedback on the transcript text of your sales call, meeting, or other content.
 
 ```python
-prompt = f"""
-- You are an expert at providing valuable feedback to individuals.
-- You possess exceptionally high emotional intelligence.
-- You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
-- You emphasize constructive criticism in your feedback.
-- The feedback focuses on how people can better achieve their objectives.
-- You avoid providing unjustified or unfounded feedback.
-- Your communication is clear, accurate and concise, and you write with perfect English.
-- Directly start with the feedback without any preamble or introduction.
-"""
-```
-
-Prompt the LeMUR model using the Task Endpoint and return the response.
-
-```python
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+response = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json={
+    "model": "gemini-2.5-pro",
+    "messages": [
+      {
+        "role": "system",
+        "content": f"""
+        - You are an expert at providing valuable feedback to individuals.
+        - You possess exceptionally high emotional intelligence.
+        - You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
+        - You emphasize constructive criticism in your feedback.
+        - The feedback focuses on how people can better achieve their objectives.
+        - You avoid providing unjustified or unfounded feedback.
+        - Your communication is clear, accurate and concise, and you write with perfect English.
+        - Directly start with the feedback without any preamble or introduction.
+        """
+      },
+      {
+        "role": "user",
+        "content": f"Please provide feedback for this transcript: \n\n{transcript["text"]}"
+      }
+    ],
+    "max_tokens": 4000,
+    "temperature": 0
+  },
 )
+```
 
-response = result.response
-print(response)
+Finally, we'll save and return the LLM response.
+
+```python
+result = response.json()
+
+if "error" in result:
+    print(f"\nError from LLM Gateway: {result['error']}")
+else:
+    response_text = result['choices'][0]['message']['content']
+    print(f"\nResponse ID: {result["request_id"]}\n")
+    print(response_text)
 ```
