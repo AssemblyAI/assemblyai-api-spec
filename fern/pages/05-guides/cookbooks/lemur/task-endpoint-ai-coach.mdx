@@ -2,7 +2,7 @@
 title: "Setup An AI Coach With LLM Gateway"
 ---
 
-This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to receive AI coaching.
+This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to receive AI coaching. LLM Gateway provides access to multiple LLM providers through a unified API.
 
 ## Quickstart
 
@@ -49,15 +49,7 @@ while True:
     else:
         time.sleep(3)
 
-response = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/chat/completions",
-  headers=headers,
-  json={
-    "model": "gemini-2.5-pro",
-    "messages": [
-      {
-        "role": "system",
-        "content": f"""
+prompt = f"""
         - You are an expert at providing valuable feedback to individuals.
         - You possess exceptionally high emotional intelligence.
         - You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
@@ -67,15 +59,22 @@ response = requests.post(
         - Your communication is clear, accurate and concise, and you write with perfect English.
         - Directly start with the feedback without any preamble or introduction.
         """
-      },
+
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
       {
         "role": "user",
-        "content": f"Please provide feedback for this transcript: \n\n{transcript["text"]}"
+        "content": f"{prompt} Please provide feedback for this transcript: \n\n{transcript["text"]}"
       }
     ],
-    "max_tokens": 4000,
-    "temperature": 0
-  },
+    "max_tokens": 1500
+  }
+
+response = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json=llm_gateway_data
 )
 
 result = response.json()
@@ -98,7 +97,7 @@ Find more details on the current LLM Gateway pricing on the AssemblyAI [pricing 
 
 In this guide, we'll prompt LLM Gateway to perform some AI coaching.
 
-First we will import the required pagackes and set the base URL and headers.
+Import the required pagackes and set the base URL and headers.
 
 ```python
 import requests
@@ -108,7 +107,7 @@ base_url = "https://api.assemblyai.com"
 headers = {"authorization": "<YOUR_API_KEY>"}
 ```
 
-Next, we'll use AssemblyAI to transcribe a file and save our transcript.
+Use AssemblyAI to transcribe a file and save the transcript.
 
 ```python
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
@@ -146,18 +145,11 @@ while True:
     else:
         time.sleep(3)
 ```
-Then we'll provide detailed instructions to prompt LLM Gateway using the chat completions endpoint to give feedback on the transcript text of your sales call, meeting, or other content.
+
+Define your detailed prompt instructions for generating feedback on the transcript text of your sales call, meeting, or other content. This is an example prompt, which you can modify to suit your specific requirements.
 
 ```python
-response = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/chat/completions",
-  headers=headers,
-  json={
-    "model": "gemini-2.5-pro",
-    "messages": [
-      {
-        "role": "system",
-        "content": f"""
+prompt = f"""
         - You are an expert at providing valuable feedback to individuals.
         - You possess exceptionally high emotional intelligence.
         - You excel at analyzing the behavior of individuals in the given transcript and providing insights on how they could improve.
@@ -167,19 +159,31 @@ response = requests.post(
         - Your communication is clear, accurate and concise, and you write with perfect English.
         - Directly start with the feedback without any preamble or introduction.
         """
-      },
+```
+
+Generate the custom feedback using LLM Gateway.
+
+```python
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
       {
         "role": "user",
-        "content": f"Please provide feedback for this transcript: \n\n{transcript["text"]}"
+        "content": f"{prompt} Please provide feedback for this transcript: \n\n{transcript["text"]}"
       }
     ],
-    "max_tokens": 4000,
+    "max_tokens": 1500,
     "temperature": 0
-  },
+  }
+
+response = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  headers=headers,
+  json=llm_gateway_data
 )
 ```
 
-Finally, we'll save and return the LLM response.
+Finally, save and return the LLM response.
 
 ```python
 result = response.json()
