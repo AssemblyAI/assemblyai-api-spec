@@ -378,7 +378,7 @@ import time
 base_url = "https://api.assemblyai.com"
 
 headers = {
-  "authorization": ""
+  "authorization": "<YOUR_API_KEY>"
 }
 
 # Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
@@ -395,8 +395,6 @@ response = requests.post(base_url + "/v2/transcript", headers=headers, json=data
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-print(f"Transcription started. ID: {transcript_id}")
-
 # Poll for transcription completion
 while True:
   transcript = requests.get(polling_endpoint, headers=headers).json()
@@ -409,7 +407,6 @@ while True:
     raise RuntimeError(f"Transcription failed: {transcript['error']}")
 
   else:
-    print(f"Status: {transcript['status']}. Waiting...")
     time.sleep(3)
 
 # Add translation configuration to the completed transcript
@@ -426,8 +423,6 @@ understanding_body = {
   }
 }
 
-print("Requesting translations...")
-
 # Send to Speech Understanding API for translation
 result = requests.post(
   "https://llm-gateway.assemblyai.com/v1/understanding",
@@ -435,14 +430,12 @@ result = requests.post(
   json=understanding_body
 ).json()
 
-print("Translation completed!")
-
 # Access and display results
 print("\n--- Original Transcript ---")
 print(transcript['text'][:200] + "...\n")
 
 print("--- Translations ---")
-for language_code, translated_text in transcript['translated_texts'].items():
+for language_code, translated_text in result['translated_texts'].items():
   print(f"{language_code.upper()}:")
   print(translated_text[:200] + "...\n")
 ```
@@ -465,8 +458,6 @@ config = aai.TranscriptionConfig(
 )
 transcript = aai.Transcriber().transcribe(audio_file, config)
 
-print("Starting transcription...")
-
 # Transcribe the audio
 transcript = transcriber.transcribe(audio_url)
 
@@ -476,8 +467,6 @@ if transcript.status == aai.TranscriptStatus.error:
 print("Transcription completed!")
 
 # Request translation using Speech Understanding
-print("Requesting translations...")
-
 result = transcript.speech_understanding(
   translation={
     "target_languages": ["es", "de"],  # Translate to Spanish and German
@@ -485,8 +474,6 @@ result = transcript.speech_understanding(
     "match_original_utterance": True  # Get translated utterances (if speaker_labels was enabled)
   }
 )
-
-print("Translation completed!")
 
 # Access and display results
 print("\n--- Original Transcript ---")
@@ -513,29 +500,36 @@ const headers = {
 // Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 const audioUrl = "https://assembly.ai/wildfires.mp3";
 
-async function translateTranscript() {
+// Helper function to sleep
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function main() {
   // Submit transcription request (without translation)
   const data = {
     audio_url: audioUrl,
-    speaker_labels: true,
+    speaker_labels: true
   };
 
-  let response = await fetch(`${baseUrl}/v2/transcript`, {
-    method: "POST",
+  // Transcribe file
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: 'POST',
     headers: headers,
     body: JSON.stringify(data)
   });
-
-  const { id: transcriptId } = await response.json();
+  
+  const responseData = await response.json();
+  const transcriptId = responseData.id;
   const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-  console.log(`Transcription started. ID: ${transcriptId}`);
 
   // Poll for transcription completion
   let transcript;
   while (true) {
-    response = await fetch(pollingEndpoint, { headers });
-    transcript = await response.json();
+    const pollResponse = await fetch(pollingEndpoint, {
+      method: 'GET',
+      headers: headers
+    });
+    
+    transcript = await pollResponse.json();
 
     if (transcript.status === "completed") {
       console.log("Transcription completed!");
@@ -543,50 +537,39 @@ async function translateTranscript() {
     } else if (transcript.status === "error") {
       throw new Error(`Transcription failed: ${transcript.error}`);
     } else {
-      console.log(`Status: ${transcript.status}. Waiting...`);
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await sleep(3000);
     }
   }
 
   // Add translation configuration to the completed transcript
-  transcript.speech_understanding = {
-    request: {
-      translation: {
-        target_languages: ["es", "de"],  // Translate to Spanish and German
-        formal: true  // Use formal language style
-      }
-    }
-  };
-
-  // Enable translation
   const understandingBody = {
     transcript_id: transcriptId,
     speech_understanding: {
       request: {
         translation: {
-        target_languages: ["es", "de"],  // Translate to Spanish and German
-        formal: true,  // Use formal language style
-        match_original_utterance: true  // Get translated utterances (if speaker_labels was enabled)
+          target_languages: ["es", "de"],  // Translate to Spanish and German
+          formal: true,  // Use formal language style
+          match_original_utterance: true  // Get translated utterances (if speaker_labels was enabled)
         }
       }
     }
   };
 
-  console.log("Requesting translations...");
-
   // Send to Speech Understanding API for translation
-  response = await fetch("https://llm-gateway.assemblyai.com/v1/understanding", {
-    method: "POST",
-    headers: headers,
-    body: JSON.stringify(understandingBody)
-  });
-
-  const result = await response.json();
-  console.log("Translation completed!");
+  const resultResponse = await fetch(
+    "https://llm-gateway.assemblyai.com/v1/understanding",
+    {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(understandingBody)
+    }
+  );
+  
+  const result = await resultResponse.json();
 
   // Access and display results
   console.log("\n--- Original Transcript ---");
-  console.log(result.text.substring(0, 200) + "...\n");
+  console.log(transcript.text.substring(0, 200) + "...\n");
 
   console.log("--- Translations ---");
   for (const [languageCode, translatedText] of Object.entries(result.translated_texts)) {
@@ -595,7 +578,10 @@ async function translateTranscript() {
   }
 }
 
-translateTranscript().catch(console.error);
+// Run the main function
+main().catch(error => {
+  console.error("Error:", error);
+});
 ```
 
 </Tab>
@@ -615,7 +601,6 @@ const audioUrl = "https://assembly.ai/wildfires.mp3";
 
 async function translateTranscript() {
   // Configure and transcribe the audio
-  console.log("Starting transcription...");
 
   const transcript = await client.transcripts.transcribe({
     audio: audioUrl,
@@ -629,7 +614,7 @@ async function translateTranscript() {
   console.log("Transcription completed!");
 
   // Request translation using Speech Understanding
-  console.log("Requesting translations...");
+
 
   const result = await transcript.speechUnderstanding({
     translation: {
@@ -638,8 +623,6 @@ async function translateTranscript() {
       match_original_utterance: true  // Get translated utterances (if speaker_labels was enabled)
     }
   });
-
-  console.log("Translation completed!");
 
   // Access and display results
   console.log("\n--- Original Transcript ---");
