@@ -1,20 +1,37 @@
 ---
-title: "Generate A Custom Summary Using LeMUR"
+title: "Generate A Custom Summary Using LLM Gateway"
 ---
 
-This tutorial will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to get a custom summary using the Task endpoint.
+This tutorial will demonstrate how to use AssemblyAI's LLM Gateway to get a custom summary using advanced prompting techniques.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+# Step 1: Transcribe the audio
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+data = {"audio_url": audio_url}
 
-transcript = aai.Transcriber().transcribe(audio_url)
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
 
-prompt = f"""
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
+
+# Step 2: Generate custom summary with LLM Gateway
+prompt = """
 - You are an expert at writing factual, useful summaries.
 - You focus on key details, leave out irrelevant information, and do not add in information that is not already present in the transcript.
 - Your summaries accurately represent the information in the transcript.
@@ -25,58 +42,73 @@ prompt = f"""
 - Your summaries do not describe what type of text they summarize.
 - You do not dumb down specific language nor make big generalizations.
 - Respond with just the summary and don't include a preamble or introduction.
+
+Your summary should use the following format: Bullet points
 """
 
-answer_format = "Bullet points"
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 1500
+}
 
-if answer_format:
-    prompt+=f"\nYour summary should use the following format: {answer_format}"
-
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
 )
 
-response = result.response
-print(response)
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
 ```
 
 ## Getting Started
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LeMUR.
-
-Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR).
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
 ## Step-by-Step Instructions
 
-In this guide, we will prompt LeMUR to generate a summary.
+In this guide, we will use LLM Gateway to generate a custom summary.
 
-First, let's install the AssemblyAI SDK.
+Install the required packages:
 
 ```bash
-pip install -U assemblyai
+pip install requests
 ```
 
-Then we'll import the SDK and set our AssemblyAI API key.
+Set up your API client and transcribe the audio file:
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
-```
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-Next, we'll use AssemblyAI to transcribe a file and save our transcript.
-
-```python
+# Transcribe the audio
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+data = {"audio_url": audio_url}
 
-transcript = aai.Transcriber().transcribe(audio_url)
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
 ```
 
-Provide detailed instructions to prompt LeMUR to summarize the transcript.
+Define your detailed prompt instructions for generating a custom summary:
 
 ```python
-prompt = f"""
+prompt = """
 - You are an expert at writing factual, useful summaries.
 - You focus on key details, leave out irrelevant information, and do not add in information that is not already present in the transcript.
 - Your summaries accurately represent the information in the transcript.
@@ -90,23 +122,32 @@ prompt = f"""
 """
 ```
 
-You can also optionally specify a summary format and append it to the prompt.
+Optionally specify a summary format and append it to the prompt:
 
 ```python
 answer_format = "Bullet points"
 
 if answer_format:
-    prompt+=f"\nYour summary should use the following format: {answer_format}"
+    prompt += f"\nYour summary should use the following format: {answer_format}"
 ```
 
-Prompt the LeMUR model using the Task Endpoint and return the response.
+Generate the custom summary using LLM Gateway:
 
 ```python
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 1500
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
 )
 
-response = result.response
-print(response)
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
 ```
