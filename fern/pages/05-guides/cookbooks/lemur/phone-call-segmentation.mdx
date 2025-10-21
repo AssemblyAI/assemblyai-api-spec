@@ -1,26 +1,47 @@
 ---
-title: "Segment A Phone Call using LeMUR"
+title: "Segment A Phone Call using LLM Gateway"
 ---
 
-In this guide we will show you how to use AssemblyAI's LLM, [LeMUR](https://www.assemblyai.com/docs/lemur/examples), to segment a phone call.
+In this guide we will show you how to use AssemblyAI's LLM Gateway to segment a phone call. LLM Gateway provides access to multiple LLM providers through a unified API.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
-audio_url = "YOUR_AUDIO_URL" # You can also provide a path to a local audio file
+base_url = "https://api.assemblyai.com"
 
-transcript = transcriber.transcribe(audio_url)
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
 
-phases = [
-    "Introduction",
-    "Complaint",
-    "Resolution",
-    "Goodbye"
-]
+# Step 1: Transcribe and get VTT subtitles
+with open("./my-audio.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+
+upload_url = response.json()["upload_url"]
+data = {"audio_url": upload_url}
+
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
+
+# Get VTT subtitles
+vtt_response = requests.get(f"{polling_endpoint}/vtt", headers=headers)
+vtt_content = vtt_response.text
+
+# Step 2: Define phases and analyze with LLM Gateway
+phases = ["Introduction", "Complaint", "Resolution", "Goodbye"]
 
 prompt = f'''
 Analyze the following transcript of a phone call conversation and divide it into the following phases:
@@ -48,43 +69,84 @@ Format your response as a JSON object with the following structure:
 Ensure that all parts of the conversation are covered by a phase, using "Other" for any parts that don't fit into the specified phases.
 '''
 
-result = aai.Lemur().task(
-    input_text=transcript.export_subtitles_vtt(),
-    prompt=prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nVTT Transcript:\n{vtt_content}"}
+    ],
+    "max_tokens": 2000
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
 )
 
-print(result.response)
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
 ```
 
 ## Get Started
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LeMUR.
-
-Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
 ## Step-by-Step Instructions
 
-Install the SDK:
+Install the required packages:
 
 ```bash
-pip install assemblyai
+pip install requests
 ```
 
-Import the SDK and set your AssemblyAI API key.
+Set up your API client and transcribe the audio file:
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
-```
+base_url = "https://api.assemblyai.com"
 
-Use AssemblyAI to transcribe a file and save the transcript.
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
 
-```python
-audio_url = "YOUR_AUDIO_URL"
+with open("./my-audio.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload",
+                            headers=headers,
+                            data=f)
 
-transcript = aai.Transcriber().transcribe(audio_url)
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcription_result['status'] == 'completed':
+        print(f"Transcript ID:", transcript_id)
+        break
+
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+    else:
+        time.sleep(3)
+
+# Get VTT subtitles for timestamp information
+vtt_response = requests.get(f"{polling_endpoint}/vtt", headers=headers)
+vtt_content = vtt_response.text
+
+with open(f"transcript_{transcript_id}.vtt", "w") as vtt_file:
+    vtt_file.write(vtt_content)
 ```
 
 Define the phases you want to identify.
@@ -100,7 +162,7 @@ phases = [
 ]
 ```
 
-Prompt LeMUR using the Task Endpoint, analyze the transcript to divide it into phases, and return the response. This is an example prompt, which you can modify to suit your specific requirements. See our documentation for more information about [prompt engineering](https://www.assemblyai.com/docs/lemur/improving-your-prompt).
+Use LLM Gateway to analyze the transcript and divide it into phases. This is an example prompt, which you can modify to suit your specific requirements. See our documentation for more information about [prompt engineering](/docs/lemur/improving-your-prompt).
 
 ```python
 prompt = f'''
@@ -129,13 +191,22 @@ Format your response as a JSON object with the following structure:
 Ensure that all parts of the conversation are covered by a phase, using "Other" for any parts that don't fit into the specified phases.
 '''
 
-result = aai.Lemur().task(
-    input_text=transcript.export_subtitles_vtt(),
-    prompt=prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nVTT Transcript:\n{vtt_content}"}
+    ],
+    "max_tokens": 2000
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
 )
 
-print(result.response)
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
 ```
 
 Example output of the analysis of a transcript divided into phases and formatted as a JSON object:
