@@ -1,19 +1,36 @@
 ---
-title: "Custom Topic Tags"
+title: "Custom Topic Tags Using LLM Gateway"
 ---
 
-In this guide we will show you how to label content with custom topic tags using AssemblyAI's LLM, [LeMUR](https://www.assemblyai.com/docs/lemur/examples).
+In this guide we will show you how to label content with custom topic tags using AssemblyAI's LLM Gateway.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
-audio_url = "YOUR_AUDIO_URL"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-transcript = aai.Transcriber().transcribe(audio_url)
+# Step 1: Transcribe the audio
+audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+data = {"audio_url": audio_url}
 
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
+
+# Step 2: Generate topic tags with LLM Gateway
 tag_list = {
     'Sports': 'News and updates on various athletic events, teams, and sports personalities.',
     'Politics': 'Coverage and discussion of government activities, policies, and political events.',
@@ -32,50 +49,73 @@ tag_list = {
     'Culture': 'Coverage of cultural events, traditions, and societal norms.'
 }
 
-predicted_tag = transcript.lemur.task(
-    prompt=f"""
+prompt = f"""
+You are a helpful assistant designed to label video content with topic tags.
 
-    You are a helpful assistant designed to label video content with topic tags.
+I will give you a list of topics and definitions. Select the most relevant topic from the list. Return your selection and nothing else.
 
-    I will give you a list of topics and definitions. Select the most relevant topic from the list. Return your selection and nothing else.
+<topics_list>
+{tag_list}
+</topics_list>
+"""
 
-    <topics_list>
-    {tag_list}
-    </topics_list>
-    """
-).response
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 500
+}
 
-print(predicted_tag.strip())
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
+)
+
+result = response.json()["choices"][0]["message"]["content"]
+print(result.strip())
 ```
 
 ## Get Started
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LeMUR.
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard. You will need to upgrade your account by adding a credit card to have access to LLM Gateway.
 
-Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
+Find more details on the current pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
 
 ## Step-by-Step Instructions
 
-Install the SDK:
+Install the required packages:
 
 ```bash
-pip install assemblyai
+pip install requests
 ```
 
-Import the SDK and set your AssemblyAI API key.
+Set up your API client and transcribe the audio file:
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
-```
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-Use AssemblyAI to transcribe a file and save the transcript.
+# Transcribe the audio
+audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+data = {"audio_url": audio_url}  # You can also use a URL to an audio or video file on the web
 
-```python
-audio_url = "YOUR_AUDIO_URL"
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
 
-transcript = aai.Transcriber().transcribe(audio_url)
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
 ```
 
 Create a `tag_list` of custom topics, which consists of a key that is the topic and a value that is a short description of what qualifies a file to be labeled with that topic.
@@ -114,21 +154,33 @@ tag_list = {
 }
 ```
 
-Prompt LeMUR using the Task Endpoint and return the response. This is an example prompt, which you can modify to suit your specific requirements. See our documentation for more information about [prompt engineering](https://www.assemblyai.com/docs/lemur/improving-your-prompt).
+Use LLM Gateway to analyze the transcript and select the most relevant topic tag. This is an example prompt, which you can modify to suit your specific requirements. See our documentation for more information about [prompt engineering](/docs/llm-gateway/improving-your-prompt).
 
 ```python
-predicted_tag = transcript.lemur.task(
-    prompt=f"""
+prompt = f"""
+You are a helpful assistant designed to label video content with topic tags.
 
-    You are a helpful assistant designed to label video content with topic tags.
+I will give you a list of topics and definitions. Select the most relevant topic from the list. Return your selection and nothing else.
 
-    I will give you a list of topics and definitions. Select the most relevant topic from the list. Return your selection and nothing else.
+<topics_list>
+{tag_list}
+</topics_list>
+"""
 
-    <topics_list>
-    {tag_list}
-    </topics_list>
-    """
-).response
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 500
+}
 
-print(predicted_tag.strip())
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
+)
+
+result = response.json()["choices"][0]["message"]["content"]
+print(result.strip())
 ```
