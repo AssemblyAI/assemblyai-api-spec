@@ -165,7 +165,7 @@ Find more details on the current LLM Gateway pricing in the AssemblyAI [pricing 
 
 In this guide, we will prompt LLM Gateway with a structured Q&A format and generate an XML response.
 
-First, let's import the necessary librariesand set our API key.
+First, let's import the necessary libraries and set our API key.
 
 ```python
 import requests
@@ -212,6 +212,9 @@ while True:
 Construct a formatted string to structure the questions. This includes the question text, context, an answer format, and any answer options, then returns the formatted string.
 
 ```python
+# -------------------------------
+# Step 2: Build question helper functions
+# -------------------------------
 def construct_question(question):
     question_str = f"Question: {question['question']}"
 
@@ -234,7 +237,7 @@ def escape_xml_characters(xml_string):
     return xml_string.replace("&", "&amp;")
 ```
 
-Define a list of questions. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`.
+Define a list of questions. For each question, you can define additional `context` and specify either an `answer_format` or a list of `answer_options`.
 
 ```python
 # -------------------------------
@@ -252,11 +255,9 @@ questions = [
     },
     {"question": "What are the future plans for the project?"},
 ]
-
-question_str = "\n".join(construct_question(q) for q in questions)
 ```
 
-Construct the formatted question string for all the Questions and build the LLM prompt.
+Construct the formatted question string for all the questions and build the LLM prompt.
 
 ```python
 question_str = '\n'.join(construct_question(q) for q in questions)
@@ -523,9 +524,24 @@ response = requests.post(
 
 response_json = response.json()
 llm_output = response_json["choices"][0]["message"]["content"]
+```
 
+Clean the XML output and print the question and answer pairs.
+
+```python
 # -------------------------------
 # Step 6: Parse and print XML response
 # -------------------------------
 clean_response = escape_xml_characters(llm_output).strip()
+
+try:
+    root = ET.fromstring(clean_response)
+    for resp in root.findall("response"):
+        question = resp.find("question").text
+        answer = resp.find("answer").text
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+except ET.ParseError as e:
+    print("Could not parse XML response.")
+    print("Raw model output:\n", llm_output)
 ```
