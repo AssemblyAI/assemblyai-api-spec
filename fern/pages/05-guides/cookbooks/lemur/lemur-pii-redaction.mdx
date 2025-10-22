@@ -1,17 +1,19 @@
 ---
-title: "Redact PII from Text Using LeMUR"
+title: "Redact PII from Text Using LLM Gateway"
 ---
 
-This guide will show you how to use AssemblyAI's LeMUR framework to redact personally identifiable information (PII) from text.
+This guide will show you how to use AssemblyAI's LLM Gateway to redact personally identifiable information (PII) from text.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 import json
-import os
+import re
 
-aai.settings.api_key = 'YOUR API KEY'
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
 def generate_ner(transcript_text):
     prompt = '''
@@ -34,43 +36,74 @@ def generate_ner(transcript_text):
 
     Important: Do not include any other information, explanations, or text in your response. Your output should consist solely of the JSON object containing the named entities.
 
-    If you do not find any named entities of a particular type, simply return a empty array for the "named_entities" field.
+    If you do not find any named entities of a particular type, simply return an empty array for the "named_entities" field.
     '''
 
-    response = aai.Lemur().task(
-        prompt=prompt,
-        input_text=transcript_text,
-        max_output_size=4000,
-        temperature=0.0,
-        final_model=aai.LemurModel.claude3_5_sonnet
-    ).response
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {transcript_text}"}
+        ],
+        "max_tokens": 1000,
+        "temperature": 0.0
+    }
+
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+
+    result = response.json()["choices"][0]["message"]["content"]
 
     try:
-      res_json = json.loads(response)
+        res_json = json.loads(result)
     except:
-      res_json = {'named_entities': []}
+        res_json = {'named_entities': []}
 
     named_entities = res_json.get('named_entities', [])
-
     return named_entities
 
-transcriber = aai.Transcriber(config=aai.TranscriptionConfig(language_code='en'))
-transcript = transcriber.transcribe('YOUR_AUDIO_URL')
+# Step 1: Transcribe audio
+with open("./my-audio.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
 
+upload_url = response.json()["upload_url"]
+data = {"audio_url": upload_url}
+
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
+
+# Step 2: Split transcript into sentences and redact PII
+transcript_text = transcription_result['text']
+sentences = re.split(r'[.!?]+', transcript_text)
 redacted_transcript = ''
 
-for sentence in transcript.get_sentences():
-  generated_entities = generate_ner(sentence.text)
+for sentence in sentences:
+    sentence = sentence.strip()
+    if not sentence:
+        continue
 
-  redacted_sentence = sentence.text
+    generated_entities = generate_ner(sentence)
+    redacted_sentence = sentence
 
-  for entity in generated_entities:
-    redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
+    for entity in generated_entities:
+        redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
 
-  redacted_transcript += redacted_sentence + ' '
-  print(redacted_sentence)
+    redacted_transcript += redacted_sentence + '. '
+    print(redacted_sentence)
 
-print('Full redacted transcript:')
+print('\nFull redacted transcript:')
 print(redacted_transcript)
 ```
 
@@ -78,27 +111,27 @@ print(redacted_transcript)
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
 
-For information about LeMUR pricing, see our [pricing page](https://www.assemblyai.com/pricing).
-
 ## Step-by-Step Instructions
 
-Install the SDK.
+Install the required packages:
 
-```python
-pip install assemblyai
+```bash
+pip install requests
 ```
 
-Import the `assemblyai` package and set your API key.
+Import the required packages and set up your API client:
 
 ```python
-import assemblyai as aai
+import requests
+import time
 import json
-import os
+import re
 
-aai.settings.api_key = 'YOUR API KEY'
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 ```
 
-Define a function `generate_ner` that uses LeMUR to identify named entities (person names, organizations, emails, phone numbers, addresses) in a given text.
+Define a function `generate_ner` that uses LLM Gateway to identify named entities (person names, organizations, emails, phone numbers, addresses) in a given text.
 
 ```python
 def generate_ner(transcript_text):
@@ -122,54 +155,83 @@ def generate_ner(transcript_text):
 
     Important: Do not include any other information, explanations, or text in your response. Your output should consist solely of the JSON object containing the named entities.
 
-    If you do not find any named entities of a particular type, simply return a empty array for the "named_entities" field.
+    If you do not find any named entities of a particular type, simply return an empty array for the "named_entities" field.
     '''
 
-    response = aai.Lemur().task(
-        prompt=prompt,
-        input_text=transcript_text,
-        max_output_size=4000,
-        temperature=0.0,
-        final_model=aai.LemurModel.claude3_5_sonnet
-    ).response
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {transcript_text}"}
+        ],
+        "max_tokens": 1000,
+        "temperature": 0.0
+    }
+
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+
+    result = response.json()["choices"][0]["message"]["content"]
 
     try:
-      res_json = json.loads(response)
+        res_json = json.loads(result)
     except:
-      res_json = {'named_entities': []}
+        res_json = {'named_entities': []}
 
     named_entities = res_json.get('named_entities', [])
-
     return named_entities
 ```
 
-Transcribe an audio file using the AssemblyAI Transcriber.
+Transcribe an audio file using the AssemblyAI API:
 
 ```python
-transcriber = aai.Transcriber(config=aai.TranscriptionConfig(language_code='en'))
-transcript = transcriber.transcribe('YOUR_AUDIO_URL')
+with open("./my-audio.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+
+upload_url = response.json()["upload_url"]
+data = {"audio_url": upload_url}  # You can also use a URL to an audio or video file on the web
+
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
 ```
 
-Iterate through each sentence in the transcript, identify named entities using `generate_ner`, and replace them with # characters.
+Split the transcript into sentences, identify named entities using `generate_ner`, and replace them with # characters:
 
 ```python
+transcript_text = transcription_result['text']
+sentences = re.split(r'[.!?]+', transcript_text)
 redacted_transcript = ''
 
-for sentence in transcript.get_sentences():
-  generated_entities = generate_ner(sentence.text)
+for sentence in sentences:
+    sentence = sentence.strip()
+    if not sentence:
+        continue
 
-  redacted_sentence = sentence.text
+    generated_entities = generate_ner(sentence)
+    redacted_sentence = sentence
 
-  for entity in generated_entities:
-    redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
+    for entity in generated_entities:
+        redacted_sentence = redacted_sentence.replace(entity, '#' * len(entity))
 
-  redacted_transcript += redacted_sentence + ' '
-  print(redacted_sentence)
+    redacted_transcript += redacted_sentence + '. '
+    print(redacted_sentence)
 ```
 
-Print the redacted transcript.
+Print the fully redacted transcript:
 
 ```python
-print('Full redacted transcript:')
+print('\nFull redacted transcript:')
 print(redacted_transcript)
 ```
