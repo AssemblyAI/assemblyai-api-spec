@@ -12,18 +12,23 @@ Building a robust medical scribe requires careful consideration of accuracy, lat
 AssemblyAI stands out as the premier choice for medical scribes with several key advantages:
 
 ### Industry-Leading Accuracy with Pre-recorded Audio
+
 - **Universal-Pro model** delivers exceptional accuracy for medical terminology and clinical documentation
 - **2.9% speaker diarization error rate** for precise attribution between provider and patient
 - Comprehensive LLM Gateway integration for intelligent post-processing into structured clinical notes
 
 ### Real-Time Streaming Advantages
+
 As medical scribes evolve toward real-time documentation, AssemblyAI's Universal-Streaming model offers significant benefits:
+
 - **Ultra-low latency (~300ms)** enables live transcription during patient encounters
 - **Format turns** feature provides structured, speaker-aware output in real-time
 - **Keyterms prompt** allows providing medical context and patient history to improve accuracy
 
 ### End-to-End Voice AI Platform
+
 Unlike fragmented solutions, AssemblyAI provides a unified API for:
+
 - Transcription with speaker diarization (provider vs. patient)
 - Medical terminology recognition and contextual understanding
 - HIPAA-compliant PII redaction on both text and audio
@@ -38,6 +43,7 @@ Understanding when to use async (pre-recorded) versus streaming is critical for 
 ### Use Pre-recorded (Universal-Pro) When:
 
 **Post-visit documentation** - Encounter already happened, need highest accuracy
+
 - **Maximum accuracy required** - Universal-Pro has highest medical terminology accuracy
 - **Complex medical terminology** - Rare medications, genetic conditions, specialized procedures
 - **HIPAA compliance critical** - Full PII redaction with audio de-identification
@@ -51,6 +57,7 @@ Understanding when to use async (pre-recorded) versus streaming is critical for 
 ### Use Streaming (Universal-Streaming) When:
 
 **Live encounter documentation** - Real-time transcription during patient visit
+
 - **Immediate documentation** - No delay between encounter and note
 - **Telemedicine visits** - Document while seeing patient virtually
 - **Emergency department** - Fast-paced, immediate documentation needed
@@ -63,6 +70,7 @@ Understanding when to use async (pre-recorded) versus streaming is critical for 
 ### Hybrid Approach (Recommended)
 
 Many medical scribes use **both**:
+
 1. **Streaming during visit** - Real-time documentation, immediate review by provider
 2. **Universal-Pro post-processing** - Run audio through Universal-Pro after visit for:
    - Highest accuracy verification
@@ -72,6 +80,7 @@ Many medical scribes use **both**:
    - Speaker diarization (provider vs. patient)
 
 **Example workflow:**
+
 - Provider sees patient → Streaming captures real-time notes
 - Visit ends → Audio sent to Universal-Pro for final high-accuracy transcription
 - LLM Gateway generates structured SOAP note from high-accuracy transcript
@@ -82,31 +91,38 @@ This gives real-time utility during visits while ensuring maximum accuracy for o
 ## What Languages and Features for a Medical Scribe?
 
 ### Pre-Recorded Doctor Patient Visits (Universal-Pro)
+
 **Languages:**
 For post-visit documentation, Universal-Pro supports English for the highest accuracy transcription. If you want to use other languages, Universal is a suitable alternative.
 
 **Core Features**:
+
 - Speaker diarization (provider-patient separation)
 - Automatic formatting, punctuation, and capitalization
 - Keyterms Prompting for medical specialties and conditions
 - Ability to prompt on related medical terms and improve the accuracy of others (for example, `ibuprofen` improving `naproxen`)
 
 **Speech Understanding Models**:
+
 - Entity detection for medications, conditions, and procedures
 - Sentiment analysis for patient experience insights
 - Speaker identification for separating doctor and patient in a visit
 
 **Guardrails**:
+
 - PII redaction on text and audio for HIPAA compliance
 
 ### Real-Time Streaming (Universal-Streaming)
+
 **Languages**:
 For live encounter transcription, Universal-Streaming supports:
+
 - English model optimized for medical contexts
 - Multilingual model for visits in other languages or with code switching (English, Spanish, German, French, Portuguese, Italian)
 - Post-processing LLM Gateway tight integration for increasing medical accuracy
 
 **Streaming-Specific Features**:
+
 - Partial and final transcripts for responsive documentation
 - Format turns for structured provider-patient dialogue
 - Keyterms Prompt for patient history and current medications
@@ -116,6 +132,7 @@ For live encounter transcription, Universal-Streaming supports:
 **Recommended approach:** Use streaming for real-time documentation, then run through Universal-Pro post-visit for accurate speaker-labeled final notes.
 
 ### Coming Soon
+
 - Medical model which packages up the best ways to contextually influence transcript output
 - Multilingual Universal-Pro, especially important for multilingual medical conversations to improve accuracy
 
@@ -139,105 +156,103 @@ aai.settings.api_key = "your_api_key_here"
 async def transcribe_encounter_async(audio_source: str) -> Dict:
     """
     Asynchronously transcribe a medical encounter with Slam-1
-    
+
     Args:
         audio_source: Either a local file path or publicly accessible URL
     """
     # Configure comprehensive medical transcription
     config = aai.TranscriptionConfig(
-        # Use Universal-Pro for medical accuracy
-        speech_model=aai.SpeechModel.slam,
-        
+        speech_model=aai.SpeechModel.slam_1,
+
         # Diarize provider and patient
         speaker_labels=True,
         speakers_expected=2,  # Typically provider and patient
-        
+
         # Punctuation and Formatting
         punctuate=True,
         format_text=True,
-        
+
         # Boost accuracy of medical terminology
         keyterms_prompt=[
             # Patient-specific context
             "hypertension", "diabetes mellitus type 2", "metformin",
-            
+
             # Specialty-specific terms
             "auscultation", "palpation", "differential diagnosis",
             "chief complaint", "review of systems", "physical examination",
-            
+
             # Common medications
             "lisinopril", "atorvastatin", "levothyroxine",
-            
+
             # Procedure terms
             "electrocardiogram", "complete blood count", "hemoglobin A1c"
         ],
-        
+
         # Speech understanding for medical documentation
         entity_detection=True,  # Extract medications, conditions, procedures
         redact_pii=True,  # HIPAA compliance
         redact_pii_policies=[
             PIIRedactionPolicy.person_name,
             PIIRedactionPolicy.date_of_birth,
-            PIIRedactionPolicy.medical_record_number,
             PIIRedactionPolicy.phone_number,
             PIIRedactionPolicy.email_address,
         ],
         redact_pii_sub=PIISubstitutionPolicy.hash,
         redact_pii_audio=True  # Create HIPAA-compliant audio
     )
-    
+
     # Create async transcriber
     transcriber = aai.Transcriber()
-    
+
     try:
         # Submit transcription job - works with both file paths and URLs
         transcript = await asyncio.to_thread(
-            transcriber.transcribe, 
+            transcriber.transcribe,
             audio_source,
             config=config
         )
-        
+
         # Check status
         if transcript.status == aai.TranscriptStatus.error:
             raise Exception(f"Transcription failed: {transcript.error}")
-        
+
         # Process speaker-labeled utterances
         print("\n=== PROVIDER-PATIENT DIALOGUE ===\n")
-        
+
         for utterance in transcript.utterances:
             # Format timestamp
             start_time = utterance.start / 1000  # Convert to seconds
             end_time = utterance.end / 1000
-            
+
             # Identify speaker role
             speaker_label = "Provider" if utterance.speaker == "A" else "Patient"
-            
+
             # Print formatted utterance
             print(f"[{start_time:.1f}s - {end_time:.1f}s] {speaker_label}:")
             print(f"  {utterance.text}")
             print(f"  Confidence: {utterance.confidence:.2%}\n")
-        
+
         # Extract clinical entities
         if transcript.entities:
             print("\n=== CLINICAL ENTITIES DETECTED ===\n")
             medications = [e for e in transcript.entities if e.entity_type == "medication"]
             conditions = [e for e in transcript.entities if e.entity_type == "medical_condition"]
             procedures = [e for e in transcript.entities if e.entity_type == "medical_procedure"]
-            
+
             if medications:
                 print("Medications:", ", ".join([m.text for m in medications]))
             if conditions:
                 print("Conditions:", ", ".join([c.text for c in conditions]))
             if procedures:
                 print("Procedures:", ", ".join([p.text for p in procedures]))
-        
+
         return {
             "transcript": transcript,
             "utterances": transcript.utterances,
             "entities": transcript.entities,
             "redacted_audio_url": transcript.redacted_audio_url
         }
-        
+
     except Exception as e:
         print(f"Error during transcription: {e}")
         raise
@@ -249,15 +264,15 @@ async def main():
     # Can use either local file or URL
     audio_source = "path/to/patient_encounter.mp3"  # Or use URL
     # audio_source = "https://your-secure-storage.com/encounter.mp3"
-    
+
     try:
         result = await transcribe_encounter_async(audio_source)
-        
+
         # Additional processing
         print(f"\nEncounter duration: {result['transcript'].audio_duration} seconds")
-        
+
         # Could send to LLM Gateway for SOAP note generation here
-        
+
     except Exception as e:
         print(f"Failed to process encounter: {e}")
 
@@ -334,13 +349,13 @@ MEDICAL_KEYTERMS = [
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
     "format_turns": True,  # Always true for readable clinical notes
-    
+
     # MEDICAL SCRIBE CONFIGURATION - Conservative for clinical accuracy
     # Medical conversations have LONG pauses (provider thinking, examining patient, reviewing charts)
     "end_of_turn_confidence_threshold": 0.7,  # Higher confidence (vs 0.4 for voice agents)
     "min_end_of_turn_silence_when_confident": 800,  # Wait much longer (vs 160ms voice agents, 560ms meetings)
     "max_turn_silence": 3600,  # Much longer for clinical thinking pauses
-    
+
     "keyterms_prompt": json.dumps(MEDICAL_KEYTERMS),  # JSON string
 }
 
@@ -748,6 +763,7 @@ HIPAA compliance is mandatory for all medical transcription workflows. Here's ho
 ### Required HIPAA Guardrails
 
 **1. Business Associate Agreement (BAA)**
+
 - AssemblyAI provides a BAA for healthcare customers
 - Required before processing any PHI
 - [Contact us](https://www.assemblyai.com/contact/support) to execute BAA
@@ -783,6 +799,7 @@ config = aai.TranscriptionConfig(
 ```
 
 **3. Secure Audio Storage**
+
 ```python
 # HIPAA-compliant storage requirements
 # - Encryption at rest (AES-256)
@@ -800,6 +817,7 @@ audio_url = "https://your-hipaa-compliant-s3.amazonaws.com/encounters/patient123
 ```
 
 **4. Access Controls**
+
 ```python
 # Implement role-based access control
 def can_access_encounter(user_role: str, patient_id: str) -> bool:
@@ -811,6 +829,7 @@ def can_access_encounter(user_role: str, patient_id: str) -> bool:
 ```
 
 **5. Audit Logging**
+
 ```python
 # Log all PHI access
 def log_phi_access(user_id: str, patient_id: str, action: str):
@@ -831,6 +850,7 @@ For complete HIPAA guidance, see our [Healthcare Compliance Guide](https://www.a
 Use these flags to transform raw medical conversations into structured clinical documentation. Below is plain-English behavior, output shape, and clinical use cases for each option.
 
 ### Entity Detection (Medical)
+
 `entity_detection: true`
 
 **What it does:** Extracts medical entities (medications, conditions, procedures, anatomy).
@@ -842,6 +862,7 @@ Use these flags to transform raw medical conversations into structured clinical 
 **Notes:** Recognizes brand/generic drug names, medical conditions, surgical procedures.
 
 ### Redact PII Text (HIPAA Compliance)
+
 `redact_pii: true`
 
 **What it does:** Scans transcript for Protected Health Information and **replaces** per HIPAA requirements.
@@ -855,6 +876,7 @@ Use these flags to transform raw medical conversations into structured clinical 
 `redact_pii_policies: [person_name, date_of_birth, medical_record_number, phone_number, email_address]`
 
 Restricts redaction scope to key HIPAA identifiers:
+
 - **`person_name`** – patient and provider names
 - **`date_of_birth`** – full or partial DOB
 - **`medical_record_number`** – MRN, account numbers
@@ -872,11 +894,13 @@ Restricts redaction scope to key HIPAA identifiers:
 `"Patient #2af4…, DOB #7b91…, MRN #e13c…"`
 
 **Benefits:**
+
 - Maintains referential integrity across document
 - Preserves sentence structure for NLP/LLM processing
 - Prevents reconstruction of original PHI
 
 ### Redact PII Audio (HIPAA Compliance)
+
 `redact_pii_audio: true`
 
 **What it does:** Produces HIPAA-compliant audio with PHI portions silenced.
@@ -888,6 +912,7 @@ Restricts redaction scope to key HIPAA identifiers:
 **Notes:** Original audio preserved separately; ensure proper access controls.
 
 ### Sentiment Analysis (Patient Experience)
+
 `sentiment_analysis: true`
 
 **What it does:** Analyzes emotional tone of patient responses.
@@ -900,21 +925,23 @@ Restricts redaction scope to key HIPAA identifiers:
 
 ### End-to-End Clinical Documentation Effect
 
-| Model | You get | Typical consumer |
-| --- | --- | --- |
-| `entity_detection` | Medical entities extracted | EHR integration, coding |
-| `sentiment_analysis` | Patient emotion tracking | Quality metrics, alerts |
-| `redact_pii` (+ policies) | HIPAA-compliant **text** | Research, QA, training |
-| `redact_pii_sub=hash` | Stable PHI placeholders | Analytics & LLM processing |
-| `redact_pii_audio` | De-identified **audio** | Compliance archives |
+| Model                     | You get                    | Typical consumer           |
+| ------------------------- | -------------------------- | -------------------------- |
+| `entity_detection`        | Medical entities extracted | EHR integration, coding    |
+| `sentiment_analysis`      | Patient emotion tracking   | Quality metrics, alerts    |
+| `redact_pii` (+ policies) | HIPAA-compliant **text**   | Research, QA, training     |
+| `redact_pii_sub=hash`     | Stable PHI placeholders    | Analytics & LLM processing |
+| `redact_pii_audio`        | De-identified **audio**    | Compliance archives        |
 
 ### Clinical Documentation Example
 
 **Original Encounter:**
-> "Hi, I'm *Dr. Smith*. *John Doe*, born *1/15/1980*, is here for follow-up. He's taking *metformin 1000mg twice daily* for his *diabetes*."
+
+> "Hi, I'm _Dr. Smith_. _John Doe_, born _1/15/1980_, is here for follow-up. He's taking _metformin 1000mg twice daily_ for his _diabetes_."
 
 **With medical scribe settings:**
-- **Text:** "Hi, I'm **#2af4…**. **#7b91…**, born **#e13c…**, is here for follow-up. He's taking *metformin 1000mg twice daily* for his *diabetes*."
+
+- **Text:** "Hi, I'm **#2af4…**. **#7b91…**, born **#e13c…**, is here for follow-up. He's taking _metformin 1000mg twice daily_ for his _diabetes_."
 - **Entities:** `[ { type: "medication", text: "metformin 1000mg" }, { type: "condition", text: "diabetes" } ]`
 - **Clinical note:** Structured SOAP format via LLM Gateway
 - **Redacted audio:** PHI portions silenced for compliance
@@ -932,25 +959,25 @@ from typing import Dict, List, Optional
 
 class MedicalSOAPGenerator:
     """Generate structured SOAP notes from medical transcripts using LLM Gateway"""
-    
+
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://llm-gateway.assemblyai.com/v1/chat/completions"
         self.headers = {"authorization": api_key}
-    
-    def generate_soap_note(self, 
-                          transcript: str, 
+
+    def generate_soap_note(self,
+                          transcript: str,
                           patient_context: Optional[Dict] = None,
                           visit_type: str = "general") -> Dict:
         """Generate SOAP note from medical transcript"""
-        
+
         # Build context for the LLM
         context_prompt = self._build_context_prompt(transcript, patient_context, visit_type)
-        
+
         messages = [
             {
                 "role": "system",
-                "content": """You are a clinical documentation specialist. Generate a structured SOAP note from the medical encounter transcript. 
+                "content": """You are a clinical documentation specialist. Generate a structured SOAP note from the medical encounter transcript.
 
 SOAP Format:
 - Subjective: Patient's chief complaint, history of present illness, and symptoms
@@ -967,11 +994,11 @@ Guidelines:
 - Note any follow-up appointments or referrals"""
             },
             {
-                "role": "user", 
+                "role": "user",
                 "content": context_prompt
             }
         ]
-        
+
         response = requests.post(
             self.base_url,
             headers=self.headers,
@@ -982,11 +1009,11 @@ Guidelines:
                 "temperature": 0.1  # Low temperature for consistent medical documentation
             }
         )
-        
+
         if response.status_code == 200:
             result = response.json()
             soap_content = result["choices"][0]["message"]["content"]
-            
+
             return {
                 "soap_note": soap_content,
                 "structured_data": self._extract_structured_data(soap_content),
@@ -995,10 +1022,10 @@ Guidelines:
             }
         else:
             raise Exception(f"LLM Gateway error: {response.status_code} - {response.text}")
-    
+
     def _build_context_prompt(self, transcript: str, patient_context: Optional[Dict], visit_type: str) -> str:
         """Build comprehensive context prompt for SOAP generation"""
-        
+
         prompt_parts = [
             f"Generate a SOAP note for a {visit_type} medical encounter.",
             "",
@@ -1006,7 +1033,7 @@ Guidelines:
             transcript,
             ""
         ]
-        
+
         if patient_context:
             prompt_parts.extend([
                 "PATIENT CONTEXT:",
@@ -1016,98 +1043,98 @@ Guidelines:
                 f"- Allergies: {', '.join(patient_context.get('allergies', []))}",
                 ""
             ])
-        
+
         prompt_parts.extend([
             "Please generate a comprehensive SOAP note following the format:",
             "Subjective:",
-            "Objective:", 
+            "Objective:",
             "Assessment:",
             "Plan:",
             "",
             "Include specific details, medications with dosages, and any follow-up instructions mentioned."
         ])
-        
+
         return "\n".join(prompt_parts)
-    
+
     def _extract_structured_data(self, soap_content: str) -> Dict:
         """Extract structured data from SOAP note"""
-        
+
         sections = {
             "subjective": self._extract_section(soap_content, "Subjective"),
             "objective": self._extract_section(soap_content, "Objective"),
             "assessment": self._extract_section(soap_content, "Assessment"),
             "plan": self._extract_section(soap_content, "Plan")
         }
-        
+
         return {
             "sections": sections,
             "medications": self._extract_medications(soap_content),
             "diagnoses": self._extract_diagnoses(soap_content),
             "follow_up": self._extract_follow_up(soap_content)
         }
-    
+
     def _extract_section(self, content: str, section_name: str) -> str:
         """Extract specific SOAP section"""
         import re
-        
+
         pattern = rf"{section_name}:\s*(.*?)(?=\n\w+:|$)"
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         return match.group(1).strip() if match else ""
-    
+
     def _extract_medications(self, content: str) -> List[str]:
         """Extract medication mentions from SOAP note"""
         import re
-        
+
         # Look for medication patterns
         medication_patterns = [
             r"([A-Z][a-z]+(?:mycin|pril|sartan|pine|zole|statin|pam|zepam))\s+\d+\s*mg",
             r"([A-Z][a-z]+)\s+\d+\s*mg\s+(?:daily|twice daily|BID|TID|QID)",
             r"([A-Z][a-z]+)\s+\d+\s*mg\s+(?:once|twice|three times)\s+(?:daily|a day)"
         ]
-        
+
         medications = []
         for pattern in medication_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
             medications.extend(matches)
-        
+
         return list(set(medications))  # Remove duplicates
-    
+
     def _extract_diagnoses(self, content: str) -> List[str]:
         """Extract diagnosis mentions from Assessment section"""
         assessment = self._extract_section(content, "Assessment")
-        
+
         # Common diagnosis patterns
         diagnosis_patterns = [
             r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:syndrome|disease|disorder|condition)",
             r"(?:diagnosis|impression):\s*([^,\n]+)",
             r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+likely"
         ]
-        
+
         diagnoses = []
         for pattern in diagnosis_patterns:
             matches = re.findall(pattern, assessment, re.IGNORECASE)
             diagnoses.extend(matches)
-        
+
         return list(set(diagnoses))
-    
+
     def _extract_follow_up(self, content: str) -> List[str]:
         """Extract follow-up instructions from Plan section"""
         plan = self._extract_section(content, "Plan")
-        
+
         follow_up_patterns = [
             r"follow[-\s]up\s+in\s+([^,\n]+)",
             r"return\s+in\s+([^,\n]+)",
             r"recheck\s+in\s+([^,\n]+)",
             r"schedule\s+([^,\n]+)"
         ]
-        
+
         follow_ups = []
         for pattern in follow_up_patterns:
             matches = re.findall(pattern, plan, re.IGNORECASE)
             follow_ups.extend(matches)
-        
+
         return list(set(follow_ups))
-    
+
     def _get_timestamp(self) -> str:
         """Get current timestamp"""
         from datetime import datetime
@@ -1116,10 +1143,9 @@ Guidelines:
 # Example usage
 async def generate_clinical_documentation(audio_file: str, patient_id: str):
     """Complete workflow: transcribe + generate SOAP note"""
-    
-    # Step 1: Transcribe with Universal-Pro
+
     config = aai.TranscriptionConfig(
-        speech_model=aai.SpeechModel.slam,
+        speech_model=aai.SpeechModel.slam_1,
         speaker_labels=True,
         speakers_expected=2,
         keyterms_prompt=get_patient_medical_history(patient_id),
@@ -1127,15 +1153,15 @@ async def generate_clinical_documentation(audio_file: str, patient_id: str):
         redact_pii=True,
         redact_pii_policies=[...],  # All HIPAA identifiers
     )
-    
+
     transcript = await transcribe_async(audio_file, config)
-    
+
     # Step 2: Load patient context from EHR
     patient_context = ehr.get_patient(patient_id)
-    
+
     # Step 3: Generate SOAP note using LLM Gateway
     soap_generator = MedicalSOAPGenerator(api_key="your_api_key")
-    
+
     soap_result = soap_generator.generate_soap_note(
         transcript=transcript.text,
         patient_context={
@@ -1146,7 +1172,7 @@ async def generate_clinical_documentation(audio_file: str, patient_id: str):
         },
         visit_type="primary_care_followup"
     )
-    
+
     # Step 4: Update EHR with structured data
     ehr.update_patient_record(patient_id, {
         "soap_note": soap_result["soap_note"],
@@ -1154,7 +1180,7 @@ async def generate_clinical_documentation(audio_file: str, patient_id: str):
         "diagnoses": soap_result["structured_data"]["diagnoses"],
         "follow_up_instructions": soap_result["structured_data"]["follow_up"]
     })
-    
+
     return {
         "transcript": transcript,
         "soap_note": soap_result["soap_note"],
@@ -1198,26 +1224,26 @@ Plan:
 ```python
 class AdvancedSOAPGenerator(MedicalSOAPGenerator):
     """Enhanced SOAP generator with specialty-specific templates"""
-    
+
     def generate_specialty_soap(self, transcript: str, specialty: str, patient_context: Dict) -> Dict:
         """Generate specialty-specific SOAP notes"""
-        
+
         specialty_templates = {
             "cardiology": self._cardiology_template(),
             "endocrinology": self._endocrinology_template(),
             "oncology": self._oncology_template(),
             "psychiatry": self._psychiatry_template()
         }
-        
+
         template = specialty_templates.get(specialty, self._general_template())
-        
+
         messages = [
             {
                 "role": "system",
                 "content": f"""You are a {specialty} specialist. Generate a detailed SOAP note using this template:
-                
+
                 {template}
-                
+
                 Focus on {specialty}-specific terminology, assessments, and treatment plans."""
             },
             {
@@ -1225,7 +1251,7 @@ class AdvancedSOAPGenerator(MedicalSOAPGenerator):
                 "content": f"Generate a {specialty} SOAP note for this encounter:\n\n{transcript}"
             }
         ]
-        
+
         response = requests.post(
             self.base_url,
             headers=self.headers,
@@ -1236,9 +1262,9 @@ class AdvancedSOAPGenerator(MedicalSOAPGenerator):
                 "temperature": 0.1
             }
         )
-        
+
         return response.json()
-    
+
     def _cardiology_template(self) -> str:
         return """
         Subjective:
@@ -1247,26 +1273,26 @@ class AdvancedSOAPGenerator(MedicalSOAPGenerator):
         - Dyspnea, orthopnea, paroxysmal nocturnal dyspnea
         - Palpitations, syncope, presyncope
         - Risk factors (smoking, diabetes, hypertension, family history)
-        
+
         Objective:
         - Vital signs including orthostatic vitals
         - Cardiovascular exam (heart sounds, murmurs, gallops)
         - Peripheral vascular exam (pulses, edema, JVD)
         - Relevant lab values (troponin, BNP, lipids)
         - Imaging results (EKG, echo, stress test, cath)
-        
+
         Assessment:
         - Primary cardiac diagnosis
         - Secondary diagnoses
         - Risk stratification (Framingham, ASCVD)
-        
+
         Plan:
         - Medications with cardiac indications
         - Procedures (cath, echo, stress test)
         - Lifestyle modifications
         - Follow-up and monitoring
         """
-    
+
     def _endocrinology_template(self) -> str:
         return """
         Subjective:
@@ -1274,18 +1300,18 @@ class AdvancedSOAPGenerator(MedicalSOAPGenerator):
         - Thyroid symptoms (fatigue, weight changes, heat/cold intolerance)
         - Medication adherence and side effects
         - Blood glucose monitoring results
-        
+
         Objective:
         - Vital signs including BMI
         - Thyroid exam
         - Diabetic foot exam
         - Lab values (HbA1c, glucose, thyroid function)
-        
+
         Assessment:
         - Diabetes control and complications
         - Thyroid function status
         - Endocrine disorders
-        
+
         Plan:
         - Medication adjustments
         - Lab monitoring schedule
@@ -1296,17 +1322,17 @@ class AdvancedSOAPGenerator(MedicalSOAPGenerator):
 # Usage example for specialty SOAP notes
 async def generate_cardiology_soap(transcript: str, patient_id: str):
     """Generate cardiology-specific SOAP note"""
-    
+
     generator = AdvancedSOAPGenerator(api_key="your_api_key")
-    
+
     patient_context = ehr.get_patient(patient_id)
-    
+
     soap_result = generator.generate_specialty_soap(
         transcript=transcript,
         specialty="cardiology",
         patient_context=patient_context
     )
-    
+
     return soap_result
 ```
 
@@ -1325,17 +1351,17 @@ patient_keyterms = [
     "metformin 1000mg twice daily",
     "lisinopril 20mg once daily",
     "atorvastatin 40mg at bedtime",
-    
+
     # Known conditions
     "type 2 diabetes mellitus",
     "hypertension stage 2",
     "hyperlipidemia",
     "chronic kidney disease stage 3",
-    
+
     # Recent procedures
     "colonoscopy March 2024",
     "echocardiogram",
-    
+
     # Allergies
     "penicillin anaphylaxis",
     "sulfa drugs rash",
@@ -1387,12 +1413,12 @@ medical_terms = [
     "coronary artery disease",
     "CABG in 2019",
     "ejection fraction 45%",
-    
+
     # Current visit context
     "chest pain",
     "shortness of breath",
     "orthopnea",
-    
+
     # Likely medications
     "carvedilol",
     "furosemide",
@@ -1448,6 +1474,7 @@ config = aai.TranscriptionConfig(
 ### Async Chunking for Long Encounters
 
 For lengthy patient visits, implement chunking to get progressive documentation. This is especially useful for:
+
 - Hospital rounds (in-person microphone running ambient)
 - Comprehensive physicals
 - Specialty consultations
@@ -1457,11 +1484,13 @@ For lengthy patient visits, implement chunking to get progressive documentation.
 For optimal clinical workflow integration, streaming is ideal when:
 
 1. **Real-time documentation needed:**
+
    - Emergency department encounters
    - Telemedicine visits
    - Procedure documentation
 
 2. **Immediate clinical decision support:**
+
    - Medication interaction checking
    - Diagnosis suggestion
    - Protocol reminders
@@ -1472,6 +1501,7 @@ For optimal clinical workflow integration, streaming is ideal when:
    - Documentation coaching
 
 Streaming provides:
+
 - ~300ms latency for immediate documentation
 - Real-time partial results for provider review
 - No delay between encounter end and note availability
@@ -1484,6 +1514,7 @@ Speaker Identification can automatically distinguish between doctors and patient
 ### Why Use Speaker Identification in Medical Scribes?
 
 **Clinical Benefits:**
+
 - **Clear attribution** - Know exactly who said what in clinical documentation
 - **SOAP note structure** - Automatically separate subjective (patient) from objective (provider) statements
 - **Compliance documentation** - Proper attribution for regulatory requirements
@@ -1502,7 +1533,7 @@ config = aai.TranscriptionConfig(
     speech_model=aai.SpeechModel.slam,
     speaker_labels=True,
     speakers_expected=2,  # Doctor and patient
-    
+
     # Enable speaker identification with medical roles
     speech_understanding={
         "request": {
@@ -1533,7 +1564,7 @@ config = aai.TranscriptionConfig(
     speech_model=aai.SpeechModel.slam,
     speaker_labels=True,
     speakers_expected=2,
-    
+
     speech_understanding={
         "request": {
             "speaker_identification": {
@@ -1547,12 +1578,7 @@ config = aai.TranscriptionConfig(
 
 ## Additional Resources
 
-- [Universal-Pro Documentation](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio)
-- [Universal-Streaming Documentation](https://www.assemblyai.com/docs/speech-to-text/universal-streaming)
-- [HIPAA Compliance Guide](https://www.assemblyai.com/docs/security-compliance)
 - [Keyterms Prompting Documentation](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/improving-transcript-accuracy)
 - [Speaker Diarization Guide](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/speaker-diarization)
 - [Speaker Identification Guide](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/speaker-identification)
-- [Medical Terminology Best Practices](https://www.assemblyai.com/blog/medical-transcription)
 - [API Playground](https://www.assemblyai.com/playground/streaming)
-- [Healthcare Support](https://www.assemblyai.com/contact/support)
