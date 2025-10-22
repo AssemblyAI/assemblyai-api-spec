@@ -1,126 +1,322 @@
 ---
-title: "Extract Dialogue Data with LeMUR and JSON"
+title: "Extract Dialogue Data with LLM Gateway and JSON"
 ---
 
-In this guide, we'll show you how to use AssemblyAI's LeMUR (Leveraging Large Language Models to Understand Recognized Speech) framework to process several audio files, and then format your results in JSON (JavaScript Object Notation) format.
+In this guide, we'll show you how to use AssemblyAI's LLM Gateway framework to process several audio files, and then format your results in JSON (JavaScript Object Notation) format.
 
-JSON allows you to programmatically format, parse, and transfer resopnses from LeMUR, which is useful for implementing LeMUR with a wide range of other applications.
+JSON allows you to programmatically format, parse, and transfer responses from LLM Gateway, which is useful for implementing LLM Gateway with a wide range of other applications.
 
-In this example, we will leverage the JSON formatting to create a .csv file from a directory of files that must be transcribed and submitted to LeMUR. However, you can use the same concepts in this guide to generate a JSON-formatted response, which you can then use to update a database table or interact with other APIs.
+In this example, we will leverage the JSON formatting to create a .csv file from a directory of files that must be transcribed and submitted to LLM Gateway. However, you can use the same concepts in this guide to generate a JSON-formatted response, which you can then use to update a database table or interact with other APIs.
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
 import json
 import os
 import csv
+import time
+import re
 
-aai.settings.api_key = "your_api_key"
-# configure the name of your output .csv file
+# Configuration
+api_key = "<YOUR_API_KEY>"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": api_key}
 output_filename = "profiles.csv"
 
-transcriber = aai.Transcriber()
-# Create a new Transcript Group with every file in the directory "interviews"
-transcript_group = transcriber.transcribe_group([os.path.join("interviews", file) for file in os.listdir("interviews")])
+def extract_json(text):
+    """Extract JSON from text that might contain markdown or extra text"""
+    # First, try to remove markdown code blocks
+    text = text.strip()
+    
+    # Remove ```json and ``` markers
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+    
+    # Find the first { and last } to extract just the JSON object
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    
+    if first_brace != -1 and last_brace != -1:
+        json_str = text[first_brace:last_brace + 1]
+        return json.loads(json_str)
+    
+    # If that didn't work, try parsing the whole thing
+    return json.loads(text)
 
+def upload_file(file_path):
+    """Upload a local audio file to AssemblyAI"""
+    with open(file_path, "rb") as f:
+        response = requests.post(f"{base_url}/v2/upload", headers=headers, data=f)
+        if response.status_code != 200:
+            print(f"Error uploading {file_path}: {response.status_code}, {response.text}")
+            response.raise_for_status()
+        return response.json()["upload_url"]
+
+def transcribe_audio(audio_url):
+    """Submit audio for transcription and poll until complete"""
+    # Submit transcription request
+    data = {"audio_url": audio_url}
+    response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
+    
+    if response.status_code != 200:
+        print(f"Error submitting transcription: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    transcript_id = response.json()["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+    
+    # Poll for completion
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            return transcript["text"]
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+
+def process_with_llm_gateway(transcript_text, prompt):
+    """Send transcript to LLM Gateway for processing"""
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nTranscript:\n\n{transcript_text}"
+            }
+        ],
+        "max_tokens": 1500
+    }
+    
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    
+    result = response.json()
+    
+    if "error" in result:
+        raise RuntimeError(f"LLM Gateway error: {result['error']}")
+    
+    return result['choices'][0]['message']['content']
+
+# Main execution
 prompt = """
-         You are an HR executive scanning through an interview transcript to extract information about a candidate.
-         You are required to create a JSON response with key information about the candidate.
-         You will use this template for your answer:
-         {
+        You are an HR executive scanning through an interview transcript to extract information about a candidate.
+        You are required to create a JSON response with key information about the candidate.
+        You will use this template for your answer:
+        {
             "Name": "<candidate-name>",
             "Position": "<job position that candidate is applying for>",
-            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>",
-         }
+            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>"
+        }
+        Do not include any other text in your response. Only respond in JSON format that is not surrounded by markdown code, as your response will be parsed programmatically as JSON.
+        """
 
-         Do not include any other text in your response. Only respond in JSON format, as your response will be parsed programmatically as JSON.
-         """
+# Get all files from interviews directory
+interview_files = [os.path.join("interviews", file) for file in os.listdir("interviews")]
 
 with open(output_filename, "w", newline="") as file:
     writer = csv.writer(file)
-    # define the header of your .csv file
     header = ["Name", "Position", "Past Experience"]
     writer.writerow(header)
-
-    print("Prompting LeMUR")
-    for transcript in transcript_group:
-        result = transcript.lemur.task(prompt=prompt, final_model=aai.LemurModel.claude3_5_sonnet)
-        # json.loads() method can be used to parse a valid JSON string and convert it into a Python dictionary.
-        interviewee_data = json.loads(result.response)
+    
+    print(f"Processing {len(interview_files)} interview files...")
+    
+    for interview_file in interview_files:
+        print(f"\nProcessing: {interview_file}")
+        
+        # Upload file and get URL
+        print("  Uploading file...")
+        audio_url = upload_file(interview_file)
+        
+        # Transcribe audio
+        print("  Transcribing...")
+        transcript_text = transcribe_audio(audio_url)
+        
+        # Process with LLM Gateway
+        print("  Analyzing with LLM Gateway...")
+        llm_response = process_with_llm_gateway(transcript_text, prompt)
+        
+        # Parse JSON response
+        interviewee_data = extract_json(llm_response)
         writer.writerow(interviewee_data.values())
+        print(f"  Completed: {interviewee_data['Name']}")
 
-print(f"Created .csv file {output_filename}")
+print(f"\nCreated .csv file {output_filename}")
 ```
 
 ## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
-LeMUR features are currently only available to paid users to two pricing tiers: LeMUR and LeMUR Basic. See [pricing](https://www.assemblyai.com/pricing#:~:text=LeMUR) for more detail.
-
 ## Step-by-Step Instructions
 
-In this guide, we will ask the same questions to LeMUR about multiple files. Then, we will collate the answers in a .csv file.
+In this guide, we will ask the same questions to LLM Gateway about multiple files. Then, we will collate the answers in a .csv file.
 
-Import the necessary libraries for making an HTTP request and set your API key.
+Import the necessary libraries for making an HTTP request and set your API key, headers, and base URL.
 
 ```python
-import assemblyai as aai
+import requests
 import json
 import os
 import csv
+import time
+import re
 
-aai.settings.api_key = "your_api_key"
-# configure the name of your output .csv file
+# Configuration
+api_key = "<YOUR_API_KEY>"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": api_key}
 output_filename = "profiles.csv"
 ```
 
-Transcribe your audio files.
+Define a function to extract the JSON text from the response from LLM Gateway.
 
 ```python
-transcriber = aai.Transcriber()
-# Create a new Transcript Group with every file in the directory "interviews"
-transcript_group = transcriber.transcribe_group([os.path.join("interviews", file) for file in os.listdir("interviews")])
+def extract_json(text):
+    """Extract JSON from text that might contain markdown or extra text"""
+    # First, try to remove markdown code blocks
+    text = text.strip()
+    
+    # Remove ```json and ``` markers
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+    
+    # Find the first { and last } to extract just the JSON object
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    
+    if first_brace != -1 and last_brace != -1:
+        json_str = text[first_brace:last_brace + 1]
+        return json.loads(json_str)
+    
+    # If that didn't work, try parsing the whole thing
+    return json.loads(text)
 ```
 
-Define your LeMUR request prompt for the Task feature.
+Define functions to upload and transcribe each file using AssemblyAI's Async API.
+
+```python
+def upload_file(file_path):
+    """Upload a local audio file to AssemblyAI"""
+    with open(file_path, "rb") as f:
+        response = requests.post(f"{base_url}/v2/upload", headers=headers, data=f)
+        if response.status_code != 200:
+            print(f"Error uploading {file_path}: {response.status_code}, {response.text}")
+            response.raise_for_status()
+        return response.json()["upload_url"]
+
+def transcribe_audio(audio_url):
+    """Submit audio for transcription and poll until complete"""
+    # Submit transcription request
+    data = {"audio_url": audio_url}
+    response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
+    
+    if response.status_code != 200:
+        print(f"Error submitting transcription: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    transcript_id = response.json()["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+    
+    # Poll for completion
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            return transcript["text"]
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+```
+
+Define a function to process each transcript text with LLM Gateway.
+
+```python
+def process_with_llm_gateway(transcript_text, prompt):
+    """Send transcript to LLM Gateway for processing"""
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nTranscript:\n\n{transcript_text}"
+            }
+        ],
+        "max_tokens": 1500
+    }
+    
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    
+    result = response.json()
+    
+    if "error" in result:
+        raise RuntimeError(f"LLM Gateway error: {result['error']}")
+    
+    return result['choices'][0]['message']['content']
+```
+
+Define your LLM Gateway request prompt.
 
 ```python
 prompt = """
-         You are an HR executive scanning through an interview transcript to extract information about a candidate.
-         You are required to create a JSON response with key information about the candidate.
-         You will use this template for your answer:
-         {
+        You are an HR executive scanning through an interview transcript to extract information about a candidate.
+        You are required to create a JSON response with key information about the candidate.
+        You will use this template for your answer:
+        {
             "Name": "<candidate-name>",
             "Position": "<job position that candidate is applying for>",
-            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>",
-         }
-
-         Do not include any other text in your response. Only respond in JSON format, as your response will be parsed programmatically as JSON.
-         """
+            "Past experience": "<A short phrase describing the candidate's relevant past experience for the role>"
+        }
+        Do not include any other text in your response. Only respond in JSON format that is not surrounded by markdown code, as your response will be parsed programmatically as JSON.
+        """
 ```
 
-Construct your .csv file and parse the JSON data.
+Retrieve and process each file in the `interviews` folder and create a .csv file with the results.
 
 ```python
+interview_files = [os.path.join("interviews", file) for file in os.listdir("interviews")]
+
 with open(output_filename, "w", newline="") as file:
     writer = csv.writer(file)
-    # define the header of your .csv file
     header = ["Name", "Position", "Past Experience"]
     writer.writerow(header)
-
-    print("Prompting LeMUR")
-    for transcript in transcript_group:
-        result = transcript.lemur.task(prompt=prompt, final_model=aai.LemurModel.claude3_5_sonnet)
-        # json.loads() method can be used to parse a valid JSON string and convert it into a Python dictionary.
-        interviewee_data = json.loads(result.response)
+    
+    print(f"Processing {len(interview_files)} interview files...")
+    
+    for interview_file in interview_files:
+        print(f"\nProcessing: {interview_file}")
+        
+        # Upload file and get URL
+        print("  Uploading file...")
+        audio_url = upload_file(interview_file)
+        
+        # Transcribe audio
+        print("  Transcribing...")
+        transcript_text = transcribe_audio(audio_url)
+        
+        # Process with LLM Gateway
+        print("  Analyzing with LLM Gateway...")
+        llm_response = process_with_llm_gateway(transcript_text, prompt)
+        
+        # Parse JSON response
+        interviewee_data = extract_json(llm_response)
         writer.writerow(interviewee_data.values())
+        print(f"  Completed: {interviewee_data['Name']}")
 
-print(f"Created .csv file {output_filename}")
+print(f"\nCreated .csv file {output_filename}")
 ```
 
-For context, this is the response from LeMUR with our prompt.
+For context, this is the response from LLM Gateway with our prompt.
 
 ```json
 {
@@ -130,4 +326,4 @@ For context, this is the response from LeMUR with our prompt.
 }
 ```
 
-You can now run your Python script and you should see that a `profiles.csv` file is generated. Your result will look similar to the example below.
+You can now run your Python script and you should see that a `profiles.csv` file is generated.
