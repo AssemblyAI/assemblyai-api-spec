@@ -1,29 +1,107 @@
 ---
-title: "Extract Quotes with Timestamps Using LeMUR + Semantic Search"
+title: "Extract Quotes with Timestamps Using LLM Gateway + Semantic Search"
 ---
 
-This Colab will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and find the best quotes included in it through [Semantic Search](https://www.elastic.co/what-is/semantic-search).
+This guide will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to process an audio file and find the best quotes included in it through [Semantic Search](https://www.elastic.co/what-is/semantic-search).
 
 ## Quickstart
 
 ```python
 import datetime
 import numpy as np
-import assemblyai as aai
+import requests
+import time
 from sklearn.neighbors import NearestNeighbors
 from sentence_transformers import SentenceTransformer
 
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
+# Configuration
+api_key = "<YOUR_API_KEY>"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": api_key}
 
-transcript = transcriber.transcribe("URL_OR_FILE_PATH_HERE")
+def upload_file(file_path):
+    """Upload a local audio file to AssemblyAI"""
+    with open(file_path, "rb") as f:
+        response = requests.post(f"{base_url}/v2/upload", headers=headers, data=f)
+        if response.status_code != 200:
+            print(f"Error uploading: {response.status_code}, {response.text}")
+            response.raise_for_status()
+        return response.json()["upload_url"]
 
-embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+def transcribe_audio(audio_url):
+    """Submit audio for transcription with sentences enabled and poll until complete"""
+    data = {
+        "audio_url": audio_url,
+        "auto_highlights": False,
+        "sentiment_analysis": False,
+        "entity_detection": False
+    }
+    
+    response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
+    
+    if response.status_code != 200:
+        print(f"Error submitting transcription: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    transcript_id = response.json()["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+    
+    print("Transcribing...")
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print("Transcription completed!")
+            return transcript
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
 
-embeddings = {}
-sentences = transcript.get_sentences()
+def get_sentences(transcript_id):
+    """Get sentences from a completed transcript"""
+    sentences_endpoint = f"{base_url}/v2/transcript/{transcript_id}/sentences"
+    response = requests.get(sentences_endpoint, headers=headers)
+    
+    if response.status_code != 200:
+        print(f"Error getting sentences: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    return response.json()["sentences"]
+
+def process_with_llm_gateway(transcript_text, question, context=""):
+    """Send transcript to LLM Gateway for question answering"""
+    prompt = f"""Based on the following transcript, please answer this question:
+            Question: {question}
+            Context: {context}
+            Transcript: {transcript_text}
+            Please provide a clear and specific answer."""
+    
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_tokens": 2000
+    }
+    
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    
+    result = response.json()
+    
+    if "error" in result:
+        raise RuntimeError(f"LLM Gateway error: {result['error']}")
+    
+    return result['choices'][0]['message']['content']
 
 def sliding_window(elements, distance, stride):
+    """Create sliding windows of elements"""
     idx = 0
     results = []
     while idx + distance < len(elements):
@@ -31,37 +109,57 @@ def sliding_window(elements, distance, stride):
         idx += (distance - stride)
     return results
 
-# Sliding window to determine length of sentence groups. Tune based on desired quote length and duration.
+# Main execution
+# If using a local file:
+audio_url = upload_file("<YOUR_AUDIO FILE>")
+
+# If using a public URL:
+# audio_url = "<YOUR_AUDIO_URL>"
+
+# Transcribe audio
+transcript = transcribe_audio(audio_url)
+transcript_text = transcript["text"]
+transcript_id = transcript["id"]
+
+# Get sentences
+print("Getting sentences...")
+sentences = get_sentences(transcript_id)
+
+# Initialize embedder
+embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+embeddings = {}
+
+# Create sliding window of sentences and generate embeddings
+print("Creating embeddings...")
 sentence_groups = sliding_window(sentences, 5, 2)
 
 for sentence_group in sentence_groups:
-    sentence = {
-        "text": " ".join([sentence.text for sentence in sentence_group]),
-        "start": sentence_group[0].start,
-        "end": sentence_group[-1].end,
-    }
-    embeddings[(sentence["start"], sentence["end"], transcript.id, sentence["text"])] = embedder.encode(sentence["text"])
+    combined_text = " ".join([sentence["text"] for sentence in sentence_group])
+    start = sentence_group[0]["start"]
+    end = sentence_group[-1]["end"]
+    
+    embeddings[(start, end, transcript_id, combined_text)] = embedder.encode(combined_text)
 
-questions = [
-    aai.LemurQuestion(
-        question="What are the 3 best quotes from this video?",
-        context="Please provide exactly 3 quotes.",
-    )
-]
+# Use LLM Gateway to find the best quotes
+print("Asking LLM Gateway for best quotes...")
+question = "What are the 3 best quotes from this video?"
+context = "Please provide exactly 3 quotes."
 
-qa_results = transcript.lemur.question(questions, final_model=aai.LemurModel.claude3_5_sonnet).response
+llm_answer = process_with_llm_gateway(transcript_text, question, context)
+print(f"\nLLM Gateway Response:\n{llm_answer}\n")
 
-# Embed the output from LeMUR for use in our comparison.
-lemur_embedding = embedder.encode(qa_results[0].answer)
+# Embed the LLM output
+llm_gateway_embedding = embedder.encode(llm_answer)
 
-# Vectorize our initial transcript embeddings.
+# Vectorize transcript embeddings
 np_embeddings = np.array(list(embeddings.values()))
 metadata = list(embeddings.keys())
 
-# Find the top 3 most similar quotes to what LeMUR surfaced.
+# Find the top 3 most similar quotes
+print("Finding matching quotes in transcript...")
 knn = NearestNeighbors(n_neighbors=3, metric="cosine")
 knn.fit(np_embeddings)
-distances, indices = knn.kneighbors([lemur_embedding])
+distances, indices = knn.kneighbors([llm_gateway_embedding])
 
 matches = []
 for distance, index in zip(distances[0], indices[0]):
@@ -75,6 +173,11 @@ for distance, index in zip(distances[0], indices[0]):
             "confidence": 1 - distance,
         }
     )
+
+# Display results
+print("\n" + "="*80)
+print("BEST MATCHING QUOTES FROM TRANSCRIPT:")
+print("="*80 + "\n")
 
 for index, m in enumerate(matches):
     print('QUOTE #{}: "{}"'.format(index + 1, m['text']))
@@ -90,7 +193,6 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
 
 You'll also need to install a few libraries that this code depends on:
 
-- The AssemblyAI [Python SDK](https://github.com/AssemblyAI/assemblyai-python-sdk).
 - [Numpy](https://numpy.org/), a scientific computing library.
 - [Sciki-Learn](https://scikit-learn.org/stable/), a library for predictive data analysis.
 - [Sentence-Transformers](https://www.sbert.net/index.html), a framework for state-of-the-art sentence and text embedding.
@@ -98,90 +200,197 @@ You'll also need to install a few libraries that this code depends on:
 ## Step-by-Step Instructions
 
 ```bash
-pip install -U assemblyai numpy scikit-learn sentence-transformers
+pip install -U numpy scikit-learn sentence-transformers
 ```
 
-Then we'll import all of these libraries and set our AssemblyAI API key.
+Then import all of these libraries and set our AssemblyAI API key, headers, and base URL.
 
 ```python
 import datetime
 import numpy as np
-import assemblyai as aai
+import requests
+import time
 from sklearn.neighbors import NearestNeighbors
 from sentence_transformers import SentenceTransformer
 
-aai.settings.api_key = "API_KEY_HERE"
+# Configuration
+api_key = "<YOUR_API_KEY>"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": api_key}
 ```
 
-Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use.
+Next, define functions to upload and transcribe files using AssemblyAI's Async API, as well as request sentences.
 
 ```python
-transcriber = aai.Transcriber()
+def upload_file(file_path):
+    """Upload a local audio file to AssemblyAI"""
+    with open(file_path, "rb") as f:
+        response = requests.post(f"{base_url}/v2/upload", headers=headers, data=f)
+        if response.status_code != 200:
+            print(f"Error uploading: {response.status_code}, {response.text}")
+            response.raise_for_status()
+        return response.json()["upload_url"]
 
-transcript = transcriber.transcribe("URL_OR_FILE_PATH_HERE")
+def transcribe_audio(audio_url):
+    """Submit audio for transcription with sentences enabled and poll until complete"""
+    data = {
+        "audio_url": audio_url,
+        "auto_highlights": False,
+        "sentiment_analysis": False,
+        "entity_detection": False
+    }
+    
+    response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
+    
+    if response.status_code != 200:
+        print(f"Error submitting transcription: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    transcript_id = response.json()["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+    
+    print("Transcribing...")
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print("Transcription completed!")
+            return transcript
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+
+def get_sentences(transcript_id):
+    """Get sentences from a completed transcript"""
+    sentences_endpoint = f"{base_url}/v2/transcript/{transcript_id}/sentences"
+    response = requests.get(sentences_endpoint, headers=headers)
+    
+    if response.status_code != 200:
+        print(f"Error getting sentences: {response.status_code}, {response.text}")
+        response.raise_for_status()
+    
+    return response.json()["sentences"]
 ```
 
-Now we can iterate over all of the paragraphs in our transcript and create [embeddings](https://github.com/microsoft/semantic-kernel/blob/main/docs/EMBEDDINGS.md) for them to use as part of our Semantic Search later.
-
-We'll be relying on SentenceTransformer's `multi-qa-mpnet-base-dot-v1` model, which has been fine-tuned specifically for Semantic Search, and is their [highest-performing model](https://www.sbert.net/docs/pretrained_models.html) for this task.
-
-We'll also be implementing a [sliding window](https://blandthony.medium.com/methods-for-semantic-text-segmentation-prior-to-generating-text-embeddings-vectorization-6442afdb086), which allows us to group sentences together in different combinations to retain their semantic meaning and context while also enabling us to customize the length (and thus duration) of the quotes. By default, we'll group 5 sentences together while having 2 of them overlap when the window moves. This should give us quotes around 30 seconds in length at most.
+Then define a function to process each transcript text with LLM Gateway.
 
 ```python
-embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+def process_with_llm_gateway(transcript_text, question, context=""):
+    """Send transcript to LLM Gateway for question answering"""
+    prompt = f"""Based on the following transcript, please answer this question:
+            Question: {question}
+            Context: {context}
+            Transcript: {transcript_text}
+            Please provide a clear and specific answer."""
+    
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_tokens": 2000
+    }
+    
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    
+    result = response.json()
+    
+    if "error" in result:
+        raise RuntimeError(f"LLM Gateway error: {result['error']}")
+    
+    return result['choices'][0]['message']['content']
+```
 
-embeddings = {}
-sentences = transcript.get_sentences()
+Define a function to implement a [sliding window](https://blandthony.medium.com/methods-for-semantic-text-segmentation-prior-to-generating-text-embeddings-vectorization-6442afdb086), which allows us to group sentences together in different combinations to retain their semantic meaning and context while also enabling us to customize the length (and thus duration) of the quotes.
 
+```python
 def sliding_window(elements, distance, stride):
+    """Create sliding windows of elements"""
     idx = 0
     results = []
     while idx + distance < len(elements):
         results.append(elements[idx:idx + distance])
         idx += (distance - stride)
     return results
+```
+Execute all upload and transcription functions.
 
-# Sliding window to determine length of sentence groups. Tune based on desired quote length and duration.
+```python
+# Main execution
+# If using a local file:
+audio_url = upload_file("<YOUR_AUDIO FILE>")
+
+# If using a public URL:
+# audio_url = "<YOUR_AUDIO_URL>"
+
+# Transcribe audio
+transcript = transcribe_audio(audio_url)
+transcript_text = transcript["text"]
+transcript_id = transcript["id"]
+
+# Get sentences
+print("Getting sentences...")
+sentences = get_sentences(transcript_id)
+```
+
+Now we can iterate over all of the sentences in our transcript and create [embeddings](https://github.com/microsoft/semantic-kernel/blob/main/docs/EMBEDDINGS.md) for them to use as part of our Semantic Search later.
+
+We'll be relying on SentenceTransformer's `multi-qa-mpnet-base-dot-v1` model, which has been fine-tuned specifically for Semantic Search, and is their [highest-performing model](https://www.sbert.net/docs/pretrained_models.html) for this task.
+
+By default, we'll group 5 sentences together while having 2 of them overlap when the window moves. This should give us quotes around 30 seconds in length at most.
+
+```python
+# Initialize embedder
+embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+embeddings = {}
+
+# Create sliding window of sentences and generate embeddings
+print("Creating embeddings...")
 sentence_groups = sliding_window(sentences, 5, 2)
 
 for sentence_group in sentence_groups:
-    sentence = {
-        "text": " ".join([sentence.text for sentence in sentence_group]),
-        "start": sentence_group[0].start,
-        "end": sentence_group[-1].end,
-    }
-    embeddings[(sentence["start"], sentence["end"], transcript.id, sentence["text"])] = embedder.encode(sentence["text"])
+    combined_text = " ".join([sentence["text"] for sentence in sentence_group])
+    start = sentence_group[0]["start"]
+    end = sentence_group[-1]["end"]
+    
+    embeddings[(start, end, transcript_id, combined_text)] = embedder.encode(combined_text)
 ```
 
-Now we can query LeMUR to provide the type of quotes we want. In this case, let's prompt LeMUR to find the best 3 quotes out of a video that we transcribed.
+Now we can query LLM Gateway to provide the type of quotes we want. In this case, let's prompt LLM Gateway to find the best 3 quotes out of a video that we transcribed.
 
 ```python
-questions = [
-    aai.LemurQuestion(
-        question="What are the 3 best quotes from this video?",
-        context="Please provide exactly 3 quotes.",
-    )
-]
+print("Asking LLM Gateway for best quotes...")
+question = "What are the 3 best quotes from this video?"
+context = "Please provide exactly 3 quotes."
 
-qa_results = transcript.lemur.question(questions, final_model=aai.LemurModel.claude3_5_sonnet).response
+llm_answer = process_with_llm_gateway(transcript_text, question, context)
+print(f"\nLLM Gateway Response:\n{llm_answer}\n")
 ```
 
-Now we can take the embeddings from the transcript text, as well as the embeddings from LeMUR's output, and use them in our [k-nearest neighbors](https://www.ibm.com/topics/knn) algorithm to determine their similarity. The most similar quotes to what LeMUR identified will be surfaced as our 3 best quotes, along with their timestamps and confidence scores.
+Now we can take the embeddings from the transcript text, as well as the embeddings from LLM Gateway's output, and use them in our [k-nearest neighbors](https://www.ibm.com/topics/knn) algorithm to determine their similarity. The most similar quotes to what LLM Gateway identified will be surfaced as our 3 best quotes, along with their timestamps and confidence scores.
 
 We'll be relying on [cosine similarity](https://github.com/microsoft/semantic-kernel/blob/main/docs/COSINE_SIMILARITY.md) rather than the default Euclidean distance metric since it takes into account both the magnitude and direction of our vectors.
 
 ```python
-# Embed the output from LeMUR for use in our comparison.
-lemur_embedding = embedder.encode(qa_results[0].answer)
+# Embed the LLM output
+llm_gateway_embedding = embedder.encode(llm_answer)
 
-# Vectorize our initial transcript embeddings.
+# Vectorize transcript embeddings
 np_embeddings = np.array(list(embeddings.values()))
 metadata = list(embeddings.keys())
 
-# Find the top 3 most similar quotes to what LeMUR surfaced.
+# Find the top 3 most similar quotes
+print("Finding matching quotes in transcript...")
 knn = NearestNeighbors(n_neighbors=3, metric="cosine")
 knn.fit(np_embeddings)
-distances, indices = knn.kneighbors([lemur_embedding])
+distances, indices = knn.kneighbors([llm_gateway_embedding])
 
 matches = []
 for distance, index in zip(distances[0], indices[0]):
@@ -195,6 +404,11 @@ for distance, index in zip(distances[0], indices[0]):
             "confidence": 1 - distance,
         }
     )
+
+# Display results
+print("\n" + "="*80)
+print("BEST MATCHING QUOTES FROM TRANSCRIPT:")
+print("="*80 + "\n")
 
 for index, m in enumerate(matches):
     print('QUOTE #{}: "{}"'.format(index + 1, m['text']))
