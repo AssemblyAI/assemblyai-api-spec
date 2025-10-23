@@ -19,7 +19,7 @@ AssemblyAI's Streaming Speech-to-Text (STT) allows you to transcribe live audio 
 
 ### Streaming with LeMUR
 
-[Use LeMUR with Streaming STT](real_time_lemur.ipynb)\
+[Use LeMUR with Streaming STT](real_time_llm_gateway.ipynb)\
 🆕 [Use LeMUR for Real-Time Translation](real_time_translation.ipynb)
 
 ### Use Case Specific Streaming Workflows
