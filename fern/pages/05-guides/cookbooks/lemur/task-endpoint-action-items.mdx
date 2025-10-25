@@ -2,7 +2,7 @@
 title: "Generate Action Items with LLM Gateway"
 ---
 
-This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to create action items from a transcript. LLM Gateway provides access to multiple LLM providers through a unified API.
+This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to create action items from a transcript.
 
 ## Quickstart
 
@@ -10,147 +10,130 @@ This tutorial will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-g
 import requests
 import time
 
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Use a publicly-accessible URL:
+API_KEY = "YOUR_API_KEY"
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-# with open("/your_audio_file.mp3", "rb") as f:
-#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-#     if response.status_code != 200:
-#         print(f"Error: {response.status_code}, Response: {response.text}")
-#         response.raise_for_status()
-#     upload_json = response.json()
-#     audio_url = upload_json["upload_url"]
-
-data = {
-    "audio_url": audio_url,
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-
-transcript_json = response.json()
-transcript_id = transcript_json["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript['id'])
-        print(f" \nFull Transcript: \n\n{transcript['text']}\n")
-
-        break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
-    else:
-        time.sleep(3)
-
-prompt = f"""
-        Here are guidelines to follow:
-        - You are an expert at understanding transcripts of conversations, calls and meetings.
-        - You are an expert at coming up with ideal action items based on the contents of the transcripts.
-        - Action items are things that the transcript implies should get done.
-        - Your action item ideas do not make stuff up that isn't relevant to the transcript.
-        - You do not needlessly make up action items - you stick to important tasks.
-        - You are useful, true and concise, and write in perfect English.
-        - Your action items can be tied back to direct quotes in the transcript.
-        - You do not cite the quotes the action items relate to.
-        - The action items are written succinctly.
-        - Please give useful action items based on the transcript.
-        - Your response should be formatted in bullet points.
-        """
-
-llm_gateway_data = {
-    "model": "claude-sonnet-4-5-20250929",
-    "messages": [
-      {
-        "role": "user",
-        "content": f"{prompt} Please give useful action items based on this transcript: \n\n{transcript["text"]}."
-      }
-    ],
-    "max_tokens": 1500,
-    "temperature": 0
-  }
-
-response = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/chat/completions",
-  headers=headers,
-  json=llm_gateway_data
+# Step 1: Upload or provide audio URL and start transcription
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
 )
 
-result = response.json()
+transcript_id = transcript_request.json()["id"]
 
-if "error" in result:
-    print(f"\nError from LLM Gateway: {result['error']}")
-else:
-    response_text = result['choices'][0]['message']['content']
-    print(f"\nResponse ID: {result["request_id"]}\n")
-    print(response_text)
+# Step 2: Poll until transcription completes
+while True:
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
+
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
+        break
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
+    else:
+        print(f"Transcription status: {status}")
+        time.sleep(3)
+
+# Step 3: Build the prompt
+prompt = """
+Here are guidelines to follow:
+- You are an expert at understanding transcripts of conversations, calls and meetings.
+- You are an expert at coming up with ideal action items based on the contents of the transcripts.
+- Action items are things that the transcript implies should get done.
+- Your action item ideas do not make stuff up that isn't relevant to the transcript.
+- You do not needlessly make up action items - you stick to important tasks.
+- You are useful, true and concise, and write in perfect English.
+- Your action items can be tied back to direct quotes in the transcript.
+- You do not cite the quotes the action items relate to.
+- The action items are written succinctly.
+- Please give useful action items based on the transcript.
+"""
+
+answer_format = "Bullet Points"
+if answer_format:
+    prompt += f"\nYour response should have the following format: {answer_format}"
+
+# Step 4: Send transcript text to LLM Gateway
+headers = {"authorization": API_KEY}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nTranscript:\n{transcript_text}",
+            }
+        ],
+        "max_tokens": 1000,
+    },
+)
+
+# Step 5: Print the LLM-generated action items
+response_json = response.json()
+print(response_json["choices"][0]["message"]["content"])
 ```
 
 ## Getting Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
-Find more details on the current LLM Gateway pricing on the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
+Find more details on the current LLM Gateway pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
 
 ## Step-by-Step Instructions
 
-In this guide, we'll prompt LLM Gateway to create actions items based on a transcript.
+In this guide, we will prompt LLM Gateway to generate action items from our transcript.
 
-Import the required pagackes and set the base URL and headers.
+
+First, we'll import the necessary libraries and set our AssemblyAI API key.
 
 ```python
 import requests
 import time
 
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
+API_KEY = "YOUR_API_KEY"
 ```
 
 Use AssemblyAI to transcribe a file and save the transcript.
 
 ```python
+# Step 1: Upload or provide audio URL and start transcription
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-# with open("/your_audio_file.mp3", "rb") as f:
-#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-#     if response.status_code != 200:
-#         print(f"Error: {response.status_code}, Response: {response.text}")
-#         response.raise_for_status()
-#     upload_json = response.json()
-#     audio_url = upload_json["upload_url"]
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
+)
 
-data = {
-    "audio_url": audio_url,
-}
+transcript_id = transcript_request.json()["id"]
 
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-
-transcript_json = response.json()
-transcript_id = transcript_json["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
+# Step 2: Poll until transcription completes
 while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript['id'])
-        print(f" \nFull Transcript: \n\n{transcript['text']}\n")
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
 
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
         break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
     else:
+        print(f"Transcription status: {status}")
         time.sleep(3)
 ```
-Define your detailed prompt instructions for generating action items based on the transcript. This is an example prompt, which you can modify to suit your specific requirements.
+
+Provide detailed instructions to prompt LLM Gateway to create action items from the transcript.
 
 ```python
 prompt = f"""
@@ -172,33 +155,35 @@ prompt = f"""
 Generate the custom action items using LLM Gateway.
 
 ```python
-llm_gateway_data = {
-    "model": "claude-sonnet-4-5-20250929",
-    "messages": [
-      {
-        "role": "user",
-        "content": f"{prompt} Please give useful action items based on this transcript: \n\n{transcript["text"]}."
-      }
-    ],
-    "max_tokens": 1500
-  }
-
-response = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/chat/completions",
-  headers=headers,
-  json=llm_gateway_data
-)
+answer_format = "Bullet Points"
+if answer_format:
+    prompt += f"\nYour response should have the following format: {answer_format}"
 ```
 
-Finally, save and return the LLM response.
+Prompt LLM Gateway using the transcript results and return the response.
 
 ```python
-result = response.json()
+# Step 4: Send transcript text to LLM Gateway
+headers = {"authorization": API_KEY}
 
-if "error" in result:
-    print(f"\nError from LLM Gateway: {result['error']}")
-else:
-    response_text = result['choices'][0]['message']['content']
-    print(f"\nResponse ID: {result["request_id"]}\n")
-    print(response_text)
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nTranscript:\n{transcript_text}",
+            }
+        ],
+        "max_tokens": 1000,
+    },
+)
+
+# Step 5: Print the LLM-generated action items
+response_json = response.json()
+print(response_json["choices"][0]["message"]["content"])
+
+
 ```

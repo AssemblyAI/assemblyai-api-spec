@@ -1,67 +1,105 @@
 ---
-title: "Prompt A Structured Q&A Response Using LeMUR"
+title: "Prompt A Structured Q&A Response Using LLM Gateway"
 ---
 
-This Colab will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to prompt a structured Question and Answer response using the Task Endpoint.
-
+This cookbook will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway) framework to prompt a structured question and answer response.
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 import xml.etree.ElementTree as ET
 
-aai.settings.api_key = "YOUR_API_KEY"
+API_KEY = "YOUR_API_KEY"
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-transcript = aai.Transcriber().transcribe(audio_url)
+# -------------------------------
+# Step 1: Transcribe the audio
+# -------------------------------
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
+)
 
+transcript_id = transcript_request.json()["id"]
+
+# Poll for completion
+while True:
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
+
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
+        break
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
+    else:
+        print(f"Transcription status: {status}")
+        time.sleep(3)
+
+# -------------------------------
+# Step 2: Build question helper functions
+# -------------------------------
 def construct_question(question):
-    question_str = f"Question: {question.question}"
+    question_str = f"Question: {question['question']}"
 
-    if question.context:
-        question_str += f"\nContext: {question.context}"
+    if question.get("context"):
+        question_str += f"\nContext: {question['context']}"
 
-    # Set default answer_format to "short sentence" if not provided
-    if not question.answer_format:
-        question.answer_format = "short sentence"
+    # Default answer_format
+    if not question.get("answer_format"):
+        question["answer_format"] = "short sentence"
 
-    question_str += f"\nAnswer Format: {question.answer_format}"
+    question_str += f"\nAnswer Format: {question['answer_format']}"
 
-    if question.answer_options:
-        options_str = ", ".join(question.answer_options)
+    if question.get("answer_options"):
+        options_str = ", ".join(question["answer_options"])
         question_str += f"\nOptions: {options_str}"
 
     return question_str + "\n"
 
-def escape_xml_characters(xml_string):
-    return xml_string.replace('&', '&amp;')
 
+def escape_xml_characters(xml_string):
+    return xml_string.replace("&", "&amp;")
+
+
+# -------------------------------
+# Step 3: Define questions
+# -------------------------------
 questions = [
-    aai.LemurQuestion(
-        question="What are the top level KPIs for engineering?",
-        context="KPI stands for key performance indicator",
-        answer_format="short sentence"),
-    aai.LemurQuestion(
-        question="How many days has it been since the data team has gotten updated metrics?",
-        answer_options=["1", "2", "3", "4", "5", "6", "7", "more than 7"]),
-    aai.LemurQuestion(
-        question="What are the future plans for the project?")
+    {
+        "question": "What are the top level KPIs for engineering?",
+        "context": "KPI stands for key performance indicator",
+        "answer_format": "short sentence",
+    },
+    {
+        "question": "How many days has it been since the data team has gotten updated metrics?",
+        "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"],
+    },
+    {"question": "What are the future plans for the project?"},
 ]
 
-question_str = '\n'.join(construct_question(q) for q in questions)
+question_str = "\n".join(construct_question(q) for q in questions)
 
+# -------------------------------
+# Step 4: Build the LLM prompt
+# -------------------------------
 prompt = f"""You are an expert at giving accurate answers to questions about texts.
-  No preamble.
-  Given the series of questions, answer the questions.
-  Each question may follow up with answer format, answer options, and context for each question.
-  It is critical that you follow the answer format and answer options for each question.
-  When context is provided with a question, refer to it when answering the question.
-  You are useful, true and concise, and write in perfect English.
-  Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
-  Only text is allowed between the <question> and <answer> tags.
-  XML tags are not allowed between the <question> and <answer> tags.
-  End your response with a closing </response> tag.
-  For each question-answer pair, format your response according to the template provided below:
+No preamble.
+Given the series of questions, answer the questions.
+Each question may follow up with answer format, answer options, and context for each question.
+It is critical that you follow the answer format and answer options for each question.
+When context is provided with a question, refer to it when answering the question.
+You are useful, true and concise, and write in perfect English.
+Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
+Only text is allowed between the <question> and <answer> tags.
+XML tags are not allowed between the <question> and <answer> tags.
+End your response with a closing </responses> tag.
+For each question-answer pair, format your response according to the template provided below:
 
 Template for response:
 <responses>
@@ -77,47 +115,64 @@ Template for response:
 
 These are the questions:
 {question_str}
+
+Transcript:
+{transcript_text}
 """
 
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+# -------------------------------
+# Step 5: Query LLM Gateway
+# -------------------------------
+headers = {"authorization": API_KEY}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2000,
+    },
 )
 
-response = result.response
+response_json = response.json()
+llm_output = response_json["choices"][0]["message"]["content"]
 
-# Escape special XML characters and strip any leading/trailing whitespace
-clean_response = escape_xml_characters(response).strip()
-root = ET.fromstring(clean_response)
-for response in root.findall('response'):
-    question = response.find('question').text
-    answer = response.find('answer').text
-    print(f"Question: {question}")
-    print(f"Answer: {answer}")
+# -------------------------------
+# Step 6: Parse and print XML response
+# -------------------------------
+clean_response = escape_xml_characters(llm_output).strip()
+
+try:
+    root = ET.fromstring(clean_response)
+    for resp in root.findall("response"):
+        question = resp.find("question").text
+        answer = resp.find("answer").text
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+except ET.ParseError as e:
+    print("Could not parse XML response.")
+    print("Raw model output:\n", llm_output)
 ```
 
 ## Getting Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
 
-Find more details on the current LeMUR pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing#:~:text=LeMUR).
+Find more details on the current LLM Gateway pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
 
 ## Step-by-Step Instructions
 
-In this guide, we will prompt LeMUR with a structured Q&A format and generate an XML response.
+In this guide, we will prompt LLM Gateway with a structured Q&A format and generate an XML response.
 
-First, let's install the AssemblyAI SDK.
-
-```bash
-pip install -U assemblyai
-```
-
-Then we'll import the SDK and set our AssemblyAI API key.
+First, let's import the necessary libraries and set our API key.
 
 ```python
-import assemblyai as aai
+import requests
+import time
+import xml.etree.ElementTree as ET
 
-aai.settings.api_key = "API_KEY_HERE"
+API_KEY = "YOUR_API_KEY"
 ```
 
 Next, we'll use AssemblyAI to transcribe a file and save our transcript.
@@ -125,69 +180,107 @@ Next, we'll use AssemblyAI to transcribe a file and save our transcript.
 ```python
 audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
 
-transcript = aai.Transcriber().transcribe(audio_url)
+# -------------------------------
+# Step 1: Transcribe the audio
+# -------------------------------
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
+)
+
+transcript_id = transcript_request.json()["id"]
+
+# Poll for completion
+while True:
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
+
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
+        break
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
+    else:
+        print(f"Transcription status: {status}")
+        time.sleep(3)
 ```
 
-Construct a formatted string to structure the questions from the `LemurQuestion` object. This includes the question text, optional context, an answer format (defaulting to "short sentence" if not provided), and any answer options, then returns the formatted string.
+Construct a formatted string to structure the questions. This includes the question text, context, an answer format, any answer options, then returns the formatted string.
 
 ```python
+# -------------------------------
+# Step 2: Build question helper functions
+# -------------------------------
 def construct_question(question):
-    question_str = f"Question: {question.question}"
+    question_str = f"Question: {question['question']}"
 
-    if question.context:
-        question_str += f"\nContext: {question.context}"
+    if question.get("context"):
+        question_str += f"\nContext: {question['context']}"
 
-    # Set default answer_format to "short sentence" if not provided
-    if not question.answer_format:
-        question.answer_format = "short sentence"
+    # Default answer_format
+    if not question.get("answer_format"):
+        question["answer_format"] = "short sentence"
 
-    question_str += f"\nAnswer Format: {question.answer_format}"
+    question_str += f"\nAnswer Format: {question['answer_format']}"
 
-    if question.answer_options:
-        options_str = ", ".join(question.answer_options)
+    if question.get("answer_options"):
+        options_str = ", ".join(question["answer_options"])
         question_str += f"\nOptions: {options_str}"
 
     return question_str + "\n"
+
+def escape_xml_characters(xml_string):
+    return xml_string.replace("&", "&amp;")
 ```
 
-Define a list of `aai.LemurQuestion` objects. For each question, you can define additional `context` and specify either a `answer_format` or a list of `answer_options`.
+Define a list of questions. For each question, you can define additional `context` and specify either an `answer_format` or a list of `answer_options`.
 
 ```python
+# -------------------------------
+# Step 3: Define questions
+# -------------------------------
 questions = [
-    aai.LemurQuestion(
-        question="What are the top level KPIs for engineering?",
-        context="KPI stands for key performance indicator",
-        answer_format="short sentence"),
-    aai.LemurQuestion(
-        question="How many days has it been since the data team has gotten updated metrics?",
-        answer_options=["1", "2", "3", "4", "5", "6", "7", "more than 7"]),
-    aai.LemurQuestion(
-        question="What are the future plans for the project?")
+    {
+        "question": "What are the top level KPIs for engineering?",
+        "context": "KPI stands for key performance indicator",
+        "answer_format": "short sentence",
+    },
+    {
+        "question": "How many days has it been since the data team has gotten updated metrics?",
+        "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"],
+    },
+    {"question": "What are the future plans for the project?"},
 ]
-
 ```
 
-Construct the formatted question string for all the Questions within the list of `aai.LemurQuestion` objects.
+Construct the formatted question string for all the questions and build the LLM prompt.
 
 ```python
 question_str = '\n'.join(construct_question(q) for q in questions)
 ```
 
-Provide detailed instructions to prompt LeMUR to answer a series of questions. This also defines a structured XML template for the responses.
+Provide detailed instructions to prompt LLM Gateway to answer a series of questions. This also defines a structured XML template for the responses.
 
 ```python
+# -------------------------------
+# Step 4: Build the LLM prompt
+# -------------------------------
 prompt = f"""You are an expert at giving accurate answers to questions about texts.
-  No preamble.
-  Given the series of questions, answer the questions.
-  Each question may follow up with answer format, answer options, and context for each question.
-  It is critical that you follow the answer format and answer options for each question.
-  When context is provided with a question, refer to it when answering the question.
-  You are useful, true and concise, and write in perfect English.
-  Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
-  Only text is allowed between the <question> and <answer> tags.
-  XML tags are not allowed between the <question> and <answer> tags.
-  End your response with a closing </response> tag.
-  For each question-answer pair, format your response according to the template provided below:
+No preamble.
+Given the series of questions, answer the questions.
+Each question may follow up with answer format, answer options, and context for each question.
+It is critical that you follow the answer format and answer options for each question.
+When context is provided with a question, refer to it when answering the question.
+You are useful, true and concise, and write in perfect English.
+Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
+Only text is allowed between the <question> and <answer> tags.
+XML tags are not allowed between the <question> and <answer> tags.
+End your response with a closing </responses> tag.
+For each question-answer pair, format your response according to the template provided below:
 
 Template for response:
 <responses>
@@ -203,37 +296,230 @@ Template for response:
 
 These are the questions:
 {question_str}
+
+Transcript:
+{transcript_text}
+"""
+
+# -------------------------------
+# Step 5: Query LLM Gateway
+# -------------------------------
+headers = {"authorization": API_KEY}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2000,
+    },
+)
+
+response_json = response.json()
+llm_output = response_json["choices"][0]["message"]["content"]
+
+# -------------------------------
+# Step 6: Parse and print XML response
+# -------------------------------
+clean_response = escape_xml_characters(llm_output).strip()
+
+try:
+    root = ET.fromstring(clean_response)
+    for resp in root.findall("response"):
+        question = resp.find("question").text
+        answer = resp.find("answer").text
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+except ET.ParseError as e:
+    print("Could not parse XML response.")
+    print("Raw model output:\n", llm_output)
+```
+
+## Getting Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
+
+Find more details on the current LLM Gateway pricing in the AssemblyAI [pricing page](https://www.assemblyai.com/pricing).
+
+## Step-by-Step Instructions
+
+In this guide, we will prompt LLM Gateway with a structured Q&A format and generate an XML response.
+
+First, let's import the necessary libraries and set our API key.
+
+```python
+import requests
+import time
+import xml.etree.ElementTree as ET
+
+API_KEY = "YOUR_API_KEY"
+```
+
+Next, we'll use AssemblyAI to transcribe a file and save our transcript.
+
+```python
+audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+
+# -------------------------------
+# Step 1: Transcribe the audio
+# -------------------------------
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
+)
+
+transcript_id = transcript_request.json()["id"]
+
+# Poll for completion
+while True:
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
+
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
+        break
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
+    else:
+        print(f"Transcription status: {status}")
+        time.sleep(3)
+```
+
+Construct a formatted string to structure the questions. This includes the question text, context, an answer format, and any answer options, then returns the formatted string.
+
+```python
+# -------------------------------
+# Step 2: Build question helper functions
+# -------------------------------
+def construct_question(question):
+    question_str = f"Question: {question.question}"
+
+    if question.context:
+        question_str += f"\nContext: {question.context}"
+
+    if not question.answer_format:
+        question.answer_format = "short sentence"
+
+    question_str += f"\nAnswer Format: {question.answer_format}"
+
+    if question.answer_options:
+        options_str = ", ".join(question.answer_options)
+        question_str += f"\nOptions: {options_str}"
+
+    return question_str + "\n"
+
+def escape_xml_characters(xml_string):
+    return xml_string.replace("&", "&amp;")
+```
+
+Define a list of questions. For each question, you can define additional `context` and specify either an `answer_format` or a list of `answer_options`.
+
+```python
+# -------------------------------
+# Step 3: Define questions
+# -------------------------------
+questions = [
+    {
+        "question": "What are the top level KPIs for engineering?",
+        "context": "KPI stands for key performance indicator",
+        "answer_format": "short sentence",
+    },
+    {
+        "question": "How many days has it been since the data team has gotten updated metrics?",
+        "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"],
+    },
+    {"question": "What are the future plans for the project?"},
+]
+```
+
+Construct the formatted question string for all the questions and build the LLM prompt.
+
+```python
+question_str = '\n'.join(construct_question(q) for q in questions)
+```
+
+Provide detailed instructions to prompt LLM Gateway to answer a series of questions. This also defines a structured XML template for the responses.
+
+```python
+# -------------------------------
+# Step 4: Build the LLM prompt
+# -------------------------------
+prompt = f"""You are an expert at giving accurate answers to questions about texts.
+No preamble.
+Given the series of questions, answer the questions.
+Each question may follow up with answer format, answer options, and context for each question.
+It is critical that you follow the answer format and answer options for each question.
+When context is provided with a question, refer to it when answering the question.
+You are useful, true and concise, and write in perfect English.
+Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
+Only text is allowed between the <question> and <answer> tags.
+XML tags are not allowed between the <question> and <answer> tags.
+End your response with a closing </responses> tag.
+For each question-answer pair, format your response according to the template provided below:
+
+Template for response:
+<responses>
+  <response>
+    <question>The question</question>
+    <answer>Your answer</answer>
+  </response>
+  <response>
+    ...
+  </response>
+  ...
+</responses>
+
+These are the questions:
+{question_str}
+
+Transcript:
+{transcript_text}
 """
 ```
 
-Prompt the LeMUR model using the Task Endpoint and return the response.
+Prompt the LLM Gateway model and return the response.
 
 ```python
-result = transcript.lemur.task(
-    prompt,
-    final_model=aai.LemurModel.claude3_5_sonnet
+# -------------------------------
+# Step 5: Query LLM Gateway
+# -------------------------------
+headers = {"authorization": API_KEY}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2000,
+    },
 )
 
-response = result.response
-print(response)
+response_json = response.json()
+llm_output = response_json["choices"][0]["message"]["content"]
 ```
 
 Clean the XML output and print the question and answer pairs.
 
 ```python
-import xml.etree.ElementTree as ET
+# -------------------------------
+# Step 6: Parse and print XML response
+# -------------------------------
+clean_response = escape_xml_characters(llm_output).strip()
 
-def escape_xml_characters(xml_string):
-    return xml_string.replace('&', '&amp;')
-
-# Escape special XML characters and strip any leading/trailing whitespace
-clean_response = escape_xml_characters(response).strip()
-
-root = ET.fromstring(clean_response)
-
-for response in root.findall('response'):
-    question = response.find('question').text
-    answer = response.find('answer').text
-    print(f"Question: {question}")
-    print(f"Answer: {answer}")
+try:
+    root = ET.fromstring(clean_response)
+    for resp in root.findall("response"):
+        question = resp.find("question").text
+        answer = resp.find("answer").text
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+except ET.ParseError as e:
+    print("Could not parse XML response.")
+    print("Raw model output:\n", llm_output)
 ```
