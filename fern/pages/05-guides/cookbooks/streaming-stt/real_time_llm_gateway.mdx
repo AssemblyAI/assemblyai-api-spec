@@ -1,9 +1,8 @@
 ---
-title: "Use LeMUR with Streaming Speech-to-Text (STT)"
-hidden: true
+title: "Use LLM Gateway with Streaming Speech-to-Text (STT)"
 ---
 
-This script is modified to contain a global variable `conversation_data` that accumulates the transcribed text in the `on_message` function. Once the transcription session is closed, the `conversation_data` is sent to LeMUR for analysis using LeMUR's `input_text` parameter.
+This script is modified to contain a global variable `conversation_data` that accumulates the transcribed text in the `on_message` function. Once the transcription session is closed, the `conversation_data` is sent to LLM Gateway for analysis.
 
 ## Quickstart
 
@@ -45,23 +44,31 @@ conversation_data = ""
 recorded_frames = []  # Store audio frames for WAV file
 recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 
-# --- Function to Analyze Text with LeMUR ---
+# --- Function to Analyze Text with LLM Gateway ---
 
-def analyze_with_lemur(text):
-    """Called when the WebSocket connection is closing and the transcript text is sent to LeMUR to be analyzed."""
+def analyze_with_llm_gateway(text):
+    """Called when the WebSocket connection is closing and the transcript text is sent to LLM Gateway to be analyzed."""
     headers = {
-        "authorization": YOUR_API_KEY
+        "authorization": YOUR_API_KEY,
+        "content-type": "application/json"
     }
 
     prompt = "You are a helpful coach. Provide an analysis of the transcript and offer areas to improve with exact quotes. Include no preamble. Start with an overall summary then get into the examples with feedback."
 
-    lemur_data = {
-        "prompt": prompt,
-        "input_text": text,
-        "final_model": "anthropic/claude-sonnet-4-20250514",
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
+        ],
+        "max_tokens": 4000
     }
-    result = requests.post("https://api.assemblyai.com/lemur/v3/generate/task", headers=headers, json=lemur_data)
-    return result.json()["response"]
+    
+    result = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    return result.json()["choices"][0]["message"]["content"]
 
 # --- WebSocket Event Handlers ---
 
@@ -220,10 +227,10 @@ def run():
         # Wait for WebSocket thread to finish
         ws_thread.join(timeout=2.0)
 
-        # Analyze transcript with LeMUR
+        # Analyze transcript with LLM Gateway
         if conversation_data.strip():
-            print("Analyzing conversation with LeMUR...")
-            print(analyze_with_lemur(conversation_data))
+            print("Analyzing conversation with LLM Gateway...")
+            print(analyze_with_llm_gateway(conversation_data))
         else:
             print("No conversation data to analyze.")
 
@@ -299,26 +306,34 @@ recorded_frames = []  # Store audio frames for WAV file
 recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 ```
 
-### Define Analyze With LeMUR Function
+### Define Analyze With LLM Gateway Function
 
-Define a function called `analyze_with_lemur`, which uses LeMUR to analyze the complete final transcript text. The `prompt` can be modified to suit your individual requirements.
+Define a function called `analyze_with_llm_gateway`, which uses LLM Gateway to analyze the complete final transcript text. The `prompt` can be modified to suit your individual requirements.
 
 ```python
-def analyze_with_lemur(text):
-    """Called when the WebSocket connection is closing and the transcript text is sent to LeMUR to be analyzed."""
+def analyze_with_llm_gateway(text):
+    """Called when the WebSocket connection is closing and the transcript text is sent to LLM Gateway to be analyzed."""
     headers = {
-        "authorization": YOUR_API_KEY
+        "authorization": YOUR_API_KEY,
+        "content-type": "application/json"
     }
 
     prompt = "You are a helpful coach. Provide an analysis of the transcript and offer areas to improve with exact quotes. Include no preamble. Start with an overall summary then get into the examples with feedback."
 
-    lemur_data = {
-        "prompt": prompt,
-        "input_text": text,
-        "final_model": "anthropic/claude-sonnet-4-20250514",
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
+        ],
+        "max_tokens": 4000
     }
-    result = requests.post("https://api.assemblyai.com/lemur/v3/generate/task", headers=headers, json=lemur_data)
-    return result.json()["response"]
+    
+    result = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    return result.json()["choices"][0]["message"]["content"]
 ```
 
 ### Websocket Event Handlers
@@ -431,7 +446,7 @@ def on_error(ws, error):
 
 ### Begin Streaming STT Transcription
 
-After the socket is closed, `conversation_data` is sent to the `analyze_with_LeMUR` function and the LeMUR results are printed out.
+After the socket is closed, `conversation_data` is sent to the `analyze_with_llm_gateway` function and the LLM Gateway results are printed out.
 
 ```python {67-71}
 def run():
@@ -499,10 +514,10 @@ def run():
         # Wait for WebSocket thread to finish
         ws_thread.join(timeout=2.0)
 
-        # Analyze transcript with LeMUR
+        # Analyze transcript with LLM Gateway
         if conversation_data.strip():
-            print("Analyzing conversation with LeMUR...")
-            print(analyze_with_lemur(conversation_data))
+            print("Analyzing conversation with LLM Gateway...")
+            print(analyze_with_llm_gateway(conversation_data))
         else:
             print("No conversation data to analyze.")
 
