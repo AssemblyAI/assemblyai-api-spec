@@ -5,529 +5,1095 @@ To transcribe multichannel streaming audio, we recommend creating a separate ses
 The following code example demonstrates how to transcribe a dual-channel audio file with diarized, speaker-separated transcripts. This same approach can be applied to any multi-channel audio stream, including those with more than two channels.
 
 <Tabs groupId="language">
+    <Tab language="python-sdk" title="Python SDK">
+        <Steps>
+            <Step>
+
+            Install the required dependencies.
+```bash
+pip install assemblyai numpy pyaudio
+```
+
+            </Step>
+            <Step>
+            Use this complete script to transcribe dual-channel audio with speaker separation:
+```python
+import logging
+from typing import Type
+import threading
+import time
+import wave
+import numpy as np
+import pyaudio
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+
+# Configuration
+API_KEY = "<YOUR_API_KEY>"
+AUDIO_FILE_PATH = "<DUAL_CHANNEL_AUDIO_FILE_PATH>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class ChannelTranscriber:
+    def __init__(self, channel_id, channel_name, sample_rate):
+        self.channel_id = channel_id
+        self.channel_name = channel_name
+        self.sample_rate = sample_rate
+        self.client = None
+        self.audio_data = []
+        self.current_turn_line = None
+        self.line_count = 0
+        self.streaming_done = threading.Event()
+
+    def load_audio_channel(self):
+        """Extract single channel from dual-channel audio file."""
+        with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
+            frames = wf.readframes(wf.getnframes())
+            audio_array = np.frombuffer(frames, dtype=np.int16)
+
+            if wf.getnchannels() == 2:
+                audio_array = audio_array.reshape(-1, 2)
+                channel_audio = audio_array[:, self.channel_id]
+
+                # Split into chunks for streaming
+                FRAMES_PER_BUFFER = 400  # 50ms chunks
+                for i in range(0, len(channel_audio), FRAMES_PER_BUFFER):
+                    chunk = channel_audio[i:i+FRAMES_PER_BUFFER]
+                    if len(chunk) < FRAMES_PER_BUFFER:
+                        chunk = np.pad(chunk, (0, FRAMES_PER_BUFFER - len(chunk)), 'constant')
+                    self.audio_data.append(chunk.astype(np.int16).tobytes())
+
+    def clear_current_line(self):
+        if self.current_turn_line is not None:
+            print("\r" + " " * 100 + "\r", end="", flush=True)
+
+    def print_partial_transcript(self, words):
+        self.clear_current_line()
+        # Build transcript from individual words
+        word_texts = [word.text for word in words]
+        transcript = ' '.join(word_texts)
+        partial_text = f"{self.channel_name}: {transcript}"
+        print(partial_text, end="", flush=True)
+        self.current_turn_line = len(partial_text)
+
+    def print_final_transcript(self, transcript):
+        self.clear_current_line()
+        final_text = f"{self.channel_name}: {transcript}"
+        print(final_text, flush=True)
+        self.current_turn_line = None
+        self.line_count += 1
+
+    def on_begin(self, client: Type[StreamingClient], event: BeginEvent):
+        """Called when the streaming session begins."""
+        pass  # Session started
+
+    def on_turn(self, client: Type[StreamingClient], event: TurnEvent):
+        """Called when a turn is received."""
+        transcript = event.transcript.strip() if event.transcript else ''
+        formatted = event.turn_is_formatted
+        words = event.words if event.words else []
+
+        if transcript or words:
+            if formatted:
+                self.print_final_transcript(transcript)
+            else:
+                self.print_partial_transcript(words)
+
+    def on_terminated(self, client: Type[StreamingClient], event: TerminationEvent):
+        """Called when the session is terminated."""
+        self.clear_current_line()
+        self.streaming_done.set()
+
+    def on_error(self, client: Type[StreamingClient], error: StreamingError):
+        """Called when an error occurs."""
+        print(f"\n{self.channel_name}: Error: {error}")
+        self.streaming_done.set()
+
+    def start_transcription(self):
+        """Start the transcription for this channel."""
+        self.load_audio_channel()
+
+        # Create streaming client
+        self.client = StreamingClient(
+            StreamingClientOptions(
+                api_key=API_KEY,
+                api_host="streaming.assemblyai.com",
+            )
+        )
+
+        # Register event handlers
+        self.client.on(StreamingEvents.Begin, self.on_begin)
+        self.client.on(StreamingEvents.Turn, self.on_turn)
+        self.client.on(StreamingEvents.Termination, self.on_terminated)
+        self.client.on(StreamingEvents.Error, self.on_error)
+
+        # Connect to streaming service with turn detection configuration
+        self.client.connect(
+            StreamingParameters(
+                sample_rate=self.sample_rate,
+                format_turns=True,
+                end_of_turn_confidence_threshold=0.4,
+                min_end_of_turn_silence_when_confident=160,
+                max_turn_silence=400,
+            )
+        )
+
+        # Create audio generator
+        def audio_generator():
+            for chunk in self.audio_data:
+                yield chunk
+                time.sleep(0.05)  # 50ms intervals
+
+        try:
+            # Stream audio
+            self.client.stream(audio_generator())
+        finally:
+            # Disconnect
+            self.client.disconnect(terminate=True)
+            self.streaming_done.set()
+
+    def start_transcription_thread(self):
+        """Start transcription in a separate thread."""
+        thread = threading.Thread(target=self.start_transcription, daemon=True)
+        thread.start()
+        return thread
+
+
+def play_audio_file():
+    try:
+        with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
+            p = pyaudio.PyAudio()
+
+            stream = p.open(
+                format=p.get_format_from_width(wf.getsampwidth()),
+                channels=wf.getnchannels(),
+                rate=wf.getframerate(),
+                output=True
+            )
+
+            print(f"Playing audio: {AUDIO_FILE_PATH}")
+
+            # Play audio in chunks
+            chunk_size = 1024
+            data = wf.readframes(chunk_size)
+
+            while data:
+                stream.write(data)
+                data = wf.readframes(chunk_size)
+
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+
+            print("Audio playback finished")
+
+    except Exception as e:
+        print(f"Error playing audio: {e}")
+
+
+def transcribe_multichannel():
+    # Get sample rate from file
+    with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
+        sample_rate = wf.getframerate()
+
+    # Create transcribers for each channel
+    transcriber_1 = ChannelTranscriber(0, "Speaker 1", sample_rate)
+    transcriber_2 = ChannelTranscriber(1, "Speaker 2", sample_rate)
+
+    # Start audio playback
+    audio_thread = threading.Thread(target=play_audio_file, daemon=True)
+    audio_thread.start()
+
+    # Start both transcriptions
+    thread_1 = transcriber_1.start_transcription_thread()
+    thread_2 = transcriber_2.start_transcription_thread()
+
+    # Wait for completion
+    thread_1.join()
+    thread_2.join()
+    audio_thread.join()
+
+
+if __name__ == "__main__":
+    transcribe_multichannel()
+```
+
+            </Step>
+        </Steps>
+    </Tab>
+
     <Tab language="python" title="Python">
 
         <Steps>
             <Step>
 
             Firstly, install the required dependencies.
-
-            ```bash
-            pip install websocket-client numpy pyaudio
-            ```
+```bash
+pip install websocket-client numpy pyaudio
+```
 
             </Step>
             <Step>
             Use this complete script to transcribe dual-channel audio with speaker separation:
+```python
+import websocket
+import json
+import threading
+import numpy as np
+import wave
+import time
+import pyaudio
+from urllib.parse import urlencode
 
-            ```python
-            import websocket
-            import json
-            import threading
-            import numpy as np
-            import wave
-            import time
-            import pyaudio
-            from urllib.parse import urlencode
+# Configuration
+YOUR_API_KEY = "<YOUR_API_KEY>"
+AUDIO_FILE_PATH = "<DUAL_CHANNEL_AUDIO_FILE_PATH>"
+API_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_PARAMS = {
+    "sample_rate": 8000,
+    "format_turns": "true",
+    "end_of_turn_confidence_threshold": 0.4,
+    "min_end_of_turn_silence_when_confident": 160,
+    "max_turn_silence": 400,
+}
+# Build API endpoint with URL encoding
+API_ENDPOINT = f"{API_BASE_URL}?{urlencode(API_PARAMS)}"
 
-            # Configuration
-            YOUR_API_KEY = "<YOUR_API_KEY>"
-            AUDIO_FILE_PATH = "<DUAL_CHANNEL_AUDIO_FILE_PATH>"
-            API_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-            API_PARAMS = {
-                "sample_rate": 8000,
-                "format_turns": "true",
-            }
+class ChannelTranscriber:
+    def __init__(self, channel_id, channel_name):
+        self.channel_id = channel_id
+        self.channel_name = channel_name
+        self.ws_app = None
+        self.audio_data = []
+        self.current_turn_line = None
+        self.line_count = 0
 
-            # Build API endpoint with URL encoding
-            API_ENDPOINT = f"{API_BASE_URL}?{urlencode(API_PARAMS)}"
+    def load_audio_channel(self):
+        """Extract single channel from dual-channel audio file."""
+        with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
+            frames = wf.readframes(wf.getnframes())
+            audio_array = np.frombuffer(frames, dtype=np.int16)
 
-            class ChannelTranscriber:
-                def __init__(self, channel_id, channel_name):
-                    self.channel_id = channel_id
-                    self.channel_name = channel_name
-                    self.ws_app = None
-                    self.audio_data = []
-                    self.current_turn_line = None
-                    self.line_count = 0
+            if wf.getnchannels() == 2:
+                audio_array = audio_array.reshape(-1, 2)
+                channel_audio = audio_array[:, self.channel_id]
 
-                def load_audio_channel(self):
-                    """Extract single channel from dual-channel audio file."""
-                    with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
-                        frames = wf.readframes(wf.getnframes())
-                        audio_array = np.frombuffer(frames, dtype=np.int16)
+                # Split into chunks for streaming
+                FRAMES_PER_BUFFER = 400  # 50ms chunks
+                for i in range(0, len(channel_audio), FRAMES_PER_BUFFER):
+                    chunk = channel_audio[i:i+FRAMES_PER_BUFFER]
+                    if len(chunk) < FRAMES_PER_BUFFER:
+                        chunk = np.pad(chunk, (0, FRAMES_PER_BUFFER - len(chunk)), 'constant')
+                    self.audio_data.append(chunk.astype(np.int16).tobytes())
 
-                        if wf.getnchannels() == 2:
-                            audio_array = audio_array.reshape(-1, 2)
-                            channel_audio = audio_array[:, self.channel_id]
+    def on_open(self, ws):
+        """Stream audio data when connection opens."""
+        def stream_audio():
+            for chunk in self.audio_data:
+                ws.send(chunk, websocket.ABNF.OPCODE_BINARY)
+                time.sleep(0.05)  # 50ms intervals
 
-                            # Split into chunks for streaming
-                            FRAMES_PER_BUFFER = 400  # 50ms chunks
-                            for i in range(0, len(channel_audio), FRAMES_PER_BUFFER):
-                                chunk = channel_audio[i:i+FRAMES_PER_BUFFER]
-                                if len(chunk) < FRAMES_PER_BUFFER:
-                                    chunk = np.pad(chunk, (0, FRAMES_PER_BUFFER - len(chunk)), 'constant')
-                                self.audio_data.append(chunk.astype(np.int16).tobytes())
+            # Send termination message
+            terminate_message = {"type": "Terminate"}
+            ws.send(json.dumps(terminate_message))
 
-                def on_open(self, ws):
-                    """Stream audio data when connection opens."""
-                    def stream_audio():
-                        for chunk in self.audio_data:
-                            ws.send(chunk, websocket.ABNF.OPCODE_BINARY)
-                            time.sleep(0.05)  # 50ms intervals
+        threading.Thread(target=stream_audio, daemon=True).start()
 
-                        # Send termination message
-                        terminate_message = {"type": "Terminate"}
-                        ws.send(json.dumps(terminate_message))
+    def clear_current_line(self):
+        if self.current_turn_line is not None:
+            print("\r" + " " * 100 + "\r", end="", flush=True)
 
-                    threading.Thread(target=stream_audio, daemon=True).start()
+    def print_partial_transcript(self, words):
+        self.clear_current_line()
+        # Build transcript from individual words
+        word_texts = [word.get('text', '') for word in words]
+        transcript = ' '.join(word_texts)
+        partial_text = f"{self.channel_name}: {transcript}"
+        print(partial_text, end="", flush=True)
+        self.current_turn_line = len(partial_text)
 
-                def clear_current_line(self):
-                    if self.current_turn_line is not None:
-                        print("\r" + " " * 100 + "\r", end="", flush=True)
+    def print_final_transcript(self, transcript):
+        self.clear_current_line()
+        final_text = f"{self.channel_name}: {transcript}"
+        print(final_text, flush=True)
+        self.current_turn_line = None
+        self.line_count += 1
 
-                def print_partial_transcript(self, words):
-                    self.clear_current_line()
-                    # Build transcript from individual words
-                    word_texts = [word.get('text', '') for word in words]
-                    transcript = ' '.join(word_texts)
-                    partial_text = f"{self.channel_name}: {transcript}"
-                    print(partial_text, end="", flush=True)
-                    self.current_turn_line = len(partial_text)
+    def on_message(self, ws, message):
+        """Handle transcription results."""
+        data = json.loads(message)
+        msg_type = data.get('type')
 
-                def print_final_transcript(self, transcript):
-                    self.clear_current_line()
-                    final_text = f"{self.channel_name}: {transcript}"
-                    print(final_text, flush=True)
-                    self.current_turn_line = None
-                    self.line_count += 1
+        if msg_type == "Turn":
+            transcript = data.get('transcript', '').strip()
+            formatted = data.get('turn_is_formatted', False)
+            words = data.get('words', [])
 
-                def on_message(self, ws, message):
-                    """Handle transcription results."""
-                    data = json.loads(message)
-                    msg_type = data.get('type')
+            if transcript or words:
+                if formatted:
+                    self.print_final_transcript(transcript)
+                else:
+                    self.print_partial_transcript(words)
 
-                    if msg_type == "Turn":
-                        transcript = data.get('transcript', '').strip()
-                        formatted = data.get('turn_is_formatted', False)
-                        words = data.get('words', [])
+    def start_transcription(self):
+        self.load_audio_channel()
 
-                        if transcript or words:
-                            if formatted:
-                                self.print_final_transcript(transcript)
-                            else:
-                                self.print_partial_transcript(words)
+        self.ws_app = websocket.WebSocketApp(
+            API_ENDPOINT,
+            header={"Authorization": YOUR_API_KEY},
+            on_open=self.on_open,
+            on_message=self.on_message,
+        )
 
-                def start_transcription(self):
-                    self.load_audio_channel()
+        thread = threading.Thread(target=self.ws_app.run_forever, daemon=True)
+        thread.start()
+        return thread
 
-                    self.ws_app = websocket.WebSocketApp(
-                        API_ENDPOINT,
-                        header={"Authorization": YOUR_API_KEY},
-                        on_open=self.on_open,
-                        on_message=self.on_message,
-                    )
+def play_audio_file():
+    try:
+        with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
+            p = pyaudio.PyAudio()
 
-                    thread = threading.Thread(target=self.ws_app.run_forever, daemon=True)
-                    thread.start()
-                    return thread
+            stream = p.open(
+                format=p.get_format_from_width(wf.getsampwidth()),
+                channels=wf.getnchannels(),
+                rate=wf.getframerate(),
+                output=True
+            )
 
-            def play_audio_file():
-                try:
-                    with wave.open(AUDIO_FILE_PATH, 'rb') as wf:
-                        p = pyaudio.PyAudio()
+            print(f"Playing audio: {AUDIO_FILE_PATH}")
 
-                        stream = p.open(
-                            format=p.get_format_from_width(wf.getsampwidth()),
-                            channels=wf.getnchannels(),
-                            rate=wf.getframerate(),
-                            output=True
-                        )
+            # Play audio in chunks
+            chunk_size = 1024
+            data = wf.readframes(chunk_size)
 
-                        print(f"Playing audio: {AUDIO_FILE_PATH}")
+            while data:
+                stream.write(data)
+                data = wf.readframes(chunk_size)
 
-                        # Play audio in chunks
-                        chunk_size = 1024
-                        data = wf.readframes(chunk_size)
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
 
-                        while data:
-                            stream.write(data)
-                            data = wf.readframes(chunk_size)
+            print("Audio playback finished")
 
-                        stream.stop_stream()
-                        stream.close()
-                        p.terminate()
-
-                        print("Audio playback finished")
-
-                except Exception as e:
-                    print(f"Error playing audio: {e}")
+    except Exception as e:
+        print(f"Error playing audio: {e}")
 
 
-            def transcribe_multichannel():
-                # Create transcribers for each channel
-                transcriber_1 = ChannelTranscriber(0, "Speaker 1")
-                transcriber_2 = ChannelTranscriber(1, "Speaker 2")
+def transcribe_multichannel():
+    # Create transcribers for each channel
+    transcriber_1 = ChannelTranscriber(0, "Speaker 1")
+    transcriber_2 = ChannelTranscriber(1, "Speaker 2")
 
-                # Start audio playback
-                audio_thread = threading.Thread(target=play_audio_file, daemon=True)
-                audio_thread.start()
+    # Start audio playback
+    audio_thread = threading.Thread(target=play_audio_file, daemon=True)
+    audio_thread.start()
 
-                # Start both transcriptions
-                thread_1 = transcriber_1.start_transcription()
-                thread_2 = transcriber_2.start_transcription()
+    # Start both transcriptions
+    thread_1 = transcriber_1.start_transcription()
+    thread_2 = transcriber_2.start_transcription()
 
-                # Wait for completion
-                thread_1.join()
-                thread_2.join()
-                audio_thread.join()
+    # Wait for completion
+    thread_1.join()
+    thread_2.join()
+    audio_thread.join()
 
-            if __name__ == "__main__":
-                transcribe_multichannel()
-            ```
+if __name__ == "__main__":
+    transcribe_multichannel()
+```
             
 
             </Step>
         </Steps>
     </Tab>
-        <Tab language="javascript" title="JavaScript">
+
+    <Tab language="javascript-sdk" title="JavaScript SDK">
+        <Steps>
+            <Step>
+
+            Firstly, install the required dependencies.
+```bash
+npm install assemblyai
+```
+
+            </Step>
+            <Step>
+            Use this complete script to transcribe dual-channel audio with speaker separation:
+```javascript
+import { AssemblyAI } from 'assemblyai';
+import fs from 'fs';
+import { spawn } from 'child_process';
+import { Readable } from 'stream';
+
+// Configuration
+const YOUR_API_KEY = '<YOUR_API_KEY>';
+const AUDIO_FILE_PATH = '<DUAL_CHANNEL_AUDIO_FILE_PATH>';
+
+// Simple WAV file parser
+class SimpleWavParser {
+    constructor(filePath) {
+        this.buffer = fs.readFileSync(filePath);
+        this.parseHeader();
+    }
+
+    parseHeader() {
+        // Read WAV header
+        this.channels = this.buffer.readUInt16LE(22);
+        this.sampleRate = this.buffer.readUInt32LE(24);
+        this.bitsPerSample = this.buffer.readUInt16LE(34);
+        
+        // Find data chunk
+        let dataOffset = 12;
+        while (dataOffset < this.buffer.length - 8) {
+            const chunkId = this.buffer.toString('ascii', dataOffset, dataOffset + 4);
+            const chunkSize = this.buffer.readUInt32LE(dataOffset + 4);
+            
+            if (chunkId === 'data') {
+                this.dataStart = dataOffset + 8;
+                this.dataSize = chunkSize;
+                break;
+            }
+            
+            dataOffset += 8 + chunkSize;
+        }
+    }
+
+    getChannelData(channelIndex) {
+        if (this.channels !== 2) {
+            throw new Error('Audio file is not stereo');
+        }
+
+        const bytesPerSample = this.bitsPerSample / 8;
+        const samplesPerChannel = this.dataSize / (bytesPerSample * this.channels);
+        const channelData = [];
+
+        // Extract samples for the specified channel
+        for (let i = 0; i < samplesPerChannel; i++) {
+            const sampleOffset = this.dataStart + (i * this.channels + channelIndex) * bytesPerSample;
+            
+            if (this.bitsPerSample === 16) {
+                const sample = this.buffer.readInt16LE(sampleOffset);
+                channelData.push(sample);
+            } else if (this.bitsPerSample === 8) {
+                const sample = this.buffer.readUInt8(sampleOffset) - 128;
+                channelData.push(sample * 256); // Convert to 16-bit range
+            }
+        }
+
+        return channelData;
+    }
+}
+
+class ChannelTranscriber {
+    constructor(client, channelId, channelName, sampleRate) {
+        this.client = client;
+        this.channelId = channelId;
+        this.channelName = channelName;
+        this.sampleRate = sampleRate;
+        this.transcriber = null;
+        this.audioData = [];
+        this.currentTurnLine = null;
+        this.lineCount = 0;
+    }
+
+    loadAudioChannel() {
+        try {
+            const wavParser = new SimpleWavParser(AUDIO_FILE_PATH);
+            const channelSamples = wavParser.getChannelData(this.channelId);
+            
+            // Split into chunks for streaming (50ms chunks)
+            const FRAMES_PER_BUFFER = Math.floor(this.sampleRate * 0.05); // 50ms
+            
+            for (let i = 0; i < channelSamples.length; i += FRAMES_PER_BUFFER) {
+                const chunkArray = new Int16Array(FRAMES_PER_BUFFER);
+                
+                // Copy samples and pad if necessary
+                for (let j = 0; j < FRAMES_PER_BUFFER; j++) {
+                    if (i + j < channelSamples.length) {
+                        chunkArray[j] = channelSamples[i + j];
+                    } else {
+                        chunkArray[j] = 0; // Pad with silence
+                    }
+                }
+                
+                // Convert to Buffer (Little Endian)
+                const buffer = Buffer.from(chunkArray.buffer);
+                this.audioData.push(buffer);
+            }
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    clearCurrentLine() {
+        if (this.currentTurnLine !== null) {
+            process.stdout.write('\r' + ' '.repeat(100) + '\r');
+        }
+    }
+
+    printPartialTranscript(words) {
+        this.clearCurrentLine();
+        // Build transcript from individual words
+        const wordTexts = words.map(word => word.text || '');
+        const transcript = wordTexts.join(' ');
+        const partialText = `${this.channelName}: ${transcript}`;
+        process.stdout.write(partialText);
+        this.currentTurnLine = partialText.length;
+    }
+
+    printFinalTranscript(transcript) {
+        this.clearCurrentLine();
+        const finalText = `${this.channelName}: ${transcript}`;
+        console.log(finalText);
+        this.currentTurnLine = null;
+        this.lineCount++;
+    }
+
+    async startTranscription() {
+        try {
+            this.loadAudioChannel();
+        } catch (error) {
+            throw error;
+        }
+
+        const turnDetectionConfig = {
+          endOfTurnConfidenceThreshold: 0.4,
+          minEndOfTurnSilenceWhenConfident: 160,
+          maxTurnSilence: 400
+        };
+
+        // Create transcriber with SDK
+        this.transcriber = this.client.streaming.transcriber({
+            sampleRate: this.sampleRate,
+            formatTurns: true,
+            ...turnDetectionConfig
+        });
+
+        // Set up event handlers
+        this.transcriber.on('open', ({ id }) => {
+            // Session opened
+        });
+
+        this.transcriber.on('error', (error) => {
+            console.error(`\n${this.channelName}: Error:`, error);
+        });
+
+        this.transcriber.on('close', (code, reason) => {
+            this.clearCurrentLine();
+            if (code !== 1000 && code !== 1001) {
+                console.log(`\n${this.channelName}: Connection closed unexpectedly`);
+            }
+        });
+
+        this.transcriber.on('turn', (turn) => {
+            const transcript = (turn.transcript || '').trim();
+            const formatted = turn.turn_is_formatted || false;
+            const words = turn.words || [];
+            
+            if (transcript || words.length > 0) {
+                if (formatted) {
+                    this.printFinalTranscript(transcript);
+                } else {
+                    this.printPartialTranscript(words);
+                }
+            }
+        });
+
+        // Connect to the streaming service
+        await this.transcriber.connect();
+
+        // Create a readable stream from audio chunks
+        const audioStream = new Readable({
+            async read() {
+                // This will be controlled by our manual push below
+            }
+        });
+
+        // Pipe audio stream to transcriber
+        Readable.toWeb(audioStream).pipeTo(this.transcriber.stream());
+
+        // Stream audio data
+        for (const chunk of this.audioData) {
+            audioStream.push(chunk);
+            await new Promise(resolve => setTimeout(resolve, 50)); // 50ms intervals
+        }
+
+        // Signal end of stream
+        audioStream.push(null);
+
+        // Wait a bit for final transcripts
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Close the transcriber
+        await this.transcriber.close();
+    }
+
+    async close() {
+        if (this.transcriber) {
+            await this.transcriber.close();
+        }
+    }
+}
+
+function playAudioFile() {
+    return new Promise((resolve) => {
+        console.log(`Playing audio: ${AUDIO_FILE_PATH}`);
+        
+        // Use platform-specific audio player
+        let command;
+        let args;
+        
+        if (process.platform === 'darwin') {
+            // macOS
+            command = 'afplay';
+            args = [AUDIO_FILE_PATH];
+        } else if (process.platform === 'win32') {
+            // Windows - using PowerShell
+            command = 'powershell';
+            args = ['-c', `(New-Object Media.SoundPlayer '${AUDIO_FILE_PATH}').PlaySync()`];
+        } else {
+            // Linux - try aplay
+            command = 'aplay';
+            args = [AUDIO_FILE_PATH];
+        }
+        
+        try {
+            const player = spawn(command, args, {
+                stdio: ['ignore', 'ignore', 'ignore'] // Suppress all output from player
+            });
+            
+            player.on('close', (code) => {
+                if (code === 0) {
+                    console.log('Audio playback finished');
+                }
+                resolve();
+            });
+            
+            player.on('error', (error) => {
+                // Silently continue without audio
+                resolve();
+            });
+        } catch (error) {
+            resolve();
+        }
+    });
+}
+
+async function transcribeMultichannel() {
+    // Verify API key is set
+    if (YOUR_API_KEY === '<YOUR_API_KEY>') {
+        console.error('ERROR: Please set YOUR_API_KEY before running');
+        process.exit(1);
+    }
+    
+    // Verify file exists
+    if (!fs.existsSync(AUDIO_FILE_PATH)) {
+        console.error(`ERROR: Audio file not found: ${AUDIO_FILE_PATH}`);
+        process.exit(1);
+    }
+
+    // Get sample rate from file
+    const wavParser = new SimpleWavParser(AUDIO_FILE_PATH);
+    const sampleRate = wavParser.sampleRate;
+
+    // Create SDK client
+    const client = new AssemblyAI({
+        apiKey: YOUR_API_KEY
+    });
+
+    const transcriber1 = new ChannelTranscriber(client, 0, 'Speaker 1', sampleRate);
+    const transcriber2 = new ChannelTranscriber(client, 1, 'Speaker 2', sampleRate);
+    
+    try {
+        // Start audio playback (non-blocking)
+        const audioPromise = playAudioFile();
+        
+        // Start both transcriptions
+        const transcriptionPromises = [
+            transcriber1.startTranscription(),
+            transcriber2.startTranscription()
+        ];
+        
+        // Wait for all to complete
+        await Promise.all([...transcriptionPromises, audioPromise]);
+        
+    } catch (error) {
+        console.error('\nError during transcription:', error.message);
+        
+        // Clean up
+        await transcriber1.close();
+        await transcriber2.close();
+        
+        process.exit(1);
+    }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\n'); // Clean line break before exit
+    process.exit(0);
+});
+
+// Main execution
+transcribeMultichannel();
+```
+
+            </Step>
+        </Steps>
+    </Tab>
+
+    <Tab language="javascript" title="JavaScript">
 
         <Steps>
             <Step>
 
             Firstly, install the required dependencies.
-
-            ```bash
-            npm install ws
-            ```
+```bash
+npm install ws
+```
 
             </Step>
             <Step>
             Use this complete script to transcribe dual-channel audio with speaker separation:
+```javascript
+const WebSocket = require('ws');
+const fs = require('fs');
+const { spawn } = require('child_process');
 
-            ```javascript
-            const WebSocket = require('ws');
-            const fs = require('fs');
-            const { spawn } = require('child_process');
+// Configuration
+const YOUR_API_KEY = '<YOUR_API_KEY>';
+const AUDIO_FILE_PATH = '<DUAL_CHANNEL_AUDIO_FILE_PATH>';
+const API_BASE_URL = 'wss://streaming.assemblyai.com/v3/ws';
+const API_PARAMS = {
+    sample_rate: 8000,
+    format_turns: 'true',
+    end_of_turn_confidence_threshold: 0.4,
+    min_end_of_turn_silence_when_confident: 160,
+    max_turn_silence: 400,
+};
 
-            // Configuration
-            const YOUR_API_KEY = '<YOUR_API_KEY>';
-            const AUDIO_FILE_PATH = '<DUAL_CHANNEL_AUDIO_FILE_PATH>';
-            const API_BASE_URL = 'wss://streaming.assemblyai.com/v3/ws';
-            const API_PARAMS = {
-                sample_rate: 8000,
-                format_turns: 'true',
-            };
+// Build API endpoint with URL encoding
+const queryString = new URLSearchParams(API_PARAMS).toString();
+const API_ENDPOINT = `${API_BASE_URL}?${queryString}`;
 
-            // Build API endpoint with URL encoding
-            const queryString = new URLSearchParams(API_PARAMS).toString();
-            const API_ENDPOINT = `${API_BASE_URL}?${queryString}`;
+// Simple WAV file parser
+class SimpleWavParser {
+    constructor(filePath) {
+        this.buffer = fs.readFileSync(filePath);
+        this.parseHeader();
+    }
 
-            // Simple WAV file parser
-            class SimpleWavParser {
-                constructor(filePath) {
-                    this.buffer = fs.readFileSync(filePath);
-                    this.parseHeader();
-                }
-
-                parseHeader() {
-                    // Read WAV header
-                    this.channels = this.buffer.readUInt16LE(22);
-                    this.sampleRate = this.buffer.readUInt32LE(24);
-                    this.bitsPerSample = this.buffer.readUInt16LE(34);
-                    
-                    // Find data chunk
-                    let dataOffset = 12;
-                    while (dataOffset < this.buffer.length - 8) {
-                        const chunkId = this.buffer.toString('ascii', dataOffset, dataOffset + 4);
-                        const chunkSize = this.buffer.readUInt32LE(dataOffset + 4);
-                        
-                        if (chunkId === 'data') {
-                            this.dataStart = dataOffset + 8;
-                            this.dataSize = chunkSize;
-                            break;
-                        }
-                        
-                        dataOffset += 8 + chunkSize;
-                    }
-                }
-
-                getChannelData(channelIndex) {
-                    if (this.channels !== 2) {
-                        throw new Error('Audio file is not stereo');
-                    }
-
-                    const bytesPerSample = this.bitsPerSample / 8;
-                    const samplesPerChannel = this.dataSize / (bytesPerSample * this.channels);
-                    const channelData = [];
-
-                    // Extract samples for the specified channel
-                    for (let i = 0; i < samplesPerChannel; i++) {
-                        const sampleOffset = this.dataStart + (i * this.channels + channelIndex) * bytesPerSample;
-                        
-                        if (this.bitsPerSample === 16) {
-                            const sample = this.buffer.readInt16LE(sampleOffset);
-                            channelData.push(sample);
-                        } else if (this.bitsPerSample === 8) {
-                            const sample = this.buffer.readUInt8(sampleOffset) - 128;
-                            channelData.push(sample * 256); // Convert to 16-bit range
-                        }
-                    }
-
-                    return channelData;
-                }
+    parseHeader() {
+        // Read WAV header
+        this.channels = this.buffer.readUInt16LE(22);
+        this.sampleRate = this.buffer.readUInt32LE(24);
+        this.bitsPerSample = this.buffer.readUInt16LE(34);
+        
+        // Find data chunk
+        let dataOffset = 12;
+        while (dataOffset < this.buffer.length - 8) {
+            const chunkId = this.buffer.toString('ascii', dataOffset, dataOffset + 4);
+            const chunkSize = this.buffer.readUInt32LE(dataOffset + 4);
+            
+            if (chunkId === 'data') {
+                this.dataStart = dataOffset + 8;
+                this.dataSize = chunkSize;
+                break;
             }
+            
+            dataOffset += 8 + chunkSize;
+        }
+    }
 
-            class ChannelTranscriber {
-                constructor(channelId, channelName) {
-                    this.channelId = channelId;
-                    this.channelName = channelName;
-                    this.ws = null;
-                    this.audioData = [];
-                    this.currentTurnLine = null;
-                    this.lineCount = 0;
-                    this.isConnected = false;
-                }
+    getChannelData(channelIndex) {
+        if (this.channels !== 2) {
+            throw new Error('Audio file is not stereo');
+        }
 
-                loadAudioChannel() {
-                    try {
-                        const wavParser = new SimpleWavParser(AUDIO_FILE_PATH);
-                        const channelSamples = wavParser.getChannelData(this.channelId);
-                        
-                        // Split into chunks for streaming (50ms chunks at 8000Hz = 400 samples)
-                        const FRAMES_PER_BUFFER = 400;
-                        
-                        for (let i = 0; i < channelSamples.length; i += FRAMES_PER_BUFFER) {
-                            const chunkArray = new Int16Array(FRAMES_PER_BUFFER);
-                            
-                            // Copy samples and pad if necessary
-                            for (let j = 0; j < FRAMES_PER_BUFFER; j++) {
-                                if (i + j < channelSamples.length) {
-                                    chunkArray[j] = channelSamples[i + j];
-                                } else {
-                                    chunkArray[j] = 0; // Pad with silence
-                                }
-                            }
-                            
-                            // Convert to Buffer (Little Endian)
-                            const buffer = Buffer.from(chunkArray.buffer);
-                            this.audioData.push(buffer);
-                        }
-                    } catch (error) {
-                        throw error;
-                    }
-                }
+        const bytesPerSample = this.bitsPerSample / 8;
+        const samplesPerChannel = this.dataSize / (bytesPerSample * this.channels);
+        const channelData = [];
 
-                clearCurrentLine() {
-                    if (this.currentTurnLine !== null) {
-                        process.stdout.write('\r' + ' '.repeat(100) + '\r');
-                    }
-                }
-
-                printPartialTranscript(words) {
-                    this.clearCurrentLine();
-                    // Build transcript from individual words
-                    const wordTexts = words.map(word => word.text || '');
-                    const transcript = wordTexts.join(' ');
-                    const partialText = `${this.channelName}: ${transcript}`;
-                    process.stdout.write(partialText);
-                    this.currentTurnLine = partialText.length;
-                }
-
-                printFinalTranscript(transcript) {
-                    this.clearCurrentLine();
-                    const finalText = `${this.channelName}: ${transcript}`;
-                    console.log(finalText);
-                    this.currentTurnLine = null;
-                    this.lineCount++;
-                }
-
-                async streamAudio() {
-                    // Wait a bit for connection to stabilize
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    for (const chunk of this.audioData) {
-                        if (this.ws.readyState === WebSocket.OPEN) {
-                            this.ws.send(chunk, { binary: true });
-                            await new Promise(resolve => setTimeout(resolve, 50)); // 50ms intervals
-                        } else {
-                            break;
-                        }
-                    }
-                    
-                    // Send termination message
-                    if (this.ws.readyState === WebSocket.OPEN) {
-                        const terminateMessage = { type: 'Terminate' };
-                        this.ws.send(JSON.stringify(terminateMessage));
-                    }
-                }
-
-                startTranscription() {
-                    return new Promise((resolve, reject) => {
-                        try {
-                            this.loadAudioChannel();
-                        } catch (error) {
-                            reject(error);
-                            return;
-                        }
-                        
-                        this.ws = new WebSocket(API_ENDPOINT, {
-                            headers: {
-                                Authorization: YOUR_API_KEY
-                            }
-                        });
-                        
-                        this.ws.on('open', () => {
-                            this.isConnected = true;
-                            // Start streaming audio
-                            this.streamAudio().catch(error => {});
-                        });
-                        
-                        this.ws.on('message', (data) => {
-                            try {
-                                const message = JSON.parse(data.toString());
-                                const msgType = message.type;
-                                
-                                if (msgType === 'Turn') {
-                                    const transcript = (message.transcript || '').trim();
-                                    const formatted = message.turn_is_formatted || false;
-                                    const words = message.words || [];
-                                    
-                                    if (transcript || words.length > 0) {
-                                        if (formatted) {
-                                            this.printFinalTranscript(transcript);
-                                        } else {
-                                            this.printPartialTranscript(words);
-                                        }
-                                    }
-                                } else if (msgType === 'error') {
-                                    console.error(`\n${this.channelName}: API Error:`, message.error);
-                                }
-                            } catch (error) {
-                                // Silently ignore parse errors
-                            }
-                        });
-                        
-                        this.ws.on('close', (code, reason) => {
-                            this.clearCurrentLine();
-                            if (code !== 1000 && code !== 1001) {
-                                console.log(`\n${this.channelName}: Connection closed unexpectedly`);
-                            }
-                            this.isConnected = false;
-                            resolve();
-                        });
-                        
-                        this.ws.on('error', (error) => {
-                            console.error(`\n${this.channelName} WebSocket error:`, error.message);
-                            this.isConnected = false;
-                            reject(error);
-                        });
-                    });
-                }
-
-                close() {
-                    if (this.ws && this.isConnected) {
-                        this.ws.close();
-                    }
-                }
+        // Extract samples for the specified channel
+        for (let i = 0; i < samplesPerChannel; i++) {
+            const sampleOffset = this.dataStart + (i * this.channels + channelIndex) * bytesPerSample;
+            
+            if (this.bitsPerSample === 16) {
+                const sample = this.buffer.readInt16LE(sampleOffset);
+                channelData.push(sample);
+            } else if (this.bitsPerSample === 8) {
+                const sample = this.buffer.readUInt8(sampleOffset) - 128;
+                channelData.push(sample * 256); // Convert to 16-bit range
             }
+        }
 
-            function playAudioFile() {
-                return new Promise((resolve) => {
-                    console.log(`Playing audio: ${AUDIO_FILE_PATH}`);
-                    
-                    // Use platform-specific audio player
-                    let command;
-                    let args;
-                    
-                    if (process.platform === 'darwin') {
-                        // macOS
-                        command = 'afplay';
-                        args = [AUDIO_FILE_PATH];
-                    } else if (process.platform === 'win32') {
-                        // Windows - using PowerShell
-                        command = 'powershell';
-                        args = ['-c', `(New-Object Media.SoundPlayer '${AUDIO_FILE_PATH}').PlaySync()`];
-                    } else {
-                        // Linux - try aplay
-                        command = 'aplay';
-                        args = [AUDIO_FILE_PATH];
-                    }
-                    
-                    try {
-                        const player = spawn(command, args, {
-                            stdio: ['ignore', 'ignore', 'ignore'] // Suppress all output from player
-                        });
-                        
-                        player.on('close', (code) => {
-                            if (code === 0) {
-                                console.log('Audio playback finished');
-                            }
-                            resolve();
-                        });
-                        
-                        player.on('error', (error) => {
-                            // Silently continue without audio
-                            resolve();
-                        });
-                    } catch (error) {
-                        resolve();
-                    }
-                });
-            }
+        return channelData;
+    }
+}
 
-            async function transcribeMultichannel() {
-                const transcriber1 = new ChannelTranscriber(0, 'Speaker 1');
-                const transcriber2 = new ChannelTranscriber(1, 'Speaker 2');
+class ChannelTranscriber {
+    constructor(channelId, channelName) {
+        this.channelId = channelId;
+        this.channelName = channelName;
+        this.ws = null;
+        this.audioData = [];
+        this.currentTurnLine = null;
+        this.lineCount = 0;
+        this.isConnected = false;
+    }
+
+    loadAudioChannel() {
+        try {
+            const wavParser = new SimpleWavParser(AUDIO_FILE_PATH);
+            const channelSamples = wavParser.getChannelData(this.channelId);
+            
+            // Split into chunks for streaming (50ms chunks at 8000Hz = 400 samples)
+            const FRAMES_PER_BUFFER = 400;
+            
+            for (let i = 0; i < channelSamples.length; i += FRAMES_PER_BUFFER) {
+                const chunkArray = new Int16Array(FRAMES_PER_BUFFER);
                 
-                try {
-                    // Verify API key is set
-                    if (YOUR_API_KEY === '<YOUR_API_KEY>') {
-                        console.error('ERROR: Please set YOUR_API_KEY before running');
-                        process.exit(1);
+                // Copy samples and pad if necessary
+                for (let j = 0; j < FRAMES_PER_BUFFER; j++) {
+                    if (i + j < channelSamples.length) {
+                        chunkArray[j] = channelSamples[i + j];
+                    } else {
+                        chunkArray[j] = 0; // Pad with silence
                     }
-                    
-                    // Verify file exists
-                    if (!fs.existsSync(AUDIO_FILE_PATH)) {
-                        console.error(`ERROR: Audio file not found: ${AUDIO_FILE_PATH}`);
-                        process.exit(1);
-                    }
-                    
-                    // Start audio playback (non-blocking)
-                    const audioPromise = playAudioFile();
-                    
-                    // Start both transcriptions
-                    const transcriptionPromises = [
-                        transcriber1.startTranscription(),
-                        transcriber2.startTranscription()
-                    ];
-                    
-                    // Wait for all to complete
-                    await Promise.all([...transcriptionPromises, audioPromise]);
-                    
-                } catch (error) {
-                    console.error('\nError during transcription:', error.message);
-                    
-                    // Clean up
-                    transcriber1.close();
-                    transcriber2.close();
-                    
-                    process.exit(1);
                 }
+                
+                // Convert to Buffer (Little Endian)
+                const buffer = Buffer.from(chunkArray.buffer);
+                this.audioData.push(buffer);
             }
+        } catch (error) {
+            throw error;
+        }
+    }
 
-            // Handle graceful shutdown
-            process.on('SIGINT', () => {
-                console.log('\n'); // Clean line break before exit
-                process.exit(0);
+    clearCurrentLine() {
+        if (this.currentTurnLine !== null) {
+            process.stdout.write('\r' + ' '.repeat(100) + '\r');
+        }
+    }
+
+    printPartialTranscript(words) {
+        this.clearCurrentLine();
+        // Build transcript from individual words
+        const wordTexts = words.map(word => word.text || '');
+        const transcript = wordTexts.join(' ');
+        const partialText = `${this.channelName}: ${transcript}`;
+        process.stdout.write(partialText);
+        this.currentTurnLine = partialText.length;
+    }
+
+    printFinalTranscript(transcript) {
+        this.clearCurrentLine();
+        const finalText = `${this.channelName}: ${transcript}`;
+        console.log(finalText);
+        this.currentTurnLine = null;
+        this.lineCount++;
+    }
+
+    async streamAudio() {
+        // Wait a bit for connection to stabilize
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        for (const chunk of this.audioData) {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(chunk, { binary: true });
+                await new Promise(resolve => setTimeout(resolve, 50)); // 50ms intervals
+            } else {
+                break;
+            }
+        }
+        
+        // Send termination message
+        if (this.ws.readyState === WebSocket.OPEN) {
+            const terminateMessage = { type: 'Terminate' };
+            this.ws.send(JSON.stringify(terminateMessage));
+        }
+    }
+
+    startTranscription() {
+        return new Promise((resolve, reject) => {
+            try {
+                this.loadAudioChannel();
+            } catch (error) {
+                reject(error);
+                return;
+            }
+            
+            this.ws = new WebSocket(API_ENDPOINT, {
+                headers: {
+                    Authorization: YOUR_API_KEY
+                }
             });
+            
+            this.ws.on('open', () => {
+                this.isConnected = true;
+                // Start streaming audio
+                this.streamAudio().catch(error => {});
+            });
+            
+            this.ws.on('message', (data) => {
+                try {
+                    const message = JSON.parse(data.toString());
+                    const msgType = message.type;
+                    
+                    if (msgType === 'Turn') {
+                        const transcript = (message.transcript || '').trim();
+                        const formatted = message.turn_is_formatted || false;
+                        const words = message.words || [];
+                        
+                        if (transcript || words.length > 0) {
+                            if (formatted) {
+                                this.printFinalTranscript(transcript);
+                            } else {
+                                this.printPartialTranscript(words);
+                            }
+                        }
+                    } else if (msgType === 'error') {
+                        console.error(`\n${this.channelName}: API Error:`, message.error);
+                    }
+                } catch (error) {
+                    // Silently ignore parse errors
+                }
+            });
+            
+            this.ws.on('close', (code, reason) => {
+                this.clearCurrentLine();
+                if (code !== 1000 && code !== 1001) {
+                    console.log(`\n${this.channelName}: Connection closed unexpectedly`);
+                }
+                this.isConnected = false;
+                resolve();
+            });
+            
+            this.ws.on('error', (error) => {
+                console.error(`\n${this.channelName} WebSocket error:`, error.message);
+                this.isConnected = false;
+                reject(error);
+            });
+        });
+    }
 
-            // Main execution
-            if (require.main === module) {
-                transcribeMultichannel();
-            }
+    close() {
+        if (this.ws && this.isConnected) {
+            this.ws.close();
+        }
+    }
+}
 
-                        ```
+function playAudioFile() {
+    return new Promise((resolve) => {
+        console.log(`Playing audio: ${AUDIO_FILE_PATH}`);
+        
+        // Use platform-specific audio player
+        let command;
+        let args;
+        
+        if (process.platform === 'darwin') {
+            // macOS
+            command = 'afplay';
+            args = [AUDIO_FILE_PATH];
+        } else if (process.platform === 'win32') {
+            // Windows - using PowerShell
+            command = 'powershell';
+            args = ['-c', `(New-Object Media.SoundPlayer '${AUDIO_FILE_PATH}').PlaySync()`];
+        } else {
+            // Linux - try aplay
+            command = 'aplay';
+            args = [AUDIO_FILE_PATH];
+        }
+        
+        try {
+            const player = spawn(command, args, {
+                stdio: ['ignore', 'ignore', 'ignore'] // Suppress all output from player
+            });
+            
+            player.on('close', (code) => {
+                if (code === 0) {
+                    console.log('Audio playback finished');
+                }
+                resolve();
+            });
+            
+            player.on('error', (error) => {
+                // Silently continue without audio
+                resolve();
+            });
+        } catch (error) {
+            resolve();
+        }
+    });
+}
+
+async function transcribeMultichannel() {
+    const transcriber1 = new ChannelTranscriber(0, 'Speaker 1');
+    const transcriber2 = new ChannelTranscriber(1, 'Speaker 2');
+    
+    try {
+        // Verify API key is set
+        if (YOUR_API_KEY === '<YOUR_API_KEY>') {
+            console.error('ERROR: Please set YOUR_API_KEY before running');
+            process.exit(1);
+        }
+        
+        // Verify file exists
+        if (!fs.existsSync(AUDIO_FILE_PATH)) {
+            console.error(`ERROR: Audio file not found: ${AUDIO_FILE_PATH}`);
+            process.exit(1);
+        }
+        
+        // Start audio playback (non-blocking)
+        const audioPromise = playAudioFile();
+        
+        // Start both transcriptions
+        const transcriptionPromises = [
+            transcriber1.startTranscription(),
+            transcriber2.startTranscription()
+        ];
+        
+        // Wait for all to complete
+        await Promise.all([...transcriptionPromises, audioPromise]);
+        
+    } catch (error) {
+        console.error('\nError during transcription:', error.message);
+        
+        // Clean up
+        transcriber1.close();
+        transcriber2.close();
+        
+        process.exit(1);
+    }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\n'); // Clean line break before exit
+    process.exit(0);
+});
+
+// Main execution
+if (require.main === module) {
+    transcribeMultichannel();
+}
+```
+
             
 
             </Step>
@@ -535,3 +1101,70 @@ The following code example demonstrates how to transcribe a dual-channel audio f
     </Tab>
 </Tabs>
 
+<Note title="Configure turn detection for your use case">
+The examples above use turn detection settings optimized for short responses and rapid back-and-forth conversations. To optimize for your specific audio scenario, you can adjust the turn detection parameters.
+
+For configuration examples tailored to different use cases, refer to our [Configuration examples](/docs/universal-streaming/turn-detection#quick-start-configurations).
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK">
+Modify the `StreamingParameters` in the `start_transcription` method:
+```python
+# Connect to streaming service with turn detection configuration
+self.client.connect(
+    StreamingParameters(
+        sample_rate=self.sample_rate,
+        format_turns=True,
+        end_of_turn_confidence_threshold=0.4,
+        min_end_of_turn_silence_when_confident=160,
+        max_turn_silence=400,
+    )
+)
+```
+</Tab>
+
+<Tab language="python" title="Python">
+Modify the turn detection parameters in `API_PARAMS`:
+```python
+API_PARAMS = {
+    "sample_rate": 8000,
+    "format_turns": "true",
+    "end_of_turn_confidence_threshold": 0.4,
+    "min_end_of_turn_silence_when_confident": 160,
+    "max_turn_silence": 400,
+}
+```
+</Tab>
+
+<Tab language="javascript-sdk" title="JavaScript SDK">
+Modify the turn detection configuration object:
+```javascript
+const turnDetectionConfig = {
+  endOfTurnConfidenceThreshold: 0.4,
+  minEndOfTurnSilenceWhenConfident: 160,
+  maxTurnSilence: 400
+};
+
+// Create transcriber with SDK
+this.transcriber = this.client.streaming.transcriber({
+    sampleRate: this.sampleRate,
+    formatTurns: true,
+    ...turnDetectionConfig
+});
+```
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+Modify the turn detection parameters in `API_PARAMS`:
+```javascript
+const API_PARAMS = {
+    sample_rate: 8000,
+    format_turns: 'true',
+    end_of_turn_confidence_threshold: 0.4,
+    min_end_of_turn_silence_when_confident: 160,
+    max_turn_silence: 400,
+};
+```
+</Tab>
+</Tabs>
+</Note>
