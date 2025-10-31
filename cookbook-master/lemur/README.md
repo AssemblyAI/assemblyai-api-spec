@@ -11,7 +11,6 @@ Apply Large Language Models to spoken data. A Large Language Model (LLM) is a ma
 🆕 [Receive AI coaching from LeMUR's Task Endpoint](task-endpoint-ai-coach.ipynb)  
 🆕 [Generate Action Items using LeMUR's Task Endpoint](task-endpoint-action-items.ipynb)<br>
 🆕 [Ask questions about a transcript using LeMUR's Task Endpoint](task-endpoint-structured-QA.ipynb)<br>
-[Calculating LeMUR Costs by Counting Input Tokens](counting-tokens.ipynb)
 
 ### Analyze Speakers with LeMUR
 
