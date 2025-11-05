@@ -1,33 +1,193 @@
 ---
-title: "Extract Transcript Quotes with LeMURs Custom Text Input Parameter"
+title: "Extract Transcript Quotes with LLM Gateway"
 ---
 
-This Colab will demonstrate how to use AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework to process an audio file and find the best quotes included in it by sending in the timestamped transcript via LeMUR's `input_text` parameter.
+This guide will demonstrate how to use AssemblyAI's [LLM Gateway](/docs/llm-gateway/overview) to process an audio file and find the best quotes via the [chat completions endpoint](/docs/api-reference/llm-gateway/create-chat-completion).
 
-## Quickstart
+## Quick start
 
+<Tabs>
+<Tab title="Python">
 ```python
-import assemblyai
+import requests
+import json
+import time
 
-assemblyai.settings.api_key = "YOUR_API_KEY"
-transcriber = assemblyai.Transcriber()
+API_KEY = "YOUR_API_KEY"
+headers = {"authorization": API_KEY}
 
-transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
-
-result = assemblyai.Lemur().question(
-    input_text=f"{[(sentence.text, sentence.start, sentence.end) for sentence in transcript.get_sentences()]}",
-    final_model=assemblyai.LemurModel.claude3_5_sonnet,
-    questions=[
-        {
-            "question": "What are the most engaging quotes from this transcript?",
-            "context": "This is a list of sentences from the transcript, with each sentence having a start and end timestamp in milliseconds.",
-            "answer_format": "Exact quotes with the start and end timestamp of each sentence."
-        }
-    ]
+# Transcribe the audio file
+print("Submitting audio for transcription...")
+transcript_response = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers=headers,
+    json={
+        "audio_url": "https://assembly.ai/wildfires.mp3",
+        "speaker_labels": True
+    }
 )
 
-print(result.response[0].answer)
+transcript_id = transcript_response.json()["id"]
+
+# Poll for transcription completion
+while True:
+    transcript_result = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers=headers
+    ).json()
+    
+    if transcript_result["status"] == "completed":
+        break
+    elif transcript_result["status"] == "error":
+        raise Exception(f"Transcription failed: {transcript_result['error']}")
+    
+    time.sleep(3)
+
+# Extract utterances with timestamps
+utterances_data = [
+    {"text": u["text"], "start": u["start"], "end": u["end"], "speaker": u["speaker"]} 
+    for u in transcript_result["utterances"]
+]
+
+# Create prompt with timestamped utterances
+prompt = f"""You are analyzing a transcript with timestamped utterances. Each utterance includes the text content, speaker label, and start/end timestamps in milliseconds.
+
+Here is the transcript data:
+{json.dumps(utterances_data, indent=2)}
+
+Task: Identify the 3-5 most engaging, impactful, or quotable utterances from this transcript.
+
+Return your response as a JSON array with the following structure:
+{{
+  "quotes": [
+    {{
+      "text": "exact quote text",
+      "start": start_timestamp_in_milliseconds,
+      "end": end_timestamp_in_milliseconds,
+      "speaker": "speaker_label",
+      "reason": "brief explanation of why this quote is engaging"
+    }}
+  ]
+}}
+
+Return ONLY valid JSON, no additional text."""
+
+# Use LLM Gateway to extract quotes
+print("Submitting transcript to LLM Gateway for quote extraction...")
+gateway_response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "gpt-5-nano",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+)
+
+result = gateway_response.json()
+quotes_json = json.loads(result["choices"][0]["message"]["content"])
+print(json.dumps(quotes_json, indent=2))
 ```
+
+</Tab>
+<Tab title="JavaScript">
+```javascript
+const API_KEY = "YOUR_API_KEY";
+
+const headers = {
+  "authorization": API_KEY,
+  "content-type": "application/json"
+};
+
+// Transcribe the audio file
+console.log("Submitting audio for transcription...");
+const transcriptResponse = await fetch(
+  "https://api.assemblyai.com/v2/transcript",
+  {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({
+      audio_url: "https://assembly.ai/wildfires.mp3",
+      speaker_labels: true
+    })
+  }
+);
+
+const { id: transcriptId } = await transcriptResponse.json();
+
+// Poll for transcription completion
+let transcriptResult;
+while (true) {
+  const response = await fetch(
+    `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+    { headers }
+  );
+  transcriptResult = await response.json();
+  
+  if (transcriptResult.status === "completed") {
+    break;
+  } else if (transcriptResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptResult.error}`);
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 3000));
+}
+
+// Extract utterances with timestamps
+const utterancesData = transcriptResult.utterances.map(u => ({
+  text: u.text,
+  start: u.start,
+  end: u.end,
+  speaker: u.speaker
+}));
+
+// Create prompt with timestamped utterances
+const prompt = `You are analyzing a transcript with timestamped utterances. Each utterance includes the text content, speaker label, and start/end timestamps in milliseconds.
+
+Here is the transcript data:
+${JSON.stringify(utterancesData, null, 2)}
+
+Task: Identify the 3-5 most engaging, impactful, or quotable utterances from this transcript.
+
+Return your response as a JSON array with the following structure:
+{
+  "quotes": [
+    {
+      "text": "exact quote text",
+      "start": start_timestamp_in_milliseconds,
+      "end": end_timestamp_in_milliseconds,
+      "speaker": "speaker_label",
+      "reason": "brief explanation of why this quote is engaging"
+    }
+  ]
+}
+
+Return ONLY valid JSON, no additional text.`;
+
+// Use LLM Gateway to extract quotes
+console.log("Submitting transcript to LLM Gateway for quote extraction...");
+const gatewayResponse = await fetch(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({
+      model: "gpt-5-nano",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
+  }
+);
+
+const result = await gatewayResponse.json();
+const quotesJson = JSON.parse(result.choices[0].message.content);
+console.log(JSON.stringify(quotesJson, null, 2));
+```
+
+</Tab>
+</Tabs>
 
 ## Getting Started
 
@@ -35,51 +195,273 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
 
 ## Step-by-Step Instructions
 
-First, let's install the AssemblyAI SDK.
+### Step 1: Set up your API key and headers
 
-```bash
-pip install -U assemblyai
+<Tabs>
+<Tab title="Python">
+```python
+import requests
+import json
+import time
+
+API_KEY = "YOUR_API_KEY"
+headers = {"authorization": API_KEY}
 ```
 
-Then we'll import the SDK and set our AssemblyAI API key.
+</Tab>
+<Tab title="JavaScript">
+```javascript
+const API_KEY = "YOUR_API_KEY";
 
-```python
-import assemblyai
-
-assemblyai.settings.api_key = "API_KEY_HERE"
+const headers = {
+  "authorization": API_KEY,
+  "content-type": "application/json"
+};
 ```
 
-Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use.
+</Tab>
+</Tabs>
 
+### Step 2: Transcribe the audio file
+
+Next, we'll use AssemblyAI to transcribe a file and save our transcript for later use. We'll enable `speaker_labels` to get utterances grouped by speaker.
+
+<Tabs>
+<Tab title="Python">
 ```python
-transcriber = assemblyai.Transcriber()
-
-transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
-```
-
-Then we'll take the timestamped `sentences` array from our transcript and provide it to the LeMUR Q&A endpoint to extract the most engaging quotes from this transcript with their associated timestamps.
-
-```python
-result = assemblyai.Lemur().question(
-    input_text=f"{[(sentence.text, sentence.start, sentence.end) for sentence in transcript.get_sentences()]}",
-    final_model=assemblyai.LemurModel.claude3_5_sonnet,
-    questions=[
-        {
-            "question": "What are the most engaging quotes from this transcript?",
-            "context": "This is a list of sentences from the transcript, with each sentence having a start and end timestamp in milliseconds.",
-            "answer_format": "Exact quotes with the start and end timestamp of each sentence."
-        }
-    ]
+# Transcribe the audio file
+print("Submitting audio for transcription...")
+transcript_response = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers=headers,
+    json={
+        "audio_url": "https://assembly.ai/wildfires.mp3",
+        "speaker_labels": True
+    }
 )
 
-print(result.response[0].answer)
+transcript_id = transcript_response.json()["id"]
+
+# Poll for transcription completion
+while True:
+    transcript_result = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers=headers
+    ).json()
+    
+    if transcript_result["status"] == "completed":
+        break
+    elif transcript_result["status"] == "error":
+        raise Exception(f"Transcription failed: {transcript_result['error']}")
+    
+    time.sleep(3)
 ```
 
-Example response:
+</Tab>
+<Tab title="JavaScript">
+```javascript
+// Transcribe the audio file
+console.log("Submitting audio for transcription...");
+const transcriptResponse = await fetch(
+  "https://api.assemblyai.com/v2/transcript",
+  {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({
+      audio_url: "https://assembly.ai/wildfires.mp3",
+      speaker_labels: true
+    })
+  }
+);
 
+const { id: transcriptId } = await transcriptResponse.json();
+
+// Poll for transcription completion
+let transcriptResult;
+while (true) {
+  const response = await fetch(
+    `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+    { headers }
+  );
+  transcriptResult = await response.json();
+  
+  if (transcriptResult.status === "completed") {
+    break;
+  } else if (transcriptResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptResult.error}`);
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 3000));
+}
 ```
-("So the concentrations of these particles in the air are just much, much higher than we typically see.", 113338, 119698)
-("And exposure to those high levels can lead to a host of health problems.", 119784, 123314)
-("I think New York has some of the higher concentrations right now, but that's going to change as that air moves away from the New York area.", 170950, 176930)
-("Looking into the future, the fire season is starting earlier and lasting longer and we're seeing more frequent fires.", 245216, 251254)
+
+</Tab>
+</Tabs>
+
+### Step 3: Extract utterances with timestamps
+
+Then we'll take the timestamped `utterances` array from our transcript and format it as structured data. Utterances are grouped by speaker and include continuous speech segments.
+
+<Tabs>
+<Tab title="Python">
+```python
+utterances_data = [
+    {"text": u["text"], "start": u["start"], "end": u["end"], "speaker": u["speaker"]} 
+    for u in transcript_result["utterances"]
+]
+```
+
+</Tab>
+<Tab title="JavaScript">
+```javascript
+const utterancesData = transcriptResult.utterances.map(u => ({
+  text: u.text,
+  start: u.start,
+  end: u.end,
+  speaker: u.speaker
+}));
+```
+
+</Tab>
+</Tabs>
+
+### Step 4: Use LLM Gateway to extract engaging quotes
+
+Finally, we'll provide the timestamped utterances to the LLM Gateway chat completions endpoint to extract the most engaging quotes from this transcript with their associated timestamps in a structured JSON format.
+
+<Tabs>
+<Tab title="Python">
+```python
+# Create prompt with timestamped utterances
+prompt = f"""You are analyzing a transcript with timestamped utterances. Each utterance includes the text content, speaker label, and start/end timestamps in milliseconds.
+
+Here is the transcript data:
+{json.dumps(utterances_data, indent=2)}
+
+Task: Identify the 3-5 most engaging, impactful, or quotable utterances from this transcript.
+
+Return your response as a JSON array with the following structure:
+{{
+  "quotes": [
+    {{
+      "text": "exact quote text",
+      "start": start_timestamp_in_milliseconds,
+      "end": end_timestamp_in_milliseconds,
+      "speaker": "speaker_label",
+      "reason": "brief explanation of why this quote is engaging"
+    }}
+  ]
+}}
+
+Return ONLY valid JSON, no additional text."""
+
+# Use LLM Gateway to extract quotes
+print("Submitting transcript to LLM Gateway for quote extraction...")
+gateway_response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "gpt-5-nano",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+)
+
+result = gateway_response.json()
+quotes_json = json.loads(result["choices"][0]["message"]["content"])
+print(json.dumps(quotes_json, indent=2))
+```
+
+</Tab>
+<Tab title="JavaScript">
+```javascript
+// Create prompt with timestamped utterances
+const prompt = `You are analyzing a transcript with timestamped utterances. Each utterance includes the text content, speaker label, and start/end timestamps in milliseconds.
+
+Here is the transcript data:
+${JSON.stringify(utterancesData, null, 2)}
+
+Task: Identify the 3-5 most engaging, impactful, or quotable utterances from this transcript.
+
+Return your response as a JSON array with the following structure:
+{
+  "quotes": [
+    {
+      "text": "exact quote text",
+      "start": start_timestamp_in_milliseconds,
+      "end": end_timestamp_in_milliseconds,
+      "speaker": "speaker_label",
+      "reason": "brief explanation of why this quote is engaging"
+    }
+  ]
+}
+
+Return ONLY valid JSON, no additional text.`;
+
+// Use LLM Gateway to extract quotes
+console.log("Submitting transcript to LLM Gateway for quote extraction...");
+const gatewayResponse = await fetch(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({
+      model: "gpt-5-nano",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
+  }
+);
+
+const result = await gatewayResponse.json();
+const quotesJson = JSON.parse(result.choices[0].message.content);
+console.log(JSON.stringify(quotesJson, null, 2));
+```
+
+</Tab>
+</Tabs>
+
+## Example Response
+```json
+{
+  "quotes": [
+    {
+      "text": "It is, it is. The levels outside right now in Baltimore are considered unhealthy. And most of that is due to what's called particulate matter, which are tiny particles, microscopic, smaller than the width of your hair, that can get into your lungs and impact your respiratory system, your cardiovascular system, and even your neurological, your brain.",
+      "start": 62350,
+      "end": 82590,
+      "speaker": "B",
+      "reason": "Defines particulate matter and explains how it harms health."
+    },
+    {
+      "text": "Yeah. So the concentration of particulate matter, I was looking at some of the monitors that we have was reaching levels of what are, in science speak, 150 micrograms per meter cubed, which is more than 10 times what the annual average should be in about four times higher than what you're supposed to have on a 24 hour average. And so the concentrations of these particles in the air are just much, much, much higher than we typically see. And exposure to those high levels can lead to a host of health problems.",
+      "start": 93550,
+      "end": 123350,
+      "speaker": "B",
+      "reason": "Gives specific concentration figures and links to health risks."
+    },
+    {
+      "text": "It's the youngest. So children, obviously, whose bodies are still developing, the elderly who are, you know, their bodies are more in decline and they're more susceptible to the health impacts of breathing, the poor air quality. And then people who have pre existing health conditions, people with respiratory conditions or heart conditions, can be triggered by high levels of air pollution.",
+      "start": 137610,
+      "end": 156650,
+      "speaker": "B",
+      "reason": "Highlights the most vulnerable groups affected by poor air quality."
+    },
+    {
+      "text": "Well, I think the fires are going to burn for a little bit longer. But the key for us in the US Is the weather system changing. Right now it's the weather systems that are pulling that air into our Mid Atlantic and Northeast region. As those weather systems change and shift, we'll see that smoke going elsewhere and not impact us in this region as much. I think that's going to be the defining factor. I think the next couple days we're going to see a shift in that weather pattern and start to push the smoke away from where we are.",
+      "start": 198280,
+      "end": 227480,
+      "speaker": "B",
+      "reason": "Offers an outlook on how weather patterns may reduce exposure."
+    },
+    {
+      "text": "I mean, that is one of the predictions for climate change. Looking into the future, the fire season is starting earlier and lasting longer and we're seeing more frequent fires. So yeah, this is probably something that we'll be seeing more, more frequently. This tends to be much more of an issue in the western U.S. so the eastern U.S. getting hit right now is a little bit new. But yeah, I think with climate change moving forward, this is something that is going to happen more frequently.",
+      "start": 241370,
+      "end": 267570,
+      "speaker": "B",
+      "reason": "Connects current event to longer-term climate change trends and future frequency."
+    }
+  ]
+}
 ```
