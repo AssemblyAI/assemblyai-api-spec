@@ -1,0 +1,422 @@
+---
+title: "Integrate Telnyx with AssemblyAI"
+description: "Build voice agents with Telnyx and AssemblyAI using Pipecat or LiveKit."
+hide-nav-links: true
+---
+
+Telnyx is a global connectivity platform that provides programmable voice, messaging, and wireless services. By combining Telnyx with AssemblyAI, you can build real-time voice agents with industry-leading speech recognition accuracy and advanced turn detection.
+
+This guide shows you how to integrate Telnyx with AssemblyAI using two popular voice agent orchestrators: Pipecat and LiveKit.
+
+## Pipecat Integration
+
+[Pipecat](https://github.com/pipecat-ai/pipecat) is an open-source framework for building voice and multimodal conversational AI agents. The following example demonstrates how to build a Telnyx voice agent with AssemblyAI's streaming speech-to-text.
+
+### Prerequisites
+
+Install the required dependencies:
+
+```bash
+pip install pipecat-ai python-dotenv loguru
+```
+
+Set up your environment variables:
+
+```bash
+TELNYX_API_KEY=your_telnyx_api_key
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key
+OPENAI_API_KEY=your_openai_api_key
+RIME_API_KEY=your_rime_api_key
+```
+
+### Basic Example
+
+Here's a complete example of a Telnyx voice agent using AssemblyAI for speech recognition:
+
+```python
+import os
+import asyncio
+import json
+
+from dotenv import load_dotenv
+from loguru import logger
+
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import EndFrame, TextFrame, UserStartedSpeakingFrame, UserStoppedSpeakingFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.aggregators.openai_llm_context import (
+    OpenAILLMContext,
+    OpenAILLMContextFrame,
+)
+from pipecat.serializers.telnyx import TelnyxFrameSerializer
+from pipecat.services.assemblyai.stt import AssemblyAISTTService
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.rime.tts import RimeTTSService
+from pipecat.transports.websocket.fastapi import (
+    FastAPIWebsocketTransport,
+    FastAPIWebsocketParams,
+)
+
+load_dotenv(override=True)
+
+
+async def run_bot(websocket):
+    """Run the voice agent bot with AssemblyAI STT, Rime TTS, and OpenAI LLM."""
+
+    logger.info("Bot starting, waiting for Telnyx stream info...")
+
+    # Read messages until we get the start event
+    stream_id = None
+    call_control_id = None
+    encoding = "PCMU"
+
+    while not (stream_id and call_control_id):
+        try:
+            msg_text = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            msg_data = json.loads(msg_text)
+            event = msg_data.get("event")
+
+            logger.info(f"Received event: {event}")
+
+            if event == "connected":
+                logger.info("WebSocket connected to Telnyx")
+                continue
+
+            elif event == "start":
+                stream_id = msg_data.get("stream_id")
+                start_info = msg_data.get("start", {})
+                call_control_id = start_info.get("call_control_id")
+                media_format = start_info.get("media_format", {})
+                encoding = media_format.get("encoding", "PCMU")
+
+                logger.info(f"Got stream info - stream_id: {stream_id}, call_control_id: {call_control_id}, encoding: {encoding}")
+                break
+
+            elif event == "media":
+                stream_id = msg_data.get("stream_id")
+                if stream_id:
+                    logger.warning("Got media before start event, using stream_id from media")
+                    logger.error("Missing call_control_id - cannot proceed")
+                    await websocket.close()
+                    return
+
+        except asyncio.TimeoutError:
+            logger.error("Timeout waiting for Telnyx start event")
+            await websocket.close()
+            return
+        except Exception as e:
+            logger.error(f"Error reading WebSocket message: {e}")
+            await websocket.close()
+            return
+
+    if not (stream_id and call_control_id):
+        logger.error("Failed to get required stream information")
+        await websocket.close()
+        return
+
+    logger.info(f"Initializing Pipecat with stream_id: {stream_id}")
+
+    # Create Telnyx serializer
+    serializer = TelnyxFrameSerializer(
+        stream_id=stream_id,
+        call_control_id=call_control_id,
+        api_key=os.getenv("TELNYX_API_KEY"),
+        outbound_encoding=encoding,
+        inbound_encoding=encoding,
+    )
+
+    logger.info("Creating transport...")
+
+    # Create transport
+    transport = FastAPIWebsocketTransport(
+        websocket=websocket,
+        params=FastAPIWebsocketParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            add_wav_header=False,
+            audio_in_passthrough=True,
+            vad_analyzer=SileroVADAnalyzer(),
+            serializer=serializer,
+        ),
+    )
+
+    logger.info("Creating AI services...")
+
+    # STT - AssemblyAI
+    stt = AssemblyAISTTService(
+        api_key=os.getenv("ASSEMBLYAI_API_KEY")
+    )
+
+    # LLM - OpenAI
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4o-mini"
+    )
+
+    # TTS - Rime (using mistv2 model with luna voice)
+    tts = RimeTTSService(
+        api_key=os.getenv("RIME_API_KEY"),
+        voice_id="luna",
+        model_id="mistv2",
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a friendly voice assistant. "
+                "Your responses will be read aloud, so keep them concise and conversational. "
+                "Avoid special characters or formatting. "
+                "Begin by saying: 'Hello! This is an automated call. How can I help you today?' "
+            ),
+        },
+    ]
+
+    # Create OpenAI LLM context
+    context = OpenAILLMContext(messages)
+    context_aggregator = llm.create_context_aggregator(context)
+
+    logger.info("Building pipeline...")
+
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            stt,
+            context_aggregator.user(),
+            llm,
+            tts,
+            transport.output(),
+            context_aggregator.assistant(),
+        ]
+    )
+
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(
+            allow_interruptions=True,
+            enable_metrics=True,
+            enable_usage_metrics=True,
+        ),
+    )
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(transport, client):
+        logger.info("📞 Call ended")
+        await task.queue_frame(EndFrame())
+
+    async def send_initial_greeting():
+        """Send greeting after pipeline is ready."""
+        await asyncio.sleep(1.5)  # Wait for pipeline to be fully ready
+        logger.info("🎤 Sending initial greeting...")
+        await task.queue_frames([
+            UserStartedSpeakingFrame(),
+            TextFrame("Hello"),  # Simple greeting to trigger response
+            UserStoppedSpeakingFrame()
+        ])
+
+    logger.info("🚀 Starting voice agent pipeline...")
+    runner = PipelineRunner()
+
+    try:
+        # Start the greeting task in the background
+        asyncio.create_task(send_initial_greeting())
+        await runner.run(task)
+        logger.info("✅ Pipeline completed")
+    except Exception as e:
+        logger.error(f"❌ Error running pipeline: {e}", exc_info=True)
+
+
+async def bot(websocket):
+    """Main bot entry point."""
+    try:
+        await run_bot(websocket)
+    except Exception as e:
+        logger.error(f"Fatal error in bot: {e}", exc_info=True)
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        try:
+            await websocket.close()
+        except:
+            pass
+```
+
+### Advanced Configuration
+
+For production use cases, you can customize AssemblyAI's turn detection and add keyterms for improved accuracy:
+
+```python
+from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAIConnectionParams
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+
+# Configure AssemblyAI with custom parameters
+stt_params = AssemblyAIConnectionParams(
+    encoding="pcm_s16le",  # Linear PCM encoding
+    sample_rate=8000,
+    end_of_turn_confidence_threshold=0.4,
+    min_end_of_turn_silence_when_confident=400,
+    max_turn_silence=1280,
+    keyterms_prompt=["NPI", "TIN", "CMS", "PTAN", "CPT", "CDT", "DOB", "SSN"]
+)
+
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    vad_force_turn_endpoint=False,
+    connection_params=stt_params,
+)
+
+# Add audio buffer to accumulate chunks for AssemblyAI
+# AssemblyAI requires >= 50ms chunks
+audio_buffer = AudioBufferProcessor(
+    sample_rate=8000,
+    num_channels=1,
+    buffer_size=1600,  # 100ms worth of 16-bit PCM audio
+)
+
+# Update pipeline to include audio buffer
+pipeline = Pipeline(
+    [
+        transport.input(),
+        audio_buffer,  # Buffer audio chunks
+        stt,
+        context_aggregator.user(),
+        llm,
+        tts,
+        transport.output(),
+        context_aggregator.assistant(),
+    ]
+)
+
+# Update task params for 8kHz sample rate
+task = PipelineTask(
+    pipeline,
+    params=PipelineParams(
+        allow_interruptions=True,
+        enable_metrics=True,
+        enable_usage_metrics=True,
+        audio_in_sample_rate=8000,
+        audio_out_sample_rate=8000,
+    ),
+)
+```
+
+### Key Configuration Notes
+
+When using AssemblyAI with Telnyx and Pipecat:
+
+1. **Audio Encoding**: Use `pcm_s16le` (16-bit linear PCM) for best compatibility with AssemblyAI. Telnyx typically sends audio in PCMU (μ-law) format, so the audio buffer processor helps convert and batch the audio appropriately.
+
+2. **Turn Detection**: AssemblyAI has built-in VAD and turn detection. You can either:
+   - Use AssemblyAI's turn detection by setting `vad_force_turn_endpoint=False`
+   - Use Silero VAD by including `vad_analyzer=SileroVADAnalyzer()` in the transport params
+
+3. **Audio Buffering**: AssemblyAI requires audio chunks of at least 50ms. Use `AudioBufferProcessor` to accumulate Telnyx's 20ms chunks into larger buffers.
+
+4. **Keyterms**: Add domain-specific terms to improve recognition accuracy for specialized vocabulary.
+
+## LiveKit Integration
+
+[LiveKit](https://livekit.io/) is a real-time communication platform for building video, voice, and data applications. You can integrate Telnyx with AssemblyAI using LiveKit Agents.
+
+### Prerequisites
+
+Install the required dependencies:
+
+```bash
+pip install livekit livekit-agents livekit-plugins-assemblyai
+```
+
+### Example Configuration
+
+Here's how to configure a LiveKit agent with AssemblyAI for Telnyx:
+
+```python
+import asyncio
+from livekit import agents
+from livekit.agents import JobContext, WorkerOptions, cli
+from livekit.plugins import assemblyai, openai, silero
+
+async def entrypoint(ctx: JobContext):
+    """Entry point for the LiveKit agent."""
+    
+    # Connect to the room
+    await ctx.connect()
+    
+    # Configure AssemblyAI STT with turn detection
+    stt = assemblyai.STT(
+        sample_rate=16000,
+        end_of_turn_confidence_threshold=0.4,
+        min_end_of_turn_silence_when_confident=400,
+        max_turn_silence=1280,
+    )
+    
+    # Configure OpenAI LLM
+    llm = openai.LLM(model="gpt-4o-mini")
+    
+    # Configure TTS
+    tts = openai.TTS(voice="alloy")
+    
+    # Create the voice assistant
+    assistant = agents.VoiceAssistant(
+        vad=silero.VAD.load(),
+        stt=stt,
+        llm=llm,
+        tts=tts,
+        chat_ctx=agents.ChatContext(
+            messages=[
+                agents.ChatMessage(
+                    role="system",
+                    content="You are a friendly voice assistant. Keep responses concise and conversational."
+                )
+            ]
+        ),
+    )
+    
+    # Start the assistant
+    assistant.start(ctx.room)
+    
+    # Wait for the first participant to join
+    await assistant.say("Hello! How can I help you today?", allow_interruptions=True)
+
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+### Turn Detection Modes
+
+LiveKit supports two turn detection modes with AssemblyAI:
+
+1. **STT-based turn detection** (recommended): Uses AssemblyAI's built-in turn detection
+   ```python
+   assistant = agents.VoiceAssistant(
+       vad=silero.VAD.load(),
+       stt=stt,
+       llm=llm,
+       tts=tts,
+       turn_detection=agents.TurnDetection.STT,  # Use AssemblyAI's turn detection
+   )
+   ```
+
+2. **VAD-based turn detection**: Uses Silero VAD for turn detection
+   ```python
+   assistant = agents.VoiceAssistant(
+       vad=silero.VAD.load(),
+       stt=stt,
+       llm=llm,
+       tts=tts,
+       turn_detection=agents.TurnDetection.VAD,  # Use Silero VAD
+   )
+   ```
+
+For more details on LiveKit integration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+
+## Resources
+
+- [Pipecat GitHub Repository](https://github.com/pipecat-ai/pipecat)
+- [Pipecat Telnyx Examples](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot)
+- [LiveKit Documentation](https://docs.livekit.io/)
+- [Telnyx LiveKit Integration Guide](https://developers.telnyx.com/docs/inference/livekit)
+- [AssemblyAI Streaming Documentation](/docs/speech-to-text/streaming)
+- [AssemblyAI Turn Detection Guide](/docs/speech-to-text/universal-streaming/turn-detection)
