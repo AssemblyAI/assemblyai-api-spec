@@ -319,6 +319,8 @@ When using AssemblyAI with Telnyx and Pipecat:
 
 [LiveKit](https://livekit.io/) is a real-time communication platform for building video, voice, and data applications. You can integrate Telnyx with AssemblyAI using LiveKit Agents.
 
+Telnyx handles the bridging between phone calls and LiveKit rooms. On the LiveKit side, you configure your agent to use AssemblyAI for speech recognition. For complete details on setting up the Telnyx-to-LiveKit bridge, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+
 ### Prerequisites
 
 Install the required dependencies:
@@ -335,7 +337,7 @@ Here's how to configure a LiveKit agent with AssemblyAI for Telnyx:
 import asyncio
 from livekit import agents
 from livekit.agents import JobContext, WorkerOptions, cli
-from livekit.plugins import assemblyai, openai, silero
+from livekit.plugins import assemblyai, openai
 
 async def entrypoint(ctx: JobContext):
     """Entry point for the LiveKit agent."""
@@ -343,13 +345,8 @@ async def entrypoint(ctx: JobContext):
     # Connect to the room
     await ctx.connect()
     
-    # Configure AssemblyAI STT with turn detection
-    stt = assemblyai.STT(
-        sample_rate=16000,
-        end_of_turn_confidence_threshold=0.4,
-        min_end_of_turn_silence_when_confident=400,
-        max_turn_silence=1280,
-    )
+    # Configure AssemblyAI STT
+    stt = assemblyai.STT(sample_rate=16000)
     
     # Configure OpenAI LLM
     llm = openai.LLM(model="gpt-4o-mini")
@@ -359,7 +356,6 @@ async def entrypoint(ctx: JobContext):
     
     # Create the voice assistant
     assistant = agents.VoiceAssistant(
-        vad=silero.VAD.load(),
         stt=stt,
         llm=llm,
         tts=tts,
@@ -384,33 +380,7 @@ if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
 
-### Turn Detection Modes
-
-LiveKit supports two turn detection modes with AssemblyAI:
-
-1. **STT-based turn detection** (recommended): Uses AssemblyAI's built-in turn detection
-   ```python
-   assistant = agents.VoiceAssistant(
-       vad=silero.VAD.load(),
-       stt=stt,
-       llm=llm,
-       tts=tts,
-       turn_detection=agents.TurnDetection.STT,  # Use AssemblyAI's turn detection
-   )
-   ```
-
-2. **VAD-based turn detection**: Uses Silero VAD for turn detection
-   ```python
-   assistant = agents.VoiceAssistant(
-       vad=silero.VAD.load(),
-       stt=stt,
-       llm=llm,
-       tts=tts,
-       turn_detection=agents.TurnDetection.VAD,  # Use Silero VAD
-   )
-   ```
-
-For more details on LiveKit integration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+For more details on LiveKit integration and Telnyx-specific configuration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
 
 ## Resources
 
