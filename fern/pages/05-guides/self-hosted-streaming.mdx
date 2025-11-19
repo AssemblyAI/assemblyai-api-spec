@@ -77,18 +77,16 @@ Follow the [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com
 docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 ```
 
-### 2. Obtain credentials
+### 2. AWS ECR authentication
 
 **AWS ECR Access**: We will manually provision AWS account credentials for your team to pull container images from our private Amazon ECR registry.
-
-### 3. AWS ECR authentication
 
 ```bash
 # Login to ECR to pull container images
 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 344839248844.dkr.ecr.us-west-2.amazonaws.com
 ```
 
-### 4. Configure container images
+### 3. Configure container images
 
 Use the reference `.env.example` file to create a `.env` file with container image references:
 
@@ -99,11 +97,22 @@ STREAMING_ASR_MULTILANG_IMAGE=<CUSTOM_IMAGE>
 LICENSE_AND_USAGE_PROXY_IMAGE=<CUSTOM_IMAGE>
 ```
 
-### 5. Have the license file ready
+For ease of reference in this doc, the current image references are below:
+
+```bash
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.2.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.2.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.2.0
+LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.2.0
+```
+
+### 4. Have the license file ready
+
+**License File Generation:** We will manually provision a .jwt license file for your team to authenticate the container.
 
 Ensure you have your AssemblyAI license file in the current working directory as `license.jwt`, or modify the `LICENSE_FILE_PATH` environment variable in the `docker-compose.yml` to point to your license file location.
 
-### 6. Start services
+### 5. Start services
 
 Start all services:
 
@@ -134,10 +143,12 @@ services:
       - "8080:8080"
     environment:
       - AAI_WSS_PORT=8080
+      - AAI_LOG_LEVEL=INFO
+      - AAI_USE_STRUCTURED_LOGGING=False
       - AAI_ASR_ENDPOINT=streaming-asr-lb:80
       - AAI_STREAMING_ASR_ENDPOINT=streaming-asr-lb:80
       - AAI_USE_SECURE_CHANNEL_TO_ASR_SERVICE=False
-      - AAI_LICENSE_AND_USAGE_PROXY_ENDPOINT=http://license-and-usage-proxy:8080
+      - AAI_LICENSE_AND_USAGE_PROXY_ENDPOINT=license-and-usage-proxy:8080
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v3/health"]
       interval: 10s
@@ -147,23 +158,6 @@ services:
     depends_on:
       - streaming-asr-lb
       - license-and-usage-proxy
-    networks:
-      - streaming-network
-
-  license-and-usage-proxy:
-    image: ${LICENSE_AND_USAGE_PROXY_IMAGE}
-    ports:
-      - "8082:8080"
-    environment:
-      - LICENSE_FILE_PATH=/app/license.jwt
-    volumes:
-      - ${LICENSE_FILE_PATH:-./license.jwt}:/app/license.jwt:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
-      interval: 10s
-      timeout: 2s
-      retries: 2
-      start_period: 5s
     networks:
       - streaming-network
 
@@ -192,6 +186,7 @@ services:
     environment:
       - SERVER_PORT=50051
       - LOGGING_LEVEL=INFO
+      - USE_STRUCTURED_LOGGING=False
     healthcheck:
       test: ["CMD", "grpc_health_probe", "-addr=:50051"]
       interval: 10s
@@ -215,6 +210,7 @@ services:
     environment:
       - SERVER_PORT=50051
       - LOGGING_LEVEL=INFO
+      - USE_STRUCTURED_LOGGING=False
     healthcheck:
       test: ["CMD", "grpc_health_probe", "-addr=:50051"]
       interval: 10s
@@ -231,6 +227,26 @@ services:
               count: 1
               capabilities: [ "gpu" ]
 
+  license-and-usage-proxy:
+    image: ${LICENSE_AND_USAGE_PROXY_IMAGE}
+    ports:
+      - "8082:8080"
+    environment:
+      - HTTP_PORT=8080
+      - LOGGING_LEVEL=INFO
+      - USE_STRUCTURED_LOGGING=False
+      - LICENSE_FILE_PATH=/var/aai_license.jwt
+    volumes:
+      - ./license.jwt:/var/aai_license.jwt:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-fsS", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 2s
+      retries: 2
+      start_period: 10s
+    networks:
+      - streaming-network
+
 networks:
   streaming-network:
     driver: bridge
@@ -241,9 +257,7 @@ networks:
 
 ### Nginx configuration
 
-The ASR load balancer uses header-based routing to direct requests to the appropriate model service based on the `X-Model-Version` header:
-
-**`nginx_streaming_asr.conf`**
+The ASR load balancer in `nginx_streaming_asr.conf` uses header-based routing to direct requests to the appropriate model service based on the `X-Model-Version` header:
 
 ```nginx
 events { worker_connections 1024; }
@@ -270,7 +284,7 @@ http {
     http2 on;
     client_max_body_size 0;
 
-    # Health endpoint (NGINX itself)
+    # ---- Health endpoint (NGINX itself) ----
     location = /nginx_health {
       access_log off;
       default_type text/plain;
