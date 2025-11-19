@@ -8,13 +8,118 @@ Telnyx is a global connectivity platform that provides programmable voice, messa
 
 This guide shows you how to integrate Telnyx with AssemblyAI using two popular voice agent orchestrators: LiveKit and Pipecat.
 
-## LiveKit Integration
+## LiveKit Telephony Integration
 
-[LiveKit](https://livekit.io/) is a real-time communication platform for building video, voice, and data applications. You can integrate Telnyx with AssemblyAI using LiveKit Agents.
+[LiveKit](https://livekit.io/) is a real-time communication platform for building voice, video, and data applications. You can integrate Telnyx SIP trunking with LiveKit to enable phone calls to your voice agents that use AssemblyAI for speech recognition.
 
-Telnyx handles the bridging between phone calls and LiveKit rooms. On the LiveKit side, you configure your agent to use AssemblyAI for speech recognition. For complete details on setting up the Telnyx-to-LiveKit bridge, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+### How it works
 
-### Prerequisites
+Telnyx SIP trunks bridge phone calls into LiveKit rooms as special SIP participants. Your LiveKit agent (configured with AssemblyAI STT) connects to the room and interacts with the caller. The flow is:
+
+1. **Phone call** → Telnyx SIP trunk
+2. **Telnyx** → LiveKit room (creates SIP participant)
+3. **LiveKit agent** (with AssemblyAI STT) → joins room and handles conversation
+
+### Before you begin
+
+- **Telnyx account**: Create an account and purchase a phone number at [telnyx.com](https://telnyx.com)
+- **LiveKit project**: Get your SIP URI from your [LiveKit project settings](https://cloud.livekit.io)
+- **LiveKit CLI**: Install the [LiveKit CLI](https://docs.livekit.io/home/cli/cli-setup/) on your computer
+- **Environment variables**: Configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `ASSEMBLYAI_API_KEY`
+
+### Step 1: Configure Telnyx SIP connection
+
+Configure your Telnyx SIP connection to route calls to LiveKit. Follow the detailed setup guide:
+
+[Telnyx LiveKit SIP Configuration Guide](https://developers.telnyx.com/docs/voice/sip-trunking/livekit-configuration-guide)
+
+Key steps:
+1. Create a SIP connection in Telnyx Mission Control Portal
+2. Set connection type to FQDN and provide your LiveKit SIP URI
+3. Configure outbound call authentication (username/password)
+4. Assign your phone number(s) to the SIP connection
+
+### Step 2: Configure LiveKit SIP trunks
+
+Create inbound and outbound SIP trunks in LiveKit using the LiveKit CLI.
+
+#### Inbound trunk
+
+Create `inboundTrunk.json`:
+
+```json
+{
+  "trunk": {
+    "name": "Telnyx Inbound Trunk",
+    "numbers": ["YOUR_TELNYX_NUMBER"]
+  }
+}
+```
+
+Create the trunk:
+
+```bash
+lk sip inbound create inboundTrunk.json
+```
+
+Save the returned `SIPTrunkID` for the next step.
+
+#### Dispatch rule
+
+Create `dispatchRule.json` to route incoming calls to your agent:
+
+```json
+{
+  "name": "Agent Dispatch Rule",
+  "trunk_ids": ["YOUR_TRUNK_ID"],
+  "rule": {
+    "dispatchRuleIndividual": {
+      "roomPrefix": "call-"
+    }
+  },
+  "roomConfig": {
+    "agents": [{
+      "agentName": "my-telephony-agent"
+    }]
+  }
+}
+```
+
+Create the dispatch rule:
+
+```bash
+lk sip dispatch create dispatchRule.json
+```
+
+This automatically dispatches your agent to each incoming call in a new room.
+
+#### Outbound trunk (optional)
+
+For outbound calling, create `outboundTrunk.json`:
+
+```json
+{
+  "trunk": {
+    "name": "Telnyx Outbound Trunk",
+    "address": "sip.telnyx.com",
+    "numbers": ["YOUR_TELNYX_NUMBER"],
+    "auth_username": "YOUR_OUTBOUND_USER",
+    "auth_password": "YOUR_OUTBOUND_PASS"
+  }
+}
+```
+
+Create the trunk:
+
+```bash
+lk sip outbound create outboundTrunk.json
+```
+
+### Step 3: Build your agent with AssemblyAI
+
+Create a LiveKit agent that uses AssemblyAI for speech recognition. Once your SIP trunks and dispatch rules are configured, no special telephony code is required—the agent simply joins the room when a call comes in.
+
+#### Prerequisites
 
 Setup and activate a virtual environment:
 
@@ -29,15 +134,15 @@ Install the required dependencies:
 pip install livekit-agents livekit-plugins-assemblyai livekit-plugins-openai livekit-plugins-silero livekit-plugins-rime
 ```
 
-Download model files (downloads the model weights for Voice-activity-detection):
+Download model files:
 
 ```bash
-python minimal_assistant.py download-files
+python agent.py download-files
 ```
 
-### Example Configuration
+#### Agent code
 
-Here's a LiveKit agent configured to use AssemblyAI for speech recognition, OpenAI LLM via Telnyx's inference API, and Rime for text-to-speech:
+Here's a minimal agent using AssemblyAI STT:
 
 ```python
 import asyncio
@@ -53,52 +158,32 @@ async def entrypoint(ctx: JobContext):
     initial_ctx = llm.ChatContext().append(
         role="system",
         text=(
-            "You are a voice assistant created by LiveKit. Your interface with users will be voice. "
-            "You should use short and concise responses, and avoiding usage of unpronouncable punctuation."
+            "You are a helpful voice assistant. Your interface with users will be voice. "
+            "Use short and concise responses, avoiding unpronounceable punctuation."
         ),
     )
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
-    # Configure OpenAI LLM to use Telnyx's inference API
-    llm_plugin = openai.LLM(
-        base_url="https://api.telnyx.com/v2/ai",
-        model="meta-llama/Meta-Llama-3.1-8B-Instruct"
-    )
-
     assistant = VoiceAssistant(
         vad=silero.VAD.load(),
         stt=assemblyai.STT(),
-        llm=llm_plugin,
+        llm=openai.LLM(),
         tts=rime.TTS(),
         chat_ctx=initial_ctx,
     )
 
     assistant.start(ctx.room)
 
-    # Listen to incoming chat messages
-    chat = rtc.ChatManager(ctx.room)
-
-    async def answer_from_text(txt: str):
-        chat_ctx = assistant.chat_ctx.copy()
-        chat_ctx.append(role="user", text=txt)
-        stream = llm_plugin.chat(chat_ctx=chat_ctx)
-        await assistant.say(stream)
-
-    @chat.on("message_received")
-    def on_chat_received(msg: rtc.ChatMessage):
-        if msg.message:
-            asyncio.create_task(answer_from_text(msg.message))
-
     await asyncio.sleep(1)
-    await assistant.say("Hey, how can I help you today?", allow_interruptions=True)
+    await assistant.say("Hello! How can I help you today?", allow_interruptions=True)
 
 
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
 
-### Environment Variables
+#### Environment variables
 
 Set the following environment variables:
 
@@ -107,23 +192,51 @@ export LIVEKIT_URL=<your LiveKit server URL>
 export LIVEKIT_API_KEY=<your API Key>
 export LIVEKIT_API_SECRET=<your API Secret>
 export ASSEMBLYAI_API_KEY=<your AssemblyAI API key>
+export OPENAI_API_KEY=<your OpenAI API key>
 export RIME_API_KEY=<your Rime API key>
-export OPENAI_API_KEY=<your TELNYX API key>
 ```
 
-Note: The `OPENAI_API_KEY` should be set to your Telnyx API key since we're using Telnyx's inference API via the OpenAI plugin.
+#### Run the agent
 
-### Running the Agent
-
-Run the agent worker:
+Start your agent:
 
 ```bash
-python minimal_assistant.py dev
+python agent.py dev
 ```
 
-Test with LiveKit's Agents Playground at [https://agents-playground.livekit.io/](https://agents-playground.livekit.io/) so you don't have to build your own frontend while you iterate on your agent.
+Now dial your Telnyx phone number to test the integration. The call will be routed through Telnyx → LiveKit → your agent with AssemblyAI speech recognition.
 
-For more details on LiveKit integration and Telnyx-specific configuration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+### Testing outbound calls
+
+To test an outbound call, create `sipParticipant.json`:
+
+```json
+{
+  "sip_trunk_id": "YOUR_OUTBOUND_TRUNK_ID",
+  "sip_call_to": "+15105551234",
+  "room_name": "test-outbound-call",
+  "participant_identity": "outbound-test",
+  "participant_name": "Test Call"
+}
+```
+
+Place the call:
+
+```bash
+lk sip participant create sipParticipant.json
+```
+
+### Troubleshooting
+
+**Call connects but agent never speaks**: Verify your dispatch rule includes `roomConfig.agents` with the correct `agentName`. Without this, the agent won't be automatically dispatched to the room.
+
+**Audio quality issues**: Check your Telnyx SIP connection settings and ensure proper codec configuration. See the [Telnyx troubleshooting guide](https://developers.telnyx.com/docs/voice/sip-trunking/livekit-configuration-guide#troubleshooting).
+
+### Additional resources
+
+- [LiveKit Telephony Quickstart](https://docs.livekit.io/agents/start/telephony/) - Complete guide to LiveKit telephony integration
+- [LiveKit Agent Dispatch](https://docs.livekit.io/agents/server/agent-dispatch/) - Detailed documentation on agent dispatch rules
+- [Telnyx SIP Trunk Setup](https://developers.telnyx.com/docs/voice/sip-trunking/get-started) - Full Telnyx SIP trunk documentation
 
 ## Pipecat Integration
 
