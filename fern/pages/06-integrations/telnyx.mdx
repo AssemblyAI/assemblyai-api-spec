@@ -6,7 +6,124 @@ hide-nav-links: true
 
 Telnyx is a global connectivity platform that provides programmable voice, messaging, and wireless services. By combining Telnyx with AssemblyAI, you can build real-time voice agents with industry-leading speech recognition accuracy and advanced turn detection.
 
-This guide shows you how to integrate Telnyx with AssemblyAI using two popular voice agent orchestrators: Pipecat and LiveKit.
+This guide shows you how to integrate Telnyx with AssemblyAI using two popular voice agent orchestrators: LiveKit and Pipecat.
+
+## LiveKit Integration
+
+[LiveKit](https://livekit.io/) is a real-time communication platform for building video, voice, and data applications. You can integrate Telnyx with AssemblyAI using LiveKit Agents.
+
+Telnyx handles the bridging between phone calls and LiveKit rooms. On the LiveKit side, you configure your agent to use AssemblyAI for speech recognition. For complete details on setting up the Telnyx-to-LiveKit bridge, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
+
+### Prerequisites
+
+Setup and activate a virtual environment:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+Install the required dependencies:
+
+```bash
+pip install livekit-agents livekit-plugins-assemblyai livekit-plugins-openai livekit-plugins-silero livekit-plugins-rime
+```
+
+Download model files (downloads the model weights for Voice-activity-detection):
+
+```bash
+python minimal_assistant.py download-files
+```
+
+### Example Configuration
+
+Here's a LiveKit agent configured to use AssemblyAI for speech recognition, OpenAI LLM via Telnyx's inference API, and Rime for text-to-speech:
+
+```python
+import asyncio
+from dotenv import load_dotenv
+from livekit import rtc
+from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, llm
+from livekit.agents.voice_assistant import VoiceAssistant
+from livekit.plugins import assemblyai, openai, silero, rime
+
+load_dotenv()
+
+async def entrypoint(ctx: JobContext):
+    initial_ctx = llm.ChatContext().append(
+        role="system",
+        text=(
+            "You are a voice assistant created by LiveKit. Your interface with users will be voice. "
+            "You should use short and concise responses, and avoiding usage of unpronouncable punctuation."
+        ),
+    )
+
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+    # Configure OpenAI LLM to use Telnyx's inference API
+    llm_plugin = openai.LLM(
+        base_url="https://api.telnyx.com/v2/ai",
+        model="meta-llama/Meta-Llama-3.1-8B-Instruct"
+    )
+
+    assistant = VoiceAssistant(
+        vad=silero.VAD.load(),
+        stt=assemblyai.STT(),
+        llm=llm_plugin,
+        tts=rime.TTS(),
+        chat_ctx=initial_ctx,
+    )
+
+    assistant.start(ctx.room)
+
+    # Listen to incoming chat messages
+    chat = rtc.ChatManager(ctx.room)
+
+    async def answer_from_text(txt: str):
+        chat_ctx = assistant.chat_ctx.copy()
+        chat_ctx.append(role="user", text=txt)
+        stream = llm_plugin.chat(chat_ctx=chat_ctx)
+        await assistant.say(stream)
+
+    @chat.on("message_received")
+    def on_chat_received(msg: rtc.ChatMessage):
+        if msg.message:
+            asyncio.create_task(answer_from_text(msg.message))
+
+    await asyncio.sleep(1)
+    await assistant.say("Hey, how can I help you today?", allow_interruptions=True)
+
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+### Environment Variables
+
+Set the following environment variables:
+
+```bash
+export LIVEKIT_URL=<your LiveKit server URL>
+export LIVEKIT_API_KEY=<your API Key>
+export LIVEKIT_API_SECRET=<your API Secret>
+export ASSEMBLYAI_API_KEY=<your AssemblyAI API key>
+export RIME_API_KEY=<your Rime API key>
+export OPENAI_API_KEY=<your TELNYX API key>
+```
+
+Note: The `OPENAI_API_KEY` should be set to your Telnyx API key since we're using Telnyx's inference API via the OpenAI plugin.
+
+### Running the Agent
+
+Run the agent worker:
+
+```bash
+python minimal_assistant.py dev
+```
+
+Test with LiveKit's Agents Playground at [https://agents-playground.livekit.io/](https://agents-playground.livekit.io/) so you don't have to build your own frontend while you iterate on your agent.
+
+For more details on LiveKit integration and Telnyx-specific configuration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
 
 ## Pipecat Integration
 
@@ -315,78 +432,11 @@ When using AssemblyAI with Telnyx and Pipecat:
 
 4. **Keyterms**: Add domain-specific terms to improve recognition accuracy for specialized vocabulary.
 
-## LiveKit Integration
-
-[LiveKit](https://livekit.io/) is a real-time communication platform for building video, voice, and data applications. You can integrate Telnyx with AssemblyAI using LiveKit Agents.
-
-Telnyx handles the bridging between phone calls and LiveKit rooms. On the LiveKit side, you configure your agent to use AssemblyAI for speech recognition. For complete details on setting up the Telnyx-to-LiveKit bridge, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
-
-### Prerequisites
-
-Install the required dependencies:
-
-```bash
-pip install livekit livekit-agents livekit-plugins-assemblyai
-```
-
-### Example Configuration
-
-Here's how to configure a LiveKit agent with AssemblyAI for Telnyx:
-
-```python
-import asyncio
-from livekit import agents
-from livekit.agents import JobContext, WorkerOptions, cli
-from livekit.plugins import assemblyai, openai
-
-async def entrypoint(ctx: JobContext):
-    """Entry point for the LiveKit agent."""
-    
-    # Connect to the room
-    await ctx.connect()
-    
-    # Configure AssemblyAI STT
-    stt = assemblyai.STT(sample_rate=16000)
-    
-    # Configure OpenAI LLM
-    llm = openai.LLM(model="gpt-4o-mini")
-    
-    # Configure TTS
-    tts = openai.TTS(voice="alloy")
-    
-    # Create the voice assistant
-    assistant = agents.VoiceAssistant(
-        stt=stt,
-        llm=llm,
-        tts=tts,
-        chat_ctx=agents.ChatContext(
-            messages=[
-                agents.ChatMessage(
-                    role="system",
-                    content="You are a friendly voice assistant. Keep responses concise and conversational."
-                )
-            ]
-        ),
-    )
-    
-    # Start the assistant
-    assistant.start(ctx.room)
-    
-    # Wait for the first participant to join
-    await assistant.say("Hello! How can I help you today?", allow_interruptions=True)
-
-
-if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
-```
-
-For more details on LiveKit integration and Telnyx-specific configuration, see the [Telnyx LiveKit documentation](https://developers.telnyx.com/docs/inference/livekit).
-
 ## Resources
 
-- [Pipecat GitHub Repository](https://github.com/pipecat-ai/pipecat)
-- [Pipecat Telnyx Examples](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot)
 - [LiveKit Documentation](https://docs.livekit.io/)
 - [Telnyx LiveKit Integration Guide](https://developers.telnyx.com/docs/inference/livekit)
+- [Pipecat GitHub Repository](https://github.com/pipecat-ai/pipecat)
+- [Pipecat Telnyx Examples](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot)
 - [AssemblyAI Streaming Documentation](/docs/speech-to-text/streaming)
 - [AssemblyAI Turn Detection Guide](/docs/speech-to-text/universal-streaming/turn-detection)
