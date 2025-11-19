@@ -1,0 +1,258 @@
+---
+title: "n8n Integration with AssemblyAI"
+description: "Use AssemblyAI with n8n to transcribe and analyze audio in your automation workflows."
+hide-nav-links: true
+---
+
+[n8n](https://n8n.io/) is a powerful workflow automation tool that allows you to connect various services and build complex automations without extensive coding. With n8n's HTTP Request node, you can integrate AssemblyAI's speech-to-text and audio intelligence capabilities into your workflows to transcribe audio files, analyze conversations, and extract insights.
+
+n8n offers both a cloud-hosted version and a self-hosted option, giving you flexibility in how you deploy your automations.
+
+## Prerequisites
+
+Before you begin, you'll need:
+
+- An [AssemblyAI API key](https://www.assemblyai.com/app/api-keys)
+- An n8n account (either [n8n Cloud](https://app.n8n.cloud/register) or a self-hosted instance)
+
+## Quickstart
+
+This guide shows you how to transcribe an audio file using AssemblyAI in an n8n workflow.
+
+<Steps>
+<Step>
+
+Create a new workflow in n8n or open an existing one. Add an HTTP Request node to your workflow canvas.
+
+</Step>
+
+<Step>
+
+Configure the HTTP Request node to submit a transcription request to AssemblyAI:
+
+1. Set **Method** to `POST`
+2. Set **URL** to `https://api.assemblyai.com/v2/transcript`
+3. Under **Authentication**, select **Generic Credential Type** and choose **Header Auth**
+4. Create a new credential:
+   - Set **Name** to `authorization`
+   - Set **Value** to your AssemblyAI API key
+5. Under **Body**, select **JSON** and add your transcription parameters:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3"
+}
+```
+
+</Step>
+
+<Step>
+
+Add a second HTTP Request node to poll for the transcript result:
+
+1. Set **Method** to `GET`
+2. Set **URL** to `https://api.assemblyai.com/v2/transcript/{{$json["id"]}}`
+   - This uses the transcript ID from the previous step
+3. Use the same **Header Auth** credential you created earlier
+
+</Step>
+
+<Step>
+
+Add a **Wait** node between the two HTTP Request nodes to give AssemblyAI time to process the audio. Configure it to wait for a reasonable amount of time based on your audio length (e.g., 30 seconds for short files).
+
+Alternatively, you can use a **Loop** node with a condition to poll the transcript status until it's `completed` or `error`.
+
+</Step>
+
+<Step>
+
+Test your workflow. The final HTTP Request node will return the completed transcript with the transcribed text and any additional features you enabled.
+
+</Step>
+</Steps>
+
+## Using AssemblyAI Features
+
+You can enable various AssemblyAI features by adding parameters to the JSON body in your initial transcription request:
+
+### Speaker Diarization
+
+Identify different speakers in your audio:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "speaker_labels": true
+}
+```
+
+### Sentiment Analysis
+
+Analyze the sentiment of the transcribed text:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "sentiment_analysis": true
+}
+```
+
+### Auto Chapters
+
+Automatically segment your audio into chapters:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "auto_chapters": true
+}
+```
+
+### PII Redaction
+
+Redact personally identifiable information:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "redact_pii": true,
+  "redact_pii_policies": ["medical_condition", "credit_card_number", "ssn"]
+}
+```
+
+### Entity Detection
+
+Extract entities like names, organizations, and locations:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "entity_detection": true
+}
+```
+
+## Common Workflow Patterns
+
+### Transcribe and Store in Google Sheets
+
+1. Use the HTTP Request nodes to transcribe audio with AssemblyAI
+2. Add a Google Sheets node to append the transcript to a spreadsheet
+3. Map the transcript text and metadata to your sheet columns
+
+### Transcribe and Send via Email
+
+1. Transcribe audio using AssemblyAI
+2. Add a Gmail or Send Email node
+3. Include the transcript text in the email body
+
+### Transcribe and Analyze with AI
+
+1. Transcribe audio with AssemblyAI
+2. Add an OpenAI or other LLM node
+3. Use the transcript as input for further analysis, summarization, or question answering
+
+### Process Audio from Cloud Storage
+
+1. Add a trigger node for Google Drive, Dropbox, or S3
+2. When a new audio file is uploaded, get its public URL
+3. Submit the URL to AssemblyAI for transcription
+4. Store or process the results as needed
+
+## Polling for Transcript Completion
+
+Since transcription is asynchronous, you need to poll for the result. Here's a recommended approach:
+
+1. Submit the transcription request and capture the transcript ID
+2. Use a **Loop** node with the following configuration:
+   - Add an HTTP Request node inside the loop to check the transcript status
+   - Add an **IF** node to check if `status` equals `completed` or `error`
+   - If not complete, add a **Wait** node (e.g., 5 seconds) before the next iteration
+   - Exit the loop when the status is `completed` or `error`
+
+## Using Webhooks for Completion Notifications
+
+For a more efficient approach, you can use webhooks instead of polling:
+
+<Steps>
+<Step>
+
+Add a **Webhook** node to your workflow and copy the webhook URL.
+
+</Step>
+
+<Step>
+
+In your initial transcription request, add the webhook URL:
+
+```json
+{
+  "audio_url": "https://example.com/your-audio-file.mp3",
+  "webhook_url": "https://your-n8n-instance.com/webhook/your-webhook-id"
+}
+```
+
+</Step>
+
+<Step>
+
+When the transcription is complete, AssemblyAI will send a POST request to your webhook with the transcript ID. You can then retrieve the full transcript using another HTTP Request node.
+
+</Step>
+</Steps>
+
+## Uploading Local Files
+
+If your audio file is not publicly accessible, you can upload it to AssemblyAI first:
+
+<Steps>
+<Step>
+
+Add an HTTP Request node to upload the file:
+
+1. Set **Method** to `POST`
+2. Set **URL** to `https://api.assemblyai.com/v2/upload`
+3. Use **Header Auth** with your API key
+4. Under **Body**, select **Binary File** and select your audio file
+
+</Step>
+
+<Step>
+
+The upload will return an `upload_url`. Use this URL as the `audio_url` in your transcription request.
+
+</Step>
+</Steps>
+
+## Error Handling
+
+Add error handling to your workflow to manage failed transcriptions:
+
+1. Use the **IF** node to check if the transcript status is `error`
+2. Add nodes to handle the error case (e.g., send a notification, log the error)
+3. Access the error message in `$json["error"]`
+
+## Additional Resources
+
+- [n8n AssemblyAI Integration Page](https://n8n.io/integrations/assemblyai/)
+- [n8n HTTP Request Node Documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/)
+- [AssemblyAI API Reference](/api-reference)
+- [n8n Workflow Templates](https://n8n.io/workflows/)
+
+## Example Use Cases
+
+### Meeting Transcription Pipeline
+
+Automatically transcribe meeting recordings uploaded to cloud storage, extract action items using sentiment analysis and entity detection, and send summaries to team members.
+
+### Podcast Processing
+
+Transcribe podcast episodes, generate chapters automatically, create searchable transcripts, and publish them to your CMS.
+
+### Customer Support Analysis
+
+Transcribe support calls, analyze sentiment, detect PII for compliance, and store insights in your CRM or database.
+
+### Content Moderation
+
+Transcribe user-generated audio content, use content moderation to flag inappropriate content, and automatically filter or review flagged items.
