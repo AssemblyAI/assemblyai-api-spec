@@ -1,0 +1,414 @@
+---
+title: "Streaming Audio"
+description: "Transcribe live audio with Streaming Speech-to-Text"
+---
+
+<Note>
+  By default, Universal-Streaming is set to transcribe English audio.
+  If you'd like to enable multilingual streaming (support for English, Spanish, French, German, Italian, and Portuguese), enable [multilingual transcription](/docs/speech-to-text/universal-streaming/multilingual-transcription) instead.
+</Note>
+
+<Note>
+  Streaming is now available in EU-West via `streaming.eu.assemblyai.com`. To use the EU streaming endpoint, replace `streaming.assemblyai.com` with `streaming.eu.assemblyai.com` in your connection configuration.
+</Note>
+
+## Quickstart
+
+In this quick guide you will learn how to use AssemblyAI's Streaming Speech-to-Text feature to transcribe audio from your microphone.
+
+To run this quickstart you will need:
+
+- Python or JavaScript installed
+- A valid AssemblyAI API key
+
+To run the quickstart:
+
+<Tabs>
+
+<Tab title="Python SDK" language="python-sdk">
+<Steps>
+    <Step>
+    Create a new Python file (for example, `main.py`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 17.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    pip install assemblyai pyaudio
+    ```
+
+    </Step>
+    <Step>
+    Run with `python main.py`
+    </Step>
+
+</Steps>
+</Tab>
+
+<Tab title="Python" language="python" default>
+
+<Steps>
+    <Step>
+    Create a new Python file (for example, `main.py`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 11.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    pip install websocket-client pyaudio
+    ```
+
+    </Step>
+    <Step>
+    Run with `python main.py`
+    </Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="JavaScript SDK" language="javascript-sdk">
+<Steps>
+    <Step>
+    Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 7.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    npm install assemblyai node-record-lpcm16
+    ```
+
+    </Step>
+    <Step>
+    Run with `node main.js`
+    </Step>
+
+</Steps>
+</Tab>
+
+<Tab title="JavaScript" language="javascript">
+<Steps>
+    <Step>
+    Create a new JavaScript file (for example, `main.js`) and paste the code provided below inside.
+    </Step>
+    <Step>
+    Insert your API key to line 7.
+    </Step>
+    <Step>
+    Install the necessary libraries
+
+    ```bash
+    npm install ws mic
+    ```
+
+    </Step>
+    <Step>
+    Run with `node main.js`
+    </Step>
+
+</Steps>
+</Tab>
+
+</Tabs>
+
+<CodeBlocks>
+
+<Code src="./code/quickstart-python-sdk.py" title="Python SDK"/>
+<Code src="./code/quickstart-python.py" title="Python"/>
+<Code src="./code/quickstart-javascript-sdk.js" title="JavaScript SDK"/>
+<Code src="./code/quickstart-javascript.js" title="JavaScript"/>
+
+</CodeBlocks>
+
+## Core concepts
+
+<Note>
+  For a message-by-message breakdown of a turn, see our [Streaming API: Message
+  Sequence Breakdown](/docs/speech-to-text/universal-streaming/message-sequence)
+  guide.
+</Note>
+
+Universal-Streaming is built based upon two core concepts: Turn objects and immutable transcriptions.
+
+### Turn object
+
+A Turn object is intended to correspond to a speaking turn in the context of voice agent applications, and therefore it roughly corresponds to an utterance in a broader context. We assign a unique ID to each Turn object, which is included in our response. Specifically, the Universal-Streaming response is formatted as follows:
+
+```json
+{
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": false,
+  "transcript": "modern medicine is",
+  "end_of_turn_confidence": 0.7,
+  "words": [
+    { "text": "modern", "word_is_final": true, ... },
+    { "text": "medicine", "word_is_final": true, ... },
+    { "text": "is", "word_is_final": true, ... },
+    { "text": "amazing", "word_is_final": false, ... }
+  ]
+}
+```
+
+- `turn_order`: Integer that increments with each new turn
+- `turn_is_formatted`: Boolean indicating if the text in the transcript field is formatted. Text formatting is enabled when `format_turns` is set to `true`. It adds punctuation as well as performs casing and inverse text normalization to display various entities, such as dates, times, and phone numbers, in a human-friendly format
+- `end_of_turn`: Boolean indicating if this is the end of the current turn
+- `transcript`: String containing only finalized words
+- `end_of_turn_confidence`: Floating number (0-1) representing the confidence that the current turn has finished, i.e., the current speaker has completed their turn
+- `words`: List of Word objects with individual metadata
+
+Each Word object in the `words` array includes:
+
+- `text`: The string representation of the word
+- `word_is_final`: Boolean indicating if the word is finalized, where a finalized word means the word won't be altered in future transcription responses
+- `start`: Timestamp for word start
+- `end`: Timestamp for word end
+- `confidence`: Confidence score for the word
+
+### Immutable transcription
+
+AssemblyAI's streaming system receives audio in a streaming fashion, it returns transcription responses in real-time using the format specified above. Unlike many other streaming speech-to-text models that implement the concept of partial/variable transcriptions to show transcripts in an ongoing manner, Universal-Streaming transcriptions are immutable. In other words, the text that has already been produced will not be overwritten in future transcription responses. Therefore, with Universal-Streaming, the transcriptions will be delivered in the following way:
+
+```json
+→ hello my na
+→ hello my name
+→ hello my name
+→ hello my name is
+→ hello my name is zac
+→ hello my name is zack
+```
+
+When an end of the current turn is detected, you then receive a message with `end_of_turn` being `true`. Additionally, if you enable text formatting, you will also receive a transcription response with `turn_is_formatted` being `true`.
+
+```json
+→ hello my name is zack (unformatted)
+→ Hello my name is Zack. (formatted)
+```
+
+In this example, you may have noticed that the last word of each transcript may occasionally be a subword ("zac" in the example shown above). Each Word object has the `word_is_final` field to indicate whether the model is confident that the last word is a completed word. Note that, except for the last word, `word_is_final` is always true.
+
+## Use-case specific recommendations
+
+### Live captioning
+
+The default setting for Streaming Speech-to-Text is optimized for the Voice Agent use case, where you expect one person speaking with long silences happening during the agent's speaking turn.
+For applications such as live captioning, where the input audio stream typically contains multiple people speaking, it is usually beneficial to wait longer before detecting turns, which trigger text formatting.
+
+When captioning conversations with multiple speakers, we recommend setting `min_end_of_turn_silence_when_confident` to 560 ms. By default, this is set to 400 ms.
+
+### Voice agents
+
+To optimize for latency when building a voice agent, we recommend using the unformatted transcript as it’s received more quickly than the formatted version. In typical voice agent applications involving large language models (LLMs), the lack of formatting makes little impact on the subsequent LLM processing. For more information, see [Voice agents](/docs/speech-to-text/universal-streaming/voice-agents).
+
+## API Reference
+
+### Connection parameters
+
+<ParamField path="token" type="string">
+  Authenticate the session using a generated temporary token.
+</ParamField>
+
+<ParamField path="sample_rate" type="int" required={true}>
+  The sample rate of the audio stream.
+</ParamField>
+
+<ParamField path="encoding" type="string" required={true}>
+  The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`
+</ParamField>
+
+<ParamField path="format_turns" type="boolean" default={"False"}>
+  Whether to return formatted final transcripts.
+  <Note>
+    If enabled, formatted final transcripts will be emitted shortly following an
+    end-of-turn detection.
+  </Note>
+</ParamField>
+
+<ParamField path="keyterms_prompt" type="list of strings" required={false}>
+
+  A list of words and phrases to improve recognition accuracy for.
+
+  <Note>
+    [Keyterms prompts](/docs/speech-to-text/universal-streaming/keyterms-prompting) longer than 50 characters are ignored. Requests containing more than 100 keyterms will result in an error.
+  </Note>
+
+</ParamField>
+
+<ParamField path="speech_model" type="string" required={false} default={"universal-streaming-english"}>
+
+  The speech model for the Streaming session. If not specified, defaults to `universal-streaming-english`.
+  Allowed values: `universal-streaming-english`, `universal-streaming-multi`.
+
+  <Note>
+    [Multilingual transcription](/docs/speech-to-text/universal-streaming/multilingual-transcription) is currently in beta and supports English, Spanish, French, German, Italian, and Portuguese.
+  </Note>
+
+</ParamField>
+
+<ParamField path="end_of_turn_confidence_threshold" type="float" default={0.4}>
+  The confidence threshold `(0.0 to 1.0)` to use when determining if the end of a turn has been
+  reached.
+
+  <Note> Raise or lower the threshold based on how confident you’d like us to be before triggering end of turn based on confidence score </Note>
+</ParamField>
+
+<ParamField
+  path="min_end_of_turn_silence_when_confident"
+  type="int"
+  default={`400 ms`}
+>
+  The minimum amount of silence in `milliseconds` required to detect end of turn
+  when confident.
+
+  <Note> Increase or decrease the amount of time we wait to trigger end of turn when confident </Note>
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default={`1280 ms`}>
+  The maximum amount of silence in `milliseconds` allowed in a turn before end of
+  turn is triggered.
+
+  <Note> Lower or raise the amount of time needed to trigger end of turn when end of turn isn't triggered by a high confidence score </Note>
+</ParamField>
+
+### Audio requirements
+
+The audio format must conform to the following requirements:
+
+- PCM16 or Mu-law encoding (See Specify the encoding)
+- A sample rate that matches the value of the `sample_rate` parameter
+- Single-channel
+- 50 milliseconds of audio per message (recommended)
+
+### Message types
+
+You send:
+
+<AccordionGroup>
+<Accordion title="Audio data">
+
+```
+"\x52\x49\x46\x46\xd8\xc8\x00\x00\x57\x41\x56\x45\x46"
+```
+
+</Accordion>
+
+<Accordion title="Endpointing config">
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "end_of_turn_confidence_threshold": 0.5
+}
+```
+
+</Accordion>
+
+<Accordion title="Session termination">
+
+```json
+{ "type": "Terminate" }
+```
+
+</Accordion>
+
+<Accordion title="Force endpoint">
+
+```json
+{ "type": "ForceEndpoint" }
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+You receive:
+
+<AccordionGroup>
+  <Accordion title="Session Begin">
+
+    ```json
+    {
+        "type": "Begin",
+        "id": "cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f",
+        "expires_at": 1745483367
+    }
+    ```
+
+  </Accordion>
+  <Accordion title="Turn">
+
+    ```json
+    {
+      "turn_order": 0,
+      "turn_is_formatted": true,
+      "end_of_turn": true,
+      "transcript": "Hi, my name is Sonny.",
+      "end_of_turn_confidence": 0.8095446228981018,
+      "words":
+      [
+          {
+              "start": 1440,
+              "end": 1520,
+              "text": "Hi,",
+              "confidence": 0.9967870712280273,
+              "word_is_final": true
+          },
+          {
+              "start": 1600,
+              "end": 1680,
+              "text": "my",
+              "confidence": 0.999546468257904,
+              "word_is_final": true
+          },
+          {
+              "start": 1600,
+              "end": 1680,
+              "text": "name",
+              "confidence": 0.9597182273864746,
+              "word_is_final": true
+          },
+          {
+              "start": 1680,
+              "end": 1760,
+              "text": "is",
+              "confidence": 0.8261497616767883,
+              "word_is_final": true
+          },
+          {
+              "start": 2320,
+              "end": 3040,
+              "text": "Sonny.",
+              "confidence": 0.5737350583076477,
+              "word_is_final": true
+          }
+      ],
+      "type": "Turn"
+    }
+    ```
+
+    For the full breakdown of the message sequence for a turn, see the [Message sequence breakdown guide](/docs/speech-to-text/universal-streaming/message-sequence).
+
+  </Accordion>
+
+  <Accordion title="Session Termination">
+
+    ```json
+    {
+        "type": "Termination",
+        "audio_duration_seconds": 2000,
+        "session_duration_seconds": 2000
+    }
+    ```
+
+  </Accordion>
+</AccordionGroup>

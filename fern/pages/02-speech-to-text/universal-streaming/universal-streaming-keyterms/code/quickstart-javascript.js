@@ -1,166 +1,3 @@
----
-title: "Multilingual streaming"
-description: "Transcribe audio in multiple languages"
----
-
-<Accordion title="Supported languages">
-    English, Spanish, French, German, Italian, and Portuguese
-</Accordion>
-
-Multilingual streaming allows you to transcribe audio streams in multiple languages.
-
-## Configuration
-
-<Warning>
-    Keyterms prompting is not supported with multilingual streaming.
-</Warning>
-
-To utilize multilingual streaming, you need to include `"speech_model":"universal-streaming-multilingual"` as a query parameter in the WebSocket URL.
-
-### Supported languages
-
-Multilingual currently supports  English, Spanish, French, German, Italian, and Portuguese.
-
-# Understanding formatting
-
-The multilingual model produces transcripts with punctuation and capitalization already built into the model outputs. This means you'll receive properly formatted text without requiring any additional post-processing.
-
-<Note>
-    While the API still returns the `turn_is_formatted` parameter to maintain interface consistency with other streaming models, the multilingual model doesn't perform additional formatting operations. All transcripts from the multilingual model are already formatted as they're generated.
-</Note>
-
-In the future, this built-in formatting capability will be extended to our English-only streaming model as well.
-
-## Quickstart
-
-<Tabs>
-
-Firstly, install the required dependencies.
-
-<Tab language="python" title="Python">
-
-```bash
-pip install websockets pyaudio
-```
-
-</Tab>
-
-<Tab language="javascript" title="Javascript">
-
-```bash
-npm install ws mic
-```
-
-</Tab>
-
-</Tabs>
-
-<Tabs>
-
-<Tab language="python" title="Python">
-
-```python {26}
-import websockets
-import asyncio
-import json
-from urllib.parse import urlencode
-
-import pyaudio
-
-FRAMES_PER_BUFFER = 3200
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 48000
-p = pyaudio.PyAudio()
-
-stream = p.open(
-    format=FORMAT,
-    channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    frames_per_buffer=FRAMES_PER_BUFFER
-)
-
-BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-CONNECTION_PARAMS = {
-    "sample_rate": RATE,
-    "format_turns": True,
-    "speech_model": "universal-streaming-multilingual",
-}
-URL = f"{BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-
-async def send_receive():
-
-    print(f'Connecting websocket to url ${URL}')
-
-    async with websockets.connect(
-        URL,
-        extra_headers={"Authorization": "YOUR-API-KEY"},
-        ping_interval=5,
-        ping_timeout=20
-    ) as _ws:
-        await asyncio.sleep(0.1)
-        print("Receiving SessionBegins ...")
-
-        session_begins = await _ws.recv()
-        print(session_begins)
-        print("Sending messages ...")
-
-        async def send():
-            while True:
-                try:
-                    data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                    await _ws.send(data)
-                except websockets.exceptions.ConnectionClosedError as e:
-                    print(e)
-                except Exception as e:
-                    print(e)
-                await asyncio.sleep(0.01)
-
-        async def receive():
-            while True:
-                try:
-                    result_str = await _ws.recv()
-                    data = json.loads(result_str)
-                    transcript = data['transcript']
-
-                    if data['type'] == 'Turn':
-                        if data.get('turn_is_formatted'):
-                            print(f"\r{transcript}")
-                        else:
-                            print(f"\r{transcript}", end="")
-                            print(data)
-                    else:
-                        pass
-
-                except websockets.exceptions.ConnectionClosed:
-                    break
-                except Exception as e:
-                    print(f"\nError receiving data: {e}")
-                    break
-
-        try:
-            await asyncio.gather(send(), receive())
-        except KeyboardInterrupt:
-            await _ws.send({"type": "Terminate"})
-            # Wait for the server to close the connection after receiving the message
-            await _ws.wait_closed()
-            print("Session terminated and connection closed.")
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(send_receive())
-    finally:
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-```
-
-</Tab>
-
-<Tab language="javascript" title="Javascript">
-
-```js {11}
 const WebSocket = require("ws");
 const mic = require("mic");
 const querystring = require("querystring");
@@ -171,7 +8,11 @@ const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
   format_turns: true, // Request formatted final transcripts
-  speech_model: "universal-streaming-multilingual"
+  keyterms_prompt: JSON.stringify([
+    "Keanu Reeves",
+    "AssemblyAI",
+    "Universal-2",
+  ]),
 };
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
@@ -421,8 +262,3 @@ function setupTerminationHandlers() {
 
 // Start the application
 run();
-```
-
-</Tab>
-
-</Tabs>
