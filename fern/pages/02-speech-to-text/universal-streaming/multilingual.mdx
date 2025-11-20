@@ -31,6 +31,65 @@ The multilingual model produces transcripts with punctuation and capitalization 
 
 In the future, this built-in formatting capability will be extended to our English-only streaming model as well.
 
+## Language detection
+
+The multilingual streaming model supports automatic language detection, allowing you to identify which language is being spoken in real-time. When enabled, the model returns the detected language code and confidence score with each complete utterance.
+
+### Configuration
+
+To enable language detection, include `language_detection=true` as a query parameter in the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=universal-streaming-multilingual&language_detection=true
+```
+
+### Output format
+
+When language detection is enabled, each Turn message with a complete utterance will include two additional fields:
+
+- `language_code`: The ISO 639-1 language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
+- `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
+
+<Note>
+    The `language_code` and `language_confidence` fields only appear when the `utterance` field is non-empty and contains a complete utterance.
+</Note>
+
+### Example response
+
+Here's an example Turn message with language detection enabled, showing Spanish being detected:
+
+```json
+{
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": false,
+  "transcript": "Buenos",
+  "end_of_turn_confidence": 0.991195,
+  "words": [
+    {
+      "start": 29920,
+      "end": 30080,
+      "text": "Buenos",
+      "confidence": 0.979445,
+      "word_is_final": true
+    },
+    {
+      "start": 30320,
+      "end": 30400,
+      "text": "días",
+      "confidence": 0.774696,
+      "word_is_final": false
+    }
+  ],
+  "utterance": "Buenos días.",
+  "language_code": "es",
+  "language_confidence": 0.999997,
+  "type": "Turn"
+}
+```
+
+In this example, the model detected Spanish (`"es"`) with a confidence of 0.999997 (99.9997%).
+
 ## Quickstart
 
 <Tabs>
@@ -86,6 +145,7 @@ CONNECTION_PARAMS = {
     "sample_rate": RATE,
     "format_turns": True,
     "speech_model": "universal-streaming-multilingual",
+    "language_detection": True,
 }
 URL = f"{BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
@@ -126,10 +186,14 @@ async def send_receive():
 
                     if data['type'] == 'Turn':
                         if data.get('turn_is_formatted'):
-                            print(f"\r{transcript}")
+                            # Display language detection info if available
+                            if 'language_code' in data:
+                                lang_info = f" [{data['language_code']} - {data['language_confidence']:.2%}]"
+                                print(f"\r{transcript}{lang_info}")
+                            else:
+                                print(f"\r{transcript}")
                         else:
                             print(f"\r{transcript}", end="")
-                            print(data)
                     else:
                         pass
 
@@ -171,7 +235,8 @@ const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
   format_turns: true, // Request formatted final transcripts
-  speech_model: "universal-streaming-multilingual"
+  speech_model: "universal-streaming-multilingual",
+  language_detection: true
 };
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
@@ -291,7 +356,13 @@ async function run() {
 
         if (formatted) {
           clearLine();
-          console.log(transcript);
+          // Display language detection info if available
+          if (data.language_code) {
+            const langConfidence = (data.language_confidence * 100).toFixed(2);
+            console.log(`${transcript} [${data.language_code} - ${langConfidence}%]`);
+          } else {
+            console.log(transcript);
+          }
         } else {
           process.stdout.write(`\r${transcript}`);
         }
