@@ -231,8 +231,7 @@ const fs = require("fs");
 // --- Configuration ---
 const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
 const CONNECTION_PARAMS = {
-  sample_rate: 16000,
-  format_turns: true, // Request formatted final transcripts
+  sample_rate: 48000,
   speech_model: "universal-streaming-multilingual",
   language_detection: true
 };
@@ -322,6 +321,8 @@ async function run() {
   console.log("Starting AssemblyAI real-time transcription...");
   console.log("Audio will be saved to a WAV file when the session ends.");
 
+  console.log(`Connecting websocket to url ${API_ENDPOINT}`);
+
   // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
@@ -332,7 +333,7 @@ async function run() {
   // Setup WebSocket event handlers
   ws.on("open", () => {
     console.log("WebSocket connection opened.");
-    console.log(`Connected to: ${API_ENDPOINT}`);
+    console.log("Receiving SessionBegins ...");
     // Start the microphone
     startMicrophone();
   });
@@ -343,26 +344,22 @@ async function run() {
       const msgType = data.type;
 
       if (msgType === "Begin") {
-        const sessionId = data.id;
-        const expiresAt = data.expires_at;
-        console.log(
-          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
-        );
+        console.log(JSON.stringify(data));
+        console.log("Sending messages ...");
       } else if (msgType === "Turn") {
         const transcript = data.transcript || "";
-        const formatted = data.turn_is_formatted;
+        const utterance = data.utterance || "";
 
-        if (formatted) {
-          clearLine();
+        if (data.utterance) {
+          console.log(`[PARTIAL TURN UTTERANCE]: ${utterance}`);
           // Display language detection info if available
           if (data.language_code) {
             const langConfidence = (data.language_confidence * 100).toFixed(2);
-            console.log(`${transcript} [${data.language_code} - ${langConfidence}%]`);
-          } else {
-            console.log(transcript);
+            console.log(`[UTTERANCE LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`);
           }
-        } else {
-          process.stdout.write(`\r${transcript}`);
+        }
+        if (data.end_of_turn) {
+          console.log(`[FULL TURN TRANSCRIPT]: ${transcript}`);
         }
       } else if (msgType === "Termination") {
         const audioDuration = data.audio_duration_seconds;
