@@ -17,19 +17,9 @@ Multilingual streaming allows you to transcribe audio streams in multiple langua
 
 To utilize multilingual streaming, you need to include `"speech_model":"universal-streaming-multilingual"` as a query parameter in the WebSocket URL.
 
-### Supported languages
+## Supported languages
 
-Multilingual currently supports  English, Spanish, French, German, Italian, and Portuguese.
-
-# Understanding formatting
-
-The multilingual model produces transcripts with punctuation and capitalization already built into the model outputs. This means you'll receive properly formatted text without requiring any additional post-processing.
-
-<Note>
-    While the API still returns the `turn_is_formatted` parameter to maintain interface consistency with other streaming models, the multilingual model doesn't perform additional formatting operations. All transcripts from the multilingual model are already formatted as they're generated.
-</Note>
-
-In the future, this built-in formatting capability will be extended to our English-only streaming model as well.
+Multilingual currently supports: English, Spanish, French, German, Italian, and Portuguese.
 
 ## Language detection
 
@@ -47,7 +37,7 @@ wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=universal-st
 
 When language detection is enabled, each Turn message with a complete utterance will include two additional fields:
 
-- `language_code`: The ISO 639-1 language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
+- `language_code`: The language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
 - `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
 
 <Note>
@@ -88,7 +78,17 @@ Here's an example Turn message with language detection enabled, showing Spanish 
 }
 ```
 
-In this example, the model detected Spanish (`"es"`) with a confidence of 0.999997 (99.9997%).
+In this example, the model detected Spanish (`"es"`) with a confidence of 0.999997.
+
+## Understanding formatting
+
+The multilingual model produces transcripts with punctuation and capitalization already built into the model outputs. This means you'll receive properly formatted text without requiring any additional post-processing.
+
+<Note>
+    While the API still returns the `turn_is_formatted` parameter to maintain interface consistency with other streaming models, the multilingual model doesn't perform additional formatting operations. All transcripts from the multilingual model are already formatted as they're generated.
+</Note>
+
+In the future, this built-in formatting capability will be extended to our English-only streaming model as well.
 
 ## Quickstart
 
@@ -143,7 +143,6 @@ stream = p.open(
 BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 CONNECTION_PARAMS = {
     "sample_rate": RATE,
-    "format_turns": True,
     "speech_model": "universal-streaming-multilingual",
     "language_detection": True,
 }
@@ -183,17 +182,16 @@ async def send_receive():
                     result_str = await _ws.recv()
                     data = json.loads(result_str)
                     transcript = data['transcript']
+                    utterance = data['utterance']
 
                     if data['type'] == 'Turn':
-                        if data.get('turn_is_formatted'):
+                        if data.get('utterance'):
+                            print(f"\r[PARTIAL TURN UTTERANCE]: {utterance}")
                             # Display language detection info if available
                             if 'language_code' in data:
-                                lang_info = f" [{data['language_code']} - {data['language_confidence']:.2%}]"
-                                print(f"\r{transcript}{lang_info}")
-                            else:
-                                print(f"\r{transcript}")
-                        else:
-                            print(f"\r{transcript}", end="")
+                                print(f"\r[UTTERANCE LANGUAGE DETECTION]: {data['language_code']} - {data['language_confidence']:.2%}")
+                        if data.get('end_of_turn'):
+                            print(f"\r[FULL TURN TRANSCRIPT]: {transcript}")
                     else:
                         pass
 
