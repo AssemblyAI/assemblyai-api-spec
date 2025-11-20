@@ -1,0 +1,129 @@
+# Keyterms prompting for Universal-Streaming
+
+The keyterms prompting feature helps improve recognition accuracy for specific words and phrases that are important to your use case.
+
+<Warning>
+
+Keyterms Prompting costs an additional $0.04/hour.
+
+</Warning>
+
+## Quickstart
+
+<Tabs>
+
+Firstly, install the required dependencies.
+
+<Tab language="python" title="Python">
+
+```bash
+pip install websocket-client pyaudio
+```
+
+</Tab>
+
+<Tab language="javascript" title="Javascript">
+
+```bash
+npm install ws mic
+```
+
+</Tab>
+
+</Tabs>
+
+<CodeBlocks>
+
+<Code src="./code/quickstart-python-sdk.py" title="Python SDK"/>
+<Code src="./code/quickstart-python.py" title="Python"/>
+<Code src="./code/quickstart-javascript-sdk.js" title="JavaScript SDK"/>
+<Code src="./code/quickstart-javascript.js" title="JavaScript"/>
+
+</CodeBlocks>
+
+## Configuration
+
+To utilize keyterms prompting, you need to include your desired keyterms as query parameters in the WebSocket URL.
+
+- You can include a maximum of 100 keyterms per session.
+- Each individual keyterm string must be 50 characters or less in length.
+
+## How it works
+
+Streaming Keyterms Prompting has two components to improve accuracy for your terms.
+
+### Word-level boosting
+
+The streaming model itself is biased during inference to be more accurate at identifying words from your keyterms list. This happens in real-time as words are emitted during the streaming process, providing immediate improvements to recognition accuracy. This component is enabled by default.
+
+### Turn-level boosting
+
+After each turn is completed, an additional boosting pass analyzes the full transcript using your keyterms list. This post-processing step, similar to formatting, provides a second layer of accuracy improvement by examining the complete context of the turn. To enable this component, set `format_turns` to `True`.
+
+Both stages work together to maximize recognition accuracy for your keyterms throughout the streaming process.
+
+## Dynamic keyterms prompting
+
+Dynamic keyterms prompting allows you to update keyterms during an active streaming session using the `UpdateConfiguration` message. This enables you to adapt the recognition context in real-time based on conversation flow or changing requirements.
+
+### Updating keyterms during a session
+
+To update keyterms while streaming, send an `UpdateConfiguration` message with a new `keyterms_prompt` array:
+
+<Tabs>
+
+<Tab language="python" title="Python">
+
+```python
+# Replace or establish new set of keyterms
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Universal-3"]}')
+
+# Remove keyterms and reset context biasing
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}')
+```
+
+</Tab>
+
+<Tab language="javascript" title="Javascript">
+
+```javascript
+// Replace or establish new set of keyterms
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Universal-3"]}');
+
+// Remove keyterms and reset context biasing
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}');
+```
+
+</Tab>
+
+</Tabs>
+
+### How dynamic keyterms work
+
+When you send an `UpdateConfiguration` message:
+
+- **Replacing keyterms**: Providing a new array of keyterms completely replaces the existing set. The new keyterms take effect immediately for subsequent audio processing.
+- **Clearing keyterms**: Sending an empty array `[]` removes all keyterms and resets context biasing to the default state.
+- **Both boosting stages**: Dynamic keyterms work with both word-level boosting (native context biasing) and turn-level boosting (metaphone-based), just like initial keyterms.
+
+### Use cases for dynamic keyterms
+
+Dynamic keyterms are particularly useful for:
+
+- **Context-aware voice agents**: Update keyterms based on conversation stage (e.g., switching from menu items to payment terms)
+- **Multi-topic conversations**: Adapt vocabulary as the conversation topic changes
+- **Progressive disclosure**: Add relevant keyterms as new information becomes available
+- **Cleanup**: Remove keyterms that are no longer relevant to reduce processing overhead
+
+## Important notes
+
+- Keyterms prompts longer than 50 characters are ignored.
+- Requests containing more than 100 keyterms will result in an error.
+
+## Best practices
+
+To maximize the effectiveness of keyterms prompting:
+
+- Specify Unique Terminology: Include proper names, company names, technical terms, or vocabulary specific to your domain that might not be commonly recognized.
+- Exact Spelling and Capitalization: Provide keyterms with the precise spelling and capitalization you expect to see in the output transcript. This helps the system accurately identify the terms.
+- Avoid Common Words: Do not include single, common English words (e.g., "information") as keyterms. The system is generally proficient with such words, and adding them as keyterms can be redundant.
