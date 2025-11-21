@@ -31,222 +31,377 @@ AssemblyAI works seamlessly with n8n's most popular nodes, enabling you to build
 - **Discord** - Share transcripts in Discord channels
 - **Telegram** - Send transcription results via Telegram bots
 
-## Quickstart
+## Complete Workflow Tutorial
 
-This guide shows you how to transcribe an audio file using AssemblyAI in an n8n workflow.
+This comprehensive tutorial walks you through building a complete AssemblyAI workflow in n8n that:
+1. Uploads an audio file to AssemblyAI
+2. Submits a transcription request with advanced features
+3. Polls for completion
+4. Processes the transcript output
+5. Retrieves additional data (redacted audio, sentences)
+6. Cleans up by deleting the transcript
 
-<Steps>
-<Step>
+### Step 1: Upload Audio File
 
-Create a new workflow in n8n or open an existing one. Add an HTTP Request node to your workflow canvas.
+The first step is to upload your audio file to AssemblyAI. You have several options depending on where your audio file is located.
 
-</Step>
+#### Option A: Upload Local File
 
-<Step>
+If you have a local audio file, use an HTTP Request node to upload it to AssemblyAI:
 
-Configure the HTTP Request node to submit a transcription request to AssemblyAI:
+1. Add an **HTTP Request** node to your workflow
+2. Configure the node:
+   - **Method**: `POST`
+   - **URL**: `https://api.assemblyai.com/v2/upload`
+   - **Authentication**: Select **Generic Credential Type** → **Header Auth**
+     - **Name**: `authorization`
+     - **Value**: Your AssemblyAI API key
+   - **Body**: Select **Binary File**
+   - **Input Binary Field**: Select the field containing your audio file data
 
-1. Set **Method** to `POST`
-2. Set **URL** to `https://api.assemblyai.com/v2/transcript`
-3. Under **Authentication**, select **Generic Credential Type** and choose **Header Auth**
-4. Create a new credential:
-   - Set **Name** to `authorization`
-   - Set **Value** to your AssemblyAI API key
-5. Under **Body**, select **JSON** and add your transcription parameters:
+The response will contain an `upload_url` that you'll use in the next step.
 
-```json
-{
-  "audio_url": "https://example.com/your-audio-file.mp3"
-}
-```
+#### Option B: Use Remote File URL
 
-</Step>
+If your audio file is already hosted online (e.g., on a CDN, S3, or public URL), you can skip the upload step and use the URL directly in Step 2.
 
-<Step>
+#### Option C: Get File from Google Drive
 
-Add a second HTTP Request node to poll for the transcript result:
+To transcribe files from Google Drive:
 
-1. Set **Method** to `GET`
-2. Set **URL** to `https://api.assemblyai.com/v2/transcript/{{$json["id"]}}`
-   - This uses the transcript ID from the previous step
-3. Use the same **Header Auth** credential you created earlier
+1. Add a **Google Drive** trigger node or **Google Drive** node
+2. Configure it to:
+   - **Operation**: Download a file
+   - **File ID**: The ID of the audio file you want to transcribe
+3. Connect this to the upload HTTP Request node from Option A
 
-</Step>
+The Google Drive node will output the file as binary data, which the upload node will send to AssemblyAI.
 
-<Step>
+### Step 2: Submit Transcription Request
 
-Add a **Wait** node between the two HTTP Request nodes to give AssemblyAI time to process the audio. Configure it to wait for a reasonable amount of time based on your audio length (e.g., 30 seconds for short files).
+Now submit the transcription request with your desired features enabled.
 
-Alternatively, you can use a **Loop** node with a condition to poll the transcript status until it's `completed` or `error`.
-
-</Step>
-
-<Step>
-
-Test your workflow. The final HTTP Request node will return the completed transcript with the transcribed text and any additional features you enabled.
-
-</Step>
-</Steps>
-
-## Using AssemblyAI Features
-
-You can enable various AssemblyAI features by adding parameters to the JSON body in your initial transcription request:
-
-### Speaker Diarization
-
-Identify different speakers in your audio:
+1. Add an **HTTP Request** node
+2. Configure the node:
+   - **Method**: `POST`
+   - **URL**: `https://api.assemblyai.com/v2/transcript`
+   - **Authentication**: Use the same **Header Auth** credential from Step 1
+   - **Body**: Select **JSON**
+   - **JSON Body**:
 
 ```json
 {
-  "audio_url": "https://example.com/your-audio-file.mp3",
-  "speaker_labels": true
-}
-```
-
-### Sentiment Analysis
-
-Analyze the sentiment of the transcribed text:
-
-```json
-{
-  "audio_url": "https://example.com/your-audio-file.mp3",
-  "sentiment_analysis": true
-}
-```
-
-### Auto Chapters
-
-Automatically segment your audio into chapters:
-
-```json
-{
-  "audio_url": "https://example.com/your-audio-file.mp3",
+  "audio_url": "{{$node['HTTP Request'].json['upload_url']}}",
+  "speaker_labels": true,
+  "language_detection": true,
+  "sentiment_analysis": true,
+  "entity_detection": true,
   "auto_chapters": true
 }
 ```
 
-### PII Redaction
+If you're using a remote file URL (Option B), replace the `audio_url` value with your file URL.
 
-Redact personally identifiable information:
+#### Available Features
+
+You can enable any combination of these features in your transcription request:
+
+- **speaker_labels**: Identify different speakers (diarization)
+- **language_detection**: Automatically detect the language
+- **sentiment_analysis**: Analyze sentiment of each sentence
+- **entity_detection**: Extract names, organizations, locations
+- **auto_chapters**: Automatically segment into chapters
+- **auto_highlights**: Extract key highlights
+- **content_safety**: Detect sensitive content
+- **iab_categories**: Categorize content by IAB taxonomy
+- **summarization**: Generate a summary (requires model parameter)
+- **redact_pii**: Redact personally identifiable information
+- **redact_pii_audio**: Generate redacted audio file
+- **redact_pii_policies**: Specify which PII types to redact
+
+The response will contain a `transcript_id` that you'll use to poll for completion.
+
+### Step 3: Poll for Transcription Completion
+
+Since transcription is asynchronous, you need to poll the API until the transcript is ready.
+
+1. Add a **Loop** node after the transcription request
+2. Inside the loop, add an **HTTP Request** node:
+   - **Method**: `GET`
+   - **URL**: `https://api.assemblyai.com/v2/transcript/{{$node['HTTP Request 1'].json['id']}}`
+   - **Authentication**: Use the same **Header Auth** credential
+
+3. Add an **IF** node to check the status:
+   - **Condition**: `{{$json['status']}}` equals `completed` or `error`
+   - **True branch**: Exit the loop (transcript is ready)
+   - **False branch**: Continue polling
+
+4. On the False branch, add a **Wait** node:
+   - **Wait Time**: 5 seconds
+   - Connect back to the HTTP Request node to poll again
+
+5. Configure the Loop node:
+   - **Max Iterations**: 100 (to prevent infinite loops)
+
+When the transcript is complete, the response will contain the full transcript data including:
+- `text`: The complete transcription
+- `words`: Array of individual words with timestamps
+- `utterances`: Array of speaker utterances (if speaker_labels enabled)
+- `sentiment_analysis_results`: Sentiment data (if enabled)
+- `entities`: Detected entities (if enabled)
+- `chapters`: Auto-generated chapters (if enabled)
+
+### Step 4: Process Transcript Output
+
+Now that you have the completed transcript, you can process it and send it to other services.
+
+#### Create Human-Readable Transcript
+
+To format the transcript into a readable format:
+
+1. Add a **Code** node (JavaScript or Python)
+2. Use this code to format utterances into a readable transcript:
+
+**JavaScript:**
+```javascript
+const transcript = $input.item.json;
+let formattedText = '';
+
+if (transcript.utterances) {
+  // Format with speaker labels
+  for (const utterance of transcript.utterances) {
+    formattedText += `Speaker ${utterance.speaker}: ${utterance.text}\n\n`;
+  }
+} else {
+  // Use plain text if no speaker labels
+  formattedText = transcript.text;
+}
+
+return { formattedText };
+```
+
+**Python:**
+```python
+transcript = _input.item.json
+formatted_text = ''
+
+if 'utterances' in transcript and transcript['utterances']:
+    # Format with speaker labels
+    for utterance in transcript['utterances']:
+        formatted_text += f"Speaker {utterance['speaker']}: {utterance['text']}\n\n"
+else:
+    # Use plain text if no speaker labels
+    formatted_text = transcript['text']
+
+return {'formattedText': formatted_text}
+```
+
+#### Save to Google Sheets
+
+To save the transcript to Google Sheets:
+
+1. Add a **Google Sheets** node
+2. Configure it:
+   - **Operation**: Append or Update
+   - **Document**: Select your spreadsheet
+   - **Sheet**: Select the sheet name
+   - **Columns**: Map the data:
+     - Column A: `{{$node['HTTP Request 2'].json['id']}}` (Transcript ID)
+     - Column B: `{{$node['Code'].json['formattedText']}}` (Formatted transcript)
+     - Column C: `{{$node['HTTP Request 2'].json['audio_duration']}}` (Duration)
+     - Column D: `{{new Date().toISOString()}}` (Timestamp)
+
+#### Send via Email
+
+To email the transcript:
+
+1. Add a **Gmail** or **Send Email** node
+2. Configure it:
+   - **To**: Recipient email address
+   - **Subject**: `Transcript Ready: {{$node['HTTP Request 2'].json['id']}}`
+   - **Body**: `{{$node['Code'].json['formattedText']}}`
+
+#### Post to Slack
+
+To post the transcript to Slack:
+
+1. Add a **Slack** node
+2. Configure it:
+   - **Operation**: Send Message
+   - **Channel**: Select your channel
+   - **Text**: `New transcript completed:\n\n{{$node['Code'].json['formattedText']}}`
+
+### Step 5: Retrieve Additional Data
+
+AssemblyAI provides additional endpoints to retrieve more data from your completed transcript.
+
+#### Get Redacted Audio
+
+If you enabled `redact_pii_audio` in your transcription request, you can retrieve the redacted audio file:
+
+1. Add an **HTTP Request** node
+2. Configure it:
+   - **Method**: `GET`
+   - **URL**: `https://api.assemblyai.com/v2/transcript/{{$node['HTTP Request 2'].json['id']}}/redacted-audio`
+   - **Authentication**: Use the same **Header Auth** credential
+   - **Response Format**: Binary
+
+The response will contain the redacted audio file with PII removed.
+
+#### Get Sentences
+
+To retrieve the transcript broken down by sentences:
+
+1. Add an **HTTP Request** node
+2. Configure it:
+   - **Method**: `GET`
+   - **URL**: `https://api.assemblyai.com/v2/transcript/{{$node['HTTP Request 2'].json['id']}}/sentences`
+   - **Authentication**: Use the same **Header Auth** credential
+
+The response will contain an array of sentences with:
+- `text`: The sentence text
+- `start`: Start time in milliseconds
+- `end`: End time in milliseconds
+- `confidence`: Confidence score
+- `speaker`: Speaker label (if speaker_labels enabled)
+
+#### Get Paragraphs
+
+To retrieve the transcript broken down by paragraphs:
+
+1. Add an **HTTP Request** node
+2. Configure it:
+   - **Method**: `GET`
+   - **URL**: `https://api.assemblyai.com/v2/transcript/{{$node['HTTP Request 2'].json['id']}}/paragraphs`
+   - **Authentication**: Use the same **Header Auth** credential
+
+### Step 6: Delete Transcript
+
+Once you're done processing the transcript, you can delete it from AssemblyAI to clean up:
+
+1. Add an **HTTP Request** node at the end of your workflow
+2. Configure it:
+   - **Method**: `DELETE`
+   - **URL**: `https://api.assemblyai.com/v2/transcript/{{$node['HTTP Request 2'].json['id']}}`
+   - **Authentication**: Use the same **Header Auth** credential
+
+The transcript will be permanently deleted from AssemblyAI's servers.
+
+## Alternative: Using Webhooks
+
+Instead of polling for completion, you can use webhooks for a more efficient approach:
+
+1. Add a **Webhook** node to your workflow
+2. Set it to **Production** mode and copy the webhook URL
+3. In your transcription request (Step 2), add the webhook URL:
 
 ```json
 {
-  "audio_url": "https://example.com/your-audio-file.mp3",
-  "redact_pii": true,
-  "redact_pii_policies": ["medical_condition", "credit_card_number", "ssn"]
+  "audio_url": "{{$node['HTTP Request'].json['upload_url']}}",
+  "webhook_url": "https://your-n8n-instance.com/webhook/your-webhook-id",
+  "speaker_labels": true
 }
 ```
 
-### Entity Detection
-
-Extract entities like names, organizations, and locations:
-
-```json
-{
-  "audio_url": "https://example.com/your-audio-file.mp3",
-  "entity_detection": true
-}
-```
-
-## Common Workflow Patterns
-
-### Transcribe and Store in Google Sheets
-
-1. Use the HTTP Request nodes to transcribe audio with AssemblyAI
-2. Add a Google Sheets node to append the transcript to a spreadsheet
-3. Map the transcript text and metadata to your sheet columns
-
-### Transcribe and Send via Email
-
-1. Transcribe audio using AssemblyAI
-2. Add a Gmail or Send Email node
-3. Include the transcript text in the email body
-
-### Transcribe and Analyze with AI
-
-1. Transcribe audio with AssemblyAI
-2. Add an OpenAI or other LLM node
-3. Use the transcript as input for further analysis, summarization, or question answering
-
-### Process Audio from Cloud Storage
-
-1. Add a trigger node for Google Drive, Dropbox, or S3
-2. When a new audio file is uploaded, get its public URL
-3. Submit the URL to AssemblyAI for transcription
-4. Store or process the results as needed
-
-## Polling for Transcript Completion
-
-Since transcription is asynchronous, you need to poll for the result. Here's a recommended approach:
-
-1. Submit the transcription request and capture the transcript ID
-2. Use a **Loop** node with the following configuration:
-   - Add an HTTP Request node inside the loop to check the transcript status
-   - Add an **IF** node to check if `status` equals `completed` or `error`
-   - If not complete, add a **Wait** node (e.g., 5 seconds) before the next iteration
-   - Exit the loop when the status is `completed` or `error`
-
-## Using Webhooks for Completion Notifications
-
-For a more efficient approach, you can use webhooks instead of polling:
-
-<Steps>
-<Step>
-
-Add a **Webhook** node to your workflow and copy the webhook URL.
-
-</Step>
-
-<Step>
-
-In your initial transcription request, add the webhook URL:
-
-```json
-{
-  "audio_url": "https://example.com/your-audio-file.mp3",
-  "webhook_url": "https://your-n8n-instance.com/webhook/your-webhook-id"
-}
-```
-
-</Step>
-
-<Step>
-
-When the transcription is complete, AssemblyAI will send a POST request to your webhook with the transcript ID. You can then retrieve the full transcript using another HTTP Request node.
-
-</Step>
-</Steps>
-
-## Uploading Local Files
-
-If your audio file is not publicly accessible, you can upload it to AssemblyAI first:
-
-<Steps>
-<Step>
-
-Add an HTTP Request node to upload the file:
-
-1. Set **Method** to `POST`
-2. Set **URL** to `https://api.assemblyai.com/v2/upload`
-3. Use **Header Auth** with your API key
-4. Under **Body**, select **Binary File** and select your audio file
-
-</Step>
-
-<Step>
-
-The upload will return an `upload_url`. Use this URL as the `audio_url` in your transcription request.
-
-</Step>
-</Steps>
+When the transcription is complete, AssemblyAI will send a POST request to your webhook with the transcript status. You can then retrieve the full transcript using the transcript ID from the webhook payload.
 
 ## Error Handling
 
-Add error handling to your workflow to manage failed transcriptions:
+Add error handling to your workflow to manage failures gracefully:
 
-1. Use the **IF** node to check if the transcript status is `error`
-2. Add nodes to handle the error case (e.g., send a notification, log the error)
-3. Access the error message in `$json["error"]`
+1. After the polling loop, add an **IF** node to check for errors:
+   - **Condition**: `{{$json['status']}}` equals `error`
+   
+2. On the True branch (error case):
+   - Add a **Slack** or **Email** node to send an error notification
+   - Include the error message: `{{$json['error']}}`
+
+3. On the False branch (success case):
+   - Continue with the normal workflow
+
+## Example Workflow JSON
+
+Here's a complete workflow JSON that you can import into n8n:
+
+```json
+{
+  "name": "AssemblyAI Complete Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "raw",
+        "rawContentType": "application/octet-stream"
+      },
+      "name": "Upload Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/transcript",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"audio_url\": \"{{$json['upload_url']}}\",\n  \"speaker_labels\": true,\n  \"language_detection\": true\n}"
+      },
+      "name": "Submit Transcription",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.assemblyai.com/v2/transcript/{{$node['Submit Transcription'].json['id']}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "name": "Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "https://api.assemblyai.com/v2/transcript/{{$node['Check Status'].json['id']}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "name": "Delete Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [[{"node": "Upload Audio", "type": "main", "index": 0}]]
+    },
+    "Upload Audio": {
+      "main": [[{"node": "Submit Transcription", "type": "main", "index": 0}]]
+    },
+    "Submit Transcription": {
+      "main": [[{"node": "Check Status", "type": "main", "index": 0}]]
+    },
+    "Check Status": {
+      "main": [[{"node": "Delete Transcript", "type": "main", "index": 0}]]
+    }
+  }
+}
+```
+
+This is a simplified version. You'll need to add the polling loop, error handling, and output processing nodes as described in the tutorial above
 
 ## Additional Resources
 
