@@ -14,6 +14,14 @@ To make sure that the specs are valid, you can use the `lint` script.
 npm run-script lint
 ```
 
+## Running Tests
+
+The test files require an AssemblyAI API key. Set the `ASSEMBLYAI_API_KEY` environment variable before running tests:
+
+```bash
+export ASSEMBLYAI_API_KEY=your_api_key_here
+```
+
 ## Fern
 
 ### SDKs

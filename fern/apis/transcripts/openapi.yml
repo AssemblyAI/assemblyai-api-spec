@@ -1,0 +1,2572 @@
+openapi: 3.1.0
+info:
+  title: AssemblyAI API
+  description: AssemblyAI API
+  termsOfService: https://www.assemblyai.com/legal/terms-of-service
+  contact:
+    name: API Support
+    url: https://www.assemblyai.com/docs/
+    email: support@assemblyai.com
+  version: 1.3.4
+servers:
+- url: https://api.assemblyai.com
+  description: US server
+- url: https://api.eu.assemblyai.com
+  description: EU server
+paths:
+  /v2/transcript:
+    post:
+      tags:
+      - transcripts
+      summary: Create transcript
+      description: Create a transcript from a media file. The transcript is queued
+        for processing and will be available when the status is 'completed'.
+      operationId: createTranscript
+      security:
+      - APIKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranscriptParams'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - transcripts
+      summary: List transcripts
+      description: Get a list of transcripts you created.
+      operationId: listTranscripts
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          description: Maximum amount of transcripts to retrieve
+          title: Limit
+        description: Maximum amount of transcripts to retrieve
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by transcript status
+          title: Status
+        description: Filter by transcript status
+      - name: created_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Get transcripts created on this date
+          title: Created On
+        description: Get transcripts created on this date
+      - name: before_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Get transcripts that were created before this transcript ID
+          title: Before Id
+        description: Get transcripts that were created before this transcript ID
+      - name: after_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Get transcripts that were created after this transcript ID
+          title: After Id
+        description: Get transcripts that were created after this transcript ID
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}:
+    get:
+      tags:
+      - transcripts
+      summary: Get transcript
+      description: Get the transcript resource. The transcript is ready when the "status"
+        is "completed".
+      operationId: getTranscript
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - transcripts
+      summary: Delete transcript
+      description: Remove the data from the transcript and mark it as deleted. Returns
+        the transcript with is_deleted=true and sanitized fields.
+      operationId: deleteTranscript
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      responses:
+        '200':
+          description: Transcript deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptResponse'
+        '400':
+          description: Bad Request - Transcript not found
+          content:
+            application/json:
+              example:
+                error: Transcript lookup error, transcript id not found
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}/sentences:
+    get:
+      tags:
+      - transcripts
+      summary: Get transcript sentences
+      description: Get sentences of the transcript. Each sentence includes timing
+        information and the words that make up the sentence.
+      operationId: getTranscriptSentences
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptSentencesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}/paragraphs:
+    get:
+      tags:
+      - transcripts
+      summary: Get transcript paragraphs
+      description: Get paragraphs of the transcript. Each paragraph includes timing
+        information and the words that make up the paragraph.
+      operationId: getTranscriptParagraphs
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptParagraphsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}/{subtitle_format}:
+    get:
+      tags:
+      - transcripts
+      summary: Get subtitles for transcript
+      description: Export your transcript in SRT or VTT format to use with a video
+        player for subtitles and closed captions.
+      operationId: getSubtitles
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      - name: subtitle_format
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/SubtitleFormat'
+      - name: chars_per_caption
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: The maximum number of characters per caption
+          title: Chars Per Caption
+        description: The maximum number of characters per caption
+      responses:
+        '200':
+          description: The exported captions as text
+          content:
+            application/json:
+              schema: {}
+            text/plain:
+              schema:
+                type: string
+              examples:
+                srt:
+                  summary: SRT format example
+                  value: '1
+
+                    00:00:00,240 --> 00:00:11,040
+
+                    Smoke from hundreds of wildfires in Canada is triggering air quality
+                    alerts...
+
+
+                    2
+
+                    00:00:11,040 --> 00:00:16,220
+
+                    throughout the US Skylines from Maine to Maryland to Minnesota
+                    are gray...'
+                vtt:
+                  summary: VTT format example
+                  value: 'WEBVTT
+
+
+                    00:00:00.240 --> 00:00:11.040
+
+                    Smoke from hundreds of wildfires in Canada is triggering air quality
+                    alerts...
+
+
+                    00:00:11.040 --> 00:00:16.220
+
+                    throughout the US Skylines from Maine to Maryland to Minnesota
+                    are gray...'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}/word-search:
+    get:
+      tags:
+      - transcripts
+      summary: Search for words in transcript
+      description: Search for specific words or phrases in the transcript and get
+        their timestamps.
+      operationId: wordSearch
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      - name: words
+        in: query
+        required: true
+        schema:
+          type: string
+          description: The word or phrase to search for in the transcript
+          title: Words
+        description: The word or phrase to search for in the transcript
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordSearchResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/transcript/{transcript_id}/redacted-audio:
+    get:
+      tags:
+      - transcripts
+      summary: Get redacted audio URL
+      description: Retrieve the URL of the redacted audio file if PII redaction was
+        enabled during transcription.
+      operationId: getRedactedAudio
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: transcript_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Transcript Id
+      responses:
+        '200':
+          description: Redacted audio URL retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedactedAudioResponse'
+        '400':
+          description: Bad Request - Various errors including transcript not found,
+            PII redaction not enabled, or transcript still processing
+          content:
+            application/json:
+              examples:
+                transcript_not_found:
+                  summary: Transcript not found
+                  value:
+                    error: Transcript lookup error, transcript id not found
+                no_redacted_audio:
+                  summary: PII redaction not enabled
+                  value:
+                    error: A redacted audio file for this transcript ID doesn't exist.
+                      Try submitting the transcript again with `redact_pii_audio`
+                      set to `true`.
+                still_processing:
+                  summary: Transcript still processing
+                  value:
+                    error: Transcription is still in progress. Redacted audio will
+                      be available after it has completed.
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v2/upload:
+    post:
+      tags:
+      - transcripts
+      summary: Upload a media file
+      description: Upload a media file to AssemblyAI's servers.
+      operationId: uploadFile
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_uploadFile'
+        required: true
+      responses:
+        '200':
+          description: Media file uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedFile'
+              example:
+                upload_url: https://cdn.assemblyai.com/upload/f756988d-47e2-4ca3-96ce-04bb168f8f2a
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+components:
+  schemas:
+    AudioIntelligenceModelStatus:
+      type: string
+      enum:
+      - success
+      - unavailable
+      title: AudioIntelligenceModelStatus
+      description: Either success, or unavailable in the rare case that the model
+        failed.
+    AutoHighlightResult:
+      properties:
+        count:
+          type: integer
+          title: Count
+          description: The total number of times the key phrase appears in the audio
+            file
+        rank:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Rank
+          description: The total relevancy to the overall audio file of this key phrase
+        text:
+          type: string
+          title: Text
+          description: The text itself of the key phrase
+        timestamps:
+          items:
+            $ref: '#/components/schemas/Timestamp'
+          type: array
+          title: Timestamps
+          description: The timestamp of the key phrase
+      type: object
+      required:
+      - count
+      - rank
+      - text
+      - timestamps
+      title: AutoHighlightResult
+      description: Auto highlight result.
+    AutoHighlightsResult:
+      properties:
+        status:
+          $ref: '#/components/schemas/AudioIntelligenceModelStatus'
+          description: The status of the Key Phrases model
+        results:
+          items:
+            $ref: '#/components/schemas/AutoHighlightResult'
+          type: array
+          title: Results
+          description: A temporally-sequential array of Key Phrases
+      type: object
+      required:
+      - status
+      - results
+      title: AutoHighlightsResult
+      description: Auto highlights result.
+    Body_uploadFile:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_uploadFile
+    Chapter:
+      properties:
+        gist:
+          type: string
+          title: Gist
+          description: An ultra-short summary (just a few words) of the content spoken
+            in the chapter
+        headline:
+          type: string
+          title: Headline
+          description: A single sentence summary of the content spoken during the
+            chapter
+        summary:
+          type: string
+          title: Summary
+          description: A one paragraph summary of the content spoken during the chapter
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, for the chapter
+        end:
+          type: integer
+          title: End
+          description: The starting time, in milliseconds, for the chapter
+      type: object
+      required:
+      - gist
+      - headline
+      - summary
+      - start
+      - end
+      title: Chapter
+      description: Chapter of the audio file.
+    ContentSafetyLabel:
+      properties:
+        label:
+          type: string
+          title: Label
+          description: The label of the sensitive topic
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the topic being discussed, from 0
+            to 1
+        severity:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Severity
+          description: How severely the topic is discussed in the section, from 0
+            to 1
+      type: object
+      required:
+      - label
+      - confidence
+      - severity
+      title: ContentSafetyLabel
+      description: Content Moderation label.
+    ContentSafetyLabelResult:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The transcript of the section flagged by the Content Moderation
+            model
+        labels:
+          items:
+            $ref: '#/components/schemas/ContentSafetyLabel'
+          type: array
+          title: Labels
+          description: An array of safety labels
+        sentences_idx_start:
+          type: integer
+          title: Sentences Idx Start
+          description: The sentence index at which the section begins
+        sentences_idx_end:
+          type: integer
+          title: Sentences Idx End
+          description: The sentence index at which the section ends
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+          description: Timestamp information for the section
+      type: object
+      required:
+      - text
+      - labels
+      - sentences_idx_start
+      - sentences_idx_end
+      - timestamp
+      title: ContentSafetyLabelResult
+      description: Content Moderation label result.
+    ContentSafetyLabelsResult:
+      properties:
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/AudioIntelligenceModelStatus'
+          - type: 'null'
+          description: The status of the Content Moderation model
+        results:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ContentSafetyLabelResult'
+            type: array
+          - type: 'null'
+          title: Results
+          description: An array of results for the Content Moderation model
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+          description: A summary of the Content Moderation confidence results
+        severity_score_summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Severity Score Summary
+          description: A summary of the Content Moderation severity results
+      type: object
+      title: ContentSafetyLabelsResult
+      description: Content Moderation labels result.
+    CustomFormattingRequest:
+      properties:
+        date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date
+          description: Date format pattern (e.g., 'mm/dd/yyyy')
+        phone_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone Number
+          description: Phone number format pattern (e.g., '(xxx)xxx-xxxx')
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+          description: Email format pattern (e.g., 'username@domain.com')
+        formatted_utterances:
+          type: boolean
+          title: Formatted Utterances
+          description: Whether to format utterances
+          default: true
+      additionalProperties: false
+      type: object
+      title: CustomFormattingRequest
+      description: Custom formatting request configuration.
+    CustomFormattingResponse:
+      properties:
+        mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Mapping
+          description: Mapping of original text to formatted text
+        formatted_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Formatted Text
+          description: The formatted text
+        formatted_utterances:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptUtterance'
+            type: array
+          - type: 'null'
+          title: Formatted Utterances
+          description: Formatted utterances
+        status:
+          type: string
+          title: Status
+          description: The status of custom formatting
+      additionalProperties: false
+      type: object
+      required:
+      - mapping
+      - status
+      title: CustomFormattingResponse
+      description: Custom formatting response.
+    Entity:
+      properties:
+        entity_type:
+          $ref: '#/components/schemas/EntityType'
+          description: The type of entity for the detected entity
+        text:
+          type: string
+          title: Text
+          description: The text for the detected entity
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, at which the detected entity
+            appears
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, for the detected entity
+      type: object
+      required:
+      - entity_type
+      - text
+      - start
+      - end
+      title: Entity
+      description: A detected entity.
+    EntityType:
+      type: string
+      enum:
+      - account_number
+      - banking_information
+      - blood_type
+      - credit_card_cvv
+      - credit_card_expiration
+      - credit_card_number
+      - date
+      - date_interval
+      - date_of_birth
+      - drivers_license
+      - drug
+      - duration
+      - email_address
+      - event
+      - filename
+      - gender_sexuality
+      - healthcare_number
+      - injury
+      - ip_address
+      - language
+      - location
+      - marital_status
+      - medical_condition
+      - medical_process
+      - money_amount
+      - nationality
+      - number_sequence
+      - occupation
+      - organization
+      - passport_number
+      - password
+      - person_age
+      - person_name
+      - phone_number
+      - physical_attribute
+      - political_affiliation
+      - religion
+      - statistics
+      - time
+      - url
+      - us_social_security_number
+      - username
+      - vehicle_id
+      - zodiac_sign
+      title: EntityType
+      description: The type of entity for the detected entity.
+    ErrorResponse:
+      properties:
+        error:
+          type: string
+          title: Error
+          description: Error message describing what went wrong
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: ErrorResponse
+      description: Standard error response.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LanguageDetectionOptions:
+      properties:
+        expected_languages:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptLanguageCode'
+            type: array
+          - type: 'null'
+          title: Expected Languages
+          description: List of languages expected in the audio file
+        fallback_language:
+          type: string
+          title: Fallback Language
+          description: Fallback language if detected language is not in expected languages
+          default: auto
+        code_switching:
+          type: boolean
+          title: Code Switching
+          description: Whether code switching should be detected
+          default: false
+        code_switching_confidence_threshold:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Code Switching Confidence Threshold
+          description: Confidence threshold for code switching detection
+          default: 0.3
+      type: object
+      title: LanguageDetectionOptions
+      description: Options for Automatic Language Detection.
+    PageDetails:
+      properties:
+        limit:
+          type: integer
+          title: Limit
+          description: The maximum number of transcripts returned
+        result_count:
+          type: integer
+          title: Result Count
+          description: The actual number of transcripts returned
+        current_url:
+          type: string
+          title: Current Url
+          description: The URL of the current page
+        prev_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prev Url
+          description: The URL of the previous page
+        next_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Url
+          description: The URL of the next page
+      additionalProperties: false
+      type: object
+      required:
+      - limit
+      - result_count
+      - current_url
+      title: PageDetails
+      description: Pagination details for list responses.
+    RedactPiiAudioOptions:
+      properties:
+        return_redacted_no_speech_audio:
+          type: boolean
+          title: Return Redacted No Speech Audio
+          description: Return redacted audio URLs even for silent audio files
+          default: false
+      type: object
+      title: RedactPiiAudioOptions
+      description: Options for PII redacted audio files.
+    RedactPiiAudioQuality:
+      type: string
+      enum:
+      - mp3
+      - wav
+      title: RedactPiiAudioQuality
+      description: Controls the filetype of the audio created by redact_pii_audio.
+    RedactedAudioResponse:
+      properties:
+        redacted_audio_url:
+          type: string
+          title: Redacted Audio Url
+          description: The URL of the redacted audio file
+        status:
+          type: string
+          title: Status
+          description: The status of the redacted audio file
+      additionalProperties: false
+      type: object
+      required:
+      - redacted_audio_url
+      - status
+      title: RedactedAudioResponse
+      description: Response model for redacted audio endpoint.
+    Sentiment:
+      type: string
+      enum:
+      - POSITIVE
+      - NEUTRAL
+      - NEGATIVE
+      title: Sentiment
+      description: Sentiment classification.
+    SentimentAnalysisResult:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The transcript of the sentence
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, of the sentence
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, of the sentence
+        sentiment:
+          $ref: '#/components/schemas/Sentiment'
+          description: The detected sentiment for the sentence
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the detected sentiment
+        channel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel
+          description: The channel of this utterance
+        speaker:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Speaker
+          description: The speaker of the sentence if Speaker Diarization is enabled
+      type: object
+      required:
+      - text
+      - start
+      - end
+      - sentiment
+      - confidence
+      title: SentimentAnalysisResult
+      description: The result of the Sentiment Analysis model.
+    SpeakerIdentificationRequest:
+      properties:
+        speaker_type:
+          $ref: '#/components/schemas/SpeakerType'
+          description: The type of speaker identification
+        known_values:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Known Values
+          description: Known values for speakers (required when speaker_type is 'role')
+      additionalProperties: false
+      type: object
+      required:
+      - speaker_type
+      title: SpeakerIdentificationRequest
+      description: Speaker identification request configuration.
+    SpeakerIdentificationResponse:
+      properties:
+        mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Mapping
+          description: Mapping of original text to speaker identification
+        status:
+          type: string
+          title: Status
+          description: The status of speaker identification
+      additionalProperties: false
+      type: object
+      required:
+      - mapping
+      - status
+      title: SpeakerIdentificationResponse
+      description: Speaker identification response.
+    SpeakerOptions:
+      properties:
+        min_speakers_expected:
+          type: integer
+          title: Min Speakers Expected
+          description: The minimum number of speakers expected
+          default: 1
+        max_speakers_expected:
+          type: integer
+          title: Max Speakers Expected
+          description: The maximum number of speakers expected
+          default: 10
+      type: object
+      title: SpeakerOptions
+      description: Options for speaker diarization.
+    SpeakerType:
+      type: string
+      enum:
+      - name
+      - role
+      title: SpeakerType
+      description: The type of speaker identification.
+    SpeechModel:
+      type: string
+      enum:
+      - best
+      - slam-1
+      - universal
+      title: SpeechModel
+      description: The speech model to use for the transcription.
+    SpeechUnderstanding:
+      properties:
+        request:
+          $ref: '#/components/schemas/SpeechUnderstandingRequest-Output'
+          description: The speech understanding request configuration
+        response:
+          anyOf:
+          - $ref: '#/components/schemas/SpeechUnderstandingResponse'
+          - type: 'null'
+          description: The speech understanding response
+      additionalProperties: false
+      type: object
+      required:
+      - request
+      title: SpeechUnderstanding
+      description: Speech Understanding configuration with results.
+    SpeechUnderstandingInput:
+      properties:
+        request:
+          $ref: '#/components/schemas/SpeechUnderstandingRequest-Input'
+          description: The speech understanding request configuration
+      additionalProperties: false
+      type: object
+      required:
+      - request
+      title: SpeechUnderstandingInput
+      description: Speech Understanding input configuration for transcript creation.
+    SpeechUnderstandingRequest-Input:
+      properties:
+        speaker_identification:
+          anyOf:
+          - $ref: '#/components/schemas/SpeakerIdentificationRequest'
+          - type: 'null'
+          description: Speaker identification request
+        translation:
+          anyOf:
+          - $ref: '#/components/schemas/TranslationRequest'
+          - type: 'null'
+          description: Translation request
+        custom_formatting:
+          anyOf:
+          - $ref: '#/components/schemas/CustomFormattingRequest'
+          - type: 'null'
+          description: Custom formatting request
+      additionalProperties: false
+      type: object
+      title: SpeechUnderstandingRequest
+      description: Speech understanding request configuration.
+    SpeechUnderstandingRequest-Output:
+      properties:
+        speaker_identification:
+          anyOf:
+          - $ref: '#/components/schemas/SpeakerIdentificationRequest'
+          - type: 'null'
+          description: Speaker identification request
+        translation:
+          anyOf:
+          - $ref: '#/components/schemas/TranslationRequest'
+          - type: 'null'
+          description: Translation request
+        custom_formatting:
+          anyOf:
+          - $ref: '#/components/schemas/CustomFormattingRequest'
+          - type: 'null'
+          description: Custom formatting request
+      additionalProperties: false
+      type: object
+      title: SpeechUnderstandingRequest
+      description: Speech understanding request configuration.
+    SpeechUnderstandingResponse:
+      properties:
+        speaker_identification:
+          anyOf:
+          - $ref: '#/components/schemas/SpeakerIdentificationResponse'
+          - type: 'null'
+          description: Speaker identification response
+        translation:
+          anyOf:
+          - $ref: '#/components/schemas/TranslationResponse'
+          - type: 'null'
+          description: Translation response
+        custom_formatting:
+          anyOf:
+          - $ref: '#/components/schemas/CustomFormattingResponse'
+          - type: 'null'
+          description: Custom formatting response
+      additionalProperties: false
+      type: object
+      title: SpeechUnderstandingResponse
+      description: Speech understanding response configuration.
+    SubstitutionPolicy:
+      type: string
+      enum:
+      - entity_name
+      - hash
+      title: SubstitutionPolicy
+      description: The replacement logic for detected PII.
+    SubtitleFormat:
+      type: string
+      enum:
+      - srt
+      - vtt
+      title: SubtitleFormat
+      description: Format of the subtitles.
+    SummaryModel:
+      type: string
+      enum:
+      - informative
+      - conversational
+      - catchy
+      title: SummaryModel
+      description: The model to summarize the transcript.
+    SummaryType:
+      type: string
+      enum:
+      - bullets
+      - bullets_verbose
+      - gist
+      - headline
+      - paragraph
+      title: SummaryType
+      description: The type of summary.
+    Timestamp:
+      properties:
+        start:
+          type: integer
+          title: Start
+          description: The start time in milliseconds
+        end:
+          type: integer
+          title: End
+          description: The end time in milliseconds
+      additionalProperties: false
+      type: object
+      required:
+      - start
+      - end
+      title: Timestamp
+      description: Timestamp containing a start and end property in milliseconds.
+    TopicDetectionLabel:
+      properties:
+        relevance:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Relevance
+          description: How relevant the detected topic is
+        label:
+          type: string
+          title: Label
+          description: The IAB taxonomical label for the detected topic
+      type: object
+      required:
+      - relevance
+      - label
+      title: TopicDetectionLabel
+      description: Topic detection label.
+    TopicDetectionModelResult:
+      properties:
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/AudioIntelligenceModelStatus'
+          - type: 'null'
+          description: The status of the Topic Detection model
+        results:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TopicDetectionResult'
+            type: array
+          - type: 'null'
+          title: Results
+          description: An array of results for the Topic Detection model
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+          description: The overall relevance of topic to the entire audio file
+      type: object
+      title: TopicDetectionModelResult
+      description: The result of the Topic Detection model.
+    TopicDetectionResult:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The text in the transcript in which a detected topic occurs
+        labels:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TopicDetectionLabel'
+            type: array
+          - type: 'null'
+          title: Labels
+          description: An array of detected topics in the text
+        timestamp:
+          anyOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+          description: Timestamp information
+      type: object
+      required:
+      - text
+      title: TopicDetectionResult
+      description: Topic detection result.
+    TranscriptCustomSpelling:
+      properties:
+        from:
+          items:
+            type: string
+          type: array
+          title: From
+          description: Words or phrases to replace
+        to:
+          type: string
+          title: To
+          description: Word to replace with
+      type: object
+      required:
+      - from
+      - to
+      title: TranscriptCustomSpelling
+      description: Custom spelling configuration.
+    TranscriptLanguageCode:
+      type: string
+      enum:
+      - en
+      - en_au
+      - en_uk
+      - en_us
+      - es
+      - fr
+      - de
+      - it
+      - pt
+      - nl
+      - af
+      - sq
+      - am
+      - ar
+      - hy
+      - as
+      - az
+      - ba
+      - eu
+      - be
+      - bn
+      - bs
+      - br
+      - bg
+      - my
+      - ca
+      - zh
+      - hr
+      - cs
+      - da
+      - et
+      - fo
+      - fi
+      - gl
+      - ka
+      - el
+      - gu
+      - ht
+      - ha
+      - haw
+      - he
+      - hi
+      - hu
+      - is
+      - id
+      - ja
+      - jw
+      - kn
+      - kk
+      - km
+      - ko
+      - lo
+      - la
+      - lv
+      - ln
+      - lt
+      - lb
+      - mk
+      - mg
+      - ms
+      - ml
+      - mt
+      - mi
+      - mr
+      - mn
+      - ne
+      - 'no'
+      - nn
+      - oc
+      - pa
+      - ps
+      - fa
+      - pl
+      - ro
+      - ru
+      - sa
+      - sr
+      - sn
+      - sd
+      - si
+      - sk
+      - sl
+      - so
+      - su
+      - sw
+      - sv
+      - tl
+      - tg
+      - ta
+      - tt
+      - te
+      - th
+      - bo
+      - tr
+      - tk
+      - uk
+      - ur
+      - uz
+      - vi
+      - cy
+      - yi
+      - yo
+      title: TranscriptLanguageCode
+      description: The language of your audio file. Possible values are found in [Supported
+        Languages](https://www.assemblyai.com/docs/concepts/supported-languages).
+        The default value is 'en_us'.
+    TranscriptListItem:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: The unique identifier of the transcript
+        status:
+          $ref: '#/components/schemas/TranscriptStatus'
+          description: The status of the transcript
+        audio_url:
+          type: string
+          title: Audio Url
+          description: The URL of the media that was transcribed
+        created:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created
+          description: The creation timestamp
+        completed:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Completed
+          description: The completion timestamp
+        language_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language Code
+          description: The language of the audio file
+        audio_duration:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Duration
+          description: The duration of the media file, in seconds
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+          description: Error message if the transcript failed
+        resource_url:
+          type: string
+          title: Resource Url
+          description: The URL to retrieve the transcript
+        region:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Region
+          description: The region where the transcript was processed
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - status
+      - audio_url
+      - resource_url
+      title: TranscriptListItem
+      description: A transcript item in the list response.
+    TranscriptListResponse:
+      properties:
+        page_details:
+          $ref: '#/components/schemas/PageDetails'
+          description: Pagination information
+        transcripts:
+          items:
+            $ref: '#/components/schemas/TranscriptListItem'
+          type: array
+          title: Transcripts
+          description: An array of transcript objects
+      additionalProperties: false
+      type: object
+      required:
+      - page_details
+      - transcripts
+      title: TranscriptListResponse
+      description: Response model for transcript list endpoint.
+    TranscriptParagraph:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The text of the paragraph
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, of the paragraph
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, of the paragraph
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the paragraph
+        words:
+          items:
+            $ref: '#/components/schemas/TranscriptWord'
+          type: array
+          title: Words
+          description: An array of word objects that make up the paragraph
+      additionalProperties: false
+      type: object
+      required:
+      - text
+      - start
+      - end
+      - confidence
+      - words
+      title: TranscriptParagraph
+      description: A paragraph in the transcript with timing and word-level information.
+    TranscriptParagraphsResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: The unique identifier of the transcript
+        paragraphs:
+          items:
+            $ref: '#/components/schemas/TranscriptParagraph'
+          type: array
+          title: Paragraphs
+          description: An array of paragraph objects
+        confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
+          description: Overall confidence score for the transcript
+        audio_duration:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Audio Duration
+          description: The duration of the audio file, in seconds
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - paragraphs
+      title: TranscriptParagraphsResponse
+      description: Response model for the paragraphs endpoint.
+    TranscriptParams:
+      properties:
+        audio_url:
+          type: string
+          format: url
+          title: Audio Url
+          description: The URL of the audio or video file to transcribe
+        language_code:
+          anyOf:
+          - $ref: '#/components/schemas/TranscriptLanguageCode'
+          - type: 'null'
+          description: The language of your audio file. Defaults to 'en_us'.
+          default: en_us
+        language_codes:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptLanguageCode'
+            type: array
+          - type: 'null'
+          title: Language Codes
+          description: The language codes of your audio file. Used for Code switching.
+            One of the values specified must be 'en'.
+        language_detection:
+          type: boolean
+          title: Language Detection
+          description: Enable Automatic language detection, either true or false.
+          default: false
+        language_detection_options:
+          anyOf:
+          - $ref: '#/components/schemas/LanguageDetectionOptions'
+          - type: 'null'
+          description: Specify options for Automatic Language Detection.
+        language_confidence_threshold:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Language Confidence Threshold
+          description: The confidence threshold for the automatically detected language.
+          default: 0.0
+        speech_model:
+          anyOf:
+          - $ref: '#/components/schemas/SpeechModel'
+          - type: 'null'
+          description: The speech model to use for the transcription.
+          default: universal
+          deprecated: true
+        speech_models:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/SpeechModel'
+            type: array
+          - type: 'null'
+          title: Speech Models
+          description: List multiple speech models in priority order.
+        punctuate:
+          type: boolean
+          title: Punctuate
+          description: Enable Automatic Punctuation, can be true or false
+          default: true
+        format_text:
+          type: boolean
+          title: Format Text
+          description: Enable Text Formatting, can be true or false
+          default: true
+        disfluencies:
+          type: boolean
+          title: Disfluencies
+          description: Transcribe Filler Words, like 'umm', in your media file
+          default: false
+        multichannel:
+          type: boolean
+          title: Multichannel
+          description: Enable Multichannel transcription, can be true or false.
+          default: false
+        dual_channel:
+          type: boolean
+          title: Dual Channel
+          description: Enable Dual Channel transcription, can be true or false.
+          default: false
+          deprecated: true
+        webhook_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          format: url
+          title: Webhook Url
+          description: The URL to which we send webhook requests.
+        webhook_auth_header_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Webhook Auth Header Name
+          description: The header name to be sent with webhook requests
+        webhook_auth_header_value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Webhook Auth Header Value
+          description: The header value to send back with webhook requests
+        auto_highlights:
+          type: boolean
+          title: Auto Highlights
+          description: Enable Key Phrases, either true or false
+          default: false
+        audio_start_from:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Start From
+          description: The point in time, in milliseconds, to begin transcribing
+        audio_end_at:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio End At
+          description: The point in time, in milliseconds, to stop transcribing
+        filter_profanity:
+          type: boolean
+          title: Filter Profanity
+          description: Filter profanity from the transcribed text
+          default: false
+        redact_pii:
+          type: boolean
+          title: Redact Pii
+          description: Redact PII from the transcribed text using the Redact PII model
+          default: false
+        redact_pii_audio:
+          type: boolean
+          title: Redact Pii Audio
+          description: Generate a copy of the original media file with spoken PII
+            'beeped' out
+          default: false
+        redact_pii_audio_quality:
+          $ref: '#/components/schemas/RedactPiiAudioQuality'
+          description: Controls the filetype of the audio created by redact_pii_audio
+          default: mp3
+        redact_pii_policies:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/EntityType'
+            type: array
+          - type: 'null'
+          title: Redact Pii Policies
+          description: The list of PII Redaction policies to enable
+        redact_pii_sub:
+          anyOf:
+          - $ref: '#/components/schemas/SubstitutionPolicy'
+          - type: 'null'
+          description: The replacement logic for detected PII
+          default: hash
+        redact_pii_audio_options:
+          anyOf:
+          - $ref: '#/components/schemas/RedactPiiAudioOptions'
+          - type: 'null'
+          description: Specify options for PII redacted audio files
+        speaker_labels:
+          type: boolean
+          title: Speaker Labels
+          description: Enable Speaker diarization, can be true or false
+          default: false
+        speakers_expected:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Speakers Expected
+          description: Tells the speaker label model how many speakers it should attempt
+            to identify
+        speaker_options:
+          anyOf:
+          - $ref: '#/components/schemas/SpeakerOptions'
+          - type: 'null'
+          description: Specify options for speaker diarization
+        content_safety:
+          type: boolean
+          title: Content Safety
+          description: Enable Content Moderation, can be true or false
+          default: false
+        content_safety_confidence:
+          type: integer
+          maximum: 100.0
+          minimum: 25.0
+          title: Content Safety Confidence
+          description: The confidence threshold for the Content Moderation model
+          default: 50
+        iab_categories:
+          type: boolean
+          title: Iab Categories
+          description: Enable Topic Detection, can be true or false
+          default: false
+        sentiment_analysis:
+          type: boolean
+          title: Sentiment Analysis
+          description: Enable Sentiment Analysis, can be true or false
+          default: false
+        auto_chapters:
+          type: boolean
+          title: Auto Chapters
+          description: Enable Auto Chapters, can be true or false
+          default: false
+        entity_detection:
+          type: boolean
+          title: Entity Detection
+          description: Enable Entity Detection, can be true or false
+          default: false
+        summarization:
+          type: boolean
+          title: Summarization
+          description: Enable Summarization, can be true or false
+          default: false
+        summary_model:
+          $ref: '#/components/schemas/SummaryModel'
+          description: The model to summarize the transcript
+          default: informative
+        summary_type:
+          $ref: '#/components/schemas/SummaryType'
+          description: The type of summary
+          default: bullets
+        custom_spelling:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptCustomSpelling'
+            type: array
+          - type: 'null'
+          title: Custom Spelling
+          description: Customize how words are spelled and formatted
+        keyterms_prompt:
+          items:
+            type: string
+          type: array
+          title: Keyterms Prompt
+          description: Improve accuracy with domain-specific words or phrases
+        speech_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Speech Threshold
+          description: Reject audio files that contain less than this fraction of
+            speech
+          default: 0.0
+        prompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt
+          description: This parameter does not currently have any functionality
+          deprecated: true
+        custom_topics:
+          type: boolean
+          title: Custom Topics
+          description: Enable custom topics, either true or false
+          default: false
+          deprecated: true
+        topics:
+          items:
+            type: string
+          type: array
+          title: Topics
+          description: The list of custom topics
+          deprecated: true
+        speech_understanding:
+          anyOf:
+          - $ref: '#/components/schemas/SpeechUnderstandingInput'
+          - type: 'null'
+          description: Enable speech understanding tasks like translation, speaker
+            identification, and custom formatting
+      additionalProperties: false
+      type: object
+      required:
+      - audio_url
+      title: TranscriptParams
+      description: Parameters for creating a transcript.
+      examples:
+      - audio_url: https://assembly.ai/wildfires.mp3
+    TranscriptResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: The unique identifier of your transcript
+        audio_url:
+          type: string
+          title: Audio Url
+          description: The URL of the media that was transcribed
+        status:
+          $ref: '#/components/schemas/TranscriptStatus'
+          description: The status of your transcript
+        language_code:
+          anyOf:
+          - $ref: '#/components/schemas/TranscriptLanguageCode'
+          - type: 'null'
+          description: The language of your audio file
+        language_codes:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptLanguageCode'
+            type: array
+          - type: 'null'
+          title: Language Codes
+          description: The language codes of your audio file. Used for Code switching
+        language_detection:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Language Detection
+          description: Whether Automatic language detection is enabled
+        language_detection_options:
+          anyOf:
+          - $ref: '#/components/schemas/LanguageDetectionOptions'
+          - type: 'null'
+          description: Options for Automatic Language Detection
+        language_confidence_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Language Confidence Threshold
+          description: The confidence threshold for the automatically detected language
+        language_confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Language Confidence
+          description: The confidence score for the detected language
+        speech_model:
+          anyOf:
+          - $ref: '#/components/schemas/SpeechModel'
+          - type: 'null'
+          description: The speech model used for the transcription
+          deprecated: true
+        speech_models:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/SpeechModel'
+            type: array
+          - type: 'null'
+          title: Speech Models
+          description: List multiple speech models in priority order
+        speech_model_used:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Speech Model Used
+          description: The speech model that was actually used for the transcription
+        language_model:
+          type: string
+          title: Language Model
+          description: The language model that was used for the transcript
+          deprecated: true
+        acoustic_model:
+          type: string
+          title: Acoustic Model
+          description: The acoustic model that was used for the transcript
+          deprecated: true
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+          description: The textual transcript of your media file
+        words:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptWord'
+            type: array
+          - type: 'null'
+          title: Words
+          description: An array of temporally-sequential word objects
+        utterances:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptUtterance'
+            type: array
+          - type: 'null'
+          title: Utterances
+          description: When multichannel or speaker_labels is enabled, a list of turn-by-turn
+            utterance objects
+        confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
+          description: The confidence score for the transcript
+        audio_duration:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Duration
+          description: The duration of this transcript object's media file, in seconds
+        audio_channels:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Channels
+          description: The number of audio channels in the audio file
+        punctuate:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Punctuate
+          description: Whether Automatic Punctuation is enabled
+        format_text:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Format Text
+          description: Whether Text Formatting is enabled
+        disfluencies:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Disfluencies
+          description: Transcribe Filler Words, like 'umm'
+        multichannel:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Multichannel
+          description: Whether Multichannel transcription was enabled
+        dual_channel:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Dual Channel
+          description: Whether Dual channel transcription was enabled
+          deprecated: true
+        audio_start_from:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio Start From
+          description: The point in time, in milliseconds, in the file at which the
+            transcription was started
+        audio_end_at:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Audio End At
+          description: The point in time, in milliseconds, in the file at which the
+            transcription was terminated
+        filter_profanity:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Filter Profanity
+          description: Whether Profanity Filtering is enabled
+        redact_pii:
+          type: boolean
+          title: Redact Pii
+          description: Whether PII Redaction is enabled
+        redact_pii_audio:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Redact Pii Audio
+          description: Whether a redacted version of the audio file was generated
+        redact_pii_audio_quality:
+          anyOf:
+          - $ref: '#/components/schemas/RedactPiiAudioQuality'
+          - type: 'null'
+          description: The audio quality of the PII-redacted audio file
+        redact_pii_policies:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/EntityType'
+            type: array
+          - type: 'null'
+          title: Redact Pii Policies
+          description: The list of PII Redaction policies that were enabled
+        redact_pii_sub:
+          anyOf:
+          - $ref: '#/components/schemas/SubstitutionPolicy'
+          - type: 'null'
+          description: The replacement logic for detected PII
+        redact_pii_audio_options:
+          anyOf:
+          - $ref: '#/components/schemas/RedactPiiAudioOptions'
+          - type: 'null'
+          description: Options for PII redacted audio files
+        speaker_labels:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Speaker Labels
+          description: Whether Speaker diarization is enabled
+        speakers_expected:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Speakers Expected
+          description: Tell the speaker label model how many speakers it should attempt
+            to identify
+        speaker_options:
+          anyOf:
+          - $ref: '#/components/schemas/SpeakerOptions'
+          - type: 'null'
+          description: Options for speaker diarization
+        auto_highlights:
+          type: boolean
+          title: Auto Highlights
+          description: Whether Key Phrases is enabled
+        auto_highlights_result:
+          anyOf:
+          - $ref: '#/components/schemas/AutoHighlightsResult'
+          - type: 'null'
+          description: An array of results for the Key Phrases model
+        content_safety:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Content Safety
+          description: Whether Content Moderation is enabled
+        content_safety_labels:
+          anyOf:
+          - $ref: '#/components/schemas/ContentSafetyLabelsResult'
+          - type: 'null'
+          description: An array of results for the Content Moderation model
+        iab_categories:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Iab Categories
+          description: Whether Topic Detection is enabled
+        iab_categories_result:
+          anyOf:
+          - $ref: '#/components/schemas/TopicDetectionModelResult'
+          - type: 'null'
+          description: The result of the Topic Detection model
+        sentiment_analysis:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Sentiment Analysis
+          description: Whether Sentiment Analysis is enabled
+        sentiment_analysis_results:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/SentimentAnalysisResult'
+            type: array
+          - type: 'null'
+          title: Sentiment Analysis Results
+          description: An array of results for the Sentiment Analysis model
+        entity_detection:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Entity Detection
+          description: Whether Entity Detection is enabled
+        entities:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/Entity'
+            type: array
+          - type: 'null'
+          title: Entities
+          description: An array of results for the Entity Detection model
+        auto_chapters:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Auto Chapters
+          description: Whether Auto Chapters is enabled
+        chapters:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/Chapter'
+            type: array
+          - type: 'null'
+          title: Chapters
+          description: An array of temporally sequential chapters for the audio file
+        summarization:
+          type: boolean
+          title: Summarization
+          description: Whether Summarization is enabled
+        summary_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary Type
+          description: The type of summary generated
+        summary_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary Model
+          description: The Summarization model used to generate the summary
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+          description: The generated summary of the media file
+        custom_spelling:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TranscriptCustomSpelling'
+            type: array
+          - type: 'null'
+          title: Custom Spelling
+          description: Customize how words are spelled and formatted
+        keyterms_prompt:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Keyterms Prompt
+          description: Improve accuracy with domain-specific words or phrases
+        prompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt
+          description: This parameter does not currently have any functionality
+          deprecated: true
+        custom_topics:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Custom Topics
+          description: Whether custom topics is enabled
+          deprecated: true
+        topics:
+          items:
+            type: string
+          type: array
+          title: Topics
+          description: The list of custom topics provided
+          deprecated: true
+        speech_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Speech Threshold
+          description: Reject audio files that contain less than this fraction of
+            speech
+        speech_understanding:
+          anyOf:
+          - $ref: '#/components/schemas/SpeechUnderstanding'
+          - type: 'null'
+          description: Speech understanding tasks like translation, speaker identification,
+            and custom formatting
+        translated_texts:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Translated Texts
+          description: Translated text keyed by language code
+        speed_boost:
+          type: boolean
+          title: Speed Boost
+          description: Whether speed boost is enabled
+          default: false
+          deprecated: true
+        throttled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Throttled
+          description: True while a request is throttled
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+          description: Error message of why the transcript failed
+        webhook_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Webhook Url
+          description: The URL to which we send webhook requests
+        webhook_status_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Webhook Status Code
+          description: The status code we received from your server
+        webhook_auth:
+          type: boolean
+          title: Webhook Auth
+          description: Whether webhook authentication details were provided
+        webhook_auth_header_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Webhook Auth Header Name
+          description: The header name to be sent with webhook requests
+        word_boost:
+          items:
+            type: string
+          type: array
+          title: Word Boost
+          description: Words to boost in recognition
+        boost_param:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Boost Param
+          description: How much to boost specified words
+        language_detection_results:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Language Detection Results
+          description: Results of language detection analysis
+        project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Project Id
+          description: The project ID
+        token_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Token Id
+          description: The token ID
+        is_deleted:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Deleted
+          description: Whether the transcript has been deleted
+        custom_topics_results:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Custom Topics Results
+          description: Results for custom topics
+          deprecated: true
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - audio_url
+      - status
+      - language_model
+      - acoustic_model
+      - redact_pii
+      - auto_highlights
+      - summarization
+      - webhook_auth
+      title: TranscriptResponse
+      description: A transcript object.
+    TranscriptSentence:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The text of the sentence
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, of the sentence
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, of the sentence
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the sentence
+        words:
+          items:
+            $ref: '#/components/schemas/TranscriptWord'
+          type: array
+          title: Words
+          description: An array of word objects that make up the sentence
+        speaker:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Speaker
+          description: The speaker of the sentence if Speaker Diarization is enabled
+      additionalProperties: false
+      type: object
+      required:
+      - text
+      - start
+      - end
+      - confidence
+      - words
+      title: TranscriptSentence
+      description: A sentence in the transcript with timing and word-level information.
+    TranscriptSentencesResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: The unique identifier of the transcript
+        sentences:
+          items:
+            $ref: '#/components/schemas/TranscriptSentence'
+          type: array
+          title: Sentences
+          description: An array of sentence objects
+        confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
+          description: Overall confidence score for the transcript
+        audio_duration:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Audio Duration
+          description: The duration of the audio file, in seconds
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - sentences
+      title: TranscriptSentencesResponse
+      description: Response model for the sentences endpoint.
+    TranscriptStatus:
+      type: string
+      enum:
+      - queued
+      - processing
+      - completed
+      - error
+      title: TranscriptStatus
+      description: The status of your transcript. Possible values are queued, processing,
+        completed, or error.
+    TranscriptUtterance:
+      properties:
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the transcript of this utterance
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, of the utterance in the
+            audio file
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, of the utterance in the audio
+            file
+        text:
+          type: string
+          title: Text
+          description: The text for this utterance
+        words:
+          items:
+            $ref: '#/components/schemas/TranscriptWord'
+          type: array
+          title: Words
+          description: The words in the utterance
+        channel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel
+          description: The channel of this utterance
+        speaker:
+          type: string
+          title: Speaker
+          description: The speaker of this utterance
+        translated_texts:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Translated Texts
+          description: Translated text keyed by language code
+      additionalProperties: false
+      type: object
+      required:
+      - confidence
+      - start
+      - end
+      - text
+      - words
+      - speaker
+      title: TranscriptUtterance
+      description: An utterance in the transcript.
+    TranscriptWord:
+      properties:
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+          description: The confidence score for the transcript of this word
+        start:
+          type: integer
+          title: Start
+          description: The starting time, in milliseconds, for the word
+        end:
+          type: integer
+          title: End
+          description: The ending time, in milliseconds, for the word
+        text:
+          type: string
+          title: Text
+          description: The text of the word
+        channel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel
+          description: The channel of the word. The left and right channels are channels
+            1 and 2
+        speaker:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Speaker
+          description: The speaker of the word if Speaker Diarization is enabled,
+            else null
+      additionalProperties: false
+      type: object
+      required:
+      - confidence
+      - start
+      - end
+      - text
+      title: TranscriptWord
+      description: A word in the transcript with timing and confidence information.
+    TranslationRequest:
+      properties:
+        target_languages:
+          items:
+            type: string
+          type: array
+          title: Target Languages
+          description: List of target language codes
+        formal:
+          type: boolean
+          title: Formal
+          description: Whether to use formal language
+          default: true
+        match_original_utterance:
+          type: boolean
+          title: Match Original Utterance
+          description: Whether to match original utterance structure
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - target_languages
+      title: TranslationRequest
+      description: Translation request configuration.
+    TranslationResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: The status of translation
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      title: TranslationResponse
+      description: Translation response.
+    UploadedFile:
+      properties:
+        upload_url:
+          type: string
+          format: url
+          title: Upload Url
+          description: A URL that points to your audio file, accessible only by AssemblyAI's
+            servers
+      additionalProperties: false
+      type: object
+      required:
+      - upload_url
+      title: UploadedFile
+      description: Response for uploaded file.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WordSearchMatch:
+      properties:
+        text:
+          type: string
+          title: Text
+          description: The matched word or phrase
+        count:
+          type: integer
+          title: Count
+          description: The number of times this word/phrase appears
+        timestamps:
+          items:
+            items:
+              type: integer
+            type: array
+          type: array
+          title: Timestamps
+          description: Array of `[start, end]` timestamp pairs in milliseconds
+        indexes:
+          items:
+            type: integer
+          type: array
+          title: Indexes
+          description: Array of word indexes where the match occurs
+      additionalProperties: false
+      type: object
+      required:
+      - text
+      - count
+      - timestamps
+      - indexes
+      title: WordSearchMatch
+      description: A word search match result.
+    WordSearchResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: The unique identifier of the transcript
+        matches:
+          items:
+            $ref: '#/components/schemas/WordSearchMatch'
+          type: array
+          title: Matches
+          description: An array of word search matches
+        total_count:
+          type: integer
+          title: Total Count
+          description: Total count of all matches across all words/phrases
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - matches
+      - total_count
+      title: WordSearchResponse
+      description: Response model for word search endpoint.
+  securitySchemes:
+    APIKeyHeader:
+      type: apiKey
+      description: AssemblyAI API Key
+      in: header
+      name: Authorization
