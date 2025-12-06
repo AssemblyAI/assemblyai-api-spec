@@ -302,6 +302,33 @@ http {
 }
 ```
 
+### Usage reporting configuration
+
+The license-and-usage-proxy service supports two billing modes based on your AssemblyAI license:
+
+#### Flat billing mode
+If your license is configured for flat billing, usage tracking is disabled. No additional configuration is required.
+
+#### Usage-based billing mode
+If your license is configured for usage-based billing, the proxy will automatically report usage data to AssemblyAI's usage tracker service. You must configure the following environment variable in the `docker-compose.yml` for the `license-and-usage-proxy` service:
+
+```yaml
+environment:
+  - USAGE_TRACKING_API_KEY=<your-api-key>
+```
+**Important Notes:**
+- For the API key, any key retrieved from the AssemblyAI dashboard can be used.
+- At startup, the proxy validates connectivity by registering with AssemblyAI's https://usage-tracker.assemblyai.com.
+- If connectivity validation fails, the proxy will shut down.
+- Usage data is batched and reported every few seconds.
+- The proxy automatically retries failed requests up to several times.
+**Critical Behavior:**
+If https://usage-tracker.assemblyai.com becomes unreachable and all retry attempts fail (after 5-60 minutes), the license-and-usage-proxy service will terminate itself. This is a fail-safe mechanism to ensure usage data integrity. Your service orchestrator should be configured to automatically replace the container with a new one.
+**Monitoring Recommendations:**
+- Monitor the proxy's logs for warnings about failed usage reporting attempts.
+- Set up alerts for proxy restarts, which may indicate persistent connectivity issues.
+- If the in-memory usage queue size exceeds 1000 items, the proxy will log a warning suggesting upscaling.
+
 ## Service endpoints
 
 - **WebSocket**: `ws://localhost:8080`
