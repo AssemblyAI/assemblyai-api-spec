@@ -362,169 +362,6 @@ if (transcript.translated_texts) {
 </Tab> */}
 </Tabs>
 
-### Translation with Speaker Labels
-
-When you use Translation with [Speaker Labels](/speech-to-text/speaker-diarization), you can get translated text for each individual utterance by setting `match_original_utterance` to `true`. This is useful for creating speaker-specific subtitles or analyzing conversations in multiple languages while preserving speaker attribution.
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-  "authorization": "YOUR_API_KEY"
-}
-
-audio_url = "https://assembly.ai/wildfires.mp3"
-
-# Configure transcription with translation and speaker labels
-data = {
-  "audio_url": audio_url,
-  "speaker_labels": True,  # Enable speaker labels
-  "speech_understanding": {
-    "request": {
-      "translation": {
-        "target_languages": ["es"],
-        "match_original_utterance": True,  # Get translated text per utterance
-        "formal": True
-      }
-    }
-  }
-}
-
-# Submit transcription request
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-transcript_id = response.json()["id"]
-polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
-
-# Poll transcription results
-while True:
-  transcript = requests.get(polling_endpoint, headers=headers).json()
-
-  if transcript["status"] == "completed":
-    break
-
-  elif transcript["status"] == "error":
-    raise RuntimeError(f"Transcription failed: {transcript['error']}")
-
-  else:
-    time.sleep(3)
-
-# Access translated utterances
-for utterance in transcript["utterances"]:
-  print(f"Speaker {utterance['speaker']}:")
-  print(f"  Original: {utterance['text'][:100]}...")
-  print(f"  Spanish: {utterance['translated_texts']['es'][:100]}...")
-  print()
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript" default>
-
-```javascript
-import fetch from 'node-fetch';
-
-const baseUrl = 'https://api.assemblyai.com';
-const headers = {
-  authorization: 'YOUR_API_KEY'
-};
-
-const audioUrl = 'https://assembly.ai/wildfires.mp3';
-
-// Configure transcription with translation and speaker labels
-const data = {
-  audio_url: audioUrl,
-  speaker_labels: true,  // Enable speaker labels
-  speech_understanding: {
-    request: {
-      translation: {
-        target_languages: ['es'],
-        match_original_utterance: true,  // Get translated text per utterance
-        formal: true
-      }
-    }
-  }
-};
-
-async function transcribeWithTranslatedUtterances() {
-  const response = await fetch(`${baseUrl}/v2/transcript`, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(data)
-  });
-
-  const transcript = await response.json();
-  const transcriptId = transcript.id;
-  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-  // Poll transcription results
-  while (true) {
-    const pollingResponse = await fetch(pollingEndpoint, { headers });
-    const transcriptResult = await pollingResponse.json();
-
-    if (transcriptResult.status === 'completed') {
-      // Access translated utterances
-      for (const utterance of transcriptResult.utterances) {
-        console.log(`Speaker ${utterance.speaker}:`);
-        console.log(`  Original: ${utterance.text.substring(0, 100)}...`);
-        console.log(`  Spanish: ${utterance.translated_texts.es.substring(0, 100)}...`);
-        console.log();
-      }
-      break;
-    } else if (transcriptResult.status === 'error') {
-      throw new Error(`Transcription failed: ${transcriptResult.error}`);
-    } else {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-    }
-  }
-}
-
-transcribeWithTranslatedUtterances();
-```
-
-</Tab>
-</Tabs>
-
-**Example response:**
-
-Each utterance in the `utterances` array includes a `translated_texts` object with the translation for that specific speaker's utterance:
-
-```json
-{
-  "utterances": [
-    {
-      "speaker": "A",
-      "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts...",
-      "confidence": 0.9815734,
-      "start": 240,
-      "end": 26560,
-      "words": [...],
-      "translated_texts": {
-        "es": "El humo de cientos de incendios forestales en Canadá está activando alertas de calidad del aire..."
-      }
-    },
-    {
-      "speaker": "B",
-      "text": "Good morning.",
-      "confidence": 0.98217773,
-      "start": 28060,
-      "end": 28620,
-      "words": [...],
-      "translated_texts": {
-        "es": "Buenos días."
-      }
-    }
-  ]
-}
-```
-
 ### Method 2: Transcribe and translate in separate requests
 
 This method is useful when you already have text that you would like to translate or for more complicated workflows where you want to separate the transcription and translation tasks.
@@ -873,28 +710,168 @@ The Translation API returns translations in the `translated_texts` key of the re
 }
 ```
 
-{/* ## Translated utterances with Speaker Labels
+## Translation with speaker labels
 
-When you enable both `speaker_labels` and set `match_original_utterance` to `true`, each utterance in the `utterances` array will include a `translated_texts` key containing translations for that specific speaker's utterance. This is useful for creating speaker-specific subtitles or analyzing conversations in multiple languages.
+When you use Translation with [Speaker Labels](/speech-to-text/speaker-diarization), you can get translated text for each individual utterance by setting `match_original_utterance` to `true`. This is useful for creating speaker-specific subtitles or analyzing conversations in multiple languages while preserving speaker attribution.
 
-**Example utterance with translations:**
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+  "authorization": "YOUR_API_KEY"
+}
+
+audio_url = "https://assembly.ai/wildfires.mp3"
+
+# Configure transcription with translation and speaker labels
+data = {
+  "audio_url": audio_url,
+  "speaker_labels": True,  # Enable speaker labels
+  "speech_understanding": {
+    "request": {
+      "translation": {
+        "target_languages": ["es"],
+        "match_original_utterance": True,  # Get translated text per utterance
+        "formal": True
+      }
+    }
+  }
+}
+
+# Submit transcription request
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll transcription results
+while True:
+  transcript = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcript["status"] == "completed":
+    break
+
+  elif transcript["status"] == "error":
+    raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+  else:
+    time.sleep(3)
+
+# Access translated utterances
+for utterance in transcript["utterances"]:
+  print(f"Speaker {utterance['speaker']}:")
+  print(f"  Original: {utterance['text'][:100]}...")
+  print(f"  Spanish: {utterance['translated_texts']['es'][:100]}...")
+  print()
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript" default>
+
+```javascript
+import fetch from 'node-fetch';
+
+const baseUrl = 'https://api.assemblyai.com';
+const headers = {
+  authorization: 'YOUR_API_KEY'
+};
+
+const audioUrl = 'https://assembly.ai/wildfires.mp3';
+
+// Configure transcription with translation and speaker labels
+const data = {
+  audio_url: audioUrl,
+  speaker_labels: true,  // Enable speaker labels
+  speech_understanding: {
+    request: {
+      translation: {
+        target_languages: ['es'],
+        match_original_utterance: true,  // Get translated text per utterance
+        formal: true
+      }
+    }
+  }
+};
+
+async function transcribeWithTranslatedUtterances() {
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+
+  const transcript = await response.json();
+  const transcriptId = transcript.id;
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcriptResult = await pollingResponse.json();
+
+    if (transcriptResult.status === 'completed') {
+      // Access translated utterances
+      for (const utterance of transcriptResult.utterances) {
+        console.log(`Speaker ${utterance.speaker}:`);
+        console.log(`  Original: ${utterance.text.substring(0, 100)}...`);
+        console.log(`  Spanish: ${utterance.translated_texts.es.substring(0, 100)}...`);
+        console.log();
+      }
+      break;
+    } else if (transcriptResult.status === 'error') {
+      throw new Error(`Transcription failed: ${transcriptResult.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+}
+
+transcribeWithTranslatedUtterances();
+```
+
+</Tab>
+</Tabs>
+
+**Example response:**
+
+Each utterance in the `utterances` array includes a `translated_texts` object with the translation for that specific speaker's utterance:
 
 ```json
 {
-  "speaker": "A",
-  "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts...",
-  "confidence": 0.9815734,
-  "start": 240,
-  "end": 26560,
-  "words": [...],
-  "translated_texts": {
-    "es": "El humo de cientos de incendios forestales en Canadá está provocando alertas de calidad del aire...",
-    "de": "Rauch von Hunderten von Waldbränden in Kanada löst in den gesamten USA Luftqualitätswarnungen aus..."
-  }
+  "utterances": [
+    {
+      "speaker": "A",
+      "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts...",
+      "confidence": 0.9815734,
+      "start": 240,
+      "end": 26560,
+      "words": [...],
+      "translated_texts": {
+        "es": "El humo de cientos de incendios forestales en Canadá está activando alertas de calidad del aire..."
+      }
+    },
+    {
+      "speaker": "B",
+      "text": "Good morning.",
+      "confidence": 0.98217773,
+      "start": 28060,
+      "end": 28620,
+      "words": [...],
+      "translated_texts": {
+        "es": "Buenos días."
+      }
+    }
+  ]
 }
 ```
-
-Each utterance's `translated_texts` object follows the same structure as the top-level `translated_texts`, with language codes as keys and translated text as values. */}
 
 ## API reference
 
