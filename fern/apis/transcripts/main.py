@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, Security, File, UploadFile
+from fastapi import FastAPI, Query, Security, File, UploadFile, Request
 from fastapi.security import APIKeyHeader
 from typing import Optional
 from models import (
@@ -53,6 +53,7 @@ app = FastAPI(
     responses={
         200: {
             "description": "Transcript created successfully",
+            "model": TranscriptResponse,
             "content": {
                 "application/json": {
                     "example": examples.get("new_transcript")
@@ -68,7 +69,7 @@ app = FastAPI(
                 }
             }
         }
-    } if examples.get("new_transcript") else {}
+    }
 )
 async def create_transcript(params: TranscriptParams, token: str = Security(security)):
     """
@@ -387,13 +388,30 @@ async def delete_transcript(transcript_id: str, token: str = Security(security))
                 }
             }
         }
+    },
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/octet-stream": {
+                    "schema": {
+                        "type": "string",
+                        "format": "binary"
+                    },
+                    "example": "@path/to/file"
+                }
+            },
+            "required": True,
+            "description": "The media file to upload as binary data"
+        }
     }
 )
-async def upload_file(file: bytes = File(...), token: str = Security(security)):
+async def upload_file(request: Request, token: str = Security(security)):
     """
     Upload a media file.
     
     Uploads binary data (application/octet-stream) and returns a URL that can be used
     for transcript creation. The URL is accessible only by AssemblyAI's servers.
     """
+    # Read the raw binary data from the request body
+    file_data = await request.body()
     pass
