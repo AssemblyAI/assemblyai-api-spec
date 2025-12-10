@@ -46,8 +46,8 @@ app = FastAPI(
 @app.post(
     "/v2/transcript",
     response_model=TranscriptResponse,
-    summary="Create transcript",
-    description="Create a transcript from a media file. The transcript is queued for processing and will be available when the status is 'completed'.",
+    summary="Transcribe audio",
+    description="<Note>To use our EU server for transcription, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nCreate a transcript from a media file that is accessible via a URL.",
     operation_id="createTranscript",
     tags=["transcripts"],
     responses={
@@ -85,7 +85,7 @@ async def create_transcript(params: TranscriptParams, token: str = Security(secu
     "/v2/transcript/{transcript_id}",
     response_model=TranscriptResponse,
     summary="Get transcript",
-    description='Get the transcript resource. The transcript is ready when the "status" is "completed".',
+    description='<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nGet the transcript resource. The transcript is ready when the "status" is "completed".',
     operation_id="getTranscript",
     tags=["transcripts"],
     responses={
@@ -110,8 +110,8 @@ async def get_transcript(transcript_id: str, token: str = Security(security)):
 @app.get(
     "/v2/transcript/{transcript_id}/sentences",
     response_model=TranscriptSentencesResponse,
-    summary="Get transcript sentences",
-    description="Get sentences of the transcript. Each sentence includes timing information and the words that make up the sentence.",
+    summary="Get sentences in transcript",
+    description="<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nGet the transcript split by sentences. The API will attempt to semantically segment the transcript into sentences to create more reader-friendly transcripts.",
     operation_id="getTranscriptSentences",
     tags=["transcripts"],
     responses={
@@ -135,8 +135,8 @@ async def get_transcript_sentences(transcript_id: str, token: str = Security(sec
 @app.get(
     "/v2/transcript/{transcript_id}/paragraphs",
     response_model=TranscriptParagraphsResponse,
-    summary="Get transcript paragraphs",
-    description="Get paragraphs of the transcript. Each paragraph includes timing information and the words that make up the paragraph.",
+    summary="Get paragraphs in transcript",
+    description="<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nGet the transcript split by paragraphs. The API will attempt to semantically segment your transcript into paragraphs to create more reader-friendly transcripts.",
     operation_id="getTranscriptParagraphs",
     tags=["transcripts"],
     responses={
@@ -162,7 +162,7 @@ async def get_transcript_paragraphs(
 @app.get(
     "/v2/transcript/{transcript_id}/{subtitle_format}",
     summary="Get subtitles for transcript",
-    description="Export your transcript in SRT or VTT format to use with a video player for subtitles and closed captions.",
+    description="<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nExport your transcript in SRT or VTT format to use with a video player for subtitles and closed captions.",
     operation_id="getSubtitles",
     tags=["transcripts"],
     responses={
@@ -206,8 +206,8 @@ async def get_subtitles(
 @app.get(
     "/v2/transcript/{transcript_id}/word-search",
     response_model=WordSearchResponse,
-    summary="Search for words in transcript",
-    description="Search for specific words or phrases in the transcript and get their timestamps.",
+    summary="Search words in transcript",
+    description="<Note>To search through a transcription created on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nSearch through the transcript for keywords. You can search for individual words, numbers, or phrases containing up to five words or numbers.",
     operation_id="wordSearch",
     tags=["transcripts"],
     responses={
@@ -222,7 +222,7 @@ async def get_subtitles(
 async def search_transcript_words(
     transcript_id: str,
     words: str = Query(
-        ..., description="The word or phrase to search for in the transcript"
+        ..., description="Keywords to search for"
     ),
     token: str = Security(security),
 ):
@@ -237,8 +237,8 @@ async def search_transcript_words(
 @app.get(
     "/v2/transcript/{transcript_id}/redacted-audio",
     response_model=RedactedAudioResponse,
-    summary="Get redacted audio URL",
-    description="Retrieve the URL of the redacted audio file if PII redaction was enabled during transcription.",
+    summary="Get redacted audio",
+    description="<Note>To retrieve the redacted audio on the EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com` in the `GET` request above.</Note>\nRetrieve the redacted audio object containing the status and URL to the redacted audio.",
     operation_id="getRedactedAudio",
     tags=["transcripts"],
     responses={
@@ -293,7 +293,7 @@ async def get_redacted_audio(transcript_id: str, token: str = Security(security)
     "/v2/transcript",
     response_model=TranscriptListResponse,
     summary="List transcripts",
-    description="Get a list of transcripts you created.",
+    description="<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nRetrieve a list of transcripts you created.\nTranscripts are sorted from newest to oldest and can be retrieved for the last 90 days of usage. The previous URL always points to a page with older transcripts.\n\nIf you need to retrieve transcripts from more than 90 days ago please reach out to our Support team at support@assemblyai.com.",
     operation_id="listTranscripts",
     tags=["transcripts"],
     responses={
@@ -335,7 +335,7 @@ async def list_transcripts(
     "/v2/transcript/{transcript_id}",
     response_model=TranscriptResponse,
     summary="Delete transcript",
-    description="Remove the data from the transcript and mark it as deleted. Returns the transcript with is_deleted=true and sanitized fields.",
+    description="<Note>To delete your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nRemove the data from the transcript and mark it as deleted.",
     operation_id="deleteTranscript",
     tags=["transcripts"],
     responses={
@@ -373,7 +373,7 @@ async def delete_transcript(transcript_id: str, token: str = Security(security))
     "/v2/upload",
     response_model=UploadedFile,
     summary="Upload a media file",
-    description="Upload a media file to AssemblyAI's servers.",
+    description="Upload a media file to AssemblyAI's servers.\n\n<Note>To upload a media file to our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\n<Warning>Requests to transcribe uploaded files must use an API key from the same project as the key that was used to upload the file. If you use an API key from a different project you will get a `403` error and \"Cannot access uploaded file\" message.</Warning>",
     operation_id="uploadFile",
     tags=["transcripts"],
     responses={

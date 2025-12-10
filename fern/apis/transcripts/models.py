@@ -280,11 +280,11 @@ class TranscriptWord(BaseModel):
     text: str = Field(..., description="The text of the word")
     channel: Optional[str] = Field(
         None,
-        description="The channel of the word. The left and right channels are channels 1 and 2",
+        description="The channel of the word. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.",
     )
     speaker: Optional[str] = Field(
         None,
-        description="The speaker of the word if Speaker Diarization is enabled, else null",
+        description="The speaker of the word if [Speaker Diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, else null",
     )
 
 
@@ -308,9 +308,9 @@ class TranscriptUtterance(BaseModel):
         description="The ending time, in milliseconds, of the utterance in the audio file",
     )
     text: str = Field(..., description="The text for this utterance")
-    words: List[TranscriptWord] = Field(..., description="The words in the utterance")
-    channel: Optional[str] = Field(None, description="The channel of this utterance")
-    speaker: str = Field(..., description="The speaker of this utterance")
+    words: List[TranscriptWord] = Field(..., description="The words in the utterance.")
+    channel: Optional[str] = Field(None, description="The channel of this utterance. The left and right channels are channels 1 and 2. Additional channels increment the channel number sequentially.")
+    speaker: str = Field(..., description="The speaker of this utterance, where each speaker is assigned a sequential capital letter - e.g. \"A\" for Speaker A, \"B\" for Speaker B, etc.")
     translated_texts: Optional[Dict[str, str]] = Field(None, description="Translated text keyed by language code")
 
 
@@ -340,7 +340,7 @@ class ContentSafetyLabelResult(BaseModel):
         description="The transcript of the section flagged by the Content Moderation model",
     )
     labels: List[ContentSafetyLabel] = Field(
-        ..., description="An array of safety labels"
+        ..., description="An array of safety labels, one per sensitive topic that was detected in the section"
     )
     sentences_idx_start: int = Field(
         ..., description="The sentence index at which the section begins"
@@ -430,7 +430,7 @@ class AutoHighlightResult(BaseModel):
     )
     text: str = Field(..., description="The text itself of the key phrase")
     timestamps: List[Timestamp] = Field(
-        ..., description="The timestamp of the key phrase"
+        ..., description="The timestamp of the of the key phrase"
     )
 
 
@@ -464,7 +464,7 @@ class Chapter(BaseModel):
         ..., description="The starting time, in milliseconds, for the chapter"
     )
     end: int = Field(
-        ..., description="The starting time, in milliseconds, for the chapter"
+        ..., description="The ending time, in milliseconds, for the chapter"
     )
 
 
@@ -477,10 +477,10 @@ class Entity(BaseModel):
     text: str = Field(..., description="The text for the detected entity")
     start: int = Field(
         ...,
-        description="The starting time, in milliseconds, at which the detected entity appears",
+        description="The starting time, in milliseconds, at which the detected entity appears in the audio file",
     )
     end: int = Field(
-        ..., description="The ending time, in milliseconds, for the detected entity"
+        ..., description="The ending time, in milliseconds, for the detected entity in the audio file"
     )
 
 
@@ -881,14 +881,14 @@ class TranscriptResponse(BaseModel):
         None, description="The textual transcript of your media file"
     )
     words: Optional[List[TranscriptWord]] = Field(
-        None, description="An array of temporally-sequential word objects"
+        None, description="An array of temporally-sequential word objects, one for each word in the transcript. See [Speech recognition](https://www.assemblyai.com/docs/models/speech-recognition) for more information."
     )
     utterances: Optional[List[TranscriptUtterance]] = Field(
         None,
-        description="When multichannel or speaker_labels is enabled, a list of turn-by-turn utterance objects",
+        description="When multichannel or speaker_labels is enabled, a list of turn-by-turn utterance objects. See [Speaker diarization](https://www.assemblyai.com/docs/speech-to-text/speaker-diarization) and [Multichannel transcription](https://www.assemblyai.com/docs/speech-to-text/speech-recognition#multichannel-transcription) for more information.",
     )
     confidence: Optional[float] = Field(
-        None, description="The confidence score for the transcript", ge=0, le=1
+        None, description="The confidence score for the transcript, between 0.0 (low confidence) and 1.0 (high confidence)", ge=0, le=1
     )
     audio_duration: Optional[int] = Field(
         None,
@@ -898,16 +898,16 @@ class TranscriptResponse(BaseModel):
         None, description="The number of audio channels in the audio file"
     )
     punctuate: Optional[bool] = Field(
-        None, description="Whether Automatic Punctuation is enabled"
+        None, description="Whether Automatic Punctuation is enabled, either true or false"
     )
     format_text: Optional[bool] = Field(
-        None, description="Whether Text Formatting is enabled"
+        None, description="Whether Text Formatting is enabled, either true or false"
     )
     disfluencies: Optional[bool] = Field(
-        None, description="Transcribe Filler Words, like 'umm'"
+        None, description="Transcribe Filler Words, like \"umm\", in your media file; can be true or false"
     )
     multichannel: Optional[bool] = Field(
-        None, description="Whether Multichannel transcription was enabled"
+        None, description="Whether [Multichannel transcription](https://www.assemblyai.com/docs/models/speech-recognition#multichannel-transcription) was enabled in the transcription request, either true or false"
     )
     dual_channel: Optional[bool] = Field(
         None,
@@ -923,75 +923,75 @@ class TranscriptResponse(BaseModel):
         description="The point in time, in milliseconds, in the file at which the transcription was terminated",
     )
     filter_profanity: Optional[bool] = Field(
-        None, description="Whether Profanity Filtering is enabled"
+        None, description="Whether [Profanity Filtering](https://www.assemblyai.com/docs/models/speech-recognition#profanity-filtering) is enabled, either true or false"
     )
-    redact_pii: bool = Field(..., description="Whether PII Redaction is enabled")
+    redact_pii: bool = Field(..., description="Whether [PII Redaction](https://www.assemblyai.com/docs/models/pii-redaction) is enabled, either true or false")
     redact_pii_audio: Optional[bool] = Field(
-        None, description="Whether a redacted version of the audio file was generated"
+        None, description="Whether a redacted version of the audio file was generated, either true or false. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information."
     )
     redact_pii_audio_quality: Optional[RedactPiiAudioQuality] = Field(
-        None, description="The audio quality of the PII-redacted audio file"
+        None, description="The audio quality of the PII-redacted audio file, if redact_pii_audio is enabled. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information."
     )
     redact_pii_policies: Optional[List[EntityType]] = Field(
-        None, description="The list of PII Redaction policies that were enabled"
+        None, description="The list of PII Redaction policies that were enabled, if PII Redaction is enabled. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more information."
     )
     redact_pii_sub: Optional[SubstitutionPolicy] = Field(
-        None, description="The replacement logic for detected PII"
+        None, description="The replacement logic for detected PII, can be `entity_type` or `hash`. See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction) for more details."
     )
     redact_pii_audio_options: Optional[RedactPiiAudioOptions] = Field(
         None, description="Options for PII redacted audio files"
     )
     speaker_labels: Optional[bool] = Field(
-        None, description="Whether Speaker diarization is enabled"
+        None, description="Whether [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) is enabled, can be true or false"
     )
     speakers_expected: Optional[int] = Field(
         None,
-        description="Tell the speaker label model how many speakers it should attempt to identify",
+        description="Tell the speaker label model how many speakers it should attempt to identify. See [Speaker diarization](https://www.assemblyai.com/docs/models/speaker-diarization) for more details.",
     )
     speaker_options: Optional[SpeakerOptions] = Field(
         None, description="Options for speaker diarization"
     )
-    auto_highlights: bool = Field(..., description="Whether Key Phrases is enabled")
+    auto_highlights: bool = Field(..., description="Whether Key Phrases is enabled, either true or false")
     auto_highlights_result: Optional[AutoHighlightsResult] = Field(
-        None, description="An array of results for the Key Phrases model"
+        None, description="An array of results for the Key Phrases model, if it is enabled. See [Key Phrases](https://www.assemblyai.com/docs/models/key-phrases) for more information."
     )
     content_safety: Optional[bool] = Field(
-        None, description="Whether Content Moderation is enabled"
+        None, description="Whether [Content Moderation](https://www.assemblyai.com/docs/models/content-moderation) is enabled, can be true or false"
     )
     content_safety_labels: Optional[ContentSafetyLabelsResult] = Field(
-        None, description="An array of results for the Content Moderation model"
+        None, description="An array of results for the Content Moderation model, if it is enabled. See [Content moderation](https://www.assemblyai.com/docs/models/content-moderation) for more information."
     )
     iab_categories: Optional[bool] = Field(
-        None, description="Whether Topic Detection is enabled"
+        None, description="Whether [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection) is enabled, can be true or false"
     )
     iab_categories_result: Optional[TopicDetectionModelResult] = Field(
-        None, description="The result of the Topic Detection model"
+        None, description="The result of the Topic Detection model, if it is enabled. See [Topic Detection](https://www.assemblyai.com/docs/models/topic-detection) for more information."
     )
     sentiment_analysis: Optional[bool] = Field(
-        None, description="Whether Sentiment Analysis is enabled"
+        None, description="Whether [Sentiment Analysis](https://www.assemblyai.com/docs/models/sentiment-analysis) is enabled, can be true or false"
     )
     sentiment_analysis_results: Optional[List[SentimentAnalysisResult]] = Field(
-        None, description="An array of results for the Sentiment Analysis model"
+        None, description="An array of results for the Sentiment Analysis model, if it is enabled. See [Sentiment Analysis](https://www.assemblyai.com/docs/models/sentiment-analysis) for more information."
     )
     entity_detection: Optional[bool] = Field(
-        None, description="Whether Entity Detection is enabled"
+        None, description="Whether [Entity Detection](https://www.assemblyai.com/docs/models/entity-detection) is enabled, can be true or false"
     )
     entities: Optional[List[Entity]] = Field(
-        None, description="An array of results for the Entity Detection model"
+        None, description="An array of results for the Entity Detection model, if it is enabled. See [Entity detection](https://www.assemblyai.com/docs/models/entity-detection) for more information."
     )
     auto_chapters: Optional[bool] = Field(
-        None, description="Whether Auto Chapters is enabled"
+        None, description="Whether [Auto Chapters](https://www.assemblyai.com/docs/models/auto-chapters) is enabled, can be true or false"
     )
     chapters: Optional[List[Chapter]] = Field(
         None,
         description="An array of temporally sequential chapters for the audio file",
     )
-    summarization: bool = Field(..., description="Whether Summarization is enabled")
+    summarization: bool = Field(..., description="Whether [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled, either true or false")
     summary_type: Optional[str] = Field(
-        None, description="The type of summary generated"
+        None, description="The type of summary generated, if [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled"
     )
     summary_model: Optional[str] = Field(
-        None, description="The Summarization model used to generate the summary"
+        None, description="The Summarization model used to generate the summary, if [Summarization](https://www.assemblyai.com/docs/models/summarization) is enabled"
     )
     summary: Optional[str] = Field(
         None, description="The generated summary of the media file"
