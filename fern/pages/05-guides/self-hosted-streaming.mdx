@@ -35,7 +35,7 @@ Design partners are encouraged to provide their GitHub username to gain access t
 The streaming solution consists of four AssemblyAI Docker images plus a standard nginx container:
 
 1. **API Service** (`streaming-api`) - Gateway API service handling WebSocket connections
-2. **License and Usage Proxy** (`license-and-usage-proxy`) - License validation service (usage tracking will be added in upcoming releases)
+2. **License and Usage Proxy** (`license-and-usage-proxy`) - License validation and usage reporting service
 3. **English ASR Service** (`streaming-asr-english`) - English speech recognition model service
 4. **Multilingual ASR Service** (`streaming-asr-multilang`) - Multilingual speech recognition model service
 5. **ASR Load Balancer** (`streaming-asr-lb`) - Standard nginx:alpine container with header-based routing between ASR services
@@ -45,9 +45,11 @@ The streaming solution consists of four AssemblyAI Docker images plus a standard
 ```
 Websocket client → streaming-api:8080 (WebSocket)
                           │
-                          ├─ License validation ─→ license-and-usage-proxy:8080 (HTTP)
+                          ├─ Usage reporting     ───────→ license-and-usage-proxy:8080 [if usage-based billing] ────→ https://usage-tracker.assemblyai.com
+                          │                               │
+                          ├─ License validation  ─────────┘
                           │
-                          └─ ASR requests ───────→ streaming-asr-lb:80 → Header-based routing (X-Model-Version):
+                          └─ ASR requests        ───────→ streaming-asr-lb:80 → Header-based routing (X-Model-Version):
                                                                                 ├── en-default → streaming-asr-english:50051 (gRPC)
                                                                                 └── ml-default → streaming-asr-multilang:50051 (gRPC)
 ```
@@ -100,10 +102,11 @@ LICENSE_AND_USAGE_PROXY_IMAGE=<CUSTOM_IMAGE>
 For ease of reference in this doc, the current image references are below:
 
 ```bash
-STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.2.0
-STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.2.0
-STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.2.0
-LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.2.0
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.3.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.3.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.3.0
+LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.3.0
+USAGE_TRACKING_API_KEY=<your_usage_tracking_api_key_here>
 ```
 
 ### 4. Have the license file ready
@@ -146,9 +149,8 @@ services:
       - AAI_LOG_LEVEL=INFO
       - AAI_USE_STRUCTURED_LOGGING=False
       - AAI_ASR_ENDPOINT=streaming-asr-lb:80
-      - AAI_STREAMING_ASR_ENDPOINT=streaming-asr-lb:80
       - AAI_USE_SECURE_CHANNEL_TO_ASR_SERVICE=False
-      - AAI_LICENSE_AND_USAGE_PROXY_ENDPOINT=license-and-usage-proxy:8080
+      - AAI_LICENSE_AND_USAGE_PROXY_ENDPOINT=http://license-and-usage-proxy:8080
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v3/health"]
       interval: 10s
@@ -236,6 +238,7 @@ services:
       - LOGGING_LEVEL=INFO
       - USE_STRUCTURED_LOGGING=False
       - LICENSE_FILE_PATH=/var/aai_license.jwt
+      - USAGE_TRACKING_API_KEY=${USAGE_TRACKING_API_KEY} # Set if license is for usage-based billing
     volumes:
       - ./license.jwt:/var/aai_license.jwt:ro
     healthcheck:
@@ -868,14 +871,20 @@ docker compose restart streaming-asr-multilang
 - **Dependencies**: For successful startup, the service depends on the license-and-usage-proxy service being up and running.
 - **Configuration**: You can enable features like TLS encryption and structured logging via environment variables.
 - **Health Checks**: Use the healthcheck command provided in the docker-compose.yml to monitor container health.
+- **Usage Reporting Behavior**: After each session completes, the streaming-api reports usage to the license-and-usage-proxy with automatic retries on failure. Monitor logs any messages at a >= warning level.
 
 ### license-and-usage-proxy service
 
-- **Deployment Strategy**: Do gradual rollouts to ensure stability.
+- **Deployment Strategy**: Do gradual rollouts to ensure stability. Consider implementing monitoring and alerting for service restarts.
 - **Resource Allocation**: We recommend allocating 1 CPU per container with at least 2GB of RAM for better hardware utilization. For example, it's better to have 4 containers with 1 CPU and 2GB RAM each rather than 1 container with 4 CPU and 8GB RAM.
-- **Monitoring**: Always monitor logs during deployment to catch any potential issues early. You can set up an alert based on the responses of the `/v1/status` endpoint to alert you on any license issues.
-- **Dependencies**: For successful startup, the service depends on having a valid license being mounted on the container filesystem. To mount it, set the `LICENSE_FILE_PATH` environment variable to point to the license file path on the host machine.
+- **Monitoring**: Always monitor logs during deployment to catch any potential issues early. You can set up an alert based on the responses of the `/v1/status` endpoint to alert you on any license issues. For usage-based billing, also monitor for usage reporting warnings and service restarts.
+- **Dependencies**:
+  - For successful startup, the service depends on having a valid license being mounted on the container filesystem. To mount it, set the `LICENSE_FILE_PATH` environment variable to point to the license file path on the host machine.
+  - For usage-based billing, the service also requires connectivity to https://usage-tracker.assemblyai.com at startup. If connectivity validation fails, the container will terminate. Ensure the `USAGE_TRACKING_API_KEY` environment variable is properly configured.
 - **Health Checks**: Use the healthcheck command provided in the docker-compose.yml to monitor container health.
+- **Usage Reporting Resilience**:
+  - Network connectivity to the https://usage-tracker.assemblyai.com endpoint must be reliable for production deployments with usage-based billing.
+  - Run at least a few containers behind a load balancer to ensure high availability.
 
 #### License Status Endpoint
 
@@ -1089,9 +1098,11 @@ cd ~/assemblyai-streaming
 
 # Create .env file with image references
 cat > .env << 'EOF'
-STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.1.0
-STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.1.0
-STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.1.0
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.3.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.3.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.3.0
+LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.3.0
+USAGE_TRACKING_API_KEY=<your_usage_tracking_api_key_here>
 EOF
 
 # Create docker-compose.yml file
