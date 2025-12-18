@@ -459,3 +459,123 @@ Values for agent `voice` configuration:
 | `estelle` | Female, middle-aged, African American, sounds so sweet |
 | `andromeda` | Female, young, breathy, yoga vibes |
 
+---
+
+## Example
+
+### Python
+
+**Installation**
+
+```bash
+pip install websockets sounddevice numpy
+```
+
+**Code**
+
+```python
+import asyncio
+import json
+import websockets
+import sounddevice as sd
+import numpy as np
+import contextlib
+
+URI = "wss://aaigentsv1.up.railway.app/ws/{agent_name}"
+
+async def voice_chat():
+    queue = asyncio.Queue(maxsize=100)
+    session_ready = False
+    interim_active = False
+
+    async with websockets.connect(URI, ping_interval=10, ping_timeout=20) as websocket:
+        print(f"Connected to {URI}")
+
+        async def sender():
+            audio_count = 0
+            while True:
+                try:
+                    data = await queue.get()
+                    if session_ready:
+                        await websocket.send(data)
+                        audio_count += 1
+                finally:
+                    queue.task_done()
+
+        sender_task = asyncio.create_task(sender())
+        loop = asyncio.get_running_loop()
+        
+        def mic_callback(indata, frames, time, status):
+            if status.input_overflow:
+                print("Audio buffer overflow!")
+            pcm_bytes = bytes(indata)
+            
+            def safe_put(item):
+                if not queue.full():
+                    queue.put_nowait(item)
+            
+            loop.call_soon_threadsafe(safe_put, pcm_bytes)
+
+        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=mic_callback), \
+             sd.OutputStream(samplerate=16000, channels=1, dtype='int16') as speaker:
+            
+            print("Waiting for session to be ready...")
+            
+            try:
+                while True:
+                    try:
+                        response_data = await websocket.recv()
+                        
+                        if isinstance(response_data, (bytes, bytearray)) and len(response_data):
+                            speaker.write(np.frombuffer(response_data, dtype=np.int16))
+                            
+                        elif isinstance(response_data, str):
+                            try:
+                                message = json.loads(response_data)
+                                
+                                if message.get("type") == "session.created":
+                                    print("Session created, voice chat is now active. Press Ctrl+C to quit.")
+                                    session_ready = True
+                                elif message.get("type") == "conversation.item.done":
+                                    item = message.get("item", {})
+                                    role = item.get("role", "unknown")
+                                    content = item.get("content", [])
+                                    if content and len(content) > 0:
+                                        text = content[0].get("text", "")
+                                        if interim_active:
+                                            print("\r" + " " * 100 + "\r", end='')
+                                            interim_active = False
+                                        print(f"[{role}]: {text}")
+                                        
+                                elif message.get("type") == "conversation.item.interim":
+                                    item = message.get("item", {})
+                                    role = item.get("role", "unknown")
+                                    content = item.get("content", [])
+                                    if content and len(content) > 0:
+                                        text = content[0].get("text", "")
+                                        if role == "user":
+                                            print(f"\r🎤 {text}...", end='', flush=True)
+                                            interim_active = True
+                                        
+                            except json.JSONDecodeError:
+                                print(f"Received non-JSON text message: {response_data}")
+                                
+                    except websockets.exceptions.ConnectionClosedOK:
+                        print("Server closed connection cleanly.")
+                        break
+                        
+            except asyncio.CancelledError:
+                pass
+            except KeyboardInterrupt:
+                print("\nDisconnecting...")
+
+        sender_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sender_task
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(voice_chat())
+    except KeyboardInterrupt:
+        print("\nExiting...")
+```
