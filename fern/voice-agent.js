@@ -3,12 +3,13 @@
 
   let websocket = null;
   let audioContext = null;
+  let playbackContext = null;
   let mediaStream = null;
   let scriptProcessor = null;
   let isConnected = false;
+  let isSessionReady = false;
   let isRecording = false;
-  let audioQueue = [];
-  let isPlaying = false;
+  let nextPlayTime = 0;
 
   function findAskAIButton() {
     const buttons = document.querySelectorAll("button");
@@ -44,7 +45,8 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 36px;
+      gap: 6px;
+      padding: 0 12px;
       height: 36px;
       border-radius: 8px;
       border: 1px solid rgba(0, 0, 0, 0.1);
@@ -53,15 +55,19 @@
       margin-left: 8px;
       transition: all 0.2s ease;
       flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
     `;
 
     voiceButton.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
         <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
         <line x1="12" y1="19" x2="12" y2="23"></line>
         <line x1="8" y1="23" x2="16" y2="23"></line>
       </svg>
+      <span>Ask Voice Agent</span>
     `;
 
     voiceButton.addEventListener("mouseenter", () => {
@@ -92,26 +98,30 @@
       stopVoiceAgent();
       button.style.background = "white";
       button.style.borderColor = "rgba(0, 0, 0, 0.1)";
+      button.style.color = "#374151";
       button.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
           <line x1="12" y1="19" x2="12" y2="23"></line>
           <line x1="8" y1="23" x2="16" y2="23"></line>
         </svg>
+        <span>Ask Voice Agent</span>
       `;
     } else {
       try {
         await startVoiceAgent();
         button.style.background = "#ef4444";
         button.style.borderColor = "#ef4444";
+        button.style.color = "white";
         button.innerHTML = `
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
             <line x1="12" y1="19" x2="12" y2="23"></line>
             <line x1="8" y1="23" x2="16" y2="23"></line>
           </svg>
+          <span>Ask Voice Agent</span>
         `;
       } catch (error) {
         console.error("Failed to start voice agent:", error);
@@ -171,7 +181,7 @@
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
     scriptProcessor.onaudioprocess = (event) => {
-      if (!isConnected || !isRecording) return;
+      if (!isSessionReady || !isRecording) return;
 
       const inputData = event.inputBuffer.getChannelData(0);
       const pcm16 = new Int16Array(inputData.length);
@@ -195,6 +205,7 @@
   function stopVoiceAgent() {
     isRecording = false;
     isConnected = false;
+    isSessionReady = false;
 
     if (scriptProcessor) {
       scriptProcessor.disconnect();
@@ -216,14 +227,19 @@
       audioContext = null;
     }
 
-    audioQueue = [];
-    isPlaying = false;
+    if (playbackContext) {
+      playbackContext.close();
+      playbackContext = null;
+    }
+
+    nextPlayTime = 0;
   }
 
   function handleServerMessage(message) {
     switch (message.type) {
       case "session.created":
         console.log("Session created:", message.session);
+        isSessionReady = true;
         break;
       case "conversation.item.done":
         const item = message.item;
@@ -249,27 +265,14 @@
     }
   }
 
-  async function playAudio(arrayBuffer) {
-    audioQueue.push(arrayBuffer);
-    if (!isPlaying) {
-      processAudioQueue();
-    }
-  }
-
-  async function processAudioQueue() {
-    if (audioQueue.length === 0) {
-      isPlaying = false;
-      return;
-    }
-
-    isPlaying = true;
-    const arrayBuffer = audioQueue.shift();
-
+  function playAudio(arrayBuffer) {
     try {
-      const playbackContext = new (window.AudioContext ||
-        window.webkitAudioContext)({
-        sampleRate: 16000,
-      });
+      if (!playbackContext) {
+        playbackContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: 16000,
+        });
+        nextPlayTime = playbackContext.currentTime;
+      }
 
       const int16Array = new Int16Array(arrayBuffer);
       const float32Array = new Float32Array(int16Array.length);
@@ -289,15 +292,13 @@
       source.buffer = audioBuffer;
       source.connect(playbackContext.destination);
 
-      source.onended = () => {
-        playbackContext.close();
-        processAudioQueue();
-      };
-
-      source.start(0);
+      const currentTime = playbackContext.currentTime;
+      const startTime = Math.max(currentTime, nextPlayTime);
+      
+      source.start(startTime);
+      nextPlayTime = startTime + audioBuffer.duration;
     } catch (error) {
       console.error("Error playing audio:", error);
-      processAudioQueue();
     }
   }
 
