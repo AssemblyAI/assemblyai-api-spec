@@ -27,7 +27,10 @@
     }
 
     const askAIButton = findAskAIButton();
-    if (!askAIButton) {
+    const searchButton = document.getElementById("fern-search-button");
+    
+    const anchorButton = askAIButton || searchButton;
+    if (!anchorButton) {
       return;
     }
 
@@ -75,9 +78,9 @@
 
     voiceButton.addEventListener("click", toggleVoiceAgent);
 
-    askAIButton.parentNode.insertBefore(
+    anchorButton.parentNode.insertBefore(
       voiceButton,
-      askAIButton.nextSibling
+      anchorButton.nextSibling
     );
   }
 
@@ -314,10 +317,13 @@
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === "childList") {
-        const askAIButton = findAskAIButton();
         const voiceButton = document.getElementById("voice-agent-button");
-        if (askAIButton && !voiceButton) {
-          createVoiceAgentButton();
+        if (!voiceButton) {
+          const askAIButton = findAskAIButton();
+          const searchButton = document.getElementById("fern-search-button");
+          if (askAIButton || searchButton) {
+            createVoiceAgentButton();
+          }
         }
       }
     }
