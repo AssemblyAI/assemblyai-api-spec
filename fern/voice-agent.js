@@ -14,6 +14,40 @@
   let conversationItems = [];
   let chatboxElement = null;
 
+  function isDarkMode() {
+    return document.documentElement.classList.contains("dark");
+  }
+
+  function getButtonStyles() {
+    const dark = isDarkMode();
+    return {
+      background: dark ? "#1f2937" : "white",
+      hoverBackground: dark ? "#374151" : "#f5f5f5",
+      borderColor: dark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)",
+      textColor: dark ? "white" : "#374151",
+      iconColor: "#3b82f6"
+    };
+  }
+
+  function updateButtonTheme() {
+    const button = document.getElementById("voice-agent-button");
+    if (!button || isRecording) return;
+    
+    const styles = getButtonStyles();
+    button.style.background = styles.background;
+    button.style.borderColor = styles.borderColor;
+    button.style.color = styles.textColor;
+    button.innerHTML = `
+      <span>Ask Voice Agent</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${styles.iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </svg>
+    `;
+  }
+
   function findAskAIButton() {
     const buttons = document.querySelectorAll("button");
     for (const button of buttons) {
@@ -44,6 +78,7 @@
     voiceButton.title = "Talk to AI Assistant";
     voiceButton.setAttribute("aria-label", "Talk to AI Assistant");
 
+    const styles = getButtonStyles();
     voiceButton.style.cssText = `
       display: inline-flex;
       align-items: center;
@@ -52,20 +87,20 @@
       padding: 0 12px;
       height: 36px;
       border-radius: 8px;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      background: white;
+      border: 1px solid ${styles.borderColor};
+      background: ${styles.background};
       cursor: pointer;
       margin-left: 8px;
       transition: all 0.2s ease;
       flex-shrink: 0;
       font-size: 14px;
       font-weight: 400;
-      color: #374151;
+      color: ${styles.textColor};
     `;
 
     voiceButton.innerHTML = `
       <span>Ask Voice Agent</span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${styles.iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
         <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
         <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -75,13 +110,15 @@
 
     voiceButton.addEventListener("mouseenter", () => {
       if (!isRecording) {
-        voiceButton.style.background = "#f5f5f5";
+        const hoverStyles = getButtonStyles();
+        voiceButton.style.background = hoverStyles.hoverBackground;
       }
     });
 
     voiceButton.addEventListener("mouseleave", () => {
       if (!isRecording) {
-        voiceButton.style.background = "white";
+        const hoverStyles = getButtonStyles();
+        voiceButton.style.background = hoverStyles.background;
       }
     });
 
@@ -99,12 +136,13 @@
 
     if (isRecording) {
       stopVoiceAgent();
-      button.style.background = "white";
-      button.style.borderColor = "rgba(0, 0, 0, 0.1)";
-      button.style.color = "#374151";
+      const styles = getButtonStyles();
+      button.style.background = styles.background;
+      button.style.borderColor = styles.borderColor;
+      button.style.color = styles.textColor;
       button.innerHTML = `
         <span>Ask Voice Agent</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${styles.iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
           <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -127,12 +165,13 @@
         await startVoiceAgent();
       } catch (error) {
         console.error("Failed to start voice agent:", error);
-        button.style.background = "white";
-        button.style.borderColor = "rgba(0, 0, 0, 0.1)";
-        button.style.color = "#374151";
+        const errorStyles = getButtonStyles();
+        button.style.background = errorStyles.background;
+        button.style.borderColor = errorStyles.borderColor;
+        button.style.color = errorStyles.textColor;
         button.innerHTML = `
           <span>Ask Voice Agent</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${errorStyles.iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
             <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -574,5 +613,19 @@
   observer.observe(document.body || document.documentElement, {
     childList: true,
     subtree: true,
+  });
+
+  // Watch for theme changes on the HTML element
+  const themeObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "attributes" && mutation.attributeName === "class") {
+        updateButtonTheme();
+      }
+    }
+  });
+
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
   });
 })();
