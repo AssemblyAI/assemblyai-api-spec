@@ -25,7 +25,7 @@
       hoverBackground: dark ? "#374151" : "#f5f5f5",
       borderColor: dark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)",
       textColor: dark ? "white" : "#374151",
-      iconColor: "#3b82f6"
+      iconColor: "#2545D3"
     };
   }
 
@@ -383,7 +383,7 @@
     const header = document.createElement("div");
     header.style.cssText = `
       padding: 14px 18px;
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      background: linear-gradient(135deg, #2545D3 0%, #1a3ab0 100%);
       font-weight: 600;
       font-size: 14px;
       color: white;
@@ -456,7 +456,7 @@
       border-radius: 12px;
       ${role === "user" 
         ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
-        : "background: #3b82f6; margin-right: 24px; color: white;"}
+        : "background: #2545D3; margin-right: 24px; color: white;"}
     `;
 
     const roleLabel = document.createElement("div");
@@ -504,7 +504,7 @@
         opacity: 0.7;
         ${role === "user" 
           ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
-          : "background: #3b82f6; margin-right: 24px;"}
+          : "background: #2545D3; margin-right: 24px;"}
       `;
 
       const roleLabel = document.createElement("div");
