@@ -115,7 +115,6 @@
       try {
         button.style.background = "#f59e0b";
         button.style.borderColor = "#f59e0b";
-        button.style.color = "white";
         button.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -123,7 +122,7 @@
             <line x1="12" y1="19" x2="12" y2="23"></line>
             <line x1="8" y1="23" x2="16" y2="23"></line>
           </svg>
-          <span>Connecting...</span>
+          <span style="color: white;">Connecting...</span>
         `;
         await startVoiceAgent();
       } catch (error) {
@@ -331,12 +330,12 @@
       top: 100%;
       right: 0;
       margin-top: 8px;
-      width: 320px;
-      max-height: 300px;
-      background: white;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      width: 340px;
+      max-height: 320px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
       overflow: hidden;
       z-index: 1000;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -344,44 +343,32 @@
 
     const header = document.createElement("div");
     header.style.cssText = `
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      padding: 14px 18px;
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
       font-weight: 600;
       font-size: 14px;
-      color: #111827;
+      color: white;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     `;
     header.innerHTML = `
-      <span style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></span>
-      Voice Agent Active
+      <span style="width: 10px; height: 10px; background: #4ade80; border-radius: 50%; box-shadow: 0 0 8px #4ade80;"></span>
+      Voice Agent
     `;
 
     const messagesContainer = document.createElement("div");
     messagesContainer.id = "voice-agent-messages";
     messagesContainer.style.cssText = `
-      padding: 12px 16px;
-      max-height: 220px;
+      padding: 16px 18px;
+      min-height: 80px;
+      max-height: 240px;
       overflow-y: auto;
-      font-size: 13px;
-      line-height: 1.5;
-    `;
-    messagesContainer.innerHTML = `
-      <div style="color: #6b7280; text-align: center; padding: 20px 0;">
-        Listening...
-      </div>
+      font-size: 14px;
+      line-height: 1.6;
+      background: #fafafa;
     `;
 
-    const style = document.createElement("style");
-    style.textContent = `
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-    `;
-
-    chatboxElement.appendChild(style);
     chatboxElement.appendChild(header);
     chatboxElement.appendChild(messagesContainer);
 
@@ -407,32 +394,29 @@
       interimElement.remove();
     }
 
-    if (messagesContainer.querySelector('[style*="Listening"]')) {
-      messagesContainer.innerHTML = "";
-    }
-
     const messageDiv = document.createElement("div");
     messageDiv.style.cssText = `
-      margin-bottom: 12px;
-      padding: 8px 12px;
-      border-radius: 8px;
+      margin-bottom: 14px;
+      padding: 10px 14px;
+      border-radius: 12px;
       ${role === "user" 
-        ? "background: #f3f4f6; margin-left: 20px;" 
-        : "background: #eff6ff; margin-right: 20px; border-left: 3px solid #3b82f6;"}
+        ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
+        : "background: #3b82f6; margin-right: 24px; color: white;"}
     `;
 
     const roleLabel = document.createElement("div");
     roleLabel.style.cssText = `
       font-size: 11px;
       font-weight: 600;
-      color: ${role === "user" ? "#6b7280" : "#3b82f6"};
+      color: ${role === "user" ? "#9ca3af" : "rgba(255,255,255,0.8)"};
       margin-bottom: 4px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     `;
     roleLabel.textContent = role === "user" ? "You" : "Assistant";
 
     const textDiv = document.createElement("div");
-    textDiv.style.cssText = `color: #374151;`;
+    textDiv.style.cssText = `color: ${role === "user" ? "#374151" : "white"}; font-size: 14px;`;
     textDiv.textContent = text;
 
     messageDiv.appendChild(roleLabel);
@@ -448,23 +432,19 @@
     const messagesContainer = document.getElementById("voice-agent-messages");
     if (!messagesContainer) return;
 
-    if (messagesContainer.querySelector('[style*="Listening"]')) {
-      messagesContainer.innerHTML = "";
-    }
-
     let interimElement = messagesContainer.querySelector(".interim-message");
     
     if (!interimElement) {
       interimElement = document.createElement("div");
       interimElement.className = "interim-message";
       interimElement.style.cssText = `
-        margin-bottom: 12px;
-        padding: 8px 12px;
-        border-radius: 8px;
+        margin-bottom: 14px;
+        padding: 10px 14px;
+        border-radius: 12px;
         opacity: 0.7;
         ${role === "user" 
-          ? "background: #f3f4f6; margin-left: 20px;" 
-          : "background: #eff6ff; margin-right: 20px; border-left: 3px solid #3b82f6;"}
+          ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
+          : "background: #3b82f6; margin-right: 24px;"}
       `;
 
       const roleLabel = document.createElement("div");
@@ -472,15 +452,16 @@
       roleLabel.style.cssText = `
         font-size: 11px;
         font-weight: 600;
-        color: ${role === "user" ? "#6b7280" : "#3b82f6"};
+        color: ${role === "user" ? "#9ca3af" : "rgba(255,255,255,0.8)"};
         margin-bottom: 4px;
         text-transform: uppercase;
+        letter-spacing: 0.5px;
       `;
       roleLabel.textContent = role === "user" ? "You" : "Assistant";
 
       const textDiv = document.createElement("div");
       textDiv.className = "interim-text";
-      textDiv.style.cssText = `color: #374151;`;
+      textDiv.style.cssText = `color: ${role === "user" ? "#374151" : "white"}; font-size: 14px;`;
 
       interimElement.appendChild(roleLabel);
       interimElement.appendChild(textDiv);
