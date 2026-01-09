@@ -5,11 +5,14 @@
   let audioContext = null;
   let playbackContext = null;
   let mediaStream = null;
+  let mediaStreamSource = null;
   let scriptProcessor = null;
   let isConnected = false;
   let isSessionReady = false;
   let isRecording = false;
   let nextPlayTime = 0;
+  let conversationItems = [];
+  let chatboxElement = null;
 
   function findAskAIButton() {
     const buttons = document.querySelectorAll("button");
@@ -133,6 +136,8 @@
   }
 
   async function startVoiceAgent() {
+    conversationItems = [];
+    
     audioContext = new (window.AudioContext || window.webkitAudioContext)({
       sampleRate: 16000,
     });
@@ -146,10 +151,29 @@
       },
     });
 
+    mediaStreamSource = audioContext.createMediaStreamSource(mediaStream);
+    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+    scriptProcessor.onaudioprocess = (event) => {
+      if (!isSessionReady || !isRecording) return;
+
+      const inputData = event.inputBuffer.getChannelData(0);
+      const pcm16 = new Int16Array(inputData.length);
+
+      for (let i = 0; i < inputData.length; i++) {
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(pcm16.buffer);
+      }
+    };
+
     websocket = new WebSocket(WS_URL);
 
     websocket.onopen = () => {
-      console.log("Voice agent connected");
+      console.log("Voice agent connected, waiting for session.created...");
       isConnected = true;
     };
 
@@ -177,29 +201,16 @@
       stopVoiceAgent();
     };
 
-    const source = audioContext.createMediaStreamSource(mediaStream);
-    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-
-    scriptProcessor.onaudioprocess = (event) => {
-      if (!isSessionReady || !isRecording) return;
-
-      const inputData = event.inputBuffer.getChannelData(0);
-      const pcm16 = new Int16Array(inputData.length);
-
-      for (let i = 0; i < inputData.length; i++) {
-        const s = Math.max(-1, Math.min(1, inputData[i]));
-        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-      }
-
-      if (websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(pcm16.buffer);
-      }
-    };
-
-    source.connect(scriptProcessor);
-    scriptProcessor.connect(audioContext.destination);
-
     isRecording = true;
+    showChatbox();
+  }
+
+  function startAudioCapture() {
+    if (mediaStreamSource && scriptProcessor) {
+      mediaStreamSource.connect(scriptProcessor);
+      scriptProcessor.connect(audioContext.destination);
+      console.log("Audio capture started - now sending audio to server");
+    }
   }
 
   function stopVoiceAgent() {
@@ -210,6 +221,11 @@
     if (scriptProcessor) {
       scriptProcessor.disconnect();
       scriptProcessor = null;
+    }
+
+    if (mediaStreamSource) {
+      mediaStreamSource.disconnect();
+      mediaStreamSource = null;
     }
 
     if (mediaStream) {
@@ -233,6 +249,7 @@
     }
 
     nextPlayTime = 0;
+    hideChatbox();
   }
 
   function handleServerMessage(message) {
@@ -240,11 +257,14 @@
       case "session.created":
         console.log("Session created:", message.session);
         isSessionReady = true;
+        startAudioCapture();
         break;
       case "conversation.item.done":
         const item = message.item;
         if (item && item.content && item.content.length > 0) {
-          console.log(`[${item.role}]: ${item.content[0].text}`);
+          const text = item.content[0].text;
+          console.log(`[${item.role}]: ${text}`);
+          addConversationItem(item.role, text, false);
         }
         break;
       case "conversation.item.interim":
@@ -254,7 +274,9 @@
           interimItem.content &&
           interimItem.content.length > 0
         ) {
-          console.log(`[${interimItem.role}] (interim): ${interimItem.content[0].text}`);
+          const interimText = interimItem.content[0].text;
+          console.log(`[${interimItem.role}] (interim): ${interimText}`);
+          updateInterimItem(interimItem.role, interimText);
         }
         break;
       case "tool.call":
@@ -263,6 +285,183 @@
       default:
         console.log("Unknown message type:", message.type);
     }
+  }
+
+  function showChatbox() {
+    if (chatboxElement) return;
+
+    const voiceButton = document.getElementById("voice-agent-button");
+    if (!voiceButton) return;
+
+    chatboxElement = document.createElement("div");
+    chatboxElement.id = "voice-agent-chatbox";
+    chatboxElement.style.cssText = `
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 8px;
+      width: 320px;
+      max-height: 300px;
+      background: white;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      z-index: 1000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    const header = document.createElement("div");
+    header.style.cssText = `
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      font-weight: 600;
+      font-size: 14px;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    `;
+    header.innerHTML = `
+      <span style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></span>
+      Voice Agent Active
+    `;
+
+    const messagesContainer = document.createElement("div");
+    messagesContainer.id = "voice-agent-messages";
+    messagesContainer.style.cssText = `
+      padding: 12px 16px;
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    `;
+    messagesContainer.innerHTML = `
+      <div style="color: #6b7280; text-align: center; padding: 20px 0;">
+        Listening...
+      </div>
+    `;
+
+    const style = document.createElement("style");
+    style.textContent = `
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    `;
+
+    chatboxElement.appendChild(style);
+    chatboxElement.appendChild(header);
+    chatboxElement.appendChild(messagesContainer);
+
+    const buttonParent = voiceButton.parentNode;
+    buttonParent.style.position = "relative";
+    buttonParent.appendChild(chatboxElement);
+  }
+
+  function hideChatbox() {
+    if (chatboxElement) {
+      chatboxElement.remove();
+      chatboxElement = null;
+    }
+    conversationItems = [];
+  }
+
+  function addConversationItem(role, text, isInterim) {
+    const messagesContainer = document.getElementById("voice-agent-messages");
+    if (!messagesContainer) return;
+
+    const interimElement = messagesContainer.querySelector(".interim-message");
+    if (interimElement) {
+      interimElement.remove();
+    }
+
+    if (messagesContainer.querySelector('[style*="Listening"]')) {
+      messagesContainer.innerHTML = "";
+    }
+
+    const messageDiv = document.createElement("div");
+    messageDiv.style.cssText = `
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      ${role === "user" 
+        ? "background: #f3f4f6; margin-left: 20px;" 
+        : "background: #eff6ff; margin-right: 20px; border-left: 3px solid #3b82f6;"}
+    `;
+
+    const roleLabel = document.createElement("div");
+    roleLabel.style.cssText = `
+      font-size: 11px;
+      font-weight: 600;
+      color: ${role === "user" ? "#6b7280" : "#3b82f6"};
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    `;
+    roleLabel.textContent = role === "user" ? "You" : "Assistant";
+
+    const textDiv = document.createElement("div");
+    textDiv.style.cssText = `color: #374151;`;
+    textDiv.textContent = text;
+
+    messageDiv.appendChild(roleLabel);
+    messageDiv.appendChild(textDiv);
+    messagesContainer.appendChild(messageDiv);
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    conversationItems.push({ role, text });
+  }
+
+  function updateInterimItem(role, text) {
+    const messagesContainer = document.getElementById("voice-agent-messages");
+    if (!messagesContainer) return;
+
+    if (messagesContainer.querySelector('[style*="Listening"]')) {
+      messagesContainer.innerHTML = "";
+    }
+
+    let interimElement = messagesContainer.querySelector(".interim-message");
+    
+    if (!interimElement) {
+      interimElement = document.createElement("div");
+      interimElement.className = "interim-message";
+      interimElement.style.cssText = `
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        opacity: 0.7;
+        ${role === "user" 
+          ? "background: #f3f4f6; margin-left: 20px;" 
+          : "background: #eff6ff; margin-right: 20px; border-left: 3px solid #3b82f6;"}
+      `;
+
+      const roleLabel = document.createElement("div");
+      roleLabel.className = "interim-role";
+      roleLabel.style.cssText = `
+        font-size: 11px;
+        font-weight: 600;
+        color: ${role === "user" ? "#6b7280" : "#3b82f6"};
+        margin-bottom: 4px;
+        text-transform: uppercase;
+      `;
+      roleLabel.textContent = role === "user" ? "You" : "Assistant";
+
+      const textDiv = document.createElement("div");
+      textDiv.className = "interim-text";
+      textDiv.style.cssText = `color: #374151;`;
+
+      interimElement.appendChild(roleLabel);
+      interimElement.appendChild(textDiv);
+      messagesContainer.appendChild(interimElement);
+    }
+
+    const textDiv = interimElement.querySelector(".interim-text");
+    if (textDiv) {
+      textDiv.textContent = text + "...";
+    }
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
   function playAudio(arrayBuffer) {
