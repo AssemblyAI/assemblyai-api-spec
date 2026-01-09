@@ -1,5 +1,5 @@
 (function () {
-  const WS_URL = "wss://aaigentsv1.up.railway.app/ws/assemblyai_docs_agent";
+  const WS_URL = "wss://aaigentsv1.up.railway.app/ws/assemblyai_docs_agentt";
 
   let websocket = null;
   let audioContext = null;
