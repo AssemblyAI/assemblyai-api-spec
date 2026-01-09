@@ -1,5 +1,5 @@
 (function () {
-  const WS_URL = "wss://aaigentsv1.up.railway.app/ws/assembly_docs_agent";
+  const WS_URL = "wss://aaigentsv1.up.railway.app/ws/assemblyai_docs_agent";
 
   let websocket = null;
   let audioContext = null;
@@ -10,14 +10,24 @@
   let audioQueue = [];
   let isPlaying = false;
 
+  function findAskAIButton() {
+    const buttons = document.querySelectorAll("button");
+    for (const button of buttons) {
+      if (button.textContent && button.textContent.includes("Ask AI")) {
+        return button;
+      }
+    }
+    return null;
+  }
+
   function createVoiceAgentButton() {
-    const searchButton = document.getElementById("fern-search-button");
-    if (!searchButton) {
+    const existingButton = document.getElementById("voice-agent-button");
+    if (existingButton) {
       return;
     }
 
-    const existingButton = document.getElementById("voice-agent-button");
-    if (existingButton) {
+    const askAIButton = findAskAIButton();
+    if (!askAIButton) {
       return;
     }
 
@@ -65,9 +75,9 @@
 
     voiceButton.addEventListener("click", toggleVoiceAgent);
 
-    searchButton.parentNode.insertBefore(
+    askAIButton.parentNode.insertBefore(
       voiceButton,
-      searchButton.nextSibling
+      askAIButton.nextSibling
     );
   }
 
@@ -304,9 +314,9 @@
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === "childList") {
-        const searchButton = document.getElementById("fern-search-button");
+        const askAIButton = findAskAIButton();
         const voiceButton = document.getElementById("voice-agent-button");
-        if (searchButton && !voiceButton) {
+        if (askAIButton && !voiceButton) {
           createVoiceAgentButton();
         }
       }
