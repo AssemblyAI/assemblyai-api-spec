@@ -59,7 +59,7 @@
       transition: all 0.2s ease;
       flex-shrink: 0;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 400;
       color: #374151;
     `;
 
