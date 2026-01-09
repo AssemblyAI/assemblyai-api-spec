@@ -113,9 +113,8 @@
       `;
     } else {
       try {
-        await startVoiceAgent();
-        button.style.background = "#ef4444";
-        button.style.borderColor = "#ef4444";
+        button.style.background = "#f59e0b";
+        button.style.borderColor = "#f59e0b";
         button.style.color = "white";
         button.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -124,10 +123,23 @@
             <line x1="12" y1="19" x2="12" y2="23"></line>
             <line x1="8" y1="23" x2="16" y2="23"></line>
           </svg>
-          <span>Ask Voice Agent</span>
+          <span>Connecting...</span>
         `;
+        await startVoiceAgent();
       } catch (error) {
         console.error("Failed to start voice agent:", error);
+        button.style.background = "white";
+        button.style.borderColor = "rgba(0, 0, 0, 0.1)";
+        button.style.color = "#374151";
+        button.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <span>Ask Voice Agent</span>
+        `;
         alert(
           "Failed to start voice agent. Please ensure microphone access is allowed."
         );
@@ -252,12 +264,31 @@
     hideChatbox();
   }
 
+  function updateButtonToDisconnect() {
+    const button = document.getElementById("voice-agent-button");
+    if (button) {
+      button.style.background = "#ef4444";
+      button.style.borderColor = "#ef4444";
+      button.style.color = "white";
+      button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+        <span>Disconnect</span>
+      `;
+    }
+  }
+
   function handleServerMessage(message) {
     switch (message.type) {
       case "session.created":
         console.log("Session created:", message.session);
         isSessionReady = true;
         startAudioCapture();
+        updateButtonToDisconnect();
         break;
       case "conversation.item.done":
         const item = message.item;
@@ -492,10 +523,19 @@
       source.connect(playbackContext.destination);
 
       const currentTime = playbackContext.currentTime;
-      const startTime = Math.max(currentTime, nextPlayTime);
       
-      source.start(startTime);
-      nextPlayTime = startTime + audioBuffer.duration;
+      // If we're too far behind (queue backed up), catch up to reduce latency
+      // Allow a small buffer (50ms) for smooth playback
+      if (nextPlayTime < currentTime) {
+        nextPlayTime = currentTime;
+      } else if (nextPlayTime > currentTime + 0.3) {
+        // If queue is more than 300ms ahead, reset to reduce latency
+        console.log("Audio queue backed up, resetting to reduce latency");
+        nextPlayTime = currentTime + 0.05;
+      }
+      
+      source.start(nextPlayTime);
+      nextPlayTime = nextPlayTime + audioBuffer.duration;
     } catch (error) {
       console.error("Error playing audio:", error);
     }
