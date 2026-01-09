@@ -369,6 +369,17 @@
       background: #fafafa;
     `;
 
+    const notice = document.createElement("div");
+    notice.id = "voice-agent-notice";
+    notice.style.cssText = `
+      color: #9ca3af;
+      font-size: 12px;
+      text-align: center;
+      padding: 12px 0;
+    `;
+    notice.textContent = "This session is recorded to provide the service.";
+    messagesContainer.appendChild(notice);
+
     chatboxElement.appendChild(header);
     chatboxElement.appendChild(messagesContainer);
 
@@ -392,6 +403,11 @@
     const interimElement = messagesContainer.querySelector(".interim-message");
     if (interimElement) {
       interimElement.remove();
+    }
+
+    const notice = document.getElementById("voice-agent-notice");
+    if (notice) {
+      notice.remove();
     }
 
     const messageDiv = document.createElement("div");
@@ -431,6 +447,11 @@
   function updateInterimItem(role, text) {
     const messagesContainer = document.getElementById("voice-agent-messages");
     if (!messagesContainer) return;
+
+    const notice = document.getElementById("voice-agent-notice");
+    if (notice) {
+      notice.remove();
+    }
 
     let interimElement = messagesContainer.querySelector(".interim-message");
     
