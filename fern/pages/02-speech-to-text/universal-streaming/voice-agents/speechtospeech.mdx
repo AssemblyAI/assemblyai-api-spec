@@ -1,163 +1,313 @@
 ---
 title: "Speech-to-Speech"
-description: "Speech-to-speech API docs"
+description: "Build real-time voice AI agents that listen and respond naturally"
 ---
 
-```
-https://aaigentsv1.up.railway.app
-```
+Build voice-powered AI agents that have natural conversations with your users. Your agent listens to speech and responds with a natural-sounding voice—all in real-time.
 
 <Note>This is an early stage product subject to change and should not be used for production usage.</Note>
 
-## Authentication
-
-All REST endpoints require an `Authorization` header:
+## How it works
 
 ```
-Authorization: YOUR_API_KEY
+┌─────────────┐                 ┌─────────────────┐                 ┌─────────────┐
+│             │     Audio       │                 │      Audio      │             │
+│    User     │  ────────────►  │   Voice Agent   │  ────────────►  │    User     │
+│  (speaks)   │                 │                 │                 │   (hears)   │
+└─────────────┘                 └─────────────────┘                 └─────────────┘
 ```
+
+1. **User speaks** — Your app captures microphone audio and streams it to the agent
+2. **Agent responds** — The agent processes the speech and generates a spoken response
+3. **User hears** — Your app receives audio and plays it through the speaker
+
+The entire flow happens in real-time with low latency.
 
 ---
 
-## REST API
+## Quick Start
 
-### Create or Update Agent
+Get a voice agent up and running in 3 steps.
 
-`POST /agents`
+### Step 1: Get your API key
 
-Create or update an agent configuration.
+Grab your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app).
 
-**Request Body**
+### Step 2: Create your agent
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `agent_name` | string | Yes | - | Unique identifier (letters, numbers, underscores only) |
-| `instructions` | string | No | null | System prompt for the agent |
-| `voice` | string | No | `"luna"` | TTS voice name |
-| `llm` | string | No | null | LLM model name (e.g., `"openai/gpt-oss-120b"`) |
-| `greeting` | string | No | null | Initial greeting instructions |
-| `temperature` | float | No | `0.8` | LLM temperature |
-| `max_tokens` | int | No | `4096` | Max tokens for LLM response |
-| `language` | string | No | `"en"` | Language code |
-| `tools` | array | No | null | Tool definitions |
-| `audio_in_sample_rate` | int | No | `16000` | Input audio sample rate |
-| `audio_out_sample_rate` | int | No | `16000` | Output audio sample rate |
+Create an agent by sending a POST request. Here's an example of a friendly assistant:
 
-**Response**
-
-```json
-{
-  "success": true,
-  "agent_name": "my_agent",
-  "message": "Agent 'my_agent' configuration saved"
-}
-```
-
----
-
-### List Agents
-
-`GET /agents`
-
-List all agents for the authenticated user.
-
-**Response**
-
-```json
-{
-  "agents": ["agent1", "agent2"],
-  "count": 2
-}
-```
-
----
-
-### Get Agent Configuration
-
-`GET /agents/{agent_name}`
-
-Get configuration for a specific agent.
-
-**Response**
-
-```json
-{
-  "agent_name": "my_agent",
-  "config": {
-    "instructions": "...",
+<Tabs>
+<Tab title="cURL">
+```bash
+curl -X POST https://aaigentsv1.up.railway.app/agents \
+  -H "Authorization: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_name": "friendly_assistant",
+    "instructions": "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
     "voice": "luna",
-    "llm": "openai/gpt-oss-120b"
-  }
-}
+    "greeting": "Say hello and ask how you can help today."
+  }'
 ```
+</Tab>
+<Tab title="Python">
+```python
+import requests
 
----
-
-### List Agent Conversations
-
-`GET /agents/{agent_name}/conversations`
-
-List all conversations for an agent.
-
-**Response**
-
-```json
-{
-  "agent_name": "my_agent",
-  "conversations": [
-    {
-      "conversation_id": "uuid",
-      "room_name": "...",
-      "timestamp": "2025-12-18T13:00:00Z",
-      "created_at": "2025-12-18T13:00:00Z"
+response = requests.post(
+    "https://aaigentsv1.up.railway.app/agents",
+    headers={
+        "Authorization": "YOUR_API_KEY",
+        "Content-Type": "application/json"
+    },
+    json={
+        "agent_name": "friendly_assistant",
+        "instructions": "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
+        "voice": "luna",
+        "greeting": "Say hello and ask how you can help today."
     }
-  ],
-  "count": 1
-}
+)
+
+print(response.json())
 ```
+</Tab>
+<Tab title="JavaScript">
+```javascript
+const response = await fetch("https://aaigentsv1.up.railway.app/agents", {
+  method: "POST",
+  headers: {
+    "Authorization": "YOUR_API_KEY",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    agent_name: "friendly_assistant",
+    instructions: "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
+    voice: "luna",
+    greeting: "Say hello and ask how you can help today."
+  })
+});
+
+console.log(await response.json());
+```
+</Tab>
+</Tabs>
+
+### Step 3: Start a conversation
+
+Connect to your agent via WebSocket and start talking:
+
+```
+wss://aaigentsv1.up.railway.app/ws/friendly_assistant
+```
+
+Once connected, send audio as binary WebSocket frames (PCM16, 16kHz, mono) and receive the agent's spoken responses back as audio.
+
+<Accordion title="Full Python example">
+```python
+import asyncio
+import json
+import websockets
+import sounddevice as sd
+import numpy as np
+
+async def voice_chat():
+    uri = "wss://aaigentsv1.up.railway.app/ws/friendly_assistant"
+    queue = asyncio.Queue(maxsize=100)
+    session_ready = False
+
+    async with websockets.connect(uri, ping_interval=10, ping_timeout=20) as ws:
+        print("Connected! Waiting for session...")
+
+        # Send microphone audio to the agent
+        async def send_audio():
+            while True:
+                data = await queue.get()
+                if session_ready:
+                    await ws.send(data)
+                queue.task_done()
+
+        asyncio.create_task(send_audio())
+        loop = asyncio.get_running_loop()
+
+        def mic_callback(indata, frames, time, status):
+            if not queue.full():
+                loop.call_soon_threadsafe(queue.put_nowait, bytes(indata))
+
+        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=mic_callback), \
+             sd.OutputStream(samplerate=16000, channels=1, dtype='int16') as speaker:
+
+            while True:
+                response = await ws.recv()
+
+                # Play audio responses
+                if isinstance(response, bytes) and len(response):
+                    speaker.write(np.frombuffer(response, dtype=np.int16))
+
+                # Handle JSON messages
+                elif isinstance(response, str):
+                    msg = json.loads(response)
+
+                    if msg.get("type") == "session.created":
+                        print("Session ready! Start speaking...")
+                        session_ready = True
+
+                    elif msg.get("type") == "conversation.item.done":
+                        item = msg.get("item", {})
+                        role = item.get("role")
+                        text = item.get("content", [{}])[0].get("text", "")
+                        print(f"[{role}]: {text}")
+
+asyncio.run(voice_chat())
+```
+
+Install dependencies with:
+```bash
+pip install websockets sounddevice numpy
+```
+</Accordion>
+
+That's it! You now have a working voice agent.
 
 ---
 
-### Get Conversation
+## Example agents
 
-`GET /agents/{agent_name}/conversations/{conversation_id}`
+Here are some practical examples to inspire your own agents.
 
-Get a specific conversation.
-
-**Response**
+### Customer support agent
 
 ```json
 {
-  "conversation_id": "uuid",
-  "agent_name": "my_agent",
-  "room_name": "...",
-  "timestamp": "2025-12-18T13:00:00Z",
-  "items": [],
-  "created_at": "2025-12-18T13:00:00Z"
+  "agent_name": "support_agent",
+  "instructions": "You are a customer support agent for a software company. Be helpful, patient, and empathetic. Ask clarifying questions to understand the customer's issue. If you can't solve a problem, offer to escalate to a human agent. Keep responses brief and focused.",
+  "voice": "celeste",
+  "greeting": "Thank the customer for calling and ask how you can help them today."
+}
+```
+
+### Appointment scheduler
+
+```json
+{
+  "agent_name": "appointment_scheduler",
+  "instructions": "You are a friendly receptionist who helps schedule appointments. Collect the caller's name, preferred date and time, and reason for the appointment. Confirm all details before ending the call. Be efficient but warm.",
+  "voice": "estelle",
+  "greeting": "Welcome the caller and ask if they'd like to schedule an appointment."
+}
+```
+
+### Virtual concierge
+
+```json
+{
+  "agent_name": "hotel_concierge",
+  "instructions": "You are a luxury hotel concierge. Be warm, professional, and knowledgeable. Help guests with restaurant recommendations, local attractions, transportation, and any requests. Anticipate needs and offer personalized suggestions.",
+  "voice": "orion",
+  "greeting": "Welcome the guest and ask how you can make their stay more enjoyable."
 }
 ```
 
 ---
 
-## WebSocket API
+## Choose a voice
 
-### Connect to Agent
+Pick a voice that matches your agent's personality.
 
-```
-wss://aaigentsv1.up.railway.app/ws/{agent_name}
-```
-
-Connect to establish a real-time voice chat session with a specific agent. **No authentication required** (agent must exist).
+| Voice | Style |
+|-------|-------|
+| `luna` | Chill but excitable, gen-z optimist |
+| `celeste` | Warm, laid-back, fun-loving |
+| `orion` | Older male, warm and happy |
+| `ursa` | Young male, energetic |
+| `astra` | Young female, wide-eyed and curious |
+| `esther` | Older female, loving and caring |
+| `estelle` | Middle-aged female, sweet and kind |
+| `andromeda` | Young female, breathy and calm |
 
 ---
 
-## Server Events
+## Add tools
+
+Tools let your agent take actions—like checking a database, calling an API, or triggering a workflow.
+
+Here's a simple example of an agent with a weather tool:
+
+```json
+{
+  "agent_name": "weather_assistant",
+  "instructions": "You help users check the weather. When they ask about weather, use the get_weather tool to look it up.",
+  "voice": "luna",
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get the current weather for a city",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "The city name"
+          }
+        },
+        "required": ["city"]
+      }
+    }
+  ]
+}
+```
+
+When a user asks "What's the weather in Tokyo?", the agent sends your client a `tool.call` event:
+
+```json
+{
+  "type": "tool.call",
+  "call_id": "call_abc123",
+  "name": "get_weather",
+  "arguments": { "city": "Tokyo" }
+}
+```
+
+Your client executes the function and sends back the result:
+
+```json
+{
+  "type": "tool.result",
+  "call_id": "call_abc123",
+  "result": "{\"temperature\": \"72°F\", \"conditions\": \"sunny\"}"
+}
+```
+
+The agent then speaks the weather information to the user.
+
+---
+
+## Agent configuration
+
+Full list of options when creating an agent.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `agent_name` | string | required | Unique identifier (letters, numbers, underscores) |
+| `instructions` | string | - | Personality and behavior guidelines |
+| `voice` | string | `"luna"` | Voice to use for responses |
+| `greeting` | string | - | What the agent says when a conversation starts |
+| `temperature` | float | `0.8` | Response creativity (0.0 = focused, 1.0 = creative) |
+| `max_tokens` | int | `4096` | Maximum response length |
+| `language` | string | `"en"` | Language code |
+| `tools` | array | - | Tool definitions (see above) |
+| `audio_in_sample_rate` | int | `16000` | Input audio sample rate in Hz |
+| `audio_out_sample_rate` | int | `16000` | Output audio sample rate in Hz |
+
+---
+
+## WebSocket events
+
+When connected to an agent, you'll receive these events:
 
 ### session.created
 
-Sent when the WebSocket connection is established.
-
-**Response**
+Sent when the connection is established and ready.
 
 ```json
 {
@@ -171,126 +321,127 @@ Sent when the WebSocket connection is established.
 
 ### conversation.item.done
 
-Final transcript when a conversation turn completes.
-
-**Response**
+Sent when a speaker finishes talking. Contains the transcript.
 
 ```json
 {
   "type": "conversation.item.done",
   "item": {
-    "id": "uuid",
     "role": "user",
-    "content": [
-      {
-        "type": "text",
-        "text": "What's the weather like?"
-      }
-    ]
+    "content": [{ "type": "text", "text": "What's the weather like?" }]
   }
 }
 ```
 
-**Properties**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `type` | string | Event type: `"conversation.item.done"` |
-| `item` | object | Conversation item |
-| `item.id` | string | Item identifier |
-| `item.role` | string | `"user"` or `"assistant"` |
-| `item.content` | array | Content parts |
-| `item.content[].type` | string | `"text"` |
-| `item.content[].text` | string | Transcript text |
-
 ### conversation.item.interim
 
-Interim transcript during speech recognition.
-
-**Response**
+Sent during speech with partial transcripts. Useful for showing real-time captions.
 
 ```json
 {
   "type": "conversation.item.interim",
   "item": {
-    "id": "uuid",
     "role": "user",
-    "content": [
-      {
-        "type": "text",
-        "text": "What's the wea..."
-      }
-    ]
+    "content": [{ "type": "text", "text": "What's the wea..." }]
   }
 }
 ```
 
 ### tool.call
 
-Function call request from AI agent.
+Sent when the agent wants to use a tool. See [Add tools](#add-tools) for handling.
 
-**Response**
+### Audio (binary)
+
+The agent's spoken responses come as binary WebSocket frames containing PCM16 audio.
+
+---
+
+## Audio format
+
+Both input and output audio use the same format:
+
+- **Encoding**: PCM16 (16-bit signed integer, little-endian)
+- **Sample rate**: 16,000 Hz (configurable)
+- **Channels**: Mono
+
+---
+
+## REST API reference
+
+<Accordion title="Manage agents">
+
+**Base URL**: `https://aaigentsv1.up.railway.app`
+
+All REST endpoints require an `Authorization: YOUR_API_KEY` header.
+
+### Create or update agent
+`POST /agents` — Create a new agent or update an existing one.
+
+### List agents
+`GET /agents` — List all your agents.
 
 ```json
 {
-  "type": "tool.call",
-  "call_id": "call_abc123",
-  "name": "get_weather",
-  "arguments": {
-    "location": "San Francisco"
-  }
+  "agents": ["agent1", "agent2"],
+  "count": 2
 }
 ```
 
-**Properties**
+### Get agent
+`GET /agents/{agent_name}` — Get an agent's configuration.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `type` | string | Event type: `"tool.call"` |
-| `call_id` | string | Unique call identifier |
-| `name` | string | Tool name |
-| `arguments` | object | Tool arguments |
+### Delete agent
+`DELETE /agents/{agent_name}` — Delete an agent.
 
-### Audio Stream (Server)
+</Accordion>
 
-Raw PCM audio response as binary WebSocket frames.
+<Accordion title="Conversation history">
 
-**Format**
-- Encoding: PCM16 (16-bit signed integer, little-endian)
-- Sample Rate: Matches agent's `audio_out_sample_rate` configuration
-- Channels: 1 (mono)
-
----
-
-## Client Events
-
-### Audio Stream (Client)
-
-Send raw PCM audio as binary WebSocket frames.
-
-**Format**
-- Encoding: PCM16 (16-bit signed integer, little-endian)
-- Sample Rate: Must match agent's `audio_in_sample_rate` configuration (default: 16000 Hz)
-- Channels: 1 (mono)
-
----
-
-## Tools / Function Calling
-
-Define tools in the agent's `tools` configuration via `POST /agents`:
-
-**Tool Definition Schema**
+### List conversations
+`GET /agents/{agent_name}/conversations` — List all conversations for an agent.
 
 ```json
 {
-  "name": "string",           // Required - unique tool identifier
-  "description": "string",    // Required - what the tool does (shown to LLM)
-  "parameters": {             // Required - JSON Schema for parameters
+  "agent_name": "my_agent",
+  "conversations": [
+    {
+      "conversation_id": "uuid",
+      "created_at": "2025-12-18T13:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+### Get conversation
+`GET /agents/{agent_name}/conversations/{conversation_id}` — Get a specific conversation with all messages.
+
+```json
+{
+  "conversation_id": "uuid",
+  "agent_name": "my_agent",
+  "items": [],
+  "created_at": "2025-12-18T13:00:00Z"
+}
+```
+
+</Accordion>
+
+<Accordion title="Tool definition schema">
+
+Tools follow JSON Schema format:
+
+```json
+{
+  "name": "tool_name",
+  "description": "What this tool does",
+  "parameters": {
     "type": "object",
     "properties": {
       "param_name": {
-        "type": "string",     // "string" | "number" | "boolean" | "array" | "object"
-        "description": "string"
+        "type": "string",
+        "description": "What this parameter is for"
       }
     },
     "required": ["param_name"]
@@ -298,284 +449,6 @@ Define tools in the agent's `tools` configuration via `POST /agents`:
 }
 ```
 
-**Properties**
+**Supported parameter types**: `string`, `number`, `boolean`, `array`, `object`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `name` | string | Yes | Unique tool identifier |
-| `description` | string | Yes | What the tool does (shown to LLM) |
-| `parameters` | object | Yes | JSON Schema for parameters |
-| `parameters.type` | string | Yes | Must be `"object"` |
-| `parameters.properties` | object | Yes | Object defining each parameter |
-| `parameters.properties.<param>.type` | string | Yes | JSON type: `"string"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
-| `parameters.properties.<param>.description` | string | No | Parameter description for LLM |
-| `parameters.required` | array | No | List of required parameter names |
-
-**Example Tool**
-
-```json
-{
-  "name": "search_docs",
-  "description": "Search the documentation to answer user questions about the API",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "query": {
-        "type": "string",
-        "description": "The search query"
-      },
-      "limit": {
-        "type": "number",
-        "description": "Maximum number of results to return"
-      }
-    },
-    "required": ["query"]
-  }
-}
-```
-
-**Full POST Example with Tools**
-
-```json
-{
-  "agent_name": "my_agent",
-  "instructions": "You are a helpful assistant.",
-  "tools": [
-    {
-      "name": "search_docs",
-      "description": "Search documentation",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Search query"}
-        },
-        "required": ["query"]
-      }
-    },
-    {
-      "name": "get_weather",
-      "description": "Get current weather for a location",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "city": {"type": "string", "description": "City name"},
-          "units": {"type": "string", "description": "celsius or fahrenheit"}
-        },
-        "required": ["city"]
-      }
-    }
-  ]
-}
-```
-
-**Handling Tool Calls**
-
-When the agent calls a tool, the server sends a `tool.call` event. Your client executes the function and sends the result back via `tool.result`.
-
-**Tool Result Schema**
-
-```json
-{
-  "type": "tool.result",
-  "call_id": "string",    // Required - matches the call_id from tool.call
-  "result": "string"      // Required - the tool's response (usually JSON stringified)
-}
-```
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `type` | string | Yes | Must be `"tool.result"` |
-| `call_id` | string | Yes | Must match the `call_id` from the `tool.call` event |
-| `result` | string | Yes | JSON-encoded function result |
-
-**Example Flow**
-
-1. **Agent sends `tool.call`** (server to client):
-
-```json
-{
-  "type": "tool.call",
-  "call_id": "call_abc123",
-  "name": "search_docs",
-  "arguments": {
-    "query": "how to transcribe audio"
-  }
-}
-```
-
-2. **Client executes tool and sends `tool.result`** (client to server):
-
-```json
-{
-  "type": "tool.result",
-  "call_id": "call_abc123",
-  "result": "{\"results\": [{\"title\": \"Getting Started\", \"content\": \"...\"}]}"
-}
-```
-
-The agent continues its response using the tool result.
-
----
-
-## Supported Languages
-
-Values for agent `language` configuration:
-
-| Code | Language |
-|------|----------|
-| `en` | English (default) |
-
----
-
-## Available LLMs
-
-Values for agent `llm` configuration:
-
-| Slug | Model |
-|------|-------|
-| `openai/gpt-oss-120b` | OpenAI GPT OSS 120B |
-| `deepseek-ai/DeepSeek-V3.2` | Deepseek V3.2 |
-| `deepseek-ai/DeepSeek-V3.1` | Deepseek V3.1 |
-| `deepseek-ai/DeepSeek-V3-0324` | Deepseek V3 0324 |
-| `moonshotai/Kimi-K2-Thinking` | Kimi K2 Thinking |
-| `moonshotai/Kimi-K2-Instruct-0905` | Kimi K2 0905 |
-| `Qwen/Qwen3-Coder-480B-A35B-Instruct` | Qwen3 Coder 480B |
-| `zai-org/GLM-4.6` | Z AI GLM4.6 |
-
----
-
-## Available Voices
-
-Values for agent `voice` configuration:
-
-| Voice ID | Description |
-|----------|-------------|
-| `luna` | Female, chill but excitable, gen-z optimist |
-| `celeste` | Female, warm, laid-back, fun-loving |
-| `orion` | Male, older, African American, happy |
-| `ursa` | Male, 20 years old, encyclopedic knowledge of 2000s emo |
-| `astra` | Female, young, wide-eyed |
-| `esther` | Female, older, Chinese American, loving |
-| `estelle` | Female, middle-aged, African American, sounds so sweet |
-| `andromeda` | Female, young, breathy, yoga vibes |
-
----
-
-## Example
-
-### Python
-
-**Installation**
-
-```bash
-pip install websockets sounddevice numpy
-```
-
-**Code**
-
-```python
-import asyncio
-import json
-import websockets
-import sounddevice as sd
-import numpy as np
-import contextlib
-
-URI = "wss://aaigentsv1.up.railway.app/ws/{agent_name}"
-
-async def voice_chat():
-    queue = asyncio.Queue(maxsize=100)
-    session_ready = False
-    interim_active = False
-
-    async with websockets.connect(URI, ping_interval=10, ping_timeout=20) as websocket:
-        print(f"Connected to {URI}")
-
-        async def sender():
-            audio_count = 0
-            while True:
-                try:
-                    data = await queue.get()
-                    if session_ready:
-                        await websocket.send(data)
-                        audio_count += 1
-                finally:
-                    queue.task_done()
-
-        sender_task = asyncio.create_task(sender())
-        loop = asyncio.get_running_loop()
-        
-        def mic_callback(indata, frames, time, status):
-            if status.input_overflow:
-                print("Audio buffer overflow!")
-            pcm_bytes = bytes(indata)
-            
-            def safe_put(item):
-                if not queue.full():
-                    queue.put_nowait(item)
-            
-            loop.call_soon_threadsafe(safe_put, pcm_bytes)
-
-        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=mic_callback), \
-             sd.OutputStream(samplerate=16000, channels=1, dtype='int16') as speaker:
-            
-            print("Waiting for session to be ready...")
-            
-            try:
-                while True:
-                    try:
-                        response_data = await websocket.recv()
-                        
-                        if isinstance(response_data, (bytes, bytearray)) and len(response_data):
-                            speaker.write(np.frombuffer(response_data, dtype=np.int16))
-                            
-                        elif isinstance(response_data, str):
-                            try:
-                                message = json.loads(response_data)
-                                
-                                if message.get("type") == "session.created":
-                                    print("Session created, voice chat is now active. Press Ctrl+C to quit.")
-                                    session_ready = True
-                                elif message.get("type") == "conversation.item.done":
-                                    item = message.get("item", {})
-                                    role = item.get("role", "unknown")
-                                    content = item.get("content", [])
-                                    if content and len(content) > 0:
-                                        text = content[0].get("text", "")
-                                        if interim_active:
-                                            print("\r" + " " * 100 + "\r", end='')
-                                            interim_active = False
-                                        print(f"[{role}]: {text}")
-                                        
-                                elif message.get("type") == "conversation.item.interim":
-                                    item = message.get("item", {})
-                                    role = item.get("role", "unknown")
-                                    content = item.get("content", [])
-                                    if content and len(content) > 0:
-                                        text = content[0].get("text", "")
-                                        if role == "user":
-                                            print(f"\r🎤 {text}...", end='', flush=True)
-                                            interim_active = True
-                                        
-                            except json.JSONDecodeError:
-                                print(f"Received non-JSON text message: {response_data}")
-                                
-                    except websockets.exceptions.ConnectionClosedOK:
-                        print("Server closed connection cleanly.")
-                        break
-                        
-            except asyncio.CancelledError:
-                pass
-            except KeyboardInterrupt:
-                print("\nDisconnecting...")
-
-        sender_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await sender_task
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(voice_chat())
-    except KeyboardInterrupt:
-        print("\nExiting...")
-```
+</Accordion>
