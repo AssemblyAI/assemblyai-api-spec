@@ -1,0 +1,548 @@
+---
+title: "Customizing transcription results using Prompt Engineering"
+---
+
+Use prompt engineering to control transcription style, from ultra-clean readable output to highly verbose verbatim transcriptions that capture every disfluency and false start. Different prompt formulations can dramatically affect transcription output.
+
+## Overview
+
+The `prompt` parameter allows you to influence how the model transcribes your audio. By providing natural language instructions, you can guide the model to produce transcripts that match your specific needs, whether that's capturing every hesitation for research purposes or creating clean, readable text for publication.
+
+## Baseline: Universal-3 Pro without prompt
+
+Universal-3 Pro without any prompt produces clean, readable transcription with proper capitalization and minimal disfluencies. This serves as the baseline for comparing prompt effects.
+
+**Baseline characteristics:**
+- **Word count:** 4,418 words
+- No filler words ("um", "uh") in default mode
+- Proper capitalization of entities and terms
+- Clean sentence structure with appropriate punctuation
+
+## Prompt summary
+
+The following table summarizes how different prompts affect word count compared to baseline (4,418 words):
+
+| Prompt type | Prompt | Words vs baseline |
+|-------------|--------|-------------------|
+| Entity-Focused | `This is a virtual business meeting, transcribe verbatim and pay close attention to entities like names, company names, products, due dates, release dates, etc. Do not make any insertions/hallucinations of phrases, just edits for missing or wrong words.` | +72 (+1.6%) |
+| Basic Disfluencies | `This is a virtual business meeting. Transcribe the audio verbatim, including all disfluencies and false starts.` | +280 (+6.3%) |
+| Enhanced Disfluencies | `This is a virtual business meeting. Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies, and false starts. This should be as close to a human transcriptionist as possible.` | +291 (+6.6%) |
+| Maximum Verbatim | `Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies, and false starts. This should be as close to a human transcriptionist as possible. We want all um, uhs, you know, start stop, hesitation, stud-stud-studder, etc.` | +349 (+7.9%) |
+| Clean and Readable | `This is a business meeting. We don't want lots of disfluencies and false starts. Focus on making the transcript super readable and more about meaning and sentence structure and punctuation versus verbatim.` | +111 (+2.5%) |
+
+## Prompt examples
+
+### Entity-focused transcription
+
+Use this prompt when accurate capture of business entities is critical.
+
+```text
+This is a virtual business meeting, transcribe verbatim and pay close attention
+to entities like names, company names, products, due dates, release dates, etc.
+Do not make any insertions/hallucinations of phrases, just edits for missing or
+wrong words.
+```
+
+This prompt produces output with improved capitalization of proper nouns and entities. It's ideal for business meeting minutes, earnings calls, product launches, and any context where entity accuracy is critical.
+
+**Result:** 4,490 words (+72 words, +1.6% vs baseline)
+
+<Accordion title="Compare baseline vs entity-focused output">
+
+<Tabs groupId="comparison">
+  <Tab title="Baseline (no prompt)">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. So, but I'm glad. Thanks for coming at least 
+once. So, news and events. I've got a lot of things on the agenda today because 
+of some of this. So apologies for that, but I think it's going to go down over 
+time. Based on feedback, I'm going to work to do more summarized communications 
+to improve the signal-to-noise ratio in my communications to groups of people, 
+including this group of people. This will result in, for this group, adding more 
+items to our staff meeting agenda, often as read-only, rather than posting to 
+our Slack channel. And I am going to be assuming that people leaders on the team 
+will attend this meeting or read the notes and not rely on the Slack channel. 
+So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
+And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
+as acting full-stack manager for security policies while I hire an EM. Alan has 
+graciously accepted this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+  <Tab title="Entity-focused prompt">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse team meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+since it's really late for you. It may— so, but I'm glad. Thanks for coming at 
+least once. So, news and events. I've got a lot of things on the agenda today 
+because of some of this. So apologies for that, but I think it's going to go 
+down over time. Based on feedback, I'll work— I'm going to work to do more 
+summarized communications to improve the signal-to-noise ratio in my 
+communications to groups of people, including this group of people. This will 
+result in, for this group, adding more items to our staff meeting agenda, often 
+as read-only, rather than posting to our Slack channel. And I am going to be 
+assuming that people leaders on the team will attend this meeting or read the 
+notes and not rely on the Slack channel. So keep that in mind. Let's see, B is 
+a read-only item unless anybody wants to discuss it. And C, Phil has. Hi, 
+welcome, Alan, to the meeting. I've asked Alan to step in as acting full-stack 
+manager for security policies while I hire an EM. Alan has graciously accepted 
+this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+### Basic disfluency capture
+
+Use this prompt when you need to capture conversational disfluencies while maintaining readability.
+
+```text
+This is a virtual business meeting. Transcribe the audio verbatim, including all
+disfluencies and false starts.
+```
+
+This prompt adds filler words like "um" and "uh" to the output and captures false starts with em-dashes. It's useful for qualitative research interviews, therapy sessions, linguistic analysis, and training data for conversation AI.
+
+**Result:** 4,698 words (+280 words, +6.3% vs baseline)
+
+<Accordion title="Compare baseline vs basic disfluencies output">
+
+<Tabs groupId="comparison">
+  <Tab title="Baseline (no prompt)">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. So, but I'm glad. Thanks for coming at least 
+once. So, news and events. I've got a lot of things on the agenda today because 
+of some of this. So apologies for that, but I think it's going to go down over 
+time. Based on feedback, I'm going to work to do more summarized communications 
+to improve the signal-to-noise ratio in my communications to groups of people, 
+including this group of people. This will result in, for this group, adding more 
+items to our staff meeting agenda, often as read-only, rather than posting to 
+our Slack channel. And I am going to be assuming that people leaders on the team 
+will attend this meeting or read the notes and not rely on the Slack channel. 
+So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
+And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
+as acting full-stack manager for security policies while I hire an EM. Alan has 
+graciously accepted this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+  <Tab title="Basic disfluencies prompt">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. Um, and, uh, that's our meeting for September 14th 
+or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
+midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
+this meeting because it's really late for you. Uh, it may— so, but I'm glad. 
+Thanks for coming at least once. So, um, news and events. Uh, I've got a lot of 
+things on the agenda today because of some of this. Uh, so apologies for that, 
+but I think it's going to go down over time. Based on feedback, I'll work— I'm 
+going to work to do more summarized communications to improve the signal-to-noise 
+ratio in my communications to groups of people, including this group of people. 
+This was worked in for this group, adding more items to our staff meeting agenda, 
+often as read-only, rather than posting to our Slack channel. And I am going to 
+be assuming that people leaders on the team will attend this meeting or read the 
+notes and not rely on the Slack channel. So keep that in, in mind. Uh, let's see, 
+B is a read-only item unless anybody wants to discuss it. And C, Phil has— hi, 
+um, welcome, Alan, uh, to the, to the meeting. Um, I've asked Alan to step in as 
+acting full-stack manager for security policies, um, while I hire an EM. Um, 
+Alan has graciously accepted, um, this, this wonderful opportunity.
+```
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+### Enhanced disfluency capture
+
+Use this prompt for more aggressive disfluency capture with explicit emphasis.
+
+```text
+This is a virtual business meeting. Transcribe the audio verbatim, overly trying
+to capture hesitations, disfluencies, and false starts. This should be as close
+to a human transcriptionist as possible.
+```
+
+Using intensifying language like "overly trying" and comparing to a human transcriptionist increases capture rates. This is useful for forensic analysis, legal depositions, and detailed conversation analysis.
+
+**Result:** 4,709 words (+291 words, +6.6% vs baseline)
+
+<Accordion title="Compare baseline vs enhanced disfluencies output">
+
+<Tabs groupId="comparison">
+  <Tab title="Baseline (no prompt)">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. So, but I'm glad. Thanks for coming at least 
+once. So, news and events. I've got a lot of things on the agenda today because 
+of some of this. So apologies for that, but I think it's going to go down over 
+time. Based on feedback, I'm going to work to do more summarized communications 
+to improve the signal-to-noise ratio in my communications to groups of people, 
+including this group of people. This will result in, for this group, adding more 
+items to our staff meeting agenda, often as read-only, rather than posting to 
+our Slack channel. And I am going to be assuming that people leaders on the team 
+will attend this meeting or read the notes and not rely on the Slack channel. 
+So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
+And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
+as acting full-stack manager for security policies while I hire an EM. Alan has 
+graciously accepted this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+  <Tab title="Enhanced disfluencies prompt">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. Um, and, uh, that's our meeting for, uh, September 
+14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
+midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
+this meeting since it's really late for you. Uh, it may— so, but I'm glad. 
+Thanks for coming at least once. So, um, news and events. Uh, I've got a lot of 
+things on the agenda today because of some of this. Uh, so apologies for that, 
+but I think it's going to go down over time. Based on feedback, I'll work— I'm 
+gonna work to do more summarized communications to improve the signal-to-noise 
+ratio in my communications to groups of people, including this group of people. 
+This will result in, for this group, adding more items to our staff meeting 
+agenda, often as read-only, rather than posting to our Slack channel. And I am 
+gonna be assuming that people leaders on the team will attend this meeting or 
+read the notes and not rely on the Slack channel. So keep that in, in mind. Uh, 
+let's see, B is a read-only item unless anybody wants to discuss it. And C, 
+Phil has— hi, um, welcome, Alan, uh, to the, to the meeting. Um, I've asked 
+Alan to step in as acting full-stack manager for security policies, um, while 
+I hire an EM. Um, Alan has graciously accepted, um, this, this wonderful 
+opportunity.
+```
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+### Maximum verbatim with examples
+
+Use this prompt when you need the highest fidelity transcription with all speech patterns captured.
+
+```text
+Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies,
+and false starts. This should be as close to a human transcriptionist as possible.
+We want all um, uhs, you know, start stop, hesitation, stud-stud-studder, etc.
+```
+
+Providing concrete examples of disfluencies to capture produces the highest word count and captures repeated hesitations. This is ideal for speech pathology research, communication pattern analysis, and training data for natural TTS systems.
+
+**Result:** 4,767 words (+349 words, +7.9% vs baseline)
+
+<Accordion title="Compare baseline vs maximum verbatim output">
+
+<Tabs groupId="comparison">
+  <Tab title="Baseline (no prompt)">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. So, but I'm glad. Thanks for coming at least 
+once. So, news and events. I've got a lot of things on the agenda today because 
+of some of this. So apologies for that, but I think it's going to go down over 
+time. Based on feedback, I'm going to work to do more summarized communications 
+to improve the signal-to-noise ratio in my communications to groups of people, 
+including this group of people. This will result in, for this group, adding more 
+items to our staff meeting agenda, often as read-only, rather than posting to 
+our Slack channel. And I am going to be assuming that people leaders on the team 
+will attend this meeting or read the notes and not rely on the Slack channel. 
+So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
+And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
+as acting full-stack manager for security policies while I hire an EM. Alan has 
+graciously accepted this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+  <Tab title="Maximum verbatim prompt">
+```text
+So it is the SEC, meaning secure and govern growth and data science, meaning 
+applied ML, MLOps, and anti-abuse team meeting. That's a big mouthful. We might 
+get a better name over time. Um, and, uh, that's our meeting for, uh, uh, 
+September 14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you 
+here when it's midnight? We could talk, uh, glad you're here. Don't make it 
+happen to come to this meeting since it's really late for you. Uh, it may— so, 
+but I'm glad. Thanks for coming at least once. So, um, news and events. Uh, 
+I've got a lot of things on the agenda today because of some of this. Uh, so 
+apologies for that, but I think it's going to go down over time. Based on 
+feedback, I'll work— I'm going to work to do more summarized communications to 
+improve the signal-to-noise ra— ratio in my communications to groups of people, 
+including this group of people. Uh, this will result in, for this group, adding 
+more items to our staff meeting agenda, often as read-only, rather than posting 
+to our Slack channel. And I am going to be assuming that people leaders on the 
+team will attend this meeting or read the notes and not rely on the Slack 
+channel. So keep that in, in mind. Uh, let's see, B is a read-only item unless 
+anybody wants to discuss it. And C, Phil has— hi, um, welcome, Alan, uh, to 
+the, to the meeting. Um, I've asked Alan to step in as acting full-stack 
+manager for security policies, um, while I hire an EM. Um, Alan has graciously 
+accepted, um, this, this wonderful opportunity.
+```
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+### Clean and readable
+
+Use this prompt when you want to reduce verbosity and improve readability.
+
+```text
+This is a business meeting. We don't want lots of disfluencies and false starts.
+Focus on making the transcript super readable and more about meaning and sentence
+structure and punctuation versus verbatim.
+```
+
+This prompt removes most filler words while maintaining natural flow. It's ideal for published meeting minutes, marketing content, executive summaries, and customer-facing documentation.
+
+**Result:** 4,529 words (+111 words, +2.5% vs baseline)
+
+<Accordion title="Compare baseline vs clean and readable output">
+
+<Tabs groupId="comparison">
+  <Tab title="Baseline (no prompt)">
+```text
+So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk. Glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. So, but I'm glad. Thanks for coming at least 
+once. So, news and events. I've got a lot of things on the agenda today because 
+of some of this. So apologies for that, but I think it's going to go down over 
+time. Based on feedback, I'm going to work to do more summarized communications 
+to improve the signal-to-noise ratio in my communications to groups of people, 
+including this group of people. This will result in, for this group, adding more 
+items to our staff meeting agenda, often as read-only, rather than posting to 
+our Slack channel. And I am going to be assuming that people leaders on the team 
+will attend this meeting or read the notes and not rely on the Slack channel. 
+So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
+And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
+as acting full-stack manager for security policies while I hire an EM. Alan has 
+graciously accepted this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+  <Tab title="Clean and readable prompt">
+```text
+So it is the SEC, meaning Secure and Govern Growth and Data Science, meaning 
+Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
+get a better name over time. And that's our meeting for September 14th or 15th 
+in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
+We can talk— glad you're here. Don't make it happen to come to this meeting 
+because it's really late for you. It may— so, but I'm glad. Thanks for coming 
+at least once. So, um, news and events. Uh, I've got a lot of things on the 
+agenda today because of some of this. Uh, so apologies for that, but I think 
+it's going to go down over time. Based on feedback, I'll work— I'm going to 
+work to do more summarized communications to improve the signal-to-noise ratio 
+in my communications to groups of people, including this group of people. This 
+was worked in for this group, adding more items to our staff meeting agenda, 
+often as read-only, rather than posting to our Slack channel. And I am going to 
+be assuming that people leaders on the team will attend this meeting or read 
+the notes and not rely on the Slack channel. So keep that in mind. Let's see, 
+B is a read-only item unless anybody wants to discuss it. And C, Phil has— hi, 
+welcome, Alan, to the meeting. I've asked Alan to step in as acting full-stack 
+manager for security policies while I hire an EM. Alan has graciously accepted 
+this wonderful opportunity. So welcome, Alan.
+```
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+## Recommended prompts by use case
+
+### Business and corporate
+
+**Meeting minutes:**
+```text
+This is a business meeting. Focus on making the transcript readable and
+professional. Capture key entities like names, dates, and action items
+accurately. Remove most filler words but keep the natural flow.
+```
+
+**Earnings calls:**
+```text
+This is a corporate earnings call. Transcribe verbatim with attention to
+financial terms, company names, metrics, and forward-looking statements.
+Maintain professional readability.
+```
+
+### Research and analysis
+
+**Qualitative research:**
+```text
+This is a research interview. Transcribe the audio verbatim, including
+disfluencies and false starts. Capture um, uh, you know, and hesitations
+to preserve natural speech patterns for analysis.
+```
+
+**Linguistic analysis:**
+```text
+Transcribe the audio verbatim, overly trying to capture all hesitations,
+disfluencies, false starts, repairs, and stutters. We want every um, uh,
+like, you know, and incomplete word or phrase.
+```
+
+### Legal and compliance
+
+**Legal depositions:**
+```text
+This is a legal deposition. Transcribe verbatim, capturing every word,
+hesitation, pause indication, and false start exactly as spoken. Maximum
+accuracy and completeness required.
+```
+
+**Compliance recording:**
+```text
+This is a compliance-monitored call. Transcribe verbatim while maintaining
+clarity. Capture all substantive statements accurately, including corrections
+and clarifications made by speakers.
+```
+
+### Media and content
+
+**Podcast and video transcripts:**
+```text
+This is a podcast/video. Create a readable transcript that maintains the
+conversational tone but removes excessive filler words. Keep false starts
+and corrections that add character.
+```
+
+**Subtitles and captions:**
+```text
+This is video content for captions. Focus on readability and timing.
+Remove most disfluencies but keep natural speech rhythm. Use clear
+punctuation and sentence structure.
+```
+
+### Medical and clinical
+
+**Therapy sessions:**
+```text
+This is a therapy session. Transcribe verbatim including all hesitations,
+pauses, false starts, and emotional indicators. Capture um, uh, and other
+speech patterns that may be clinically relevant.
+```
+
+**Medical consultations:**
+```text
+This is a doctor-patient consultation. Transcribe verbatim with careful
+attention to medical terminology, symptoms, medications, and dosages.
+Maintain clarity while preserving exact patient statements.
+```
+
+## Best practices
+
+When crafting prompts for transcription, keep these principles in mind:
+
+**Prompt specificity matters.** The progression from general instructions like "including all disfluencies" to specific examples like "um, uhs, you know, stud-stud-studder" shows consistent increases in disfluency capture. Provide concrete examples of what you want captured.
+
+**Bidirectional control is possible.** You can effectively move in both directions: more verbose with maximum verbatim prompts or less verbose with clean readable prompts. Use opposite-direction prompts to achieve your desired style.
+
+**Language intensity works.** Using intensifying language like "overly trying" and "as close to a human transcriptionist as possible" demonstrably increases capture rates.
+
+**Examples drive behavior.** The biggest improvements come from adding concrete examples of disfluencies to capture. Include 3-5 specific examples of the speech patterns you want captured or avoided.
+
+## API usage
+
+Use the `prompt` parameter when submitting a transcription request:
+
+<Tabs groupId="language">
+  <Tab language="python" title="Python" default>
+    ```python
+    import requests
+    import time
+
+    base_url = "https://api.assemblyai.com"
+    headers = {"authorization": "<YOUR_API_KEY>"}
+
+    data = {
+        "audio_url": "https://example.com/your-audio.mp3",
+        "prompt": "This is a business meeting. Focus on making the transcript readable and professional."
+    }
+
+    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code}, Response: {response.text}")
+        response.raise_for_status()
+
+    transcript_response = response.json()
+    transcript_id = transcript_response["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print(transcript["text"])
+            break
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+    ```
+
+  </Tab>
+  <Tab language="javascript" title="JavaScript">
+    ```javascript
+      import axios from 'axios'
+
+      const baseUrl = 'https://api.assemblyai.com'
+
+      const headers = {
+        authorization: '<YOUR_API_KEY>'
+      }
+
+      const data = {
+        audio_url: 'https://example.com/your-audio.mp3',
+        prompt: 'This is a business meeting. Focus on making the transcript readable and professional.'
+      }
+
+      const url = `${baseUrl}/v2/transcript`
+      const response = await axios.post(url, data, { headers: headers })
+
+      const transcriptId = response.data.id
+      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+      while (true) {
+        const pollingResponse = await axios.get(pollingEndpoint, {
+          headers: headers
+        })
+        const transcriptionResult = pollingResponse.data
+
+        if (transcriptionResult.status === 'completed') {
+          console.log(transcriptionResult.text)
+          break
+        } else if (transcriptionResult.status === 'error') {
+          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+        }
+      }
+    ```
+
+  </Tab>
+</Tabs>
+
+## Prompt guidelines
+
+When using the `prompt` parameter, keep these guidelines in mind:
+
+- **Character limit:** 1,000 characters recommended
+- **Optimal length:** 100-200 characters for clear, focused instructions
+- **Formatting:** Plain text, no special formatting required
