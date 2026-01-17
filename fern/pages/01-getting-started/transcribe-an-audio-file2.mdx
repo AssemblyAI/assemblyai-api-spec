@@ -30,6 +30,10 @@ transcriber = aai.Transcriber()
 # Or use a publicly-accessible URL:
 audio_file = "https://assembly.ai/sports_injuries.mp3"
 
+# Optionally specify a speech model (defaults to "universal"):
+# config = aai.TranscriptionConfig(speech_models=["slam-1"])
+# transcript = transcriber.transcribe(audio_file, config=config)
+
 transcript = transcriber.transcribe(audio_file)
 
 if transcript.status == aai.TranscriptStatus.error:
@@ -65,7 +69,9 @@ with open("./example.mp3", "rb") as f:
 '''
 
 data = {
-    "audio_url": audio_file  # For local files use: "audio_url": upload_url
+    "audio_url": audio_file,  # For local files use: "audio_url": upload_url
+    # Optionally specify a speech model (defaults to "universal"):
+    # "speech_models": ["slam-1"]
 }
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
@@ -107,6 +113,8 @@ const audioFile = "https://assembly.ai/sports_injuries.mp3";
 
 const params = {
   audio: audioFile,
+  // Optionally specify a speech model (defaults to "universal"):
+  // speech_models: ["slam-1"],
 };
 
 const run = async () => {
@@ -158,6 +166,8 @@ async function transcribe() {
 
     const data = {
       audio_url: audioFile, // For local files use: audio_url: uploadUrl
+      // Optionally specify a speech model (defaults to "universal"):
+      // speech_models: ["slam-1"],
     };
 
     const url = `${baseUrl}/v2/transcript`;
@@ -204,6 +214,7 @@ transcribe();
 To complete this tutorial, you need:
 
 - If opting to use the Python or Python SDK code, you will need [Python](https://www.python.org/) installed.
+- If opting to use the JavaScript or JavaScript SDK code, you will need [Node.js](https://nodejs.org/) installed.
 - <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">
     A free AssemblyAI account.
   </a>
@@ -312,7 +323,7 @@ import fs from "fs-extra";
 
 <Tabs>
 <Tab language="python-sdk" title="Python SDK">
-In this step, you 'll create an SDK client and configure it to use your API key.
+In this step, you'll create an SDK client and configure it to use your API key.
 
 <Steps>
 <Step>
@@ -442,7 +453,7 @@ data = {"audio_url": audio_file}
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
-In this step, you 'll create an SDK client and configure it to use your API key.
+In this step, you'll create an SDK client and configure it to use your API key.
 
 <Steps>
 <Step>
@@ -466,7 +477,7 @@ const client = new AssemblyAI({
 </Step>
 <Step>
 
-Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](https://support.assemblyai.com/).
+Specify a URL to the audio you want to transcribe. The URL needs to be accessible from AssemblyAI's servers. For a list of supported formats, see [FAQ](/docs/faq/what-audio-and-video-file-types-are-supported-by-your-api).
 
 ```javascript
 const audioFile = "https://assembly.ai/sports_injuries.mp3";
@@ -579,7 +590,105 @@ YouTube URLs are not supported. If you want to transcribe a YouTube video, you n
 </Tab>
 </Tabs>
 
-## Step 3: Submit for transcription
+## Step 3: Select the speech model (optional)
+
+AssemblyAI offers multiple speech models optimized for different use cases. You can use the `speech_models` parameter to specify which model to use for your transcription.
+
+The available models are:
+
+- **Universal** (default): Best for out-of-the-box transcription with multi-language support and excellent accuracy.
+- **Slam-1** (beta): Highest accuracy for English content with fine-tuning support and customization via prompting.
+
+For more details on model capabilities and pricing, see [Models](/docs/getting-started/models).
+
+<Note>
+If you do not specify a speech model, the Universal model will be used by default.
+</Note>
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK">
+
+To specify a speech model, create a `TranscriptionConfig` with the `speech_models` parameter:
+
+```python
+config = aai.TranscriptionConfig(speech_models=["slam-1"])
+```
+
+You can also specify multiple models in priority order. The system will use the first compatible model:
+
+```python
+config = aai.TranscriptionConfig(speech_models=["slam-1", "universal"])
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+To specify a speech model, add the `speech_models` parameter to the data object:
+
+```python
+data = {
+    "audio_url": audio_file,
+    "speech_models": ["slam-1"]
+}
+```
+
+You can also specify multiple models in priority order. The system will use the first compatible model:
+
+```python
+data = {
+    "audio_url": audio_file,
+    "speech_models": ["slam-1", "universal"]
+}
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+To specify a speech model, set the `speech_models` property in the params object:
+
+```javascript
+const params = {
+  audio: audioFile,
+  speech_models: ["slam-1"],
+};
+```
+
+You can also specify multiple models in priority order. The system will use the first compatible model:
+
+```javascript
+const params = {
+  audio: audioFile,
+  speech_models: ["slam-1", "universal"],
+};
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+To specify a speech model, add the `speech_models` property to the data object:
+
+```javascript
+const data = {
+  audio_url: audioFile,
+  speech_models: ["slam-1"],
+};
+```
+
+You can also specify multiple models in priority order. The system will use the first compatible model:
+
+```javascript
+const data = {
+  audio_url: audioFile,
+  speech_models: ["slam-1", "universal"],
+};
+```
+
+</Tab>
+</Tabs>
+
+For more information on selecting speech models, see [Select the speech model](/docs/speech-to-text/pre-recorded-audio/select-the-speech-model).
+
+## Step 4: Submit for transcription
 
 <Tabs>
 <Tab language="python-sdk" title="Python SDK">
@@ -587,6 +696,12 @@ YouTube URLs are not supported. If you want to transcribe a YouTube video, you n
 <Step>
 
 To generate the transcript, pass the `audio_file` or file to `transcriber.transcribe()`. This may take a minute while we're processing the audio.
+
+```python
+transcript = transcriber.transcribe(audio_file)
+```
+
+If you configured a `TranscriptionConfig` in Step 3, pass it to the `transcribe()` method:
 
 ```python
 transcript = transcriber.transcribe(audio_file, config=config)
@@ -775,13 +890,11 @@ transcribe();
 
 ## Next steps
 
-In this tutorial, you've learned how to generate a transcript for an audio file and how to set the speech model.
-
 Want to learn more?
 
-- For more ways to analyze your audio data, explore our [Speech Understanding](https://www.assemblyai.com/products/speech-understanding).
-- If you want to transcribe audio in real-time, see [Transcribe streaming audio from a microphone](/getting-started/transcribe-streaming-audio).
+- For more ways to analyze your audio data, explore our [Speech Understanding features](https://www.assemblyai.com/products/speech-understanding).
 - To search, summarize, and ask questions on your transcripts with LLMs, see [LLM Gateway](/docs/llm-gateway/overview).
+- For detailed endpoint documentation, see the [API Reference](/docs/api-reference/overview).
 
 ## Need some help?
 
