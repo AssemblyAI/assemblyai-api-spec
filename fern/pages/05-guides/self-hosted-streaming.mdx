@@ -66,6 +66,7 @@ Websocket client → streaming-api:8080 (WebSocket)
 ### 1. Docker runtime with GPU support
 
 **1.1** Verify NVIDIA drivers are installed:
+
 ```bash
 nvidia-smi
 ```
@@ -75,6 +76,7 @@ nvidia-smi
 Follow the [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) to set up GPU support for Docker.
 
 **1.3** Verify the Docker runtime has GPU access:
+
 ```bash
 docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 ```
@@ -168,7 +170,7 @@ services:
     ports:
       - "8081:80"
     healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://localhost:80/nginx_health" ]
+      test: ["CMD", "curl", "-fsS", "http://localhost:80/nginx_health"]
       interval: 10s
       timeout: 2s
       retries: 2
@@ -203,7 +205,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ "gpu" ]
+              capabilities: ["gpu"]
 
   streaming-asr-multilang:
     image: ${STREAMING_ASR_MULTILANG_IMAGE}
@@ -227,7 +229,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ "gpu" ]
+              capabilities: ["gpu"]
 
   license-and-usage-proxy:
     image: ${LICENSE_AND_USAGE_PROXY_IMAGE}
@@ -242,7 +244,7 @@ services:
     volumes:
       - ./license.jwt:/var/aai_license.jwt:ro
     healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://localhost:8080/health" ]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 10s
       timeout: 2s
       retries: 2
@@ -310,24 +312,28 @@ http {
 The license-and-usage-proxy service supports two billing modes based on your AssemblyAI license:
 
 #### Flat billing mode
+
 If your license is configured for flat billing, usage tracking is disabled. No additional configuration is required.
 
 #### Usage-based billing mode
+
 If your license is configured for usage-based billing, the proxy will automatically report usage data to AssemblyAI's usage tracker service. You must configure the following environment variable in the `docker-compose.yml` for the `license-and-usage-proxy` service:
 
 ```yaml
 environment:
   - USAGE_TRACKING_API_KEY=<your-api-key>
 ```
+
 **Important Notes:**
+
 - For the API key, any key retrieved from the AssemblyAI dashboard can be used.
 - At startup, the proxy validates connectivity by registering with AssemblyAI's https://usage-tracker.assemblyai.com.
 - If connectivity validation fails, the proxy will shut down.
 - Usage data is batched and reported every few seconds.
 - The proxy automatically retries failed requests up to several times.
-**Critical Behavior:**
-If https://usage-tracker.assemblyai.com becomes unreachable and all retry attempts fail (after 5-60 minutes), the license-and-usage-proxy service will terminate itself. This is a fail-safe mechanism to ensure usage data integrity. Your service orchestrator should be configured to automatically replace the container with a new one.
-**Monitoring Recommendations:**
+  **Critical Behavior:**
+  If https://usage-tracker.assemblyai.com becomes unreachable and all retry attempts fail (after 5-60 minutes), the license-and-usage-proxy service will terminate itself. This is a fail-safe mechanism to ensure usage data integrity. Your service orchestrator should be configured to automatically replace the container with a new one.
+  **Monitoring Recommendations:**
 - Monitor the proxy's logs for warnings about failed usage reporting attempts.
 - Set up alerts for proxy restarts, which may indicate persistent connectivity issues.
 - If the in-memory usage queue size exceeds 1000 items, the proxy will log a warning suggesting upscaling.
@@ -345,17 +351,20 @@ A Python example script is provided to demonstrate how to stream a pre-recorded 
 ### Setup
 
 Change to the `streaming_example` directory:
+
 ```bash
 cd streaming_example
 ```
 
 Create a fresh Python virtual environment and activate it:
+
 ```bash
 python -m venv streaming_venv
 source streaming_venv/bin/activate
 ```
 
 Install the required packages:
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -643,15 +652,18 @@ if __name__ == "__main__":
 The example script (`example_with_prerecorded_audio_file.py`) requires a PCM 16-bit WAV file (mono channel, 16kHz sample rate).
 
 **Note on language parameter:**
+
 - Use `"en"` or omit the `--language` parameter for English transcription (routes to English ASR service)
 - Use `"multi"` or any non-English language code for multilingual transcription (routes to multilingual ASR service)
 
 **Basic usage:**
+
 ```bash
 python example_with_prerecorded_audio_file.py --audio-file example_audio_file.wav
 ```
 
 **Example with multilingual transcription:**
+
 ```bash
 python example_with_prerecorded_audio_file.py \
   --audio-file example_audio_file.wav \
@@ -661,13 +673,14 @@ python example_with_prerecorded_audio_file.py \
 
 **Command-line arguments:**
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--audio-file` | Path to the audio file to transcribe (must be PCM 16-bit WAV, mono, 16kHz) | `example_audio_file.wav` |
-| `--endpoint` | WebSocket endpoint URL | `ws://localhost:8080` |
-| `--language` | Language code for transcription. Use `"en"` for English or omit for English (default). Use `"multi"` for multilingual | `"en"` |
+| Argument       | Description                                                                                                           | Default                  |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `--audio-file` | Path to the audio file to transcribe (must be PCM 16-bit WAV, mono, 16kHz)                                            | `example_audio_file.wav` |
+| `--endpoint`   | WebSocket endpoint URL                                                                                                | `ws://localhost:8080`    |
+| `--language`   | Language code for transcription. Use `"en"` for English or omit for English (default). Use `"multi"` for multilingual | `"en"`                   |
 
 **View help:**
+
 ```bash
 python example_with_prerecorded_audio_file.py --help
 ```
@@ -679,6 +692,7 @@ This example demonstrates real-time microphone transcription using a remote self
 ### Setup
 
 Install the required packages:
+
 ```bash
 pip install websockets pyaudio
 ```
@@ -700,15 +714,15 @@ async def stream_audio(language="en"):
     # Build WebSocket URL with query parameters
     params = f"sample_rate=16000&language={language}"
     WS_URL = f"ws://{SERVER_IP}:8080/v3/ws?{params}"
-    
+
     # Add authorization header (required for self-hosted)
     headers = {"Authorization": "self-hosted"}
-    
+
     print(f"Connecting to {WS_URL}...")
-    
+
     async with websockets.connect(WS_URL, extra_headers=headers) as ws:
         print("Connected! Starting to stream audio...")
-        
+
         # Set up audio stream from microphone
         p = pyaudio.PyAudio()
         stream = p.open(
@@ -718,10 +732,10 @@ async def stream_audio(language="en"):
             input=True,
             frames_per_buffer=3200  # 100ms chunks at 16kHz
         )
-        
+
         print(f"\n🎤 Listening with language={language}... speak into your microphone!")
         print("Press Ctrl+C to stop\n")
-        
+
         # Function to send audio
         async def send_audio():
             try:
@@ -736,42 +750,42 @@ async def stream_audio(language="en"):
                 stream.stop_stream()
                 stream.close()
                 p.terminate()
-        
+
         # Function to receive transcripts
         async def receive_transcripts():
             try:
                 async for message in ws:
                     data = json.loads(message)
-                    
+
                     if data.get("type") == "Begin":
                         print(f"✅ Session started! ID: {data.get('id')}")
-                    
+
                     elif data.get("type") == "Turn":
                         if data.get("words"):
                             text = " ".join([word["text"] for word in data["words"]])
                             end_of_turn = "[FINAL]" if data.get("end_of_turn") else ""
                             print(f"📝 {text} {end_of_turn}")
-                    
+
                     elif data.get("type") == "Termination":
                         print(f"✅ Session completed. Duration: {data.get('session_duration_seconds')}s")
                         break
-                    
+
             except Exception as e:
                 print(f"Error receiving: {e}")
-        
+
         # Run both tasks concurrently
         await asyncio.gather(send_audio(), receive_transcripts())
 
 if __name__ == "__main__":
     import sys
-    
+
     # Usage: python live_microphone_streaming.py [language]
     # Examples:
     #   python live_microphone_streaming.py en       # English
     #   python live_microphone_streaming.py multi    # Multilingual with auto-detect
     #   python live_microphone_streaming.py es       # Spanish
     language = sys.argv[1] if len(sys.argv) > 1 else "en"
-    
+
     try:
         asyncio.run(stream_audio(language))
     except KeyboardInterrupt:
@@ -781,21 +795,25 @@ if __name__ == "__main__":
 ### Usage
 
 **Basic usage (English):**
+
 ```bash
 python live_microphone_streaming.py
 ```
 
 **Multilingual transcription:**
+
 ```bash
 python live_microphone_streaming.py multi
 ```
 
 **Specific language (e.g., Spanish):**
+
 ```bash
 python live_microphone_streaming.py es
 ```
 
-**Note:** 
+**Note:**
+
 - Make sure to replace `SERVER_IP` in the script with your actual server IP address
 - If testing locally on the same machine as the server, use `localhost` or `127.0.0.1`
 - The `Authorization: self-hosted` header is required for all connections
@@ -893,6 +911,7 @@ The `/v1/status` endpoint provides real-time information about the license valid
 **Endpoint**: `GET /v1/status`
 
 **Response Schema**:
+
 ```json
 {
   "state": "Ready | Connected | TrustBased | Failed",
@@ -902,17 +921,20 @@ The `/v1/status` endpoint provides real-time information about the license valid
 ```
 
 **State Descriptions**:
+
 - `Ready`: Initial state when the service starts before any license validation has occurred.
 - `Connected`: Last license validation check was successful.
 - `TrustBased`: Last license validation check failed, but the request was within the trust window grace period, so services will remain operational.
 - `Failed`: Last license validation check failed and the trust window has expired. streaming-api containers will shut down and stop serving requests.
 
 **Fields**:
+
 - `state`: Current license validation state.
 - `last_successful_checkin`: ISO 8601 timestamp of the last successful license validation (null if never successful).
 - `trust_expiration`: ISO 8601 timestamp when the trust window expires (null if no successful validation yet).
 
 **Recommended Alerts**:
+
 - Alert when `state` transitions to `TrustBased` (indicates license validation issues).
 - Critical alert when `state` is `Failed` (services will shut down).
 
@@ -955,6 +977,7 @@ This section provides step-by-step instructions for deploying the self-hosted st
 ### AWS prerequisites
 
 Before you begin, ensure you have:
+
 - An AWS account with billing enabled
 - AWS CLI installed and configured on your local machine
 - Basic familiarity with SSH and command-line operations
@@ -979,12 +1002,12 @@ By default, AWS accounts have limited or zero quota for GPU instances. You'll ne
 
 Recommended instance types based on your needs:
 
-| Instance Type | vCPUs | GPU | Memory | Use Case | Approximate Cost/Hour |
-|--------------|-------|-----|---------|----------|----------------------|
-| g4dn.xlarge | 4 | 1x T4 (16GB) | 16 GB | Development/Testing | ~$0.526 |
-| g4dn.2xlarge | 8 | 1x T4 (16GB) | 32 GB | Light Production | ~$0.752 |
-| g5.xlarge | 4 | 1x A10G (24GB) | 16 GB | Production (Higher Performance) | ~$1.006 |
-| g5.2xlarge | 8 | 1x A10G (24GB) | 32 GB | Production (High Throughput) | ~$1.212 |
+| Instance Type | vCPUs | GPU            | Memory | Use Case                        | Approximate Cost/Hour |
+| ------------- | ----- | -------------- | ------ | ------------------------------- | --------------------- |
+| g4dn.xlarge   | 4     | 1x T4 (16GB)   | 16 GB  | Development/Testing             | ~$0.526               |
+| g4dn.2xlarge  | 8     | 1x T4 (16GB)   | 32 GB  | Light Production                | ~$0.752               |
+| g5.xlarge     | 4     | 1x A10G (24GB) | 16 GB  | Production (Higher Performance) | ~$1.006               |
+| g5.2xlarge    | 8     | 1x A10G (24GB) | 32 GB  | Production (High Throughput)    | ~$1.212               |
 
 **Recommendation:** Start with **g4dn.xlarge** for evaluation, then scale to g4dn.2xlarge or g5 instances for production workloads.
 
@@ -1004,6 +1027,7 @@ Recommended instance types based on your needs:
   - Set permissions: `chmod 400 your-key.pem`
 
 **3.3** Configure storage:
+
 - **Root volume:** Increase to at least **100 GB gp3** (model weights and containers require significant space)
 - The default 8 GB is insufficient
 
@@ -1011,13 +1035,14 @@ Recommended instance types based on your needs:
 
 Create a new security group with the following inbound rules:
 
-| Type | Protocol | Port Range | Source | Description |
-|------|----------|------------|--------|-------------|
-| SSH | TCP | 22 | Your IP/0.0.0.0/0 | SSH access for management |
-| Custom TCP | TCP | 8080 | Your IP/0.0.0.0/0 | WebSocket endpoint |
-| Custom TCP | TCP | 8081 | Your IP/0.0.0.0/0 | Health check endpoint (optional) |
+| Type       | Protocol | Port Range | Source            | Description                      |
+| ---------- | -------- | ---------- | ----------------- | -------------------------------- |
+| SSH        | TCP      | 22         | Your IP/0.0.0.0/0 | SSH access for management        |
+| Custom TCP | TCP      | 8080       | Your IP/0.0.0.0/0 | WebSocket endpoint               |
+| Custom TCP | TCP      | 8081       | Your IP/0.0.0.0/0 | Health check endpoint (optional) |
 
 **Security recommendations:**
+
 - For production: Restrict Source to your specific IP addresses or VPC CIDR ranges
 - For development/testing: You can use `0.0.0.0/0` but understand this allows public access
 - Consider using AWS VPN or Direct Connect for enhanced security
@@ -1062,7 +1087,9 @@ docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 ```
 
 <Warning>
-**Important:** This setup uses **Docker Compose v2**, which uses the command `docker compose` (space, no hyphen) instead of the older `docker-compose` (hyphen). All commands in this guide use the v2 syntax.
+  **Important:** This setup uses **Docker Compose v2**, which uses the command
+  `docker compose` (space, no hyphen) instead of the older `docker-compose`
+  (hyphen). All commands in this guide use the v2 syntax.
 </Warning>
 
 #### 6. Configure AWS credentials on the instance
@@ -1079,6 +1106,7 @@ aws configure
 ```
 
 You'll be prompted to enter:
+
 - AWS Access Key ID
 - AWS Secret Access Key
 - Default region: `us-west-2`
@@ -1121,6 +1149,7 @@ docker compose logs -f
 ```
 
 **Important startup notes:**
+
 - The ASR services (`streaming-asr-english` and `streaming-asr-multilang`) take approximately **2-3 minutes** to fully initialize
 - You'll see `"Ready to serve!"` in the logs when each ASR service is ready
 - Health checks may show "unhealthy" during startup - this is normal
@@ -1131,7 +1160,9 @@ docker compose logs -f
 From your local machine, test the connection using the live microphone example (see the [Live microphone streaming example](/docs/deployment/self-hosted-streaming#live-microphone-streaming-example) section above).
 
 <Warning>
-**Important:** Replace `SERVER_IP` in the example script with your EC2 instance's **public IP address**, which you can find in the EC2 console under your instance details.
+  **Important:** Replace `SERVER_IP` in the example script with your EC2
+  instance's **public IP address**, which you can find in the EC2 console under
+  your instance details.
 </Warning>
 
 ### AWS cost optimization tips
@@ -1156,37 +1187,46 @@ From your local machine, test the connection using the live microphone example (
 ### Troubleshooting AWS-specific issues
 
 **Issue: "InsufficientInstanceCapacity" error when launching**
+
 - Solution: Try a different availability zone within your region or a different instance type
 
 **Issue: Quota request denied or pending**
+
 - Solution: Contact AWS Support through the console with your use case details
 
 **Issue: Cannot connect to EC2 instance**
+
 - Solution: Verify security group allows SSH (port 22) from your IP
 - Solution: Check that you're using the correct key pair and username (`ubuntu` for Ubuntu AMIs)
 
 **Issue: Docker containers fail to start with GPU errors**
+
 - Solution: Verify NVIDIA Container Toolkit is properly configured
 - Solution: Check that the instance type has GPU resources
 
 **Issue: Services show "unhealthy" status**
+
 - Solution: ASR services take 2-3 minutes to fully initialize - wait for "Ready to serve!" log messages
 - Solution: Health checks may fail during startup - this is normal and will resolve once services are ready
 
 **Issue: Connection refused when testing from local machine**
+
 - Solution: Ensure you're using the instance's **public IP address**, not the private IP
 - Solution: Verify security group allows inbound traffic on port 8080 from your IP
 - Solution: Check that services are fully started with `docker compose logs -f`
 
 **Issue: "Authorization" header missing error**
+
 - Solution: All WebSocket connections must include the header `Authorization: self-hosted`
 
 **Issue: Need to transfer files to EC2 instance (e.g., audio files)**
+
 - Solution: Use SCP from your local machine:
   ```bash
   scp -i your-key.pem local-file.wav ubuntu@<EC2_PUBLIC_IP>:~/destination/
   ```
 
 **Issue: High costs**
+
 - Solution: Stop the instance when not in use
 - Solution: Review CloudWatch metrics to ensure you're using the right instance size

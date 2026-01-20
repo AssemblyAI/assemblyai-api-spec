@@ -36,16 +36,16 @@ def transcribe_audio(audio_url):
         "sentiment_analysis": False,
         "entity_detection": False
     }
-    
+
     response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
-    
+
     if response.status_code != 200:
         print(f"Error submitting transcription: {response.status_code}, {response.text}")
         response.raise_for_status()
-    
+
     transcript_id = response.json()["id"]
     polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-    
+
     print("Transcribing...")
     while True:
         transcript = requests.get(polling_endpoint, headers=headers).json()
@@ -61,11 +61,11 @@ def get_sentences(transcript_id):
     """Get sentences from a completed transcript"""
     sentences_endpoint = f"{base_url}/v2/transcript/{transcript_id}/sentences"
     response = requests.get(sentences_endpoint, headers=headers)
-    
+
     if response.status_code != 200:
         print(f"Error getting sentences: {response.status_code}, {response.text}")
         response.raise_for_status()
-    
+
     return response.json()["sentences"]
 
 def process_with_llm_gateway(transcript_text, question, context=""):
@@ -75,7 +75,7 @@ def process_with_llm_gateway(transcript_text, question, context=""):
             Context: {context}
             Transcript: {transcript_text}
             Please provide a clear and specific answer."""
-    
+
     llm_gateway_data = {
         "model": "claude-sonnet-4-5-20250929",
         "messages": [
@@ -86,18 +86,18 @@ def process_with_llm_gateway(transcript_text, question, context=""):
         ],
         "max_tokens": 2000
     }
-    
+
     response = requests.post(
         "https://llm-gateway.assemblyai.com/v1/chat/completions",
         headers=headers,
         json=llm_gateway_data
     )
-    
+
     result = response.json()
-    
+
     if "error" in result:
         raise RuntimeError(f"LLM Gateway error: {result['error']}")
-    
+
     return result['choices'][0]['message']['content']
 
 def sliding_window(elements, distance, stride):
@@ -137,7 +137,7 @@ for sentence_group in sentence_groups:
     combined_text = " ".join([sentence["text"] for sentence in sentence_group])
     start = sentence_group[0]["start"]
     end = sentence_group[-1]["end"]
-    
+
     embeddings[(start, end, transcript_id, combined_text)] = embedder.encode(combined_text)
 
 # Use LLM Gateway to find the best quotes
@@ -239,16 +239,16 @@ def transcribe_audio(audio_url):
         "sentiment_analysis": False,
         "entity_detection": False
     }
-    
+
     response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
-    
+
     if response.status_code != 200:
         print(f"Error submitting transcription: {response.status_code}, {response.text}")
         response.raise_for_status()
-    
+
     transcript_id = response.json()["id"]
     polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-    
+
     print("Transcribing...")
     while True:
         transcript = requests.get(polling_endpoint, headers=headers).json()
@@ -264,11 +264,11 @@ def get_sentences(transcript_id):
     """Get sentences from a completed transcript"""
     sentences_endpoint = f"{base_url}/v2/transcript/{transcript_id}/sentences"
     response = requests.get(sentences_endpoint, headers=headers)
-    
+
     if response.status_code != 200:
         print(f"Error getting sentences: {response.status_code}, {response.text}")
         response.raise_for_status()
-    
+
     return response.json()["sentences"]
 ```
 
@@ -282,7 +282,7 @@ def process_with_llm_gateway(transcript_text, question, context=""):
             Context: {context}
             Transcript: {transcript_text}
             Please provide a clear and specific answer."""
-    
+
     llm_gateway_data = {
         "model": "claude-sonnet-4-5-20250929",
         "messages": [
@@ -293,18 +293,18 @@ def process_with_llm_gateway(transcript_text, question, context=""):
         ],
         "max_tokens": 2000
     }
-    
+
     response = requests.post(
         "https://llm-gateway.assemblyai.com/v1/chat/completions",
         headers=headers,
         json=llm_gateway_data
     )
-    
+
     result = response.json()
-    
+
     if "error" in result:
         raise RuntimeError(f"LLM Gateway error: {result['error']}")
-    
+
     return result['choices'][0]['message']['content']
 ```
 
@@ -320,6 +320,7 @@ def sliding_window(elements, distance, stride):
         idx += (distance - stride)
     return results
 ```
+
 Execute all upload and transcription functions.
 
 ```python
@@ -359,7 +360,7 @@ for sentence_group in sentence_groups:
     combined_text = " ".join([sentence["text"] for sentence in sentence_group])
     start = sentence_group[0]["start"]
     end = sentence_group[-1]["end"]
-    
+
     embeddings[(start, end, transcript_id, combined_text)] = embedder.encode(combined_text)
 ```
 
