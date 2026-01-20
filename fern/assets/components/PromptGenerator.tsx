@@ -29,59 +29,128 @@ const STYLE_LABELS: Record<TranscriptionStyle, string> = {
   "max-verbatim-audio-tags": "Max verbatim with audio tags",
 };
 
+const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample, analyze the domain and terminology patterns to generate an optimized transcription prompt.
+
+Key principles for effective prompts:
+1. Use authoritative language: "Non-negotiable:", "Mandatory:", "Strict requirement:"
+2. Include explicit examples in format: (correct not incorrect)
+3. Keep prompts concise: 3-5 instructions, 50-80 words
+4. Show error patterns the model should fix (vowel substitution, sound-alike confusion, etc.)
+
+Generate a prompt that follows this structure:
+[Base instruction based on style]
+[Authoritative language] + [Specific instruction] + [2-3 explicit examples]
+
+Analyze the transcript for domain-specific terminology that might be misheard and include corrections.`;
+
 export function PromptGenerator() {
   const [transcript, setTranscript] = React.useState("");
   const [style, setStyle] = React.useState<TranscriptionStyle>("readability");
   const [generatedPrompt, setGeneratedPrompt] = React.useState("");
   const [isGenerated, setIsGenerated] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
 
   const handleGenerate = () => {
-    // For now, generate a sample prompt based on the selected style
-    // In the future, this will call an LLM to analyze the transcript
     const basePrompt = STYLE_PROMPTS[style];
     
     let samplePrompt = basePrompt;
     
-    // Add a sample domain-specific instruction based on transcript length
     if (transcript.length > 0) {
       samplePrompt += `\n\nNon-negotiable: Accuracy required for domain-specific terminology.`;
-      
-      // Add example instruction
       samplePrompt += `\n\n[Add your domain-specific corrections here, e.g.: (correct not incorrect, correct2 not incorrect2)]`;
     }
     
     setGeneratedPrompt(samplePrompt);
     setIsGenerated(true);
+    setCopied(false);
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(generatedPrompt);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = generatedPrompt;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const buildLLMPrompt = () => {
+    const styleLabel = STYLE_LABELS[style];
+    const basePrompt = STYLE_PROMPTS[style];
+    
+    return `${LLM_CONTEXT}
+
+User's selected transcription style: ${styleLabel}
+Base prompt for this style:
+${basePrompt}
+
+User's transcript sample:
+${transcript || "(No transcript provided - generate a general prompt for this style)"}
+
+Please generate an optimized transcription prompt based on the above.`;
+  };
+
+  const openInClaude = () => {
+    const prompt = encodeURIComponent(buildLLMPrompt());
+    window.open(`https://claude.ai/new?q=${prompt}`, "_blank");
+  };
+
+  const openInChatGPT = () => {
+    const prompt = encodeURIComponent(buildLLMPrompt());
+    window.open(`https://chat.openai.com/?q=${prompt}`, "_blank");
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
-      <div className="space-y-4">
+    <div style={{ border: "1px solid var(--border-color, #e5e7eb)", borderRadius: "8px", padding: "24px", backgroundColor: "var(--bg-secondary, #f9fafb)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div>
-          <label className="block text-sm font-medium mb-2">
+          <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "8px" }}>
             Paste your transcript sample
           </label>
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Paste a sample of your transcript here (100-500 words recommended). This helps identify your domain and common terminology patterns..."
-            className="w-full h-40 p-3 border border-gray-300 rounded-md text-sm font-mono resize-y dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+            style={{
+              width: "100%",
+              height: "160px",
+              padding: "12px",
+              border: "1px solid var(--border-color, #d1d5db)",
+              borderRadius: "6px",
+              fontSize: "14px",
+              fontFamily: "monospace",
+              resize: "vertical",
+              backgroundColor: "var(--bg-primary, #ffffff)",
+              color: "var(--text-primary, #111827)",
+            }}
           />
         </div>
 
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium mb-2">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end" }}>
+          <div style={{ flex: 1, minWidth: "200px" }}>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "8px" }}>
               Select transcription style
             </label>
             <select
               value={style}
               onChange={(e) => setStyle(e.target.value as TranscriptionStyle)}
-              className="w-full p-2 border border-gray-300 rounded-md text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+              style={{
+                width: "100%",
+                padding: "8px",
+                border: "1px solid var(--border-color, #d1d5db)",
+                borderRadius: "6px",
+                fontSize: "14px",
+                backgroundColor: "var(--bg-primary, #ffffff)",
+                color: "var(--text-primary, #111827)",
+              }}
             >
               {Object.entries(STYLE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -93,33 +162,97 @@ export function PromptGenerator() {
 
           <button
             onClick={handleGenerate}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#2563eb",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "14px",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
           >
             Generate Prompt
           </button>
         </div>
 
         {isGenerated && (
-          <div className="mt-4">
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium">
+          <div style={{ marginTop: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <label style={{ fontSize: "14px", fontWeight: 500 }}>
                 Generated prompt
               </label>
               <button
                 onClick={handleCopy}
-                className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                style={{
+                  fontSize: "12px",
+                  color: "#2563eb",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
               >
-                Copy to clipboard
+                {copied ? "Copied!" : "Copy to clipboard"}
               </button>
             </div>
-            <div className="relative">
-              <pre className="w-full p-3 bg-white border border-gray-300 rounded-md text-sm font-mono whitespace-pre-wrap dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100">
-                {generatedPrompt}
-              </pre>
-            </div>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <pre style={{
+              width: "100%",
+              padding: "12px",
+              backgroundColor: "#1f2937",
+              border: "1px solid #374151",
+              borderRadius: "6px",
+              fontSize: "14px",
+              fontFamily: "monospace",
+              whiteSpace: "pre-wrap",
+              color: "#f3f4f6",
+              margin: 0,
+            }}>
+              {generatedPrompt}
+            </pre>
+            <p style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-secondary, #6b7280)" }}>
               This is a starting point based on your selected style. Customize the prompt by adding domain-specific terminology corrections based on the patterns you observe in your transcripts.
             </p>
+            
+            <div style={{ marginTop: "16px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <button
+                onClick={openInClaude}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 16px",
+                  backgroundColor: "#d97706",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Open in Claude
+              </button>
+              <button
+                onClick={openInChatGPT}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 16px",
+                  backgroundColor: "#10a37f",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Open in ChatGPT
+              </button>
+            </div>
           </div>
         )}
       </div>
