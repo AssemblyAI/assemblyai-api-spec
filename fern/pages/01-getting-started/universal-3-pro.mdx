@@ -105,17 +105,7 @@ while (true) {
 
 <Note title="Language Support">
 
-Universal-3-Pro currently offers support for English, Spanish, Portuguese, French, German, and Italian.
-
-For best results, we suggest using our [Automatic Language Detection](/docs/speech-to-text/pre-recorded-audio/automatic-language-detection) feature along with including our Universal model as a `speech_model` option in your request, which is the approach shown in this code example.
-
-Using this approach will result in the broadest language support for all 99 [languages supported by our API](/docs/speech-to-text/pre-recorded-audio/supported-languages).
-
-</Note>
-
-<Note title="Local audio files">
-
-The above code examples show how to transcribe a file that is available via URL. If you would like to work with local files, see our [API Reference](https://www.assemblyai.com/docs/api-reference/files/upload) for more information on transcribing local files.
+Universal-3-Pro supports English, Spanish, Portuguese, French, German, and Italian. To access all 99 languages, use `"speech_models": ["universal-3-pro", "universal"]` as shown in the code example.
 
 </Note>
 
@@ -135,7 +125,90 @@ Keyterms prompting allows you to provide up to 1000 words or phrases (maximum 6 
 
 Universal-3-Pro has built-in code switching capabilities across English, Spanish, Portuguese, French, German, and Italian. Set `"language_detection": true`, as shown in the code example in the Quick Start section, to be routed to the appropriate ASR model.
 
-*Placeholder for code example*
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/code_switching.mov",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal"]
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from 'axios'
+
+const baseUrl = 'https://api.assemblyai.com'
+const headers = {
+  authorization: '<YOUR_API_KEY>'
+}
+
+const data = {
+  audio_url: 'https://assemblyaiassets.com/audios/code_switching.mov',
+  language_detection: true,
+  speech_models: ['universal-3-pro', 'universal']
+}
+
+const url = `${baseUrl}/v2/transcript`
+const response = await axios.post(url, data, { headers: headers })
+
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    console.log(transcriptionResult.text)
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+<video controls width="100%">
+  <source src="https://assemblyaiassets.com/audios/code_switching.mov" type="video/quicktime" />
+  Your browser does not support the video tag.
+</video>
 
 Example output:
 
