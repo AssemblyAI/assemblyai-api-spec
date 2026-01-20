@@ -4,8 +4,6 @@ title: "Customizing transcription results using Prompt Engineering"
 
 Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3 Pro speech transcription, based on extensive testing (~1,000+ prompt variations).
 
-The key finding: **showing the model examples of error patterns you want corrected teaches it to fix those patterns across all similar terms**.
-
 ## Prompt generator (beta)
 
 <Note>
@@ -42,15 +40,15 @@ Based on your transcript sample and style preference, click "Generate Prompt" to
 **Security note:** When this feature launches, transcript samples will be processed securely and not stored. For sensitive content, we recommend using the manual prompt building guide below instead.
 </Warning>
 
-## Core principles
+## Core prompt principles
 
-### The winning formula
+### The winning prompt structure
 
 ```text
 [Base instruction] + [Pushy language] + [Specific concept] + [Concrete examples]
 ```
 
-All four components matter, but examples are critical.
+All four components matter, but examples are critical to drive changes in transcription output.
 
 ### Keep it concise
 
@@ -61,67 +59,36 @@ Limit prompts to 3-5 instructions maximum. Overly verbose prompts don't improve 
 The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-(omeprazole not omeprizole, metformin not metforman)
+Fix vowel substitution errors in pharmaceutical terms (omeprazole not omeprizole, metformin not metforman)
 ```
 
-The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs, including ones not in your examples.
+The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs in the transcript, including ones not in your examples.
 
 ## Prompt components
 
-### Base instructions
+### Base transcription instructions
 
 Choose based on your transcription needs:
 
-| Style | Base instruction | Use when |
+| Style | Base instruction | Use for |
 |-------|------------------|----------|
-| **Minimal** | `Transcribe verbatim.` | Clean audio, formal speech |
-| **With disfluencies** | `Transcribe verbatim:`<br/>`- Include all disfluencies` | Conversational audio, interviews |
-| **Full disfluency** | See template below | Research, linguistic analysis |
+| **Readability** | `Transcribe verbatim.` | Transcript readabilitiy, Remove speech errors |
+| **Readable with disfluencies** | `Transcribe verbatim:`<br/>`- Include all disfluencies` | Conversational accuracy, Capturing basic speech patterns |
+| **Full verbatim** | Transcribe verbatim:`<br/>`- Fillers: yes (um, uh, like, you know)`<br/>`- Repetitions: yes (I I, the the the)`<br/>`- Stutters: yes (th-that, b-but)`<br/>`- False starts: yes (I was- I went)` | Maximum speech accuracy, linguistic analysis of transcript |
 
-**Full disfluency template:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-```
-
-### Pushy language (required)
+### Pushy, authoritative language
 
 The model responds to authoritative, non-negotiable language. Use one of:
 
 | Phrase | Effectiveness |
 |--------|---------------|
 | `Non-negotiable:` | High |
-| `MANDATORY:` | High |
+| `Mandatory:` | High |
 | `Strict requirement:` | High |
 | `Must follow:` | Medium-High |
-| `REQUIRED:` | Medium-High |
-| `Essential:` | Medium |
+| `Required:` | Medium-High |
 
-### Context setting (optional, minor impact)
-
-Context phrases like `Context: Medical transcription` provide marginal benefit at best. Testing showed:
-
-- Winner with context: 100% success
-- Winner without context: 90-100% success
-
-**Examples do the heavy lifting.** Context is not a substitute for concrete examples. If you're limited on prompt length, prioritize examples over context.
-
-```text
-Context: [Domain description].
-```
-
-### Role priming (optional, minor impact)
-
-Role phrases may help slightly but are not required:
-
-- `As pharmacist reviewer:`
-- `For legal review:`
-
-## The critical component: Examples
+## Explicit examples of tanscript corrections
 
 ### Why examples work
 
@@ -153,6 +120,18 @@ The model learns: "Fix vowel substitution errors in pharmaceutical terms" and ap
 
 Based on testing, avoid these patterns:
 
+### Context setting
+
+Context phrases like `Context: Medical transcription` provide marginal benefit at best.
+
+Context is not a substitute for concrete examples. If you're limited on prompt length, prioritize examples over context.
+
+### Role priming
+
+Role phrases like `You are a pharmacist reviewer` provide marginal benefit at best.
+
+Role phrases work best when combined with affirmative language like `You are a superstar doctor with world class diagnosis skills`. Generally you are better off prioritizing examples over role priming.
+
 ### Vague instructions without examples
 
 ```text
@@ -161,9 +140,15 @@ Transcribe accurately.
 Be precise with drug names.
 ```
 
-*Why it fails: No error pattern for the model to learn from*
+With no error pattern for the model to learn from, these examples will only provide marginal benefits to accuracy.
 
-### Overly long prompts (>500 chars)
+### Overly short or long prompts
+
+We found in testing the sweet spot for length is:
+- 3-5 instructions
+- 50-80 words
+
+#### Overly long prompts
 
 ```text
 You are a medical transcriptionist with 20 years of experience.
@@ -171,9 +156,19 @@ Your job is to accurately transcribe medical dictation...
 [continues for 10 more lines]
 ```
 
-*Why it fails: Signal gets lost in noise*
+With longer prompts with more instructions, the instructions start to conflict one another. The model thus starts to degragde in transcription quality versus improve.
 
-### Weak/polite language
+#### Overly short prompts
+
+```text
+Use correct medical terminology.
+Transcribe accurately.
+Be precise with drug names.
+```
+
+With shorter prompts with less examples, the model struggles to produce corrections since there are not enough examples to draw on. Transcription quality won't degrade, but it won't be as accurate as it would be.
+
+### Polite, non-authoritative language
 
 ```text
 Please try to use correct spelling.
@@ -181,7 +176,7 @@ If possible, verify drug names.
 It would be nice to have accurate terms.
 ```
 
-*Why it fails: Model doesn't prioritize non-authoritative requests*
+The model doesn't prioritize non-authoritative requests well. The instruction will be followed weakly versus others provided and the base model's system prompts.
 
 ### Examples of what you DON'T want only
 
@@ -189,18 +184,19 @@ It would be nice to have accurate terms.
 Don't write "omeprizole" or "metforman"
 ```
 
-*Why it fails: Needs the correct form, not just the incorrect one*
+Examples need what you WANT to see. If you only include what you don't want, the model won't know what changes to make to transcription.
 
 ## Quick reference: Building your prompt
 
 ### Step 1: Choose your base
 
-- Clean audio: `Transcribe verbatim.`
-- Conversational: `Transcribe verbatim:\n- Include all disfluencies`
+- Readability: `Transcribe verbatim.`
+- Readable with disfluencies: `Transcribe verbatim:\n- Include all disfluencies`
+- Full verbatim: `Transcribe verbatim::\n- Fillers: yes (um, uh, like, you know)\n- Repetitions: yes (I I, the the the)\n- Stutters: yes (th-that, b-but)\n- False starts: yes (I was- I went)`
 
-### Step 2: Add pushy language (required)
+### Step 2: Add pushy, authoritative language
 
-- `Non-negotiable:` / `MANDATORY:` / `Strict requirement:`
+- `Non-negotiable:` / `Mandatory:` / `Strict requirement:` / `Required:`
 
 ### Step 3: State the specific requirement
 
@@ -208,15 +204,11 @@ Don't write "omeprizole" or "metforman"
 - `Legal terminology accuracy`
 - `Technical term precision`
 
-### Step 4: Add 2-3 examples (critical)
+### Step 4: Add 2-3 examples per requirement (critical)
 
 - `(correct not incorrect, correct2 not incorrect2)`
 
-### Step 5: Add context (optional, minor impact)
-
-- `Context: [Your domain].`
-
-### Final format
+### Final prompt format
 
 ```text
 [Base]. [Pushy language]: [Requirement] ([example1 not wrong1], [example2 not wrong2])
@@ -227,10 +219,10 @@ Don't write "omeprizole" or "metforman"
 ### Recommended approach
 
 1. **Identify your target terms** - What specific words/phrases are being transcribed incorrectly?
-2. **Find the error pattern** - Is it vowel substitution? Sound-alike confusion? Phonetic spelling?
-3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern (not the exact terms you're trying to fix)
-4. **Test 5-10 times** - Due to model variability, test multiple times to measure true accuracy
-5. **Measure success rate** - Aim for 90%+ accuracy on target terms
+2. **Find the error pattern** - Is it vowel substitution? Sound-alike confusion? Phonetic spelling? Make this your requirement.
+3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern (not the exact terms you're trying to fix, but examples the model can draw from).
+4. **Test and human verify** - The model is often times capturing verbatim transcription humans struggle with. You will need to listen to the file and determine correctness.
+5. **Measure success rate** - Evaluate a few prompt variations on sample files and confirm what works best
 
 ### Success metrics
 
