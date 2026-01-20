@@ -14,6 +14,7 @@ The migration involves several key improvements:
 - **Graceful Shutdown**: Proper termination handling
 
 You can follow the step-by-step guide below to make changes to your existing code but here is what your code should look like in the end:
+
 ```python
 import pyaudio
 import websocket
@@ -225,6 +226,7 @@ For more information on our Universal Streaming feature, see [this section](/doc
 ### 1. Update API endpoint and configuration
 
 **Before (v2):**
+
 ```python
 ws = websocket.WebSocketApp(
     f'wss://api.assemblyai.com/v2/realtime/ws?sample_rate={SAMPLE_RATE}',
@@ -237,6 +239,7 @@ ws = websocket.WebSocketApp(
 ```
 
 **After (v3):**
+
 ```python
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
@@ -253,6 +256,7 @@ ws_app = websocket.WebSocketApp(
 ```
 
 **Key Changes:**
+
 - New base URL: `streaming.assemblyai.com` instead of `api.assemblyai.com`
 - Version upgrade: `/v3/ws` instead of `/v2/realtime/ws`
 - Configuration via URL parameters using `urlencode()`
@@ -261,6 +265,7 @@ ws_app = websocket.WebSocketApp(
 ### 2. Improve audio configuration
 
 **Before (v2):**
+
 ```python
 FRAMES_PER_BUFFER = 3200  # 200ms of audio
 SAMPLE_RATE = 16000
@@ -269,6 +274,7 @@ FORMAT = pyaudio.paInt16
 ```
 
 **After (v3):**
+
 ```python
 FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
 SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
@@ -277,6 +283,7 @@ FORMAT = pyaudio.paInt16
 ```
 
 **Key Changes:**
+
 - Reduced buffer size from 200ms to 50ms for lower latency
 - Sample rate now references the configuration parameter
 - Added detailed comments explaining the calculations
@@ -284,6 +291,7 @@ FORMAT = pyaudio.paInt16
 ### 3. Enhance thread management
 
 **Before (v2):**
+
 ```python
 def on_open(ws):
     def stream_audio():
@@ -300,6 +308,7 @@ def on_open(ws):
 ```
 
 **After (v3):**
+
 ```python
 # Global variables for better resource management
 stop_event = threading.Event()
@@ -322,6 +331,7 @@ def on_open(ws):
 ```
 
 **Key Changes:**
+
 - Added `threading.Event()` for controlled thread termination
 - Global `audio_thread` variable for better lifecycle management
 - Condition-based loop (`while not stop_event.is_set()`) instead of infinite loop
@@ -330,6 +340,7 @@ def on_open(ws):
 ### 4. Update message handling
 
 **Before (v2):**
+
 ```python
 def on_message(ws, message):
     try:
@@ -356,6 +367,7 @@ def on_message(ws, message):
 ```
 
 **After (v3):**
+
 ```python
 def on_message(ws, message):
     try:
@@ -386,6 +398,7 @@ def on_message(ws, message):
 ```
 
 **Key Changes:**
+
 - Message types renamed: `SessionBegins` → `Begin`, `PartialTranscript`/`FinalTranscript` → `Turn`
 - Field names updated: `message_type` → `type`, `session_id` → `id`, `text` → `transcript`
 - Added session expiration timestamp handling
@@ -396,6 +409,7 @@ def on_message(ws, message):
 ### 5. Implement robust resource management
 
 **Before (v2):**
+
 ```python
 def on_close(ws, status, msg):
     stream.stop_stream()
@@ -409,6 +423,7 @@ stream = audio.open(...)
 ```
 
 **After (v3):**
+
 ```python
 def on_close(ws, close_status_code, close_msg):
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
@@ -433,6 +448,7 @@ def on_error(ws, error):
 ```
 
 **Key Changes:**
+
 - Added thread stop signaling via `stop_event.set()`
 - Conditional resource cleanup with null checks
 - Proper thread joining with timeout
@@ -442,6 +458,7 @@ def on_error(ws, error):
 ### 6. Add graceful shutdown handling
 
 **Before (v2):**
+
 ```python
 try:
     ws.run_forever()
@@ -450,10 +467,11 @@ except Exception as e:
 ```
 
 **After (v3):**
+
 ```python
 def run():
     # ... initialization code ...
-    
+
     ws_thread = threading.Thread(target=ws_app.run_forever)
     ws_thread.daemon = True
     ws_thread.start()
@@ -482,22 +500,28 @@ def run():
 ```
 
 **Key Changes:**
+
 - WebSocket runs in separate thread for better control
 - Proper KeyboardInterrupt handling
 - Graceful termination message sending
 - Thread joining with timeouts
 - Comprehensive cleanup in `finally` block
 
-<Warning>Note: Pricing is based on session duration so it is very important to close sessions properly to avoid unexpected usage and cost.</Warning>
+<Warning>
+  Note: Pricing is based on session duration so it is very important to close
+  sessions properly to avoid unexpected usage and cost.
+</Warning>
 
 ### 7. Improve error handling and logging
 
 **Before (v2):**
+
 - Basic error printing
 - Limited context in error messages
 - No resource cleanup on errors
 
 **After (v3):**
+
 - Detailed error context and timestamps
 - Proper exception type handling
 - Resource cleanup on all error paths
@@ -530,15 +554,19 @@ def run():
 ## Common migration issues
 
 ### Issue: "WebSocket connection failed"
+
 **Solution**: Verify you're using the new v3 endpoint URL and proper authentication header format.
 
 ### Issue: "Message type not recognized"
+
 **Solution**: Update message type handling from old names (`SessionBegins`, `PartialTranscript`) to new ones (`Begin`, `Turn`).
 
 ### Issue: "Audio thread won't stop"
+
 **Solution**: Ensure you're using `threading.Event()` and calling `stop_event.set()` in error handlers.
 
 ### Issue: "Resource leak warnings"
+
 **Solution**: Verify all audio resources are properly cleaned up in `on_close` and `finally` blocks.
 
 ## Benefits of migration

@@ -10,6 +10,7 @@ The [AssemblyAI n8n integration](https://n8n.io/integrations/assemblyai/) is bui
 ## Overview
 
 This comprehensive tutorial walks you through building a complete AssemblyAI workflow within n8n Cloud that:
+
 1. Watches for changes to a Google Drive folder
 2. Once an audio file is added, submits a transcription request to AssemblyAI with the audio
 3. Polls for the transcription process to complete
@@ -18,9 +19,11 @@ This comprehensive tutorial walks you through building a complete AssemblyAI wor
 6. Deletes the transcript from AssemblyAI's servers
 
 <Note>
-  The [Google Drive n8n integration](https://n8n.io/integrations/google-drive/) is used in this example for file storage and triggering, but you can adapt the workflow to use other services like Dropbox, Amazon S3, FTP/SFTP, or webhooks based on your needs.
-  
-  For all available integrations, see the [n8n integrations page](https://n8n.io/integrations/).
+  The [Google Drive n8n integration](https://n8n.io/integrations/google-drive/)
+  is used in this example for file storage and triggering, but you can adapt the
+  workflow to use other services like Dropbox, Amazon S3, FTP/SFTP, or webhooks
+  based on your needs. For all available integrations, see the [n8n integrations
+  page](https://n8n.io/integrations/).
 </Note>
 
 ## Prerequisites
@@ -97,10 +100,12 @@ When a new audio file is added to the specified Google Drive folder, the workflo
 <Note title="Running the workflow">
   To test the workflow, you can manually trigger it at any time by clicking the orange **Execute Workflow** button in the n8n editor to populate the nodes with sample data.
 
-  For the Google Drive trigger to work as intended, you will need to deploy this workflow (to n8n cloud) and then add a new audio file to the monitored folder in Google Drive (`/audio_files`). This is handled in a [later step](/docs/integrations/n-8-n#step-8-deploy).
+For the Google Drive trigger to work as intended, you will need to deploy this workflow (to n8n cloud) and then add a new audio file to the monitored folder in Google Drive (`/audio_files`). This is handled in a [later step](/docs/integrations/n-8-n#step-8-deploy).
+
 </Note>
 
 For more information on supported audio file types, size limits, and using Google Drive with AssemblyAI, see:
+
 - [Can I submit files stored in Google Drive?](/docs/faq/can-i-submit-files-to-the-api-that-are-stored-in-a-google-drive)
 - [What Is the Recommended File Type for Using Your API?](/docs/faq/what-is-the-recommended-file-type-for-using-your-api)
 - [What types of audio URLs can I use with the API?](/docs/faq/what-types-of-audio-urls-can-i-use-with-the-api)
@@ -109,9 +114,10 @@ For more information on supported audio file types, size limits, and using Googl
 <Note title="Important Google Drive Considerations">
   For the sake of simplicity, this tutorial uses a public Google Drive link, so you must ensure your file is **100 MB or less** and the Google Drive **folder settings are set to Public** (anyone with the link can view).
 
-  <img src="../../assets/img/integrations/n8n/public_folder.png" />
+<img src="../../assets/img/integrations/n8n/public_folder.png" />
 
-  If you'd like to transcribe private folders/files greater than 100MB, you'll need to add a Google Drive "Download file" node to download the binary data first, then upload it to AssemblyAI using the AssemblyAI "Upload a file" node.
+If you'd like to transcribe private folders/files greater than 100MB, you'll need to add a Google Drive "Download file" node to download the binary data first, then upload it to AssemblyAI using the AssemblyAI "Upload a file" node.
+
 </Note>
 
 </Step>
@@ -123,9 +129,11 @@ For more information on supported audio file types, size limits, and using Googl
 After the Google Drive trigger fires, you have the file's `webContentLink` available at `{{ $json.webContentLink }}`.
 
 #### For files under 100MB
+
 You can **skip this step** and use the public Google Drive link directly in [Step 3](/docs/integrations/n-8-n#step-3-submit-transcription-request) without uploading. AssemblyAI accepts [all Google Drive files below 100MB](/docs/faq/can-i-submit-files-to-the-api-that-are-stored-in-a-google-drive).
 
 #### For files over 100MB
+
 Use the **AssemblyAI Upload** node:
 
 1. Add a **Google Drive** "Download File" node and configure it to download the file by ID (you can get the file ID from the trigger response)
@@ -160,6 +168,7 @@ Using the + sign linked to the Google Drive trigger, add an **AssemblyAI** `Crea
 <Step title="Enable features">
 
 In **Additional Fields**, enable the following features for this tutorial:
+
 - **Speaker Labels**: `true` (identifies different speakers through diarization)
 - **Language Detection**: `true` (automatically detects the language, also known as ALD)
 
@@ -184,6 +193,7 @@ Since transcription is asynchronous, the transcription request returns immediate
 <Step title="Add a Wait node">
 
 Add a `Wait` node and configure the wait parameters:
+
 - **Resume**: After Time Interval
 - **Wait Amount**: 3.00
 - **Wait Unit**: Seconds
@@ -195,6 +205,7 @@ This will wait 3 seconds before checking the transcript's status.
 <Step title="Add the transcription (get) node">
 
 Add an **AssemblyAI** `Get a transcription` node after the `Wait` node and configure the node parameters:
+
 - **Credential to connect with**: Select your AssemblyAI Account credential (see [Credentials](#credentials))
 - **Resource**: Transcript
 - **Operation**: Get
@@ -210,6 +221,7 @@ Add an **AssemblyAI** `Get a transcription` node after the `Wait` node and confi
 Add a `Switch` node after the `Get a transcription` node and configure the switch to check the transcript's [status](/docs/api-reference/transcripts/submit#response.body.status):
 
 Add 4 routing rules, each with:
+
 - **Value 1**: `{{ $json.status }}`
   - Or drag the `status` field from the `Get a transcription` response
 - **Condition**: "is equal to"
@@ -226,6 +238,7 @@ Add 4 routing rules, each with:
 <Step title="Handle switch outputs">
 
 Handle each switch node output based on the transcript status:
+
 - **Output 0 (queued)**: Connect back to the **Wait** node to continue polling
 - **Output 1 (processing)**: Connect back to the **Wait** node to continue polling
 - **Output 2 (error)**: Add a **Stop and Error** node to halt the workflow
@@ -240,10 +253,12 @@ By connecting the `processing` and `queued` outputs back to the `Get a transcrip
 
 When the transcript is complete, the response will contain the [full transcript data](/docs/api-reference/transcripts/submit#response).
 
-
 <Note>
-  For this tutorial, we are only using the `Create a transcription`, `Get a transcription`, and `Delete a transcription` actions from the AssemblyAI node.
-  However, n8n's AssemblyAI integration supports **all available endpoints**, including uploading files, retrieving redacted audio, getting sentences and paragraphs, LLM Gateway, and more.
+  For this tutorial, we are only using the `Create a transcription`, `Get a
+  transcription`, and `Delete a transcription` actions from the AssemblyAI node.
+  However, n8n's AssemblyAI integration supports **all available endpoints**,
+  including uploading files, retrieving redacted audio, getting sentences and
+  paragraphs, LLM Gateway, and more.
 </Note>
 
 ### Step 5: Process Transcript Output into a Human-Readable Transcript
@@ -282,6 +297,7 @@ return {'formattedText': formatted_text}
 ```
 
 This will output a `formattedText` field containing the transcript with speaker labels.
+
 </Step>
 
 </Steps>
@@ -297,6 +313,7 @@ To save the formatted transcript back to Google Drive:
 <img src="../../assets/img/integrations/n8n/upload_file.png" />
 
 Add a `Convert to File` node and configure it:
+
 - **Operation**: Convert to Text File
 - **Text Input Field**: formattedText
 - **Put Output File in Field**: data
@@ -308,6 +325,7 @@ Add a `Convert to File` node and configure it:
 <img src="../../assets/img/integrations/n8n/upload_drive.png" />
 
 Add a Google Drive `Upload file` node and configure it:
+
 - **Credential to connect with**: Select your Google Drive credential
 - **Resource**: File
 - **Operation**: Upload
@@ -340,6 +358,7 @@ Add an AssemblyAI `Delete a transcription` node at the end of your workflow.
 <Step title="Configure the node">
 
 Configure the node parameters:
+
 - **Credential to connect with**: Select your AssemblyAI Account credential
 - **Resource**: Transcript
 - **Operation**: Delete
@@ -354,9 +373,11 @@ The transcript will be permanently deleted from AssemblyAI's servers.
 ### Step 8: Deploy
 
 Once the transcript has been deleted, the workflow is complete! At this point, it should look like this:
+
 <img src="../../assets/img/integrations/n8n/full_tutorial.png" />
 
 Now you can deploy the workflow to n8n Cloud by navigating back to the n8n Cloud **Overview** page, locating your workflow, and moving the slider icon to the `Active` position.
+
 <img src="../../assets/img/integrations/n8n/deploy.png" />
 
 And we're done! Add a file to `/audio_files` in Google Drive, and within a few seconds to a few minutes (depending on the `Poll Times` set for the [Google Drive trigger](/docs/integrations/n-8-n#choose-your-trigger) and the duration of the audio file), you should see the transcript appear in the `/transcripts` Google Drive folder.
@@ -368,6 +389,7 @@ In this tutorial, you built a complete AssemblyAI transcription workflow in n8n 
 This is just one simple idea, but the possibilities are endless! You can customize this workflow further by adding additional AssemblyAI features and products like sentiment analysis, entity detection, and LLM Gateway (see the **"What can you do with AssemblyAI?"** section of [this page](https://n8n.io/integrations/assemblyai/) for all available actions), or by integrating with other services like Slack, OpenAI, Supabase, Discord, and the hundreds of other [official n8n integrations](https://n8n.io/integrations/).
 
 ## Additional Resources
+
 - [AssemblyAI n8n Integration Page](https://n8n.io/integrations/assemblyai/)
 - [AssemblyAI n8n Integration GitHub Repo](https://github.com/gsharp-aai/n8n-nodes-assemblyai)
 
