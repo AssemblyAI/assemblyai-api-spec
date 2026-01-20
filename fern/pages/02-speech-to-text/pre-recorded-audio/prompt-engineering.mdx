@@ -2,547 +2,817 @@
 title: "Customizing transcription results using Prompt Engineering"
 ---
 
-Use prompt engineering to control transcription style, from ultra-clean readable output to highly verbose verbatim transcriptions that capture every disfluency and false start. Different prompt formulations can dramatically affect transcription output.
+Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3 Pro speech transcription, based on extensive testing (~1,000+ prompt variations).
 
-## Overview
+The key finding: **showing the model examples of error patterns you want corrected teaches it to fix those patterns across all similar terms**.
 
-The `prompt` parameter allows you to influence how the model transcribes your audio. By providing natural language instructions, you can guide the model to produce transcripts that match your specific needs, whether that's capturing every hesitation for research purposes or creating clean, readable text for publication.
+## Core principles
 
-## Baseline: Universal-3 Pro without prompt
-
-Universal-3 Pro without any prompt produces clean, readable transcription with proper capitalization and minimal disfluencies. This serves as the baseline for comparing prompt effects.
-
-**Baseline characteristics:**
-- **Word count:** 4,418 words
-- No filler words ("um", "uh") in default mode
-- Proper capitalization of entities and terms
-- Clean sentence structure with appropriate punctuation
-
-## Prompt summary
-
-The following table summarizes how different prompts affect word count compared to baseline (4,418 words):
-
-| Prompt type | Prompt | Words vs baseline |
-|-------------|--------|-------------------|
-| Entity-Focused | `This is a virtual business meeting, transcribe verbatim and pay close attention to entities like names, company names, products, due dates, release dates, etc. Do not make any insertions/hallucinations of phrases, just edits for missing or wrong words.` | +72 (+1.6%) |
-| Basic Disfluencies | `This is a virtual business meeting. Transcribe the audio verbatim, including all disfluencies and false starts.` | +280 (+6.3%) |
-| Enhanced Disfluencies | `This is a virtual business meeting. Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies, and false starts. This should be as close to a human transcriptionist as possible.` | +291 (+6.6%) |
-| Maximum Verbatim | `Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies, and false starts. This should be as close to a human transcriptionist as possible. We want all um, uhs, you know, start stop, hesitation, stud-stud-studder, etc.` | +349 (+7.9%) |
-| Clean and Readable | `This is a business meeting. We don't want lots of disfluencies and false starts. Focus on making the transcript super readable and more about meaning and sentence structure and punctuation versus verbatim.` | +111 (+2.5%) |
-
-## Prompt examples
-
-### Entity-focused transcription
-
-Use this prompt when accurate capture of business entities is critical.
+### The winning formula
 
 ```text
-This is a virtual business meeting, transcribe verbatim and pay close attention
-to entities like names, company names, products, due dates, release dates, etc.
-Do not make any insertions/hallucinations of phrases, just edits for missing or
-wrong words.
+[Base instruction] + [Pushy language] + [Specific concept] + [Concrete examples]
 ```
 
-This prompt produces output with improved capitalization of proper nouns and entities. It's ideal for business meeting minutes, earnings calls, product launches, and any context where entity accuracy is critical.
+All four components matter, but examples are critical.
 
-**Result:** 4,490 words (+72 words, +1.6% vs baseline)
+### Keep it concise
 
-<Accordion title="Compare baseline vs entity-focused output">
+Limit prompts to 3-5 instructions maximum. Overly verbose prompts don't improve accuracy. Each instruction should be actionable and specific.
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Entity-focused prompt">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse team meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-since it's really late for you. It may— so, but I'm glad. Thanks for coming at 
-least once. So, news and events. I've got a lot of things on the agenda today 
-because of some of this. So apologies for that, but I think it's going to go 
-down over time. Based on feedback, I'll work— I'm going to work to do more 
-summarized communications to improve the signal-to-noise ratio in my 
-communications to groups of people, including this group of people. This will 
-result in, for this group, adding more items to our staff meeting agenda, often 
-as read-only, rather than posting to our Slack channel. And I am going to be 
-assuming that people leaders on the team will attend this meeting or read the 
-notes and not rely on the Slack channel. So keep that in mind. Let's see, B is 
-a read-only item unless anybody wants to discuss it. And C, Phil has. Hi, 
-welcome, Alan, to the meeting. I've asked Alan to step in as acting full-stack 
-manager for security policies while I hire an EM. Alan has graciously accepted 
-this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-</Tabs>
+### Show, don't just tell
 
-</Accordion>
-
-### Basic disfluency capture
-
-Use this prompt when you need to capture conversational disfluencies while maintaining readability.
+The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-This is a virtual business meeting. Transcribe the audio verbatim, including all
-disfluencies and false starts.
+(omeprazole not omeprizole, metformin not metforman)
 ```
 
-This prompt adds filler words like "um" and "uh" to the output and captures false starts with em-dashes. It's useful for qualitative research interviews, therapy sessions, linguistic analysis, and training data for conversation AI.
+The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs, including ones not in your examples.
 
-**Result:** 4,698 words (+280 words, +6.3% vs baseline)
+## Prompt components
 
-<Accordion title="Compare baseline vs basic disfluencies output">
+### Base instructions
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Basic disfluencies prompt">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. Um, and, uh, that's our meeting for September 14th 
-or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
-midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
-this meeting because it's really late for you. Uh, it may— so, but I'm glad. 
-Thanks for coming at least once. So, um, news and events. Uh, I've got a lot of 
-things on the agenda today because of some of this. Uh, so apologies for that, 
-but I think it's going to go down over time. Based on feedback, I'll work— I'm 
-going to work to do more summarized communications to improve the signal-to-noise 
-ratio in my communications to groups of people, including this group of people. 
-This was worked in for this group, adding more items to our staff meeting agenda, 
-often as read-only, rather than posting to our Slack channel. And I am going to 
-be assuming that people leaders on the team will attend this meeting or read the 
-notes and not rely on the Slack channel. So keep that in, in mind. Uh, let's see, 
-B is a read-only item unless anybody wants to discuss it. And C, Phil has— hi, 
-um, welcome, Alan, uh, to the, to the meeting. Um, I've asked Alan to step in as 
-acting full-stack manager for security policies, um, while I hire an EM. Um, 
-Alan has graciously accepted, um, this, this wonderful opportunity.
-```
-  </Tab>
-</Tabs>
+Choose based on your transcription needs:
 
-</Accordion>
+| Style | Base instruction | Use when |
+|-------|------------------|----------|
+| **Minimal** | `Transcribe verbatim.` | Clean audio, formal speech |
+| **With disfluencies** | `Transcribe verbatim:`<br/>`- Include all disfluencies` | Conversational audio, interviews |
+| **Full disfluency** | See template below | Research, linguistic analysis |
 
-### Enhanced disfluency capture
-
-Use this prompt for more aggressive disfluency capture with explicit emphasis.
+**Full disfluency template:**
 
 ```text
-This is a virtual business meeting. Transcribe the audio verbatim, overly trying
-to capture hesitations, disfluencies, and false starts. This should be as close
-to a human transcriptionist as possible.
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
 ```
 
-Using intensifying language like "overly trying" and comparing to a human transcriptionist increases capture rates. This is useful for forensic analysis, legal depositions, and detailed conversation analysis.
+### Pushy language (required)
 
-**Result:** 4,709 words (+291 words, +6.6% vs baseline)
+The model responds to authoritative, non-negotiable language. Use one of:
 
-<Accordion title="Compare baseline vs enhanced disfluencies output">
+| Phrase | Effectiveness |
+|--------|---------------|
+| `Non-negotiable:` | High |
+| `MANDATORY:` | High |
+| `Strict requirement:` | High |
+| `Must follow:` | Medium-High |
+| `REQUIRED:` | Medium-High |
+| `Essential:` | Medium |
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Enhanced disfluencies prompt">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. Um, and, uh, that's our meeting for, uh, September 
-14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
-midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
-this meeting since it's really late for you. Uh, it may— so, but I'm glad. 
-Thanks for coming at least once. So, um, news and events. Uh, I've got a lot of 
-things on the agenda today because of some of this. Uh, so apologies for that, 
-but I think it's going to go down over time. Based on feedback, I'll work— I'm 
-gonna work to do more summarized communications to improve the signal-to-noise 
-ratio in my communications to groups of people, including this group of people. 
-This will result in, for this group, adding more items to our staff meeting 
-agenda, often as read-only, rather than posting to our Slack channel. And I am 
-gonna be assuming that people leaders on the team will attend this meeting or 
-read the notes and not rely on the Slack channel. So keep that in, in mind. Uh, 
-let's see, B is a read-only item unless anybody wants to discuss it. And C, 
-Phil has— hi, um, welcome, Alan, uh, to the, to the meeting. Um, I've asked 
-Alan to step in as acting full-stack manager for security policies, um, while 
-I hire an EM. Um, Alan has graciously accepted, um, this, this wonderful 
-opportunity.
-```
-  </Tab>
-</Tabs>
+### Context setting (optional, minor impact)
 
-</Accordion>
+Context phrases like `Context: Medical transcription` provide marginal benefit at best. Testing showed:
 
-### Maximum verbatim with examples
+- Winner with context: 100% success
+- Winner without context: 90-100% success
 
-Use this prompt when you need the highest fidelity transcription with all speech patterns captured.
+**Examples do the heavy lifting.** Context is not a substitute for concrete examples. If you're limited on prompt length, prioritize examples over context.
 
 ```text
-Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies,
-and false starts. This should be as close to a human transcriptionist as possible.
-We want all um, uhs, you know, start stop, hesitation, stud-stud-studder, etc.
+Context: [Domain description].
 ```
 
-Providing concrete examples of disfluencies to capture produces the highest word count and captures repeated hesitations. This is ideal for speech pathology research, communication pattern analysis, and training data for natural TTS systems.
+### Role priming (optional, minor impact)
 
-**Result:** 4,767 words (+349 words, +7.9% vs baseline)
+Role phrases may help slightly but are not required:
 
-<Accordion title="Compare baseline vs maximum verbatim output">
+- `As pharmacist reviewer:`
+- `For legal review:`
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Maximum verbatim prompt">
-```text
-So it is the SEC, meaning secure and govern growth and data science, meaning 
-applied ML, MLOps, and anti-abuse team meeting. That's a big mouthful. We might 
-get a better name over time. Um, and, uh, that's our meeting for, uh, uh, 
-September 14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you 
-here when it's midnight? We could talk, uh, glad you're here. Don't make it 
-happen to come to this meeting since it's really late for you. Uh, it may— so, 
-but I'm glad. Thanks for coming at least once. So, um, news and events. Uh, 
-I've got a lot of things on the agenda today because of some of this. Uh, so 
-apologies for that, but I think it's going to go down over time. Based on 
-feedback, I'll work— I'm going to work to do more summarized communications to 
-improve the signal-to-noise ra— ratio in my communications to groups of people, 
-including this group of people. Uh, this will result in, for this group, adding 
-more items to our staff meeting agenda, often as read-only, rather than posting 
-to our Slack channel. And I am going to be assuming that people leaders on the 
-team will attend this meeting or read the notes and not rely on the Slack 
-channel. So keep that in, in mind. Uh, let's see, B is a read-only item unless 
-anybody wants to discuss it. And C, Phil has— hi, um, welcome, Alan, uh, to 
-the, to the meeting. Um, I've asked Alan to step in as acting full-stack 
-manager for security policies, um, while I hire an EM. Um, Alan has graciously 
-accepted, um, this, this wonderful opportunity.
-```
-  </Tab>
-</Tabs>
+## The critical component: Examples
 
-</Accordion>
+### Why examples work
 
-### Clean and readable
-
-Use this prompt when you want to reduce verbosity and improve readability.
+The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-This is a business meeting. We don't want lots of disfluencies and false starts.
-Focus on making the transcript super readable and more about meaning and sentence
-structure and punctuation versus verbatim.
+(omeprazole not omeprizole, metformin not metforman)
 ```
 
-This prompt removes most filler words while maintaining natural flow. It's ideal for published meeting minutes, marketing content, executive summaries, and customer-facing documentation.
+The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs, including ones not in your examples.
 
-**Result:** 4,529 words (+111 words, +2.5% vs baseline)
+### How to construct examples
 
-<Accordion title="Compare baseline vs clean and readable output">
+1. **Identify the error pattern** in your domain (vowel swaps, similar-sounding words, etc.)
+2. **Choose 2-3 common terms** where this error frequently occurs
+3. **Show correct to incorrect** format: `(correct not incorrect)`
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
+### Example patterns by error type
+
+| Error type | Example format |
+|------------|----------------|
+| Vowel substitution | `(omeprazole not omeprizole)` |
+| Sound-alike confusion | `(CABG not cabbage)` |
+| Phonetic spelling | `(prescription not perscription)` |
+| Technical terms | `(kubernetes not kubernetties)` |
+| Proper nouns | `(Salesforce not sales force)` |
+
+## What doesn't work
+
+Based on testing, avoid these patterns:
+
+### Vague instructions without examples
+
 ```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
+Use correct medical terminology.
+Transcribe accurately.
+Be precise with drug names.
 ```
-  </Tab>
-  <Tab title="Clean and readable prompt">
+
+*Why it fails: No error pattern for the model to learn from*
+
+### Overly long prompts (>500 chars)
+
 ```text
-So it is the SEC, meaning Secure and Govern Growth and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk— glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. It may— so, but I'm glad. Thanks for coming 
-at least once. So, um, news and events. Uh, I've got a lot of things on the 
-agenda today because of some of this. Uh, so apologies for that, but I think 
-it's going to go down over time. Based on feedback, I'll work— I'm going to 
-work to do more summarized communications to improve the signal-to-noise ratio 
-in my communications to groups of people, including this group of people. This 
-was worked in for this group, adding more items to our staff meeting agenda, 
-often as read-only, rather than posting to our Slack channel. And I am going to 
-be assuming that people leaders on the team will attend this meeting or read 
-the notes and not rely on the Slack channel. So keep that in mind. Let's see, 
-B is a read-only item unless anybody wants to discuss it. And C, Phil has— hi, 
-welcome, Alan, to the meeting. I've asked Alan to step in as acting full-stack 
-manager for security policies while I hire an EM. Alan has graciously accepted 
-this wonderful opportunity. So welcome, Alan.
+You are a medical transcriptionist with 20 years of experience.
+Your job is to accurately transcribe medical dictation...
+[continues for 10 more lines]
 ```
-  </Tab>
-</Tabs>
 
-</Accordion>
+*Why it fails: Signal gets lost in noise*
 
-## Recommended prompts by use case
+### Weak/polite language
 
-### Business and corporate
-
-**Meeting minutes:**
 ```text
-This is a business meeting. Focus on making the transcript readable and
-professional. Capture key entities like names, dates, and action items
-accurately. Remove most filler words but keep the natural flow.
+Please try to use correct spelling.
+If possible, verify drug names.
+It would be nice to have accurate terms.
 ```
 
-**Earnings calls:**
+*Why it fails: Model doesn't prioritize non-authoritative requests*
+
+### Examples of what you DON'T want only
+
 ```text
-This is a corporate earnings call. Transcribe verbatim with attention to
-financial terms, company names, metrics, and forward-looking statements.
-Maintain professional readability.
+Don't write "omeprizole" or "metforman"
 ```
 
-### Research and analysis
+*Why it fails: Needs the correct form, not just the incorrect one*
 
-**Qualitative research:**
+## Quick reference: Building your prompt
+
+### Step 1: Choose your base
+
+- Clean audio: `Transcribe verbatim.`
+- Conversational: `Transcribe verbatim:\n- Include all disfluencies`
+
+### Step 2: Add pushy language (required)
+
+- `Non-negotiable:` / `MANDATORY:` / `Strict requirement:`
+
+### Step 3: State the specific requirement
+
+- `Pharmaceutical accuracy required`
+- `Legal terminology accuracy`
+- `Technical term precision`
+
+### Step 4: Add 2-3 examples (critical)
+
+- `(correct not incorrect, correct2 not incorrect2)`
+
+### Step 5: Add context (optional, minor impact)
+
+- `Context: [Your domain].`
+
+### Final format
+
 ```text
-This is a research interview. Transcribe the audio verbatim, including
-disfluencies and false starts. Capture um, uh, you know, and hesitations
-to preserve natural speech patterns for analysis.
+[Base]. [Pushy language]: [Requirement] ([example1 not wrong1], [example2 not wrong2])
 ```
 
-**Linguistic analysis:**
+## Testing your prompts
+
+### Recommended approach
+
+1. **Identify your target terms** - What specific words/phrases are being transcribed incorrectly?
+2. **Find the error pattern** - Is it vowel substitution? Sound-alike confusion? Phonetic spelling?
+3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern (not the exact terms you're trying to fix)
+4. **Test 5-10 times** - Due to model variability, test multiple times to measure true accuracy
+5. **Measure success rate** - Aim for 90%+ accuracy on target terms
+
+### Success metrics
+
+- **90-100%**: Production ready
+- **70-89%**: May need example refinement
+- **<70%**: Revisit error pattern analysis
+
+## Validated prompts (90-100% success)
+
+These prompts were validated with 10+ test runs each:
+
 ```text
-Transcribe the audio verbatim, overly trying to capture all hesitations,
-disfluencies, false starts, repairs, and stutters. We want every um, uh,
-like, you know, and incomplete word or phrase.
+Transcribe verbatim. Context: Prescription transcription. Non-negotiable: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)
 ```
 
-### Legal and compliance
-
-**Legal depositions:**
 ```text
-This is a legal deposition. Transcribe verbatim, capturing every word,
-hesitation, pause indication, and false start exactly as spoken. Maximum
-accuracy and completeness required.
+Transcribe verbatim. Non-negotiable: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)
 ```
 
-**Compliance recording:**
 ```text
-This is a compliance-monitored call. Transcribe verbatim while maintaining
-clarity. Capture all substantive statements accurately, including corrections
-and clarifications made by speakers.
+Transcribe verbatim. Strict requirement: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)
 ```
 
-### Media and content
-
-**Podcast and video transcripts:**
 ```text
-This is a podcast/video. Create a readable transcript that maintains the
-conversational tone but removes excessive filler words. Keep false starts
-and corrections that add character.
+Transcribe verbatim:
+- Include all disfluencies
+- Context: Medication reconciliation. As pharmacist reviewer: MANDATORY: Publication-quality drug names (acetaminophen not acetaminophin, ibuprofen not ibuprofin)
 ```
 
-**Subtitles and captions:**
+## Use case templates
+
+The following templates are optimized for specific industries and applications. Each includes recommended prompts and common error patterns to address.
+
+### AI-powered meeting intelligence
+
+**Use case**: Transcribing business meetings for summaries, action items, and searchable archives.
+
+**Common errors**: Company names, product names, project codenames, attendee names, acronyms.
+
+**Recommended prompt (full verbatim):**
+
 ```text
-This is video content for captions. Focus on readability and timing.
-Remove most disfluencies but keep natural speech rhythm. Use clear
-punctuation and sentence structure.
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Proper noun accuracy (Salesforce not sales force, Asana not a sauna, Figma not fig ma)
 ```
 
-### Medical and clinical
+**Minimal (for polished summaries only):**
 
-**Therapy sessions:**
 ```text
-This is a therapy session. Transcribe verbatim including all hesitations,
-pauses, false starts, and emotional indicators. Capture um, uh, and other
-speech patterns that may be clinically relevant.
+Transcribe verbatim. Non-negotiable: Product and company name accuracy (Kubernetes not kubernetties, Elasticsearch not elastic search, MongoDB not mongo DB)
 ```
 
-**Medical consultations:**
+**Tips:**
+- Use full verbatim for raw transcripts; minimal for auto-summarization pipelines
+- Add your specific company/product names as examples if they're commonly misheard
+- For recurring meetings, identify which terms get mangled and add those as examples
+
+### Call centers and contact centers
+
+**Use case**: Customer service calls, support tickets, quality assurance, compliance monitoring.
+
+**Common errors**: Product names, policy terms, ticket/case numbers, customer account references.
+
+**Recommended prompt (full verbatim - required for compliance):**
+
 ```text
-This is a doctor-patient consultation. Transcribe verbatim with careful
-attention to medical terminology, symptoms, medications, and dosages.
-Maintain clarity while preserving exact patient statements.
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Policy term accuracy (warranty not warrenty, reimbursement not reimbersment, eligibility not eligability)
 ```
 
-## Best practices
+**For compliance-focused transcription:**
 
-When crafting prompts for transcription, keep these principles in mind:
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Customer service accuracy (cancellation not cancelation, subscription not subsciption, representative not representive)
+```
 
-**Prompt specificity matters.** The progression from general instructions like "including all disfluencies" to specific examples like "um, uhs, you know, stud-stud-studder" shows consistent increases in disfluency capture. Provide concrete examples of what you want captured.
+**Tips:**
+- Full verbatim is critical for compliance - captures exact phrasing like "I, uh, I guess I agree" vs "I agree"
+- Disfluencies reveal customer confusion (false starts), frustration (repetitions), hesitation (fillers)
+- Replace examples with your product-specific terms that get misheard
 
-**Bidirectional control is possible.** You can effectively move in both directions: more verbose with maximum verbatim prompts or less verbose with clean readable prompts. Use opposite-direction prompts to achieve your desired style.
+### Call tracking
 
-**Language intensity works.** Using intensifying language like "overly trying" and "as close to a human transcriptionist as possible" demonstrably increases capture rates.
+**Use case**: Marketing attribution, lead tracking, campaign performance analysis.
 
-**Examples drive behavior.** The biggest improvements come from adding concrete examples of disfluencies to capture. Include 3-5 specific examples of the speech patterns you want captured or avoided.
+**Common errors**: Campaign names, promo codes, URL mentions, phone numbers spoken aloud.
 
-## API usage
+**Recommended prompt (full verbatim):**
 
-Use the `prompt` parameter when submitting a transcription request:
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Marketing term accuracy (referral not referal, campaign not campain, promotional not promotial)
+```
 
-<Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-    ```python
-    import requests
-    import time
+**Minimal (for analytics pipelines):**
 
-    base_url = "https://api.assemblyai.com"
-    headers = {"authorization": "<YOUR_API_KEY>"}
+```text
+Transcribe verbatim. Strict requirement: Alphanumeric accuracy for codes and references. Marketing terminology (coupon not cupon, discount not disount)
+```
 
-    data = {
-        "audio_url": "https://example.com/your-audio.mp3",
-        "prompt": "This is a business meeting. Focus on making the transcript readable and professional."
-    }
+**Tips:**
+- Full verbatim captures caller intent signals (hesitation before providing info)
+- If tracking specific campaign names, add them as examples
+- Promo codes are challenging - consider post-processing validation
 
-    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+### Conversation intelligence as a service
 
-    if response.status_code != 200:
-        print(f"Error: {response.status_code}, Response: {response.text}")
-        response.raise_for_status()
+**Use case**: B2B analytics platform processing diverse customer audio.
 
-    transcript_response = response.json()
-    transcript_id = transcript_response["id"]
-    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+**Common errors**: Varies by customer domain - need flexible, generalizable prompts.
 
-    while True:
-        transcript = requests.get(polling_endpoint, headers=headers).json()
-        if transcript["status"] == "completed":
-            print(transcript["text"])
-            break
-        elif transcript["status"] == "error":
-            raise RuntimeError(f"Transcription failed: {transcript['error']}")
-        else:
-            time.sleep(3)
-    ```
+**Recommended prompt (full verbatim - default for conversation analysis):**
 
-  </Tab>
-  <Tab language="javascript" title="JavaScript">
-    ```javascript
-      import axios from 'axios'
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Business terminology accuracy (revenue not revenu, acquisition not aqusition, quarterly not quartly)
+```
 
-      const baseUrl = 'https://api.assemblyai.com'
+**Minimal (for downstream NLP that strips disfluencies anyway):**
 
-      const headers = {
-        authorization: '<YOUR_API_KEY>'
-      }
+```text
+Transcribe verbatim. Non-negotiable: Professional vocabulary accuracy (strategy not stragety, implementation not implimentation, infrastructure not infastructure)
+```
 
-      const data = {
-        audio_url: 'https://example.com/your-audio.mp3',
-        prompt: 'This is a business meeting. Focus on making the transcript readable and professional.'
-      }
+**Tips:**
+- Full verbatim is essential for sentiment analysis, talk-time ratios, interruption detection
+- Allow customers to specify their own example terms via API
+- Build a library of domain-specific example sets customers can choose from
 
-      const url = `${baseUrl}/v2/transcript`
-      const response = await axios.post(url, data, { headers: headers })
+### CRMs
 
-      const transcriptId = response.data.id
-      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+**Use case**: Sales call logging, contact records, deal notes, activity capture.
 
-      while (true) {
-        const pollingResponse = await axios.get(pollingEndpoint, {
-          headers: headers
-        })
-        const transcriptionResult = pollingResponse.data
+**Common errors**: Company names, contact names, deal values, competitor mentions.
 
-        if (transcriptionResult.status === 'completed') {
-          console.log(transcriptionResult.text)
-          break
-        } else if (transcriptionResult.status === 'error') {
-          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-        }
-      }
-    ```
+**Recommended prompt (full verbatim):**
 
-  </Tab>
-</Tabs>
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Company and contact name accuracy. Business term precision (proposal not propsal, contract not contrakt, negotiation not negotation)
+```
 
-## Prompt guidelines
+**Minimal (for auto-logging summaries):**
 
-When using the `prompt` parameter, keep these guidelines in mind:
+```text
+Transcribe verbatim. MANDATORY: Sales vocabulary accuracy (procurement not procurment, stakeholder not stakholdr, decision-maker not decision maker)
+```
 
-- **Character limit:** 1,000 characters recommended
-- **Optimal length:** 100-200 characters for clear, focused instructions
-- **Formatting:** Plain text, no special formatting required
+**Tips:**
+- Full verbatim captures prospect hesitation and buying signals
+- Integrate with CRM data to validate company/contact names post-transcription
+- Competitor names are high-value - add common competitors as examples
+
+### EdTech
+
+**Use case**: Lecture transcription, tutoring sessions, educational content, accessibility.
+
+**Common errors**: Academic terminology, subject-specific vocabulary, citation references.
+
+**Recommended prompt (full verbatim - for tutoring/interactive sessions):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Academic terminology accuracy (curriculum not curiculum, pedagogy not pedogogy, assessment not assesment)
+```
+
+**For STEM lectures (polished output):**
+
+```text
+Transcribe verbatim. Strict requirement: Scientific term accuracy (algorithm not algorythm, hypothesis not hypothesus, variable not varable)
+```
+
+**For humanities:**
+
+```text
+Transcribe verbatim. MANDATORY: Academic vocabulary (bibliography not bibilography, dissertation not disertation, methodology not methodolgy)
+```
+
+**Tips:**
+- Full verbatim for tutoring captures student thinking process and confusion points
+- Minimal works for polished lecture recordings meant for captions
+- For language learning content, disfluencies are pedagogically valuable - use full verbatim
+- Different subjects have different terminology - customize examples per course/subject
+
+### Hiring platforms
+
+**Use case**: Interview transcription, candidate screening, hiring analytics.
+
+**Common errors**: Job titles, company names, technical skills, certifications.
+
+**Recommended prompt (full verbatim - critical for interview analysis):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Professional terminology accuracy (LinkedIn not linked in, resume not resumay, candidate not canadate)
+```
+
+**For technical roles:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Technical skill accuracy (JavaScript not java script, PostgreSQL not post-gress, Kubernetes not kubernetties)
+```
+
+**Tips:**
+- Full verbatim is essential - hesitations, self-corrections, and false starts reveal candidate thinking patterns
+- Stutters on technical questions vs fluent answers are meaningful signals
+- Add role-specific technical terms as examples based on job requirements
+
+### Online meeting platforms
+
+**Use case**: General video conferencing transcription, closed captions, meeting records.
+
+**Common errors**: Participant names, screen-shared content references, technical terms.
+
+**Recommended prompt (full verbatim):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Proper noun accuracy (Zoom not zoom, Microsoft Teams not microsoft teams, Google Meet not google meet)
+```
+
+**Minimal (for live captions where brevity matters):**
+
+```text
+Transcribe verbatim. MANDATORY: Professional vocabulary (agenda not agender, minutes not minuts, action item not action itam)
+```
+
+**Tips:**
+- Full verbatim for meeting records; minimal for live captions
+- For live captions, speed matters more than capturing every "um"
+- Allow users to add custom vocabulary for their organization
+
+### Revenue/sales intelligence and sales coaching
+
+**Use case**: Sales call analysis, coaching insights, deal intelligence, competitive intel.
+
+**Common errors**: Competitor names, pricing terms, objection handling phrases, sales methodology terms.
+
+**Recommended prompt (full verbatim - essential for coaching):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Sales terminology accuracy (procurement not procurment, revenue not revenu, quarterly not quartly)
+```
+
+**For methodology-specific coaching:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Business vocabulary accuracy (stakeholder not stakholder, implementation not implimentation, integration not intergration)
+```
+
+**For competitive intelligence:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Strict requirement: Company name accuracy (Salesforce not sales force, HubSpot not hub spot, Atlassian not atlassion)
+```
+
+**Tips:**
+- Full verbatim captures coaching moments - confident rep: "The price is fifty thousand" vs hesitant rep: "The, uh, the price is... fifty thousand"
+- Customer buying signals show in disfluencies - "We, um, we might be interested" (hesitation) vs "We're interested" (commitment)
+- False starts reveal objections forming - "I don't- well, I mean, the budget is..."
+- Replace company name examples with your actual competitors
+
+### Medical platforms
+
+**Use case**: Clinical documentation, patient encounters, telehealth, medical dictation.
+
+**Tested extensively - 90-100% accuracy achievable.**
+
+**Recommended prompt (patient conversations - full verbatim):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)
+```
+
+**For clinical dictation (polished output):**
+
+```text
+Transcribe verbatim. MANDATORY: Publication-quality drug names (acetaminophen not acetaminophin, ibuprofen not ibuprofin)
+```
+
+**For specialty-specific:**
+
+```text
+Transcribe verbatim. Strict requirement: Medical terminology accuracy (diagnosis not diagnosus, prescription not perscription, symptoms not simptoms)
+```
+
+**Common medical error patterns:**
+- `-azole` endings: omeprazole, fluconazole, metronidazole
+- `-statin` endings: atorvastatin, simvastatin, rosuvastatin
+- `-pril` endings: lisinopril, enalapril, ramipril
+- Complex compounds: acetaminophen, hydrochlorothiazide
+
+**Tips:**
+- Full verbatim for patient conversations captures symptom descriptions: "It hurts, um, kind of here- no, more like here"
+- Minimal for physician dictation where speech is already polished
+- Drug name accuracy is critical for patient safety - vowel errors like "omeprizole" could cause dispensing errors
+- The model generalizes from examples: showing vowel errors in common drugs fixes the pattern in ALL drugs
+
+### Productivity software/tools
+
+**Use case**: Voice notes, dictation, task capture, voice commands.
+
+**Common errors**: App names, action verbs, proper nouns.
+
+**Recommended prompt (voice notes - full verbatim):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Application name accuracy (Notion not no shun, Todoist not to do ist, Trello not trel oh)
+```
+
+**For voice commands (minimal - precision over verbatim):**
+
+```text
+Transcribe verbatim. MANDATORY: Action clarity (schedule not schedual, reminder not remindre, deadline not deadlin)
+```
+
+**Tips:**
+- Full verbatim for brainstorming voice notes: "I want to, um, maybe add a- no wait, let's do..." captures thought process
+- Minimal for voice commands where you just need the action
+- Add your integrated app names as examples
+
+### Avatar/dubbing
+
+**Use case**: Voice synthesis input, dubbing preparation, lip-sync content.
+
+**Common errors**: Timing-critical - need accurate word boundaries; pronunciation preservation.
+
+**Recommended prompt (full verbatim - required for lip-sync):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Preserve exact speech patterns. No smoothing or corrections.
+```
+
+**For dubbing prep:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Exact syllable preservation (going to not gonna, want to not wanna) for lip-sync accuracy
+```
+
+**Tips:**
+- Full verbatim is mandatory - every "um" and pause affects lip-sync timing
+- Colloquial forms matter for mouth shapes: "gonna" (2 syllables) vs "going to" (3 syllables) changes lip movement
+- False starts and stutters: "I th-thought" must be preserved exactly for natural dubbing
+- Word-level timestamps are critical - verify alignment
+
+### Podcast recording and editing
+
+**Use case**: Episode transcription, show notes, searchable archives, audiograms.
+
+**Common errors**: Guest names, show names, sponsor names, niche topic vocabulary.
+
+**Recommended prompt (full verbatim):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Media term accuracy (podcast not pod cast, episode not episod, subscriber not subscirber)
+```
+
+**For interview podcasts:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Proper noun accuracy (Spotify not spot-ify, Patreon not patron, YouTube not you tube)
+```
+
+**Tips:**
+- Full verbatim helps editors find cut points - natural pauses after "um" or false starts are good edit locations
+- Disfluencies show authentic conversation vs scripted - "I, I actually think..." sounds more genuine
+- Replace platform examples with your show name, guest names, and sponsor names
+
+### Video editing
+
+**Use case**: Subtitle generation, content editing, searchable video archives.
+
+**Common errors**: Speaker names, on-screen text references, technical terms.
+
+**Recommended prompt (full verbatim):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Video term accuracy (thumbnail not thumnail, subscribe not subscibe, notification not notifcation)
+```
+
+**For tutorial content:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Strict requirement: Technical term accuracy (tutorial not tutoreal, demonstration not demonstation, screenshot not screen shot)
+```
+
+**Tips:**
+- Full verbatim helps find edit points - cut after "um" or before false starts for clean edits
+- Disfluencies in raw footage: "So, um, click here and then- actually, first go to..." shows where to trim
+- Speaker diarization complements transcription - use both features
+
+### Legal tech and e-discovery platforms
+
+**Use case**: Depositions, court proceedings, legal document review, compliance.
+
+**Common errors**: Legal terminology, party names, case citations, Latin phrases.
+
+**Recommended prompt (depositions - full verbatim required):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Legal terminology accuracy (plaintiff not plantiff, defendant not defendent, subpoena not supena)
+```
+
+**For court proceedings:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Legal term precision (adjudicate not ajudicate, injunction not injuntion, testimony not testimoney)
+```
+
+**For contract review:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Strict requirement: Legal vocabulary (indemnification not indemnication, arbitration not arbritration, jurisdiction not juristiction)
+```
+
+**Common legal error patterns:**
+- Latin terms: habeas corpus, pro bono, ex parte, voir dire
+- Process terms: deposition, adjudication, litigation, arbitration
+- Document types: affidavit, subpoena, injunction, stipulation
+
+**Tips:**
+- Full verbatim is legally required - "I, uh, don't recall" vs "I don't recall" have different evidentiary weight
+- Hesitation captured: "Did you see the defendant?" "I... I think so" vs "I think so" - the pause matters
+- False starts show witness uncertainty: "He was- I mean, she was there"
+- Party names and case numbers require post-processing validation
+
+### Market intelligence research
+
+**Use case**: Focus groups, consumer interviews, competitive research, survey responses.
+
+**Common errors**: Brand names, product names, competitor mentions, industry jargon.
+
+**Recommended prompt (full verbatim - critical for sentiment):**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Non-negotiable: Consumer research accuracy (preference not preferance, recommendation not recomendation, satisfaction not satisfation)
+```
+
+**For focus groups:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- MANDATORY: Brand accuracy (Nike not nikey, Adidas not adeedas, Lululemon not lulu lemon)
+```
+
+**For competitive research:**
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was- I went)
+- Colloquial: yes (gonna, wanna, gotta)
+- Strict requirement: Industry term accuracy (demographic not demograhic, analytics not analitics, segmentation not segmantation)
+```
+
+**Tips:**
+- Full verbatim reveals true consumer sentiment - "I, um, I guess I like it" (lukewarm) vs "I like it" (appears positive)
+- Hesitation before brand mentions: "I usually buy... um... Nike" suggests weak brand loyalty
+- False starts show conflicting opinions: "I love- well, I don't love it, but..."
+- Replace brand examples with the specific brands you're researching
+
+## Summary
+
+| Principle | Implementation | Impact |
+|-----------|----------------|--------|
+| **Concrete examples** | Show 2-3 examples of the error pattern being corrected | Critical |
+| **Pushy language** | Use "Non-negotiable", "MANDATORY", "Strict requirement" | High |
+| **Specific concept** | State exactly what accuracy you need | High |
+| **Keep concise** | 3-5 instructions maximum | Medium |
+| **Context** | Add domain context | Minor |
+
+**The key insight**: Examples teach error patterns, not just specific corrections. Show the model what "wrong to right" looks like with common terms, and it will apply that pattern broadly across your domain.
