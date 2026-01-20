@@ -1,13 +1,23 @@
 ---
-title: "Introducing Universal 3 Pro"
-subtitle: "Learn how to transcribe pre-recorded audio using Universal 3 Pro."
+title: "Introducing Universal-3-Pro"
+subtitle: "Learn how to transcribe pre-recorded audio using Universal-3-Pro."
 hide-nav-links: true
-description: "Learn how to transcribe pre-recorded audio using Universal 3 Pro."
+description: "Learn how to transcribe pre-recorded audio using Universal-3-Pro."
 ---
 
 ## Overview
 
-Universal 3 Pro represents a fundamental shift in speech recognition technology. With a multimodal LLM architecture that jointly optimizes an LLM and our best-in-class speech encoder, we've created the world's first Speech Language Model explicitly optimized for speech-to-text tasks—enabling you to adjust transcription nuances directly through prompting.
+Universal-3-Pro is our best transcription model designed to capture the "hard stuff" that traditional ASR models struggle with, namely:
+
+- **Natural language prompting** - control the style and context of transcription
+- **Key terms prompting** - boost accuracy of known rare words in transcription
+- **Built-in code switching** - native switching between languages and context
+- **Max verbatim mode** - control elements like disfluencies, stutters, false starts, colloquialisms, and more
+- **Audio tags for non-speech** - add markers for non-speech events in the audio file
+
+Using the above altogether, you can get an entirely customized transcription output that rivals near-human-level transcription.
+
+Without any prompting or changes, the model out of the box outperforms all ASR models on the market on accuracy, especially as it pertains to entities and rare words.
 
 ## Quick Start
 
@@ -106,224 +116,6 @@ Using this approach will result in the broadest language support for all 99 [lan
 <Note title="Local audio files">
 
 The above code examples show how to transcribe a file that is available via URL. If you would like to work with local files, see our [API Reference](https://www.assemblyai.com/docs/api-reference/files/upload) for more information on transcribing local files.
-
-</Note>
-
-## Fine-tuning Universal 3 Pro
-
-What truly sets Universal 3 Pro apart is its ability to be customized for specific industries and use cases with minimal effort. Rather than spending months developing custom models or implementing complex post-processing rules, Universal 3 Pro offers two distinct customization approaches that give you unprecedented control over your transcription results.
-
-One approach is to prompt the model with key terminology in the form of a list of words and phrases. The other uses natural-language prompts to convey the nuances you want to capture or the contextual information relevant to your audio. Continue reading for more information on these two approaches.
-
-### Key-term prompting of words and phrases
-
-Improve transcription accuracy by leveraging Universal 3 Pro's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file.
-
-Rather than simply increasing the likelihood of detecting specific words, Universal 3 Pro's multi-modal architecture actually understands the semantic meaning and context of the terminology you provide, enhancing transcription quality not just of the exact terms you specify, but also related terminology, variations, and contextually similar phrases.
-
-Provide up to 1,000 domain-specific words or phrases (maximum 6 words per phrase) that may appear in your audio using the optional `keyterms_prompt` parameter:
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-data = {
-    "audio_url": "https://assembly.ai/sports_injuries.mp3",
-    "speech_models": ["universal-3-pro"],
-    "keyterms_prompt": ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-    response.raise_for_status()
-
-transcript_response = response.json()
-transcript_id = transcript_response["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript["text"])
-        break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
-    else:
-        time.sleep(3)
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-
-```javascript
-import axios from 'axios'
-
-const baseUrl = 'https://api.assemblyai.com'
-const headers = {
-  authorization: '<YOUR_API_KEY>'
-}
-
-const data = {
-  audio_url: 'https://assembly.ai/sports_injuries.mp3',
-  speech_models: ['universal-3-pro'],
-  keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
-}
-
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
-
-const transcriptId = response.data.id
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
-
-while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers
-  })
-  const transcriptionResult = pollingResponse.data
-
-  if (transcriptionResult.status === 'completed') {
-    console.log(transcriptionResult.text)
-    break
-  } else if (transcriptionResult.status === 'error') {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-  } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-  }
-}
-```
-
-</Tab>
-</Tabs>
-
-<Note title="Keyword count limits">
-
-While we support up to 1,000 keywords and phrases, actual capacity may be lower due to internal tokenization and implementation constraints.
-
-Key points to remember:
-
-- Each word in a multi-word phrase counts towards the 1,000 keyword limit
-- Capitalization affects capacity (uppercase tokens consume more than lowercase)
-- Longer words consume more capacity than shorter words
-
-For optimal results, use shorter phrases when possible and be mindful of your total token count when approaching the keyword limit.
-
-</Note>
-
-Here is an example of what a `keyterms_prompt` list might look like for a transcription of a professional therapy session for a patient named Jane Doe, who is being treated for anxiety and depression:
-
-```txt wordWrap
-["Jane Doe", "cognitive behavioral therapy", "major depressive disorder", "generalized anxiety disorder", "ADHD", "trauma-informed care", "Lexapro 10mg", "psychosocial assessment", "therapeutic alliance", "emotional dysregulation", "GAD-7", "PHQ-9", "Citalopram", "Lorazepam"]
-```
-
-### Natural-language prompting
-
-Another way to improve transcription accuracy is to leverage Universal 3 Pro's contextual understanding capabilities by prompting the model with a description of your audio in plain English. This allows the model to understand the broader context of your audio file and make more intelligent transcription decisions. You can provide up to 1,500 words of contextual information, giving the model rich background knowledge about the content, participants, domain, and purpose of the audio.
-
-A common use case for these contextual prompts is to leverage known context about the call and provide it with the transcription. This might look like:
-
-- **Legal Deposition**: "This is a deposition in the case of Smith v. Acme Corporation, a product liability lawsuit involving an alleged defect in the XJ-5000 power tool that resulted in severe lacerations to the plaintiff's right hand. The deposition will involve questioning of Dr. Elizabeth Chen, an orthopedic surgeon who treated the plaintiff's injuries."
-- **Veterinary Consultation**: "This is a veterinary consultation about a dog with hip dysplasia."
-- **Medical Consultation**: "This is a medical consultation between Dr. Jones, a pulmonologist, and Dan Rayman who is being evaluated for recurring pneumonia."
-
-To prompt the model with contextual language, include the `prompt` parameter in your request as shown in the code example below.
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-data = {
-    "audio_url": "https://assembly.ai/sports_injuries.mp3",
-    "speech_models": ["universal-3-pro"],
-    "prompt": "This is a shareholder meeting for the ACME Corporation to discuss Q3 financial results and expectations for Q4 and beyond."
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-    response.raise_for_status()
-
-transcript_response = response.json()
-transcript_id = transcript_response["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript["text"])
-        break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
-    else:
-        time.sleep(3)
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-
-```javascript
-import axios from 'axios'
-
-const baseUrl = 'https://api.assemblyai.com'
-const headers = {
-  authorization: '<YOUR_API_KEY>'
-}
-
-const data = {
-  audio_url: 'https://assembly.ai/sports_injuries.mp3',
-  speech_models: ['universal-3-pro'],
-  prompt: 'This is a shareholder meeting for the ACME Corporation to discuss Q3 financial results and expectations for Q4 and beyond.'
-}
-
-const url = `${baseUrl}/v2/transcript`
-const response = await axios.post(url, data, { headers: headers })
-
-const transcriptId = response.data.id
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
-
-while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers
-  })
-  const transcriptionResult = pollingResponse.data
-
-  if (transcriptionResult.status === 'completed') {
-    console.log(transcriptionResult.text)
-    break
-  } else if (transcriptionResult.status === 'error') {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-  } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-  }
-}
-```
-
-</Tab>
-</Tabs>
-
-### Should I use key-term prompting or natural-language prompting?
-
-Key-term prompting with the `keyterms_prompt` parameter is a good option when you have a specific terminology or vocabulary that you would like to fine-tune the model with. Key-term prompting works best with targeted use cases where specific words and phrases can be identified.
-
-Natural-language prompting with the `prompt` parameter is a good option when you know the context of the audio, perhaps derived from some metadata, but exact terminology may be too broad or numerous to capture in a list. Natural-language prompting works best when you would rather pass a high-level description than specific words or phrases.
-
-<Note>
-
-The `keyterms_prompt` and `prompt` parameters cannot both be used in the same request.
 
 </Note>
 
