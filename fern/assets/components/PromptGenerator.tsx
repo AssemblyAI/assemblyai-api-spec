@@ -29,7 +29,11 @@ const STYLE_LABELS: Record<TranscriptionStyle, string> = {
   "max-verbatim-audio-tags": "Max verbatim with audio tags",
 };
 
+const HELP_ARTICLE_URL = "https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering";
+
 const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample, analyze the domain and terminology patterns to generate an optimized transcription prompt.
+
+IMPORTANT: Please read the full prompt engineering guide for detailed best practices: ${HELP_ARTICLE_URL}
 
 Key principles for effective prompts:
 1. Use authoritative language: "Non-negotiable:", "Mandatory:", "Strict requirement:"
@@ -46,41 +50,35 @@ Analyze the transcript for domain-specific terminology that might be misheard an
 export function PromptGenerator() {
   const [transcript, setTranscript] = React.useState("");
   const [style, setStyle] = React.useState<TranscriptionStyle>("readability");
-  const [generatedPrompt, setGeneratedPrompt] = React.useState("");
-  const [isGenerated, setIsGenerated] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
 
-  const handleGenerate = () => {
-    const basePrompt = STYLE_PROMPTS[style];
-    
-    let samplePrompt = basePrompt;
-    
-    if (transcript.length > 0) {
-      samplePrompt += `\n\nNon-negotiable: Accuracy required for domain-specific terminology.`;
-      samplePrompt += `\n\n[Add your domain-specific corrections here, e.g.: (correct not incorrect, correct2 not incorrect2)]`;
-    }
-    
-    setGeneratedPrompt(samplePrompt);
-    setIsGenerated(true);
-    setCopied(false);
-  };
+  React.useEffect(() => {
+    const checkDarkMode = () => {
+      const html = document.documentElement;
+      const body = document.body;
+      const isDark = 
+        html.classList.contains("dark") ||
+        body.classList.contains("dark") ||
+        html.getAttribute("data-theme") === "dark" ||
+        body.getAttribute("data-theme") === "dark" ||
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setIsDarkMode(isDark);
+    };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(generatedPrompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      const textArea = document.createElement("textarea");
-      textArea.value = generatedPrompt;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+    checkDarkMode();
+
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class", "data-theme"] });
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", checkDarkMode);
+
+    return () => {
+      observer.disconnect();
+      mediaQuery.removeEventListener("change", checkDarkMode);
+    };
+  }, []);
 
   const buildLLMPrompt = () => {
     const styleLabel = STYLE_LABELS[style];
@@ -95,7 +93,7 @@ ${basePrompt}
 User's transcript sample:
 ${transcript || "(No transcript provided - generate a general prompt for this style)"}
 
-Please generate an optimized transcription prompt based on the above.`;
+Please generate an optimized transcription prompt based on the above. Remember to check the help article for additional guidance: ${HELP_ARTICLE_URL}`;
   };
 
   const openInClaude = () => {
@@ -108,153 +106,137 @@ Please generate an optimized transcription prompt based on the above.`;
     window.open(`https://chat.openai.com/?q=${prompt}`, "_blank");
   };
 
+  const openInGemini = () => {
+    const prompt = encodeURIComponent(buildLLMPrompt());
+    window.open(`https://gemini.google.com/app?q=${prompt}`, "_blank");
+  };
+
+  const containerStyle: React.CSSProperties = {
+    border: `1px solid ${isDarkMode ? "#374151" : "#e5e7eb"}`,
+    borderRadius: "8px",
+    padding: "24px",
+    backgroundColor: isDarkMode ? "#1f2937" : "#f9fafb",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: "14px",
+    fontWeight: 500,
+    marginBottom: "8px",
+    color: isDarkMode ? "#f3f4f6" : "#111827",
+  };
+
+  const textareaStyle: React.CSSProperties = {
+    width: "100%",
+    height: "160px",
+    padding: "12px",
+    border: `1px solid ${isDarkMode ? "#4b5563" : "#d1d5db"}`,
+    borderRadius: "6px",
+    fontSize: "14px",
+    fontFamily: "monospace",
+    resize: "vertical",
+    backgroundColor: isDarkMode ? "#111827" : "#ffffff",
+    color: isDarkMode ? "#f3f4f6" : "#111827",
+  };
+
+  const selectStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "8px",
+    border: `1px solid ${isDarkMode ? "#4b5563" : "#d1d5db"}`,
+    borderRadius: "6px",
+    fontSize: "14px",
+    backgroundColor: isDarkMode ? "#111827" : "#ffffff",
+    color: isDarkMode ? "#f3f4f6" : "#111827",
+  };
+
+  const buttonBaseStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 20px",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "14px",
+    fontWeight: 500,
+    cursor: "pointer",
+    color: "#ffffff",
+  };
+
+  const helpTextStyle: React.CSSProperties = {
+    marginTop: "12px",
+    fontSize: "13px",
+    color: isDarkMode ? "#9ca3af" : "#6b7280",
+  };
+
   return (
-    <div style={{ border: "1px solid var(--border-color, #e5e7eb)", borderRadius: "8px", padding: "24px", backgroundColor: "var(--bg-secondary, #f9fafb)" }}>
+    <div style={containerStyle}>
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div>
-          <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "8px" }}>
+          <label style={labelStyle}>
             Paste your transcript sample
           </label>
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Paste a sample of your transcript here (100-500 words recommended). This helps identify your domain and common terminology patterns..."
-            style={{
-              width: "100%",
-              height: "160px",
-              padding: "12px",
-              border: "1px solid var(--border-color, #d1d5db)",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontFamily: "monospace",
-              resize: "vertical",
-              backgroundColor: "var(--bg-primary, #ffffff)",
-              color: "var(--text-primary, #111827)",
-            }}
+            style={textareaStyle}
           />
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-end" }}>
-          <div style={{ flex: 1, minWidth: "200px" }}>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "8px" }}>
-              Select transcription style
-            </label>
-            <select
-              value={style}
-              onChange={(e) => setStyle(e.target.value as TranscriptionStyle)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                border: "1px solid var(--border-color, #d1d5db)",
-                borderRadius: "6px",
-                fontSize: "14px",
-                backgroundColor: "var(--bg-primary, #ffffff)",
-                color: "var(--text-primary, #111827)",
-              }}
-            >
-              {Object.entries(STYLE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={handleGenerate}
-            style={{
-              padding: "8px 16px",
-              backgroundColor: "#2563eb",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
+        <div>
+          <label style={labelStyle}>
+            Select transcription style
+          </label>
+          <select
+            value={style}
+            onChange={(e) => setStyle(e.target.value as TranscriptionStyle)}
+            style={selectStyle}
           >
-            Generate Prompt
-          </button>
+            {Object.entries(STYLE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {isGenerated && (
-          <div style={{ marginTop: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <label style={{ fontSize: "14px", fontWeight: 500 }}>
-                Generated prompt
-              </label>
-              <button
-                onClick={handleCopy}
-                style={{
-                  fontSize: "12px",
-                  color: "#2563eb",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                {copied ? "Copied!" : "Copy to clipboard"}
-              </button>
-            </div>
-            <pre style={{
-              width: "100%",
-              padding: "12px",
-              backgroundColor: "#1f2937",
-              border: "1px solid #374151",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontFamily: "monospace",
-              whiteSpace: "pre-wrap",
-              color: "#f3f4f6",
-              margin: 0,
-            }}>
-              {generatedPrompt}
-            </pre>
-            <p style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-secondary, #6b7280)" }}>
-              This is a starting point based on your selected style. Customize the prompt by adding domain-specific terminology corrections based on the patterns you observe in your transcripts.
-            </p>
-            
-            <div style={{ marginTop: "16px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <button
-                onClick={openInClaude}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "8px 16px",
-                  backgroundColor: "#d97706",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Open in Claude
-              </button>
-              <button
-                onClick={openInChatGPT}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "8px 16px",
-                  backgroundColor: "#10a37f",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Open in ChatGPT
-              </button>
-            </div>
+        <div style={{ marginTop: "8px" }}>
+          <label style={labelStyle}>
+            Generate a prompt with AI
+          </label>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              onClick={openInClaude}
+              style={{
+                ...buttonBaseStyle,
+                backgroundColor: "#d97706",
+              }}
+            >
+              Open in Claude
+            </button>
+            <button
+              onClick={openInChatGPT}
+              style={{
+                ...buttonBaseStyle,
+                backgroundColor: "#10a37f",
+              }}
+            >
+              Open in ChatGPT
+            </button>
+            <button
+              onClick={openInGemini}
+              style={{
+                ...buttonBaseStyle,
+                backgroundColor: "#4285f4",
+              }}
+            >
+              Open in Gemini
+            </button>
           </div>
-        )}
+          <p style={helpTextStyle}>
+            Click a button to open your preferred AI assistant with your transcript and style pre-loaded. The AI will generate an optimized prompt based on our prompt engineering guide.
+          </p>
+        </div>
       </div>
     </div>
   );
