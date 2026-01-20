@@ -33,8 +33,6 @@ const HELP_ARTICLE_URL = "https://www.assemblyai.com/docs/speech-to-text/pre-rec
 
 const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample, analyze the domain and terminology patterns to generate an optimized transcription prompt.
 
-IMPORTANT: Please read the full prompt engineering guide for detailed best practices: ${HELP_ARTICLE_URL}
-
 Key principles for effective prompts:
 1. Use authoritative language: "Non-negotiable:", "Mandatory:", "Strict requirement:"
 2. Include explicit examples in format: (correct not incorrect)
@@ -80,9 +78,19 @@ export function PromptGenerator() {
     };
   }, []);
 
-  const buildLLMPrompt = () => {
+  // Max URL length to avoid browser errors (conservative limit)
+  const MAX_URL_LENGTH = 8000;
+
+  const buildLLMPrompt = (maxTranscriptLength?: number) => {
     const styleLabel = STYLE_LABELS[style];
     const basePrompt = STYLE_PROMPTS[style];
+    
+    let transcriptText = transcript || "(No transcript provided - generate a general prompt for this style)";
+    
+    // Truncate transcript if needed
+    if (maxTranscriptLength && transcriptText.length > maxTranscriptLength) {
+      transcriptText = transcriptText.substring(0, maxTranscriptLength) + "\n\n[Transcript truncated due to length - please provide the full transcript directly to the AI if needed]";
+    }
     
     return `${LLM_CONTEXT}
 
@@ -91,24 +99,39 @@ Base prompt for this style:
 ${basePrompt}
 
 User's transcript sample:
-${transcript || "(No transcript provided - generate a general prompt for this style)"}
+${transcriptText}
 
-Please generate an optimized transcription prompt based on the above. Remember to check the help article for additional guidance: ${HELP_ARTICLE_URL}`;
+IMPORTANT: Please generate an optimized transcription prompt based on the above. For detailed best practices and examples, check the help article: ${HELP_ARTICLE_URL}`;
+  };
+
+  const getMaxTranscriptLength = (baseUrl: string) => {
+    // Calculate how much space we have for the transcript
+    const promptWithoutTranscript = buildLLMPrompt(0).replace(transcript || "(No transcript provided - generate a general prompt for this style)", "");
+    const encodedBaseLength = baseUrl.length + encodeURIComponent(promptWithoutTranscript).length;
+    const availableLength = MAX_URL_LENGTH - encodedBaseLength;
+    // Account for URL encoding overhead (roughly 3x for special chars)
+    return Math.floor(availableLength / 3);
   };
 
   const openInClaude = () => {
-    const prompt = encodeURIComponent(buildLLMPrompt());
-    window.open(`https://claude.ai/new?q=${prompt}`, "_blank");
+    const baseUrl = "https://claude.ai/new?q=";
+    const maxLength = getMaxTranscriptLength(baseUrl);
+    const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
+    window.open(`${baseUrl}${prompt}`, "_blank");
   };
 
   const openInChatGPT = () => {
-    const prompt = encodeURIComponent(buildLLMPrompt());
-    window.open(`https://chat.openai.com/?q=${prompt}`, "_blank");
+    const baseUrl = "https://chat.openai.com/?q=";
+    const maxLength = getMaxTranscriptLength(baseUrl);
+    const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
+    window.open(`${baseUrl}${prompt}`, "_blank");
   };
 
   const openInGemini = () => {
-    const prompt = encodeURIComponent(buildLLMPrompt());
-    window.open(`https://gemini.google.com/app?q=${prompt}`, "_blank");
+    const baseUrl = "https://aistudio.google.com/prompts/new_chat?prompt=";
+    const maxLength = getMaxTranscriptLength(baseUrl);
+    const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
+    window.open(`${baseUrl}${prompt}`, "_blank");
   };
 
   const containerStyle: React.CSSProperties = {
