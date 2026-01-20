@@ -25,14 +25,14 @@
       hoverBackground: dark ? "#374151" : "#f5f5f5",
       borderColor: dark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)",
       textColor: dark ? "white" : "#374151",
-      iconColor: "#2545D3"
+      iconColor: "#2545D3",
     };
   }
 
   function updateButtonTheme() {
     const button = document.getElementById("voice-agent-button");
     if (!button || isRecording) return;
-    
+
     const styles = getButtonStyles();
     button.style.background = styles.background;
     button.style.borderColor = styles.borderColor;
@@ -66,7 +66,7 @@
 
     const askAIButton = findAskAIButton();
     const searchButton = document.getElementById("fern-search-button");
-    
+
     const anchorButton = askAIButton || searchButton;
     if (!anchorButton) {
       return;
@@ -124,10 +124,7 @@
 
     voiceButton.addEventListener("click", toggleVoiceAgent);
 
-    anchorButton.parentNode.insertBefore(
-      voiceButton,
-      anchorButton.nextSibling
-    );
+    anchorButton.parentNode.insertBefore(voiceButton, anchorButton.nextSibling);
   }
 
   async function toggleVoiceAgent() {
@@ -187,7 +184,7 @@
 
   async function startVoiceAgent() {
     conversationItems = [];
-    
+
     audioContext = new (window.AudioContext || window.webkitAudioContext)({
       sampleRate: 16000,
     });
@@ -454,9 +451,11 @@
       margin-bottom: 14px;
       padding: 10px 14px;
       border-radius: 12px;
-      ${role === "user" 
-        ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
-        : "background: #2545D3; margin-right: 24px; color: white;"}
+      ${
+        role === "user"
+          ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;"
+          : "background: #2545D3; margin-right: 24px; color: white;"
+      }
     `;
 
     const roleLabel = document.createElement("div");
@@ -479,7 +478,7 @@
     messagesContainer.appendChild(messageDiv);
 
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
+
     conversationItems.push({ role, text });
   }
 
@@ -493,7 +492,7 @@
     }
 
     let interimElement = messagesContainer.querySelector(".interim-message");
-    
+
     if (!interimElement) {
       interimElement = document.createElement("div");
       interimElement.className = "interim-message";
@@ -502,9 +501,11 @@
         padding: 10px 14px;
         border-radius: 12px;
         opacity: 0.7;
-        ${role === "user" 
-          ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;" 
-          : "background: #2545D3; margin-right: 24px;"}
+        ${
+          role === "user"
+            ? "background: #ffffff; margin-left: 24px; border: 1px solid #e5e7eb;"
+            : "background: #2545D3; margin-right: 24px;"
+        }
       `;
 
       const roleLabel = document.createElement("div");
@@ -539,7 +540,8 @@
   function playAudio(arrayBuffer) {
     try {
       if (!playbackContext) {
-        playbackContext = new (window.AudioContext || window.webkitAudioContext)({
+        playbackContext = new (window.AudioContext ||
+          window.webkitAudioContext)({
           sampleRate: 16000,
         });
         nextPlayTime = playbackContext.currentTime;
@@ -564,7 +566,7 @@
       source.connect(playbackContext.destination);
 
       const currentTime = playbackContext.currentTime;
-      
+
       // If we're too far behind (queue backed up), catch up to reduce latency
       // Allow a small buffer (50ms) for smooth playback
       if (nextPlayTime < currentTime) {
@@ -574,7 +576,7 @@
         console.log("Audio queue backed up, resetting to reduce latency");
         nextPlayTime = currentTime + 0.05;
       }
-      
+
       source.start(nextPlayTime);
       nextPlayTime = nextPlayTime + audioBuffer.duration;
     } catch (error) {
@@ -618,7 +620,10 @@
   // Watch for theme changes on the HTML element
   const themeObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type === "attributes" && mutation.attributeName === "class") {
+      if (
+        mutation.type === "attributes" &&
+        mutation.attributeName === "class"
+      ) {
         updateButtonTheme();
       }
     }

@@ -1,0 +1,222 @@
+imports:
+  root: __package__.yml
+types:
+  StreamingApiGenerateStreamingTokenResponse:
+    properties:
+      expires_in_seconds:
+        docs: |
+          The actual expiration time of the token in seconds.
+        type: integer
+      token:
+        docs: The temporary authentication token
+        type: string
+    source:
+      openapi: ../streaming-token.yml
+  StreamingEncoding:
+    default: pcm_s16le
+    docs: Encoding of the audio stream
+    enum:
+      - pcm_s16le
+      - pcm_mulaw
+    source:
+      openapi: ../usm-streaming.yml
+  StreamingFormatTurns:
+    default: "false"
+    docs: Whether to return formatted final transcripts
+    enum:
+      - "true"
+      - "false"
+    source:
+      openapi: ../usm-streaming.yml
+  StreamingLanguage:
+    default: en
+    docs: The language of your audio stream.
+    enum:
+      - en
+      - multi
+    source:
+      openapi: ../usm-streaming.yml
+  StreamingLanguageDetection:
+    default: "false"
+    docs: >-
+      Whether to detect the language and return language metadata on utterances
+      and final turns. Only available for the multilingual model.
+    enum:
+      - "true"
+      - "false"
+    source:
+      openapi: ../usm-streaming.yml
+  StreamingSpeechModel:
+    default: universal-streaming-english
+    docs: The speech model used for your Streaming session.
+    enum:
+      - name: UniversalStreamingEnglish
+        value: universal-streaming-english
+      - name: UniversalStreamingMultilingual
+        value: universal-streaming-multilingual
+    source:
+      openapi: ../usm-streaming.yml
+channel:
+  auth: false
+  display-name: Streaming API
+  docs: >
+    Main channel for bi-directional audio and transcription data.
+
+
+    <Note> To use our EU server for Streaming STT, replace
+    `streaming.assemblyai.com` with
+
+    `streaming.eu.assemblyai.com`. </Note>
+  examples:
+    - headers: {}
+      messages:
+        - body:
+            expires_at: "2024-01-15T09:30:00Z"
+            id: cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f
+            type: Begin
+          type: receiveSessionBegins
+        - body: Y3VyaW91cyBtaW5k
+          type: sendAudio
+        - body: cyB0aGluayBhbGlrZSA6KQ==
+          type: sendAudio
+      name: This is an example of a speech-to-text session
+      query-parameters:
+        end_of_turn_confidence_threshold: "0.4"
+        max_turn_silence: "700"
+        min_end_of_turn_silence_when_confident: "480"
+        sample_rate: sample_rate
+        vad_threshold: vad_threshold
+  headers:
+    Authorization:
+      docs: >-
+        Use your API key for authentication, or alternatively generate a
+        [temporary
+        token](/docs/api-reference/streaming-api/generate-streaming-token) and
+        pass it via the `token` query parameter.
+      name: authorization
+      type: optional<string>
+  messages: {}
+  path: /v3/ws
+  path-parameters:
+    filter_profanity: optional<string>
+  query-parameters:
+    encoding:
+      default: pcm_s16le
+      docs: Encoding of the audio stream
+      type: optional<StreamingEncoding>
+    end_of_turn_confidence_threshold:
+      default: "0.4"
+      docs: >-
+        The confidence threshold (0.0 to 1.0) to use when determining if the end
+        of a turn has been reached
+      type: optional<string>
+    format_turns:
+      default: "false"
+      docs: Whether to return formatted final transcripts
+      type: optional<StreamingFormatTurns>
+    inactivity_timeout:
+      default: None
+      docs: >-
+        Optional time in seconds of inactivity before session is terminated. If
+        not set, no inactivity timeout is applied.
+      type: optional<string>
+    keyterms_prompt:
+      docs: A list of words and phrases to improve recognition accuracy for.
+      type: optional<string>
+    language:
+      availability: deprecated
+      default: en
+      docs: The language of your audio stream.
+      type: optional<StreamingLanguage>
+    language_detection:
+      default: "false"
+      docs: >-
+        Whether to detect the language and return language metadata on
+        utterances and final turns. Only available for the multilingual model.
+      type: optional<StreamingLanguageDetection>
+    max_turn_silence:
+      default: "1280"
+      docs: >-
+        The maximum amount of silence in milliseconds allowed in a turn before
+        end of turn is triggered
+      type: optional<string>
+    min_end_of_turn_silence_when_confident:
+      default: "400"
+      docs: >-
+        The minimum amount of silence in milliseconds required to detect end of
+        turn when confident
+      type: optional<string>
+    sample_rate:
+      docs: Sample rate of the audio stream
+      type: string
+    speech_model:
+      default: universal-streaming-english
+      docs: The speech model used for your Streaming session.
+      type: optional<StreamingSpeechModel>
+    token:
+      docs: API token for authentication
+      type: optional<string>
+    vad_threshold:
+      default: "0.4"
+      docs: >-
+        The confidence threshold (0.0 to 1.0) for classifying audio frames as
+        silence. Frames with VAD confidence below this value are considered
+        silent. Increase for noisy environments to reduce false speech
+        detection.
+      type: string
+  url: production
+service:
+  auth: false
+  base-path: ""
+  endpoints:
+    generateStreamingToken:
+      auth:
+        - apiKey: []
+      display-name: Generate temporary streaming token
+      docs: >
+        Generates a temporary authentication token for use with streaming
+        services.
+      errors:
+        - root.BadRequestError
+        - root.UnauthorizedError
+        - root.TooManyRequestsError
+        - root.InternalServerError
+      examples:
+        - headers:
+            Authorization: "[object Object]"
+          query-parameters:
+            expires_in_seconds: 60
+            max_session_duration_seconds: 600
+          response:
+            body:
+              expires_in_seconds: 60
+              token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      method: GET
+      path: /v3/token
+      request:
+        name: StreamingApiGenerateStreamingTokenRequest
+        query-parameters:
+          expires_in_seconds:
+            docs: |
+              The desired expiration time for the token in seconds.
+            type: integer
+            validation:
+              max: 600
+              min: 1
+          max_session_duration_seconds:
+            default: 10800
+            docs: >
+              The desired maximum duration for the session started using this
+              token in seconds.
+            type: optional<integer>
+            validation:
+              max: 10800
+              min: 60
+      response:
+        docs: Successfully generated temporary token
+        status-code: 200
+        type: StreamingApiGenerateStreamingTokenResponse
+      source:
+        openapi: ../streaming-token.yml
+  source:
+    openapi: ../streaming-token.yml

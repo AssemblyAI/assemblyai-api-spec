@@ -1,20 +1,606 @@
+imports:
+  lemur: lemur.yml
 types:
-  Error:
-    extra-properties: true
+  Choice:
     properties:
-      error:
-        docs: Error message
-        type: string
-      status: optional<literal<"error">>
+      finish_reason:
+        docs: The reason the model stopped generating tokens.
+        type: optional<string>
+      message: optional<ResponseMessage>
+      tool_calls: optional<list<FunctionToolCall>>
+    source:
+      openapi: ../llm-gateway.yml
+  ContentPart:
+    docs: Currently only supports text content parts.
+    type: TextContent
+  CreateSpeechUnderstandingResponse:
+    discriminated: false
+    source:
+      openapi: ../llm-gateway.yml
+    union:
+      - LlmGatewayTranslationResponse
+      - LlmGatewaySpeakerIdentificationResponse
+      - LlmGatewayCustomFormattingResponse
+  CustomFormattingRequestBody:
+    properties:
+      custom_formatting: CustomFormattingRequestBodyCustomFormatting
+    source:
+      openapi: ../llm-gateway.yml
+  CustomFormattingRequestBodyCustomFormatting:
+    inline: true
+    properties:
+      date:
+        docs: Date format pattern (e.g., `"mm/dd/yyyy"`)
+        type: optional<string>
+      email:
+        docs: Email format pattern (e.g., `"username@domain.com"`)
+        type: optional<string>
+      phone_number:
+        docs: Phone number format pattern (e.g., `"(xxx)xxx-xxxx"`)
+        type: optional<string>
+    source:
+      openapi: ../llm-gateway.yml
+  CustomFormattingResponse:
+    properties:
+      custom_formatting: optional<CustomFormattingResponseCustomFormatting>
     source:
       openapi: ../openapi.yml
+  CustomFormattingResponseCustomFormatting:
+    inline: true
+    properties:
+      formatted_text: optional<string>
+      mapping: optional<map<string, string>>
+    source:
+      openapi: ../openapi.yml
+  Error:
+    properties:
+      code:
+        docs: Error code for programmatic handling
+        type: optional<string>
+      details:
+        docs: Additional error details if available
+        type: optional<map<string, unknown>>
+      error:
+        docs: Error message describing what went wrong
+        type: string
+    source:
+      openapi: ../streaming-token.yml
+  ErrorResponse:
+    properties:
+      error: optional<ErrorResponseError>
+    source:
+      openapi: ../llm-gateway.yml
+  ErrorResponseError:
+    inline: true
+    properties:
+      code: integer
+      message: string
+      metadata: optional<map<string, unknown>>
+    source:
+      openapi: ../llm-gateway.yml
+  ForceEndpointPayload:
+    properties:
+      type: literal<"ForceEndpoint">
+    source:
+      openapi: ../usm-streaming.yml
+  FunctionCall:
+    properties:
+      arguments:
+        docs: The arguments to call the function with, as a JSON-formatted string.
+        type: string
+      name: string
+    source:
+      openapi: ../llm-gateway.yml
+  FunctionDescription:
+    properties:
+      description:
+        docs: A description of what the function does.
+        type: optional<string>
+      name:
+        docs: The name of the function to be called.
+        type: string
+      parameters:
+        docs: A JSON Schema object describing the parameters the function accepts.
+        type: map<string, unknown>
+    source:
+      openapi: ../llm-gateway.yml
+  FunctionToolCall:
+    properties:
+      function: FunctionCall
+      id: string
+      type: literal<"function">
+    source:
+      openapi: ../llm-gateway.yml
+  LemurTaskParams:
+    properties:
+      final_model:
+        docs: >
+          The model that is used for the final prompt after compression is
+          performed.
+        type: lemur.LemurModel
+      input_text:
+        docs: >
+          Custom formatted transcript data. Maximum size is the context limit of
+          the selected model.
+
+          Use either transcript_ids or input_text as input into LeMUR.
+        type: optional<string>
+      max_output_size:
+        default: 2000
+        docs: >-
+          Maximum output size in tokens, up to the `final_model`'s max [(see
+          chart)](/docs/lemur/customize-parameters#change-the-maximum-output-size).
+        type: optional<integer>
+      prompt:
+        docs: >-
+          Your text to prompt the model to produce a desired output, including
+          any context you want to pass into the model.
+        type: string
+      temperature:
+        docs: >
+          The temperature to use for the model.
+
+          Higher values result in answers that are more creative, lower values
+          are more conservative.
+
+          Can be any value between 0.0 and 1.0 inclusive.
+        type: optional<float>
+      transcript_ids:
+        docs: >
+          A list of completed transcripts with text. Up to a maximum of 100
+          hours of audio.
+
+          Use either transcript_ids or input_text as input into LeMUR.
+        type: optional<list<string>>
+    source:
+      openapi: ../openapi.yml
+  LlmGatewayCustomFormattingResponse:
+    properties:
+      speech_understanding: optional<LlmGatewayCustomFormattingResponseSpeechUnderstanding>
+      utterances: optional<list<map<string, unknown>>>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayCustomFormattingResponseSpeechUnderstanding:
+    inline: true
+    properties:
+      request: optional<CustomFormattingRequestBody>
+      response: optional<LlmGatewayCustomFormattingResponseSpeechUnderstandingResponse>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayCustomFormattingResponseSpeechUnderstandingResponse:
+    inline: true
+    properties:
+      custom_formatting: >-
+        optional<LlmGatewayCustomFormattingResponseSpeechUnderstandingResponseCustomFormatting>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayCustomFormattingResponseSpeechUnderstandingResponseCustomFormatting:
+    inline: true
+    properties:
+      formatted_text: optional<string>
+      formatted_utterances:
+        docs: >-
+          Array of formatted utterances. Only included when utterances exist and
+          formatting was applied.
+        type: optional<list<map<string, unknown>>>
+      mapping: map<string, string>
+      status: string
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewaySpeakerIdentificationResponse:
+    properties:
+      speech_understanding: optional<LlmGatewaySpeakerIdentificationResponseSpeechUnderstanding>
+      utterances: optional<list<map<string, unknown>>>
+      words: optional<list<map<string, unknown>>>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewaySpeakerIdentificationResponseSpeechUnderstanding:
+    inline: true
+    properties:
+      request: optional<SpeakerIdentificationRequestBody>
+      response: >-
+        optional<LlmGatewaySpeakerIdentificationResponseSpeechUnderstandingResponse>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewaySpeakerIdentificationResponseSpeechUnderstandingResponse:
+    inline: true
+    properties:
+      speaker_identification: >-
+        optional<LlmGatewaySpeakerIdentificationResponseSpeechUnderstandingResponseSpeakerIdentification>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewaySpeakerIdentificationResponseSpeechUnderstandingResponseSpeakerIdentification:
+    inline: true
+    properties:
+      status: string
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayTranslationResponse:
+    properties:
+      speech_understanding: optional<LlmGatewayTranslationResponseSpeechUnderstanding>
+      translated_texts:
+        docs: >-
+          Translated text keyed by language code (e.g., `{"es": "Texto
+          traducido"}`)
+        type: optional<map<string, string>>
+      utterances:
+        docs: >-
+          Array of utterances with translations (when `match_original_utterance`
+          is true)
+        type: optional<list<LlmGatewayTranslationResponseUtterancesItem>>
+      words: optional<list<map<string, unknown>>>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayTranslationResponseSpeechUnderstanding:
+    inline: true
+    properties:
+      request: optional<TranslationRequestBody>
+      response: optional<LlmGatewayTranslationResponseSpeechUnderstandingResponse>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayTranslationResponseSpeechUnderstandingResponse:
+    inline: true
+    properties:
+      translation: >-
+        optional<LlmGatewayTranslationResponseSpeechUnderstandingResponseTranslation>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayTranslationResponseSpeechUnderstandingResponseTranslation:
+    inline: true
+    properties:
+      status: optional<string>
+    source:
+      openapi: ../llm-gateway.yml
+  LlmGatewayTranslationResponseUtterancesItem:
+    inline: true
+    properties:
+      translated_texts:
+        docs: >-
+          Translations keyed by language code (e.g., `{"es": "Texto traducido",
+          "de": "Übersetzter Text"}`). Only present when
+          `match_original_utterance` is enabled.
+        type: optional<map<string, string>>
+    source:
+      openapi: ../llm-gateway.yml
+  Message:
+    base-properties: {}
+    discriminant: role
+    source:
+      openapi: ../llm-gateway.yml
+    union:
+      assistant: UserAssistantSystemMessage
+      system: UserAssistantSystemMessage
+      tool: ToolMessage
+      user: UserAssistantSystemMessage
+  Response:
+    properties:
+      choices: optional<list<Choice>>
+      http_status_code:
+        docs: The HTTP status code of the response
+        type: optional<integer>
+      llm_status_code:
+        docs: The status code from the LLM provider
+        type: optional<integer>
+      request:
+        docs: A copy of the original request, excluding `prompt` and `messages`.
+        type: optional<ResponseRequest>
+      request_id:
+        type: optional<string>
+        validation:
+          format: uuid
+      response_time:
+        docs: The response time in nanoseconds
+        type: optional<integer>
+      usage: optional<Usage>
+    source:
+      openapi: ../llm-gateway.yml
+  ResponseMessage:
+    properties:
+      content: optional<string>
+      role: optional<string>
+    source:
+      openapi: ../llm-gateway.yml
+  ResponseRequest:
+    docs: A copy of the original request, excluding `prompt` and `messages`.
+    inline: true
+    properties:
+      max_tokens: optional<integer>
+      model: optional<string>
+      temperature: optional<double>
+      tool_choice: optional<ToolChoice>
+      tools: optional<list<Tool>>
+    source:
+      openapi: ../llm-gateway.yml
+  SessionBeginsPayload:
+    properties:
+      expires_at:
+        docs: ISO 8601 timestamp indicating when the session will expire.
+        type: datetime
+      id:
+        docs: Unique identifier for the streaming session.
+        type: string
+        validation:
+          format: uuid
+      type:
+        docs: Identifies the type of the message.
+        type: literal<"Begin">
+    source:
+      openapi: ../usm-streaming.yml
+  SessionTerminationPayload:
+    properties:
+      type: literal<"Terminate">
+    source:
+      openapi: ../usm-streaming.yml
+  SpeakerIdentificationRequestBody:
+    properties:
+      speaker_identification: SpeakerIdentificationRequestBodySpeakerIdentification
+    source:
+      openapi: ../llm-gateway.yml
+  SpeakerIdentificationRequestBodySpeakerIdentification:
+    inline: true
+    properties:
+      known_values:
+        docs: >-
+          Required if speaker_type is "role". Each value must be 35 characters
+          or less.
+        type: optional<list<string>>
+      speaker_type:
+        docs: Type of speaker identification
+        type: SpeakerIdentificationRequestBodySpeakerIdentificationSpeakerType
+    source:
+      openapi: ../llm-gateway.yml
+  SpeakerIdentificationRequestBodySpeakerIdentificationSpeakerType:
+    docs: Type of speaker identification
+    enum:
+      - role
+      - name
+    inline: true
+    source:
+      openapi: ../llm-gateway.yml
+  SpeakerIdentificationResponse:
+    properties:
+      speaker_identification: optional<SpeakerIdentificationResponseSpeakerIdentification>
+    source:
+      openapi: ../openapi.yml
+  SpeakerIdentificationResponseSpeakerIdentification:
+    inline: true
+    properties:
+      status: optional<string>
+    source:
+      openapi: ../openapi.yml
+  TerminationPayload:
+    properties:
+      audio_duration_seconds:
+        docs: Duration of the audio in seconds.
+        type: integer
+      session_duration_seconds:
+        docs: Duration of the session in seconds.
+        type: integer
+      type:
+        docs: Indicates the session has been terminated.
+        type: literal<"Termination">
+    source:
+      openapi: ../usm-streaming.yml
+  TextContent:
+    properties:
+      text: string
+      type: literal<"text">
+    source:
+      openapi: ../llm-gateway.yml
+  Tool:
+    properties:
+      function: FunctionDescription
+      type: literal<"function">
+    source:
+      openapi: ../llm-gateway.yml
+  ToolChoice:
+    discriminated: false
+    docs: Controls which (if any) function is called by the model.
+    source:
+      openapi: ../llm-gateway.yml
+    union:
+      - literal<"none">
+      - literal<"auto">
+      - ToolChoiceFunction
+  ToolChoiceFunction:
+    inline: true
+    properties:
+      function: ToolChoiceFunctionFunction
+      type: literal<"function">
+    source:
+      openapi: ../llm-gateway.yml
+  ToolChoiceFunctionFunction:
+    inline: true
+    properties:
+      name: string
+    source:
+      openapi: ../llm-gateway.yml
+  ToolMessage:
+    properties:
+      content:
+        docs: The result of the tool call.
+        type: string
+      tool_call_id:
+        docs: The ID of the tool call that this message is responding to.
+        type: string
+    source:
+      openapi: ../llm-gateway.yml
+  TranslationRequestBody:
+    properties:
+      translation: TranslationRequestBodyTranslation
+    source:
+      openapi: ../llm-gateway.yml
+  TranslationRequestBodyTranslation:
+    inline: true
+    properties:
+      formal:
+        default: true
+        docs: Use formal language style
+        type: optional<boolean>
+      match_original_utterance:
+        default: false
+        docs: >-
+          When enabled with Speaker Labels, returns translated text in the
+          utterances array. Each utterance will include a `translated_texts` key
+          containing translations for each target language.
+        type: optional<boolean>
+      target_languages:
+        docs: List of target language codes (e.g., `["es", "de"]`)
+        type: list<string>
+    source:
+      openapi: ../llm-gateway.yml
+  TranslationResponse:
+    properties:
+      translation: optional<TranslationResponseTranslation>
+    source:
+      openapi: ../openapi.yml
+  TranslationResponseTranslation:
+    inline: true
+    properties:
+      status: optional<string>
+    source:
+      openapi: ../openapi.yml
+  TurnPayload:
+    properties:
+      end_of_turn:
+        docs: Whether this marks the end of a turn.
+        type: boolean
+      end_of_turn_confidence:
+        docs: >-
+          The confidence score that this is the end of a turn, between 0.0 (low
+          confidence) and 1.0 (high confidence).
+        type: float
+      language_code:
+        docs: >-
+          The language of the turn. Only populated when language detection is
+          enabled and an utterance is complete or turn is final.
+        type: optional<string>
+      language_confidence:
+        docs: >-
+          The confidence score for the detected language, between 0 (low
+          confidence) and 1 (high confidence). Only populated when language
+          detection is enabled and an utterance is complete or turn is final.
+        type: optional<float>
+      transcript:
+        docs: Transcript of all finalized words in the turn.
+        type: string
+      turn_is_formatted:
+        docs: Whether this turn has been formatted.
+        type: boolean
+      turn_order:
+        docs: Order of this turn in the conversation.
+        type: integer
+      type: literal<"Turn">
+      utterance:
+        docs: >-
+          Transcript of all finalized words when an utterance is complete. Can
+          be multiple utterances in a turn.
+        type: optional<string>
+      words:
+        docs: Array of word-level details for this turn.
+        type: list<Word>
+    source:
+      openapi: ../usm-streaming.yml
+  UnderstandingRequestSpeechUnderstanding:
+    inline: true
+    properties:
+      request: UnderstandingRequestSpeechUnderstandingRequest
+    source:
+      openapi: ../llm-gateway.yml
+  UnderstandingRequestSpeechUnderstandingRequest:
+    discriminated: false
+    inline: true
+    source:
+      openapi: ../llm-gateway.yml
+    union:
+      - TranslationRequestBody
+      - SpeakerIdentificationRequestBody
+      - CustomFormattingRequestBody
+  UpdateConfigurationPayload:
+    properties:
+      end_of_turn_confidence_threshold:
+        docs: Confidence threshold (0-1) for detecting end of turn.
+        type: optional<float>
+      max_turn_silence:
+        docs: >-
+          The maximum amount of silence allowed in a turn before end of turn is
+          triggered.
+        type: optional<integer>
+      min_end_of_turn_silence_when_confident:
+        docs: Minimum silence duration in ms when confident about end of turn.
+        type: optional<integer>
+      type: literal<"UpdateConfiguration">
+    source:
+      openapi: ../usm-streaming.yml
+  Usage:
+    properties:
+      input_tokens: integer
+      output_tokens: integer
+      total_tokens: integer
+    source:
+      openapi: ../llm-gateway.yml
+  UserAssistantSystemMessage:
+    properties:
+      content:
+        docs: >-
+          The content of the message. Can be a string or an array of content
+          parts (for user messages).
+        type: UserAssistantSystemMessageContent
+      name:
+        docs: An optional name for the participant.
+        type: optional<string>
+    source:
+      openapi: ../llm-gateway.yml
+  UserAssistantSystemMessageContent:
+    discriminated: false
+    docs: >-
+      The content of the message. Can be a string or an array of content parts
+      (for user messages).
+    inline: true
+    source:
+      openapi: ../llm-gateway.yml
+    union:
+      - string
+      - list<ContentPart>
+  Word:
+    properties:
+      confidence:
+        docs: Confidence score for the word (0.0 to 1.0).
+        type: float
+      end:
+        docs: >-
+          End time in milliseconds relative to the beginning of the audio
+          stream.
+        type: integer
+      start:
+        docs: >-
+          Start time in milliseconds relative to the beginning of the audio
+          stream.
+        type: integer
+      text:
+        docs: The transcribed word.
+        type: string
+      word_is_final:
+        docs: Whether the word is final.
+        type: boolean
+    source:
+      openapi: ../usm-streaming.yml
 errors:
   BadRequestError:
     docs: Bad request
     examples:
       - value:
           error: This is a sample error message
+      - value:
+          error: error
     status-code: 400
+    type: Error
+  ForbiddenError:
+    docs: Cannot access uploaded file
+    examples:
+      - value:
+          error: Cannot access uploaded file
+    status-code: 403
     type: Error
   GatewayTimeoutError:
     docs: Gateway timeout
@@ -25,6 +611,8 @@ errors:
     examples:
       - value:
           error: Internal Server Error
+      - value:
+          error: error
     status-code: 500
     type: Error
   NotFoundError:
@@ -43,6 +631,8 @@ errors:
     examples:
       - value:
           error: Too Many Requests
+      - value:
+          error: error
     status-code: 429
     type: Error
   UnauthorizedError:
@@ -50,12 +640,309 @@ errors:
     examples:
       - value:
           error: Authentication error, API token missing/invalid
+      - value:
+          error: error
     status-code: 401
     type: Error
-  CannotAccessUploadedFileError:
-    docs: Cannot access uploaded file
-    examples:
-      - value:
-          error: Cannot access uploaded file
-    status-code: 403
-    type: Error
+service:
+  auth: false
+  base-path: ""
+  endpoints:
+    createChatCompletion:
+      display-name: Create a chat completion
+      docs: >-
+        Generates a response from a model given a prompt or a series of
+        messages.
+      examples:
+        - headers:
+            Authorization: "[object Object]"
+          name: Chat with messages
+          request:
+            max_tokens: 100
+            messages:
+              - content: content
+                role: user
+            model: claude-sonnet-4-5-20250929
+            temperature: 0.7
+          response:
+            body:
+              choices:
+                - finish_reason: stop
+                  tool_calls:
+                    - function:
+                        arguments: arguments
+                        name: name
+                      id: id
+                      type: function
+              http_status_code: 200
+              llm_status_code: 200
+              request:
+                max_tokens: 1
+                model: model
+                temperature: 1.1
+                tool_choice: none
+                tools:
+                  - function:
+                      name: name
+                      parameters:
+                        key: value
+                    type: function
+              request_id: request_id
+              response_time: 275510459
+              usage:
+                input_tokens: 1
+                output_tokens: 1
+                total_tokens: 1
+        - headers:
+            Authorization: "[object Object]"
+          name: Simple prompt
+          request:
+            max_tokens: 50
+            model: claude-sonnet-4-5-20250929
+            prompt: Write a haiku about coding
+            temperature: 0.5
+          response:
+            body:
+              choices:
+                - finish_reason: stop
+                  tool_calls:
+                    - function:
+                        arguments: arguments
+                        name: name
+                      id: id
+                      type: function
+              http_status_code: 200
+              llm_status_code: 200
+              request:
+                max_tokens: 1
+                model: model
+                temperature: 1.1
+                tool_choice: none
+                tools:
+                  - function:
+                      name: name
+                      parameters:
+                        key: value
+                    type: function
+              request_id: request_id
+              response_time: 275510459
+              usage:
+                input_tokens: 1
+                output_tokens: 1
+                total_tokens: 1
+      method: POST
+      path: /chat/completions
+      request:
+        body:
+          properties:
+            max_tokens:
+              docs: The maximum number of tokens to generate in the completion.
+              type: optional<integer>
+              validation:
+                min: 1
+            messages:
+              docs: A list of messages comprising the conversation so far.
+              type: optional<list<Message>>
+            model:
+              docs: The ID of the model to use for this request.
+              type: string
+            prompt:
+              docs: >-
+                A simple string prompt. The API will automatically convert this
+                into a user message.
+              type: optional<string>
+            temperature:
+              docs: >-
+                Controls randomness. Lower values produce more deterministic
+                results.
+              type: optional<float>
+            tool_choice: optional<ToolChoice>
+            tools:
+              docs: A list of tools the model may call.
+              type: optional<list<Tool>>
+        content-type: application/json
+        name: LlmGatewayRequest
+      response:
+        docs: Successful response containing the model's choices.
+        status-code: 200
+        type: Response
+      source:
+        openapi: ../llm-gateway.yml
+    createSpeechUnderstanding:
+      display-name: Process speech understanding
+      docs: >-
+        Perform various speech understanding tasks like translation, speaker
+        identification, and custom formatting.
+      examples:
+        - headers:
+            Authorization: "[object Object]"
+          name: Translation request
+          request:
+            speech_understanding:
+              request:
+                translation:
+                  formal: true
+                  match_original_utterance: true
+                  target_languages:
+                    - es
+                    - de
+            transcript_id: "12345"
+          response:
+            body:
+              speech_understanding:
+                request:
+                  translation:
+                    formal: true
+                    match_original_utterance: true
+                    target_languages:
+                      - es
+                      - de
+                response:
+                  translation:
+                    status: completed
+              translated_texts:
+                de: >-
+                  Hallo, ich bin der Interviewer. Rufen Sie mich an unter fünf
+                  fünf fünf eins zwei drei vier fünf sechs sieben acht am
+                  fünfundzwanzigsten Dezember zweitausendvierundzwanzig. Danke!
+                  Ich werde mich dann melden.
+                es: >-
+                  Hola, soy el entrevistador. Llámame al cinco cinco cinco uno
+                  dos tres cuatro cinco seis siete ocho el veinticinco de
+                  diciembre de dos mil veinticuatro. ¡Gracias! Me pondré en
+                  contacto entonces.
+              utterances:
+                - translated_texts:
+                    de: >-
+                      Hallo, ich bin der Interviewer. Rufen Sie mich an unter
+                      fünf fünf fünf eins zwei drei vier fünf sechs sieben acht
+                      am fünfundzwanzigsten Dezember zweitausendvierundzwanzig
+                    es: >-
+                      Hola, soy el entrevistador. Llámame al cinco cinco cinco
+                      uno dos tres cuatro cinco seis siete ocho el veinticinco
+                      de diciembre de dos mil veinticuatro
+                - translated_texts:
+                    de: Danke! Ich werde mich dann melden.
+                    es: ¡Gracias! Me pondré en contacto entonces.
+              words:
+                - key: value
+        - headers:
+            Authorization: "[object Object]"
+          name: Speaker identification request
+          request:
+            speech_understanding:
+              request:
+                speaker_identification:
+                  known_values:
+                    - interviewer
+                    - candidate
+                  speaker_type: role
+            transcript_id: "12345"
+          response:
+            body:
+              speech_understanding:
+                request:
+                  translation:
+                    formal: true
+                    match_original_utterance: true
+                    target_languages:
+                      - es
+                      - de
+                response:
+                  translation:
+                    status: completed
+              translated_texts:
+                de: >-
+                  Hallo, ich bin der Interviewer. Rufen Sie mich an unter fünf
+                  fünf fünf eins zwei drei vier fünf sechs sieben acht am
+                  fünfundzwanzigsten Dezember zweitausendvierundzwanzig. Danke!
+                  Ich werde mich dann melden.
+                es: >-
+                  Hola, soy el entrevistador. Llámame al cinco cinco cinco uno
+                  dos tres cuatro cinco seis siete ocho el veinticinco de
+                  diciembre de dos mil veinticuatro. ¡Gracias! Me pondré en
+                  contacto entonces.
+              utterances:
+                - translated_texts:
+                    de: >-
+                      Hallo, ich bin der Interviewer. Rufen Sie mich an unter
+                      fünf fünf fünf eins zwei drei vier fünf sechs sieben acht
+                      am fünfundzwanzigsten Dezember zweitausendvierundzwanzig
+                    es: >-
+                      Hola, soy el entrevistador. Llámame al cinco cinco cinco
+                      uno dos tres cuatro cinco seis siete ocho el veinticinco
+                      de diciembre de dos mil veinticuatro
+                - translated_texts:
+                    de: Danke! Ich werde mich dann melden.
+                    es: ¡Gracias! Me pondré en contacto entonces.
+              words:
+                - key: value
+        - headers:
+            Authorization: "[object Object]"
+          name: Custom formatting request
+          request:
+            speech_understanding:
+              request:
+                custom_formatting:
+                  date: mm/dd/yyyy
+                  email: username@domain.com
+                  phone_number: (xxx)xxx-xxxx
+            transcript_id: "12345"
+          response:
+            body:
+              speech_understanding:
+                request:
+                  translation:
+                    formal: true
+                    match_original_utterance: true
+                    target_languages:
+                      - es
+                      - de
+                response:
+                  translation:
+                    status: completed
+              translated_texts:
+                de: >-
+                  Hallo, ich bin der Interviewer. Rufen Sie mich an unter fünf
+                  fünf fünf eins zwei drei vier fünf sechs sieben acht am
+                  fünfundzwanzigsten Dezember zweitausendvierundzwanzig. Danke!
+                  Ich werde mich dann melden.
+                es: >-
+                  Hola, soy el entrevistador. Llámame al cinco cinco cinco uno
+                  dos tres cuatro cinco seis siete ocho el veinticinco de
+                  diciembre de dos mil veinticuatro. ¡Gracias! Me pondré en
+                  contacto entonces.
+              utterances:
+                - translated_texts:
+                    de: >-
+                      Hallo, ich bin der Interviewer. Rufen Sie mich an unter
+                      fünf fünf fünf eins zwei drei vier fünf sechs sieben acht
+                      am fünfundzwanzigsten Dezember zweitausendvierundzwanzig
+                    es: >-
+                      Hola, soy el entrevistador. Llámame al cinco cinco cinco
+                      uno dos tres cuatro cinco seis siete ocho el veinticinco
+                      de diciembre de dos mil veinticuatro
+                - translated_texts:
+                    de: Danke! Ich werde mich dann melden.
+                    es: ¡Gracias! Me pondré en contacto entonces.
+              words:
+                - key: value
+      method: POST
+      path: /understanding
+      request:
+        body:
+          properties:
+            speech_understanding: UnderstandingRequestSpeechUnderstanding
+            transcript_id:
+              docs: The ID of the transcript to process.
+              type: string
+        content-type: application/json
+        name: UnderstandingRequest
+      response:
+        docs: Successful response containing the speech understanding results.
+        status-code: 200
+        type: CreateSpeechUnderstandingResponse
+      source:
+        openapi: ../llm-gateway.yml
+  source:
+    openapi: ../llm-gateway.yml

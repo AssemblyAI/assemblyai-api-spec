@@ -5,6 +5,7 @@ title: "Determine Optimal Turn Detection Settings from Historical Audio Analysis
 This guide shows how to analyze utterance gaps from multiple pre-recorded audio files to automatically determine optimal turn detection settings for real-time streaming transcription. It processes an entire folder, aggregates gap statistics across all recordings, and configures the WebSocket with parameters tailored to your specific conversation patterns.
 
 ## Quickstart
+
 ```python
 import requests
 import time
@@ -45,24 +46,24 @@ def get_audio_files(folder_path):
     Gets all audio files from the specified folder.
     Supports all formats accepted by AssemblyAI's API
     """
-    audio_extensions = {'.aac', '.ac3', '.aif', '.aiff', '.alac', '.amr', '.ape', 
-    '.au', '.dss', '.flac', '.m4a', '.m4b', '.m4p', '.mp3', 
-    '.mpga', '.ogg', '.oga', '.mogg', '.opus', '.qcp', '.tta', 
-    '.voc', '.wav', '.wv', '.webm', '.MTS', '.M2TS', '.TS', 
+    audio_extensions = {'.aac', '.ac3', '.aif', '.aiff', '.alac', '.amr', '.ape',
+    '.au', '.dss', '.flac', '.m4a', '.m4b', '.m4p', '.mp3',
+    '.mpga', '.ogg', '.oga', '.mogg', '.opus', '.qcp', '.tta',
+    '.voc', '.wav', '.wv', '.webm', '.MTS', '.M2TS', '.TS',
     '.mov', '.mp4', '.m4v'}
     folder = Path(folder_path)
-    
+
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder_path}")
-    
+
     audio_files = [
-        str(f) for f in folder.iterdir() 
+        str(f) for f in folder.iterdir()
         if f.is_file() and f.suffix.lower() in audio_extensions
     ]
-    
+
     if not audio_files:
         raise ValueError(f"No audio files found in {folder_path}")
-    
+
     return sorted(audio_files)
 
 
@@ -73,13 +74,13 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
     print("\n" + "=" * 70)
     print(f"ANALYZING FILE {file_index}/{total_files}: {Path(audio_file).name}")
     print("=" * 70)
-    
+
     base_url = "https://api.assemblyai.com"
     headers = {"authorization": api_key}
-    
+
     # Upload audio file
     print(f"\nUploading audio file...")
-    
+
     if audio_file.startswith("http"):
         upload_url = audio_file
         print("Using provided URL")
@@ -92,14 +93,14 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
             )
         upload_url = response.json()["upload_url"]
         print(f"Upload complete")
-    
+
     # Enable Speaker Labels
     data = {
         "audio_url": upload_url,
         "speaker_labels": True,
-        # "language_detection": True # Enable automatic language detection if your files are in different languages 
+        # "language_detection": True # Enable automatic language detection if your files are in different languages
     }
-    
+
     response = requests.post(
         base_url + "/v2/transcript",
         json=data,
@@ -107,14 +108,14 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
     )
     transcript_id = response.json()['id']
     print(f"Transcript ID: {transcript_id}")
-    
+
     # Poll for completion
     print("\nWaiting for transcription to complete...")
     polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-    
+
     while True:
         transcription_result = requests.get(polling_endpoint, headers=headers).json()
-        
+
         if transcription_result['status'] == 'completed':
             print("Transcription completed!")
             break
@@ -123,27 +124,27 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
             return None
         else:
             time.sleep(3)
-    
+
     # Calculate gaps
     utterances = transcription_result['utterances']
-    
+
     if len(utterances) < 2:
         print("⚠ Not enough utterances to analyze gaps (need at least 2)")
         return None
-    
+
     gaps = []
     for i in range(len(utterances) - 1):
         current_end = utterances[i]['end']
         next_start = utterances[i + 1]['start']
         gap = next_start - current_end
-        
+
         if gap > 0:
             gaps.append(gap)
-    
+
     if not gaps:
         print("⚠ No gaps found between utterances (all speech overlaps)")
         return None
-    
+
     # Calculate statistics
     stats = {
         'filename': Path(audio_file).name,
@@ -155,25 +156,25 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
         'total_gaps': len(gaps),
         'all_gaps': gaps
     }
-    
+
     print(f"\nResults for {stats['filename']}:")
     print(f"   Total utterances:  {stats['total_utterances']}")
     print(f"   Total gaps:        {stats['total_gaps']}")
     print(f"   Average gap:       {stats['average_gap_ms']:.0f} ms")
     print(f"   Median gap:        {stats['median_gap_ms']:.0f} ms")
-    
+
     # Save transcript JSON to file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_filename = Path(audio_file).stem.replace(' ', '_')
     json_filename = f"transcript_{safe_filename}_{timestamp}.json"
-    
+
     try:
         with open(json_filename, 'w', encoding='utf-8') as f:
             json.dump(transcription_result, f, indent=2, ensure_ascii=False)
         print(f"   Transcript saved:  {json_filename}")
     except Exception as e:
         print(f"   Error saving transcript: {e}")
-    
+
     return stats
 
 
@@ -184,18 +185,18 @@ def analyze_multiple_files(folder_path, api_key):
     print("=" * 70)
     print("MULTI-FILE UTTERANCE GAP ANALYSIS")
     print("=" * 70)
-    
+
     audio_files = get_audio_files(folder_path)
     total_files = len(audio_files)
-    
+
     print(f"\nFound {total_files} audio file(s) in: {folder_path}")
     for i, file in enumerate(audio_files, 1):
         print(f"   {i}. {Path(file).name}")
-    
+
     # Analyze each file
     all_file_stats = []
     all_gaps = []
-    
+
     for i, audio_file in enumerate(audio_files, 1):
         try:
             stats = analyze_single_file(audio_file, api_key, i, total_files)
@@ -205,16 +206,16 @@ def analyze_multiple_files(folder_path, api_key):
         except Exception as e:
             print(f"\n✗ Error analyzing {Path(audio_file).name}: {str(e)}")
             continue
-    
+
     if not all_file_stats:
         print("\n✗ No files were successfully analyzed")
         return None
-    
+
     # Calculate aggregated statistics
     print("\n" + "=" * 70)
     print("AGGREGATED GAP ANALYSIS RESULTS")
     print("=" * 70)
-    
+
     aggregated_stats = {
         'total_files_analyzed': len(all_file_stats),
         'total_utterances': sum(s['total_utterances'] for s in all_file_stats),
@@ -226,7 +227,7 @@ def analyze_multiple_files(folder_path, api_key):
         'file_averages': [s['average_gap_ms'] for s in all_file_stats],
         'file_stats': all_file_stats
     }
-    
+
     print(f"\nFiles successfully analyzed:  {aggregated_stats['total_files_analyzed']}/{total_files}")
     print(f"Total utterances (all files): {aggregated_stats['total_utterances']}")
     print(f"Total gaps analyzed:          {aggregated_stats['total_gaps']}")
@@ -234,30 +235,30 @@ def analyze_multiple_files(folder_path, api_key):
     print(f"Overall median gap:           {aggregated_stats['overall_median_gap_ms']:.0f} ms")
     print(f"Overall minimum gap:          {aggregated_stats['overall_min_gap_ms']:.0f} ms")
     print(f"Overall maximum gap:          {aggregated_stats['overall_max_gap_ms']:.0f} ms")
-    
+
     # Show per-file breakdown
     print(f"\nPer-file average gaps:")
     for stat in all_file_stats:
         print(f"   • {stat['filename']:<40} {stat['average_gap_ms']:>6.0f} ms")
-    
+
     # Calculate variability
     avg_of_file_averages = sum(aggregated_stats['file_averages']) / len(aggregated_stats['file_averages'])
     variability_ratio = aggregated_stats['overall_max_gap_ms'] / aggregated_stats['overall_average_gap_ms']
-    
+
     print(f"\nAverage of file averages:     {avg_of_file_averages:.0f} ms")
     print(f"Variability ratio:            {variability_ratio:.2f}x")
-    
+
     if variability_ratio > 3:
         print("└─> HIGH variability - mixed conversation patterns across files")
     elif variability_ratio > 2:
         print("└─> MODERATE variability - some pattern variation")
     else:
         print("└─> LOW variability - consistent conversation rhythm")
-    
+
     # Save aggregated results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_filename = f"aggregated_analysis_{timestamp}.json"
-    
+
     try:
         summary_data = {
             'analysis_date': datetime.now().isoformat(),
@@ -283,13 +284,13 @@ def analyze_multiple_files(folder_path, api_key):
                 for s in all_file_stats
             ]
         }
-        
+
         with open(summary_filename, 'w', encoding='utf-8') as f:
             json.dump(summary_data, f, indent=2, ensure_ascii=False)
         print(f"\nAggregated analysis saved to: {summary_filename}")
     except Exception as e:
         print(f"\nError saving aggregated analysis: {e}")
-    
+
     return aggregated_stats
 
 
@@ -307,17 +308,17 @@ def determine_streaming_config(aggregated_stats):
             'max_turn_silence': 1280,
             'description': 'Standard configuration for general use'
         }
-    
+
     print("\n" + "=" * 70)
     print("DETERMINING OPTIMAL STREAMING CONFIGURATION")
     print("=" * 70)
-    
+
     avg_gap = aggregated_stats['overall_average_gap_ms']
     num_files = aggregated_stats['total_files_analyzed']
-    
+
     print(f"\nBased on analysis of {num_files} file(s)")
     print(f"Overall average gap: {avg_gap:.0f} ms")
-    
+
     # Determine configuration based on average gap
     if avg_gap < 500:
         config = {
@@ -346,7 +347,7 @@ def determine_streaming_config(aggregated_stats):
             'description': 'Thoughtful, complex speech with longer pauses'
         }
         use_cases = "Technical support, healthcare, legal consultations, troubleshooting"
-    
+
     print(f"\nSelected Configuration: {config['name']}")
     print(f"   Reasoning: Average gap of {avg_gap:.0f}ms indicates {config['description']}")
     print(f"\nConfiguration Parameters:")
@@ -354,7 +355,7 @@ def determine_streaming_config(aggregated_stats):
     print(f"   • min_end_of_turn_silence_when_confident:  {config['min_end_of_turn_silence_when_confident']} ms")
     print(f"   • max_turn_silence:                        {config['max_turn_silence']} ms")
     print(f"\nRecommended use cases: {use_cases}")
-    
+
     return config
 
 
@@ -371,10 +372,10 @@ def on_open(ws):
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                
+
                 with recording_lock:
                     recorded_frames.append(audio_data)
-                
+
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 print(f"Error streaming audio: {e}")
@@ -398,7 +399,7 @@ def on_message(ws, message):
             print(f"   Expires at: {datetime.fromtimestamp(expires_at)}")
             print(f"   Configuration: {OPTIMIZED_CONFIG['name']}")
             print("\nSpeak now... (Press Ctrl+C to stop)\n")
-            
+
         elif msg_type == "Turn":
             transcript = data.get('transcript', '')
             formatted = data.get('turn_is_formatted', False)
@@ -408,12 +409,12 @@ def on_message(ws, message):
                 print(f"FINAL: {transcript}")
             else:
                 print(f"\r  partial: {transcript}", end='')
-                
+
         elif msg_type == "Termination":
             audio_duration = data.get('audio_duration_seconds', 0)
             session_duration = data.get('session_duration_seconds', 0)
             print(f"\nSession Terminated: Audio={audio_duration}s, Session={session_duration}s")
-            
+
     except json.JSONDecodeError as e:
         print(f"Error decoding message: {e}")
     except Exception as e:
@@ -427,7 +428,7 @@ def on_error(ws, error):
 def on_close(ws, close_status_code, close_msg):
     """Called when the WebSocket connection is closed."""
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    
+
     global stream, audio
     stop_event.set()
 
@@ -450,13 +451,13 @@ def run_streaming(config):
     Runs the streaming transcription with optimized turn detection settings.
     """
     global audio, stream, ws_app, OPTIMIZED_CONFIG
-    
+
     OPTIMIZED_CONFIG = config
-    
+
     print("\n" + "=" * 70)
     print("STARTING REAL-TIME STREAMING")
     print("=" * 70)
-    
+
     # Build connection parameters with optimized settings
     CONNECTION_PARAMS = {
         "sample_rate": SAMPLE_RATE,
@@ -465,15 +466,15 @@ def run_streaming(config):
         "min_end_of_turn_silence_when_confident": str(config['min_end_of_turn_silence_when_confident']),
         "max_turn_silence": str(config['max_turn_silence'])
     }
-    
+
     API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
     API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-    
+
     print(f"\nWebSocket Endpoint: {API_ENDPOINT_BASE_URL}")
     print(f"\nApplied Configuration:")
     for key, value in CONNECTION_PARAMS.items():
         print(f"   • {key}: {value}")
-    
+
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
 
@@ -552,17 +553,17 @@ def main():
     """
     Main workflow: Analyze multiple files -> Configure -> Run Streaming
     """
-    
+
     try:
         # Step 1: Analyze all audio files in folder
         aggregated_stats = analyze_multiple_files(AUDIO_FOLDER_PATH, YOUR_API_KEY)
-        
+
         # Step 2: Determine optimal configuration based on aggregated data
         streaming_config = determine_streaming_config(aggregated_stats)
-        
+
         # Step 3: Run streaming with optimized settings
         run_streaming(streaming_config)
-        
+
     except Exception as e:
         print(f"\nError in workflow: {str(e)}")
         raise
@@ -629,24 +630,24 @@ This function scans a specified folder for audio/video files with supported exte
 
 ```python
 def get_audio_files(folder_path):
-    audio_extensions = {'.aac', '.ac3', '.aif', '.aiff', '.alac', '.amr', '.ape', 
-    '.au', '.dss', '.flac', '.m4a', '.m4b', '.m4p', '.mp3', 
-    '.mpga', '.ogg', '.oga', '.mogg', '.opus', '.qcp', '.tta', 
-    '.voc', '.wav', '.wv', '.webm', '.MTS', '.M2TS', '.TS', 
+    audio_extensions = {'.aac', '.ac3', '.aif', '.aiff', '.alac', '.amr', '.ape',
+    '.au', '.dss', '.flac', '.m4a', '.m4b', '.m4p', '.mp3',
+    '.mpga', '.ogg', '.oga', '.mogg', '.opus', '.qcp', '.tta',
+    '.voc', '.wav', '.wv', '.webm', '.MTS', '.M2TS', '.TS',
     '.mov', '.mp4', '.m4v'}
     folder = Path(folder_path)
-    
+
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder_path}")
-    
+
     audio_files = [
-        str(f) for f in folder.iterdir() 
+        str(f) for f in folder.iterdir()
         if f.is_file() and f.suffix.lower() in audio_extensions
     ]
-    
+
     if not audio_files:
         raise ValueError(f"No audio files found in {folder_path}")
-    
+
     return sorted(audio_files)
 ```
 
@@ -659,13 +660,13 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
     print("\n" + "=" * 70)
     print(f"ANALYZING FILE {file_index}/{total_files}: {Path(audio_file).name}")
     print("=" * 70)
-    
+
     base_url = "https://api.assemblyai.com"
     headers = {"authorization": api_key}
-    
+
     # Upload audio file
     print(f"\nUploading audio file...")
-    
+
     if audio_file.startswith("http"):
         upload_url = audio_file
         print("Using provided URL")
@@ -678,14 +679,14 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
             )
         upload_url = response.json()["upload_url"]
         print(f"Upload complete")
-    
+
     # Enable Speaker Labels
     data = {
         "audio_url": upload_url,
         "speaker_labels": True,
-        # "language_detection": True # Enable automatic language detection if your files are in different languages 
+        # "language_detection": True # Enable automatic language detection if your files are in different languages
     }
-    
+
     response = requests.post(
         base_url + "/v2/transcript",
         json=data,
@@ -693,14 +694,14 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
     )
     transcript_id = response.json()['id']
     print(f"Transcript ID: {transcript_id}")
-    
+
     # Poll for completion
     print("\nWaiting for transcription to complete...")
     polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-    
+
     while True:
         transcription_result = requests.get(polling_endpoint, headers=headers).json()
-        
+
         if transcription_result['status'] == 'completed':
             print("Transcription completed!")
             break
@@ -709,27 +710,27 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
             return None
         else:
             time.sleep(3)
-    
+
     # Calculate gaps
     utterances = transcription_result['utterances']
-    
+
     if len(utterances) < 2:
         print("⚠ Not enough utterances to analyze gaps (need at least 2)")
         return None
-    
+
     gaps = []
     for i in range(len(utterances) - 1):
         current_end = utterances[i]['end']
         next_start = utterances[i + 1]['start']
         gap = next_start - current_end
-        
+
         if gap > 0:
             gaps.append(gap)
-    
+
     if not gaps:
         print("⚠ No gaps found between utterances (all speech overlaps)")
         return None
-    
+
     # Calculate statistics
     stats = {
         'filename': Path(audio_file).name,
@@ -741,25 +742,25 @@ def analyze_single_file(audio_file, api_key, file_index, total_files):
         'total_gaps': len(gaps),
         'all_gaps': gaps
     }
-    
+
     print(f"\nResults for {stats['filename']}:")
     print(f"   Total utterances:  {stats['total_utterances']}")
     print(f"   Total gaps:        {stats['total_gaps']}")
     print(f"   Average gap:       {stats['average_gap_ms']:.0f} ms")
     print(f"   Median gap:        {stats['median_gap_ms']:.0f} ms")
-    
+
     # Save transcript JSON to file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_filename = Path(audio_file).stem.replace(' ', '_')
     json_filename = f"transcript_{safe_filename}_{timestamp}.json"
-    
+
     try:
         with open(json_filename, 'w', encoding='utf-8') as f:
             json.dump(transcription_result, f, indent=2, ensure_ascii=False)
         print(f"   Transcript saved:  {json_filename}")
     except Exception as e:
         print(f"   Error saving transcript: {e}")
-    
+
     return stats
 ```
 
@@ -772,18 +773,18 @@ def analyze_multiple_files(folder_path, api_key):
     print("=" * 70)
     print("MULTI-FILE UTTERANCE GAP ANALYSIS")
     print("=" * 70)
-    
+
     audio_files = get_audio_files(folder_path)
     total_files = len(audio_files)
-    
+
     print(f"\nFound {total_files} audio file(s) in: {folder_path}")
     for i, file in enumerate(audio_files, 1):
         print(f"   {i}. {Path(file).name}")
-    
+
     # Analyze each file
     all_file_stats = []
     all_gaps = []
-    
+
     for i, audio_file in enumerate(audio_files, 1):
         try:
             stats = analyze_single_file(audio_file, api_key, i, total_files)
@@ -793,16 +794,16 @@ def analyze_multiple_files(folder_path, api_key):
         except Exception as e:
             print(f"\n✗ Error analyzing {Path(audio_file).name}: {str(e)}")
             continue
-    
+
     if not all_file_stats:
         print("\n✗ No files were successfully analyzed")
         return None
-    
+
     # Calculate aggregated statistics
     print("\n" + "=" * 70)
     print("AGGREGATED GAP ANALYSIS RESULTS")
     print("=" * 70)
-    
+
     aggregated_stats = {
         'total_files_analyzed': len(all_file_stats),
         'total_utterances': sum(s['total_utterances'] for s in all_file_stats),
@@ -814,7 +815,7 @@ def analyze_multiple_files(folder_path, api_key):
         'file_averages': [s['average_gap_ms'] for s in all_file_stats],
         'file_stats': all_file_stats
     }
-    
+
     print(f"\nFiles successfully analyzed:  {aggregated_stats['total_files_analyzed']}/{total_files}")
     print(f"Total utterances (all files): {aggregated_stats['total_utterances']}")
     print(f"Total gaps analyzed:          {aggregated_stats['total_gaps']}")
@@ -822,30 +823,30 @@ def analyze_multiple_files(folder_path, api_key):
     print(f"Overall median gap:           {aggregated_stats['overall_median_gap_ms']:.0f} ms")
     print(f"Overall minimum gap:          {aggregated_stats['overall_min_gap_ms']:.0f} ms")
     print(f"Overall maximum gap:          {aggregated_stats['overall_max_gap_ms']:.0f} ms")
-    
+
     # Show per-file breakdown
     print(f"\nPer-file average gaps:")
     for stat in all_file_stats:
         print(f"   • {stat['filename']:<40} {stat['average_gap_ms']:>6.0f} ms")
-    
+
     # Calculate variability
     avg_of_file_averages = sum(aggregated_stats['file_averages']) / len(aggregated_stats['file_averages'])
     variability_ratio = aggregated_stats['overall_max_gap_ms'] / aggregated_stats['overall_average_gap_ms']
-    
+
     print(f"\nAverage of file averages:     {avg_of_file_averages:.0f} ms")
     print(f"Variability ratio:            {variability_ratio:.2f}x")
-    
+
     if variability_ratio > 3:
         print("└─> HIGH variability - mixed conversation patterns across files")
     elif variability_ratio > 2:
         print("└─> MODERATE variability - some pattern variation")
     else:
         print("└─> LOW variability - consistent conversation rhythm")
-    
+
     # Save aggregated results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_filename = f"aggregated_analysis_{timestamp}.json"
-    
+
     try:
         summary_data = {
             'analysis_date': datetime.now().isoformat(),
@@ -871,13 +872,13 @@ def analyze_multiple_files(folder_path, api_key):
                 for s in all_file_stats
             ]
         }
-        
+
         with open(summary_filename, 'w', encoding='utf-8') as f:
             json.dump(summary_data, f, indent=2, ensure_ascii=False)
         print(f"\nAggregated analysis saved to: {summary_filename}")
     except Exception as e:
         print(f"\nError saving aggregated analysis: {e}")
-    
+
     return aggregated_stats
 ```
 
@@ -896,17 +897,17 @@ def determine_streaming_config(aggregated_stats):
             'max_turn_silence': 1280,
             'description': 'Standard configuration for general use'
         }
-    
+
     print("\n" + "=" * 70)
     print("DETERMINING OPTIMAL STREAMING CONFIGURATION")
     print("=" * 70)
-    
+
     avg_gap = aggregated_stats['overall_average_gap_ms']
     num_files = aggregated_stats['total_files_analyzed']
-    
+
     print(f"\nBased on analysis of {num_files} file(s)")
     print(f"Overall average gap: {avg_gap:.0f} ms")
-    
+
     # Determine configuration based on average gap
     if avg_gap < 500:
         config = {
@@ -935,7 +936,7 @@ def determine_streaming_config(aggregated_stats):
             'description': 'Thoughtful, complex speech with longer pauses'
         }
         use_cases = "Technical support, healthcare, legal consultations, troubleshooting"
-    
+
     print(f"\nSelected Configuration: {config['name']}")
     print(f"   Reasoning: Average gap of {avg_gap:.0f}ms indicates {config['description']}")
     print(f"\nConfiguration Parameters:")
@@ -943,7 +944,7 @@ def determine_streaming_config(aggregated_stats):
     print(f"   • min_end_of_turn_silence_when_confident:  {config['min_end_of_turn_silence_when_confident']} ms")
     print(f"   • max_turn_silence:                        {config['max_turn_silence']} ms")
     print(f"\nRecommended use cases: {use_cases}")
-    
+
     return config
 ```
 
@@ -963,10 +964,10 @@ def on_open(ws):
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                
+
                 with recording_lock:
                     recorded_frames.append(audio_data)
-                
+
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 print(f"Error streaming audio: {e}")
@@ -990,7 +991,7 @@ def on_message(ws, message):
             print(f"   Expires at: {datetime.fromtimestamp(expires_at)}")
             print(f"   Configuration: {OPTIMIZED_CONFIG['name']}")
             print("\nSpeak now... (Press Ctrl+C to stop)\n")
-            
+
         elif msg_type == "Turn":
             transcript = data.get('transcript', '')
             formatted = data.get('turn_is_formatted', False)
@@ -1000,12 +1001,12 @@ def on_message(ws, message):
                 print(f"FINAL: {transcript}")
             else:
                 print(f"\r  partial: {transcript}", end='')
-                
+
         elif msg_type == "Termination":
             audio_duration = data.get('audio_duration_seconds', 0)
             session_duration = data.get('session_duration_seconds', 0)
             print(f"\nSession Terminated: Audio={audio_duration}s, Session={session_duration}s")
-            
+
     except json.JSONDecodeError as e:
         print(f"Error decoding message: {e}")
     except Exception as e:
@@ -1019,7 +1020,7 @@ def on_error(ws, error):
 def on_close(ws, close_status_code, close_msg):
     """Called when the WebSocket connection is closed."""
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    
+
     global stream, audio
     stop_event.set()
 
@@ -1042,13 +1043,13 @@ This function initializes PyAudio to capture microphone input, establishes a Web
 ```python
 def run_streaming(config):
     global audio, stream, ws_app, OPTIMIZED_CONFIG
-    
+
     OPTIMIZED_CONFIG = config
-    
+
     print("\n" + "=" * 70)
     print("STARTING REAL-TIME STREAMING")
     print("=" * 70)
-    
+
     # Build connection parameters with optimized settings
     CONNECTION_PARAMS = {
         "sample_rate": SAMPLE_RATE,
@@ -1057,15 +1058,15 @@ def run_streaming(config):
         "min_end_of_turn_silence_when_confident": str(config['min_end_of_turn_silence_when_confident']),
         "max_turn_silence": str(config['max_turn_silence'])
     }
-    
+
     API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
     API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-    
+
     print(f"\nWebSocket Endpoint: {API_ENDPOINT_BASE_URL}")
     print(f"\nApplied Configuration:")
     for key, value in CONNECTION_PARAMS.items():
         print(f"   • {key}: {value}")
-    
+
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
 
@@ -1147,13 +1148,13 @@ def main():
     try:
         # Step 1: Analyze all audio files in folder
         aggregated_stats = analyze_multiple_files(AUDIO_FOLDER_PATH, YOUR_API_KEY)
-        
+
         # Step 2: Determine optimal configuration based on aggregated data
         streaming_config = determine_streaming_config(aggregated_stats)
-        
+
         # Step 3: Run streaming with optimized settings
         run_streaming(streaming_config)
-        
+
     except Exception as e:
         print(f"\nError in workflow: {str(e)}")
         raise

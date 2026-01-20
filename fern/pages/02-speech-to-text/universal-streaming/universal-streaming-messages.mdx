@@ -13,7 +13,9 @@ For this example, we are going to walk through a user saying:
 `Hi my name is Sonny. I am a voice agent.`
 
 ## Session initialization
+
 When the session begins you will get a message indicating the session ID and expiration time.
+
 ```json
 {
   "type": "Begin",
@@ -25,7 +27,9 @@ When the session begins you will get a message indicating the session ID and exp
 ## Initial utterance and turn
 
 ### Start of utterance (Partial transcript), and Start of turn
+
 The user begins saying `Hi my name is Sonny`. Each message return finalizes words as they come through. Finalized words appear in the `transcript` field.
+
 ```json
 {
   "turn_order": 0,
@@ -53,7 +57,7 @@ The user begins saying `Hi my name is Sonny`. Each message return finalizes word
   "turn_is_formatted": false,
   "end_of_turn": false,
   "transcript": "hi",
-  "end_of_turn_confidence": 1.4e-05,
+  "end_of_turn_confidence": 1.4e-5,
   "words": [
     {
       "start": 1920,
@@ -251,9 +255,11 @@ The user begins saying `Hi my name is Sonny`. Each message return finalizes word
 ```
 
 ### End of utterance (Final transcript), and End of turn
+
 When the utterance is completed, the turn may or may not be predicted to end (this depends entirely on the `end_of_turn_confidence` value). Since the utterance is complete, we push the utterance value to the `utterance` key so you can process it for pre-emptive generation. This is especially useful to get the fastest possible return from our streaming STT model.
 
 In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confidence` is greater than `0.5`. If the turn confidence was higher, the turn will end later - see [End of utterance (Final Transcript), not End of turn](#end-of-utterance-final-transcript-not-end-of-turn) section below.
+
 ```json
 {
   "turn_order": 0,
@@ -304,6 +310,7 @@ In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confide
 ```
 
 ### End of turn formatting
+
 Once the turn ends, if formatting is enabled there will be an additional message where `"turn_is_formatted":True` comes back. This will format the final message.
 
 Since LLMs can parse unformatted text, waiting for this message is NOT recommended for voice agents as it adds additional latency. It is recommended for other use cases like closed captioning where the transcript will be displayed to the end user.
@@ -369,7 +376,7 @@ In this case, the user is not actually done speaking yet. Normally you would hav
   "turn_is_formatted": false,
   "end_of_turn": false,
   "transcript": "",
-  "end_of_turn_confidence": 7.1e-05,
+  "end_of_turn_confidence": 7.1e-5,
   "words": [
     {
       "start": 5200,
@@ -418,7 +425,7 @@ In this case, the user is not actually done speaking yet. Normally you would hav
   "turn_is_formatted": false,
   "end_of_turn": false,
   "transcript": "i am",
-  "end_of_turn_confidence": 1e-05,
+  "end_of_turn_confidence": 1e-5,
   "words": [
     {
       "start": 5200,
@@ -588,10 +595,14 @@ In this case, the user is not actually done speaking yet. Normally you would hav
 ```
 
 ### End of utterance (Final Transcript), not End of turn
+
 In many cases, the turn may not end but we will have finalized an utterance. For this reason, we supply the `utterances` param to finalize each utterance as fast as possible for downstream LLM pre-emptive generation.
 
 <Note>
-If you're using a voice agent provider like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide) or [Pipecat](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide), this logic is pre-configured for you with the fastest performance settings.
+  If you're using a voice agent provider like
+  [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide) or
+  [Pipecat](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide),
+  this logic is pre-configured for you with the fastest performance settings.
 </Note>
 
 ```json
@@ -752,6 +763,7 @@ Lastly we will format the transcript if formatting is enabled. Again this is onl
 ## Best practices
 
 ### Voice agents
+
 - Grab the `utterance` parameter as soon as it is available for the fastest STT model response. This is particularly useful if you are using an external Turn Detection model. You can read more about [configuring for third-party turn detection here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#disable-turn-detection).
   - If you are using AssemblyAI's turn detection, you can simply configure your settings to be [Aggressive](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#aggressive), [Balanced](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#balanced), or [Conservative](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#conservative).
 - Avoid using `format_turns` as it will significantly increase latency. LLMs don't need formatting so you can just pass raw text as soon as its ready.
@@ -759,5 +771,6 @@ Lastly we will format the transcript if formatting is enabled. Again this is onl
   - Note that AssemblyAI has a built-in VAD to the model. If you modify `min_end_of_turn_silence_when_confident` latency will increase but you can substitute the model entirely for a VAD.
 
 ### Notetakers and Closed captioning
+
 - Utilize `format_turns` since text will be displayed to the end user and this will make it human-readable. The added latency will be less noticeable to the human eye in these applications.
 - Utilize `keyterms_prompt` to increase the accuracy of rare words and entities. Again since the text will be shown to the end user this will improve their perception of accuracy.
