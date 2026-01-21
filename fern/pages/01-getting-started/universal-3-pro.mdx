@@ -117,7 +117,7 @@ Prompt allows you to provide up to 1,500 words of contextual information to help
 
 ## Keyterms Prompting
 
-Keyterms prompting allows you to provide up to 1000 words or phrases (maximum 6 words per phrase) to improve transcription accuracy for those terms and related variations or contextually similar phrases.
+Keyterms prompting allows you to provide up to 1,000 words or phrases (maximum 6 words per phrase) to improve transcription accuracy for those terms and related variations or contextually similar phrases.
 
 *Placeholder for code example*
 
@@ -226,7 +226,85 @@ Here is an example of a prompt for verbatim transcription:
 "Prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but), and informal speech (gonna, wanna, gotta)"
 ```
 
-*Placeholder for code example*
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assembly.ai/sports_injuries.mp3",
+    "speech_models": ["universal-3-pro", "universal"],
+    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but), and informal speech (gonna, wanna, gotta)"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from 'axios'
+
+const baseUrl = 'https://api.assemblyai.com'
+const headers = {
+  authorization: '<YOUR_API_KEY>'
+}
+
+const data = {
+  audio_url: 'https://assembly.ai/sports_injuries.mp3',
+  speech_models: ['universal-3-pro', 'universal'],
+  prompt: 'Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but), and informal speech (gonna, wanna, gotta)'
+}
+
+const url = `${baseUrl}/v2/transcript`
+const response = await axios.post(url, data, { headers: headers })
+
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    console.log(transcriptionResult.text)
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+```
+
+</Tab>
+</Tabs>
 
 ## Audio Tags
 
@@ -240,6 +318,6 @@ Here is an example of a prompt using audio tags:
 
 *Placeholder for code example*
 
-## Learn more about what you can do with natural-language prompting
+## Best practices for natural language prompting
 
-*This section will include more information on things like verbatim transcripts, audio tags, and link to the prompting resources that Ryan is working on in a separate doc update.*
+Check out [this guide](https://www.assemblyai.com/docs/pre-recorded-audio/prompt-engineering) to learn even more about how to craft effective prompts for Universal-3-Pro speech transcription.
