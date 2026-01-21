@@ -9,7 +9,7 @@ interface AudioPlayerProps {
 
 export function AudioPlayer({
   src,
-  type = "audio/mp4",
+  type = "audio/mpeg",
   fallbackText = "Your browser does not support the audio element."
 }: AudioPlayerProps) {
   return (
