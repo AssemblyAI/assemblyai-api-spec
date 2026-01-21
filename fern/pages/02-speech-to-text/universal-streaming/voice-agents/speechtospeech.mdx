@@ -18,7 +18,6 @@ Connect to the Speech-to-Speech API at `wss://speech-to-speech.assemblyai.com/v1
 ```python
 import asyncio
 import json
-import base64
 import os
 import websockets
 import sounddevice as sd
@@ -27,6 +26,12 @@ import numpy as np
 ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
 
+# Audio settings
+INPUT_SAMPLE_RATE = 16000  # 16kHz for input
+OUTPUT_SAMPLE_RATE = 24000  # 24kHz for output
+CHUNK_MS = 50  # 50ms chunks recommended
+CHUNK_SIZE = int(INPUT_SAMPLE_RATE * CHUNK_MS / 1000) * 2  # 1600 bytes per 50ms chunk
+
 async def main():
     headers = {
         "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
@@ -34,7 +39,7 @@ async def main():
     }
 
     async with websockets.connect(URL, additional_headers=headers) as ws:
-        # Configure the session
+        # Configure the session (JSON message)
         await ws.send(json.dumps({
             "type": "session.update",
             "session": {
@@ -50,37 +55,43 @@ async def main():
         print("Connected! Start speaking...")
 
         # Set up audio input/output
+        audio_buffer = bytearray()
         audio_queue = asyncio.Queue()
 
         def audio_callback(indata, frames, time, status):
             audio_queue.put_nowait(bytes(indata))
 
         async def send_audio():
+            nonlocal audio_buffer
             while True:
                 audio_data = await audio_queue.get()
-                audio_b64 = base64.b64encode(audio_data).decode()
-                await ws.send(json.dumps({
-                    "type": "input_audio_buffer.append",
-                    "audio": audio_b64
-                }))
+                audio_buffer.extend(audio_data)
+
+                # Send in 50ms chunks (1600 bytes for 16kHz mono PCM16)
+                while len(audio_buffer) >= CHUNK_SIZE:
+                    chunk = bytes(audio_buffer[:CHUNK_SIZE])
+                    audio_buffer = audio_buffer[CHUNK_SIZE:]
+                    # Send raw PCM16 bytes as binary WebSocket frame
+                    await ws.send(chunk)
 
         async def receive_messages():
-            with sd.OutputStream(samplerate=24000, channels=1, dtype='int16') as speaker:
+            with sd.OutputStream(samplerate=OUTPUT_SAMPLE_RATE, channels=1, dtype='int16') as speaker:
                 async for message in ws:
-                    event = json.loads(message)
-
-                    if event["type"] == "response.audio.delta":
-                        audio_bytes = base64.b64decode(event["delta"])
-                        audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+                    # Binary frames contain audio data
+                    if isinstance(message, bytes):
+                        audio_array = np.frombuffer(message, dtype=np.int16)
                         speaker.write(audio_array)
+                    else:
+                        # Text frames contain JSON events
+                        event = json.loads(message)
 
-                    elif event["type"] == "conversation.item.input_audio_transcription.completed":
-                        print(f"You: {event['transcript']}")
+                        if event["type"] == "conversation.item.input_audio_transcription.completed":
+                            print(f"You: {event['transcript']}")
 
-                    elif event["type"] == "response.audio_transcript.done":
-                        print(f"Agent: {event['transcript']}")
+                        elif event["type"] == "response.audio_transcript.done":
+                            print(f"Agent: {event['transcript']}")
 
-        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=audio_callback):
+        with sd.InputStream(samplerate=INPUT_SAMPLE_RATE, channels=1, dtype='int16', callback=audio_callback):
             await asyncio.gather(send_audio(), receive_messages())
 
 if __name__ == "__main__":
@@ -94,6 +105,12 @@ const WebSocket = require("ws");
 const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 const URL = "wss://speech-to-speech.assemblyai.com/v1/realtime";
 
+// Audio settings
+const INPUT_SAMPLE_RATE = 16000; // 16kHz for input
+const OUTPUT_SAMPLE_RATE = 24000; // 24kHz for output
+const CHUNK_MS = 50; // 50ms chunks recommended
+const CHUNK_SIZE = (INPUT_SAMPLE_RATE * CHUNK_MS / 1000) * 2; // 1600 bytes per 50ms chunk
+
 const ws = new WebSocket(URL, {
   headers: {
     Authorization: `Bearer ${ASSEMBLYAI_API_KEY}`,
@@ -101,10 +118,12 @@ const ws = new WebSocket(URL, {
   },
 });
 
+let audioBuffer = Buffer.alloc(0);
+
 ws.on("open", () => {
   console.log("Connected!");
 
-  // Configure the session
+  // Configure the session (JSON message)
   ws.send(
     JSON.stringify({
       type: "session.update",
@@ -120,35 +139,39 @@ ws.on("open", () => {
   );
 });
 
-ws.on("message", (data) => {
-  const event = JSON.parse(data);
+ws.on("message", (data, isBinary) => {
+  if (isBinary) {
+    // Binary frames contain raw PCM16 audio data
+    // Play audio using your preferred audio library
+    const audioData = data;
+    // Example: speaker.write(audioData);
+  } else {
+    // Text frames contain JSON events
+    const event = JSON.parse(data.toString());
 
-  switch (event.type) {
-    case "response.audio.delta":
-      // Handle audio playback - decode base64 and play
-      const audioBuffer = Buffer.from(event.delta, "base64");
-      // Play audio using your preferred audio library
-      break;
+    switch (event.type) {
+      case "conversation.item.input_audio_transcription.completed":
+        console.log(`You: ${event.transcript}`);
+        break;
 
-    case "conversation.item.input_audio_transcription.completed":
-      console.log(`You: ${event.transcript}`);
-      break;
-
-    case "response.audio_transcript.done":
-      console.log(`Agent: ${event.transcript}`);
-      break;
+      case "response.audio_transcript.done":
+        console.log(`Agent: ${event.transcript}`);
+        break;
+    }
   }
 });
 
-// Send audio data (PCM16, 16kHz, mono)
-function sendAudio(audioBuffer) {
-  const base64Audio = audioBuffer.toString("base64");
-  ws.send(
-    JSON.stringify({
-      type: "input_audio_buffer.append",
-      audio: base64Audio,
-    })
-  );
+// Send audio data as raw PCM16 in 50ms chunks (16kHz, mono)
+function sendAudio(pcm16Data) {
+  audioBuffer = Buffer.concat([audioBuffer, pcm16Data]);
+
+  // Send in 50ms chunks (1600 bytes for 16kHz mono PCM16)
+  while (audioBuffer.length >= CHUNK_SIZE) {
+    const chunk = audioBuffer.subarray(0, CHUNK_SIZE);
+    audioBuffer = audioBuffer.subarray(CHUNK_SIZE);
+    // Send raw PCM16 bytes as binary WebSocket frame
+    ws.send(chunk);
+  }
 }
 ```
 </Tab>
@@ -375,15 +398,16 @@ Configure your session using the `session.update` event:
 
 ### Audio format
 
-The API uses the following audio formats:
+The API uses raw PCM16 audio sent as binary WebSocket frames (not base64 encoded). Send audio in 50ms chunks for optimal performance.
 
 **Input audio:**
-- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Encoding: Raw PCM16 (16-bit signed integer, little-endian)
 - Sample rate: 16,000 Hz
 - Channels: Mono
+- Chunk size: 50ms recommended (1,600 bytes per chunk)
 
 **Output audio:**
-- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Encoding: Raw PCM16 (16-bit signed integer, little-endian)
 - Sample rate: 24,000 Hz
 - Channels: Mono
 
@@ -1177,30 +1201,30 @@ if __name__ == "__main__":
 
 | Event | Description |
 |-------|-------------|
-| `session.update` | Configure session parameters, instructions, and tools |
-| `input_audio_buffer.append` | Send audio data (base64-encoded PCM16) |
-| `input_audio_buffer.commit` | Commit the audio buffer for processing |
-| `input_audio_buffer.clear` | Clear the audio buffer |
-| `conversation.item.create` | Add an item to the conversation (e.g., tool results) |
-| `response.create` | Request the model to generate a response |
-| `response.cancel` | Cancel an in-progress response |
+| `session.update` | Configure session parameters, instructions, and tools (JSON) |
+| Binary frame | Send raw PCM16 audio data (50ms chunks recommended) |
+| `input_audio_buffer.commit` | Commit the audio buffer for processing (JSON) |
+| `input_audio_buffer.clear` | Clear the audio buffer (JSON) |
+| `conversation.item.create` | Add an item to the conversation, e.g., tool results (JSON) |
+| `response.create` | Request the model to generate a response (JSON) |
+| `response.cancel` | Cancel an in-progress response (JSON) |
 
 ### Server events (you receive)
 
 | Event | Description |
 |-------|-------------|
-| `session.created` | Session has been created |
-| `session.updated` | Session configuration has been updated |
-| `conversation.item.created` | A conversation item was added |
-| `conversation.item.input_audio_transcription.completed` | User speech transcription is complete |
-| `response.created` | Response generation has started |
-| `response.audio.delta` | Audio chunk for the response (base64-encoded) |
-| `response.audio.done` | Audio generation is complete |
-| `response.audio_transcript.delta` | Partial transcript of the response |
-| `response.audio_transcript.done` | Full transcript of the response |
-| `response.function_call_arguments.done` | Tool call with complete arguments |
-| `response.done` | Response generation is complete |
-| `error` | An error occurred |
+| `session.created` | Session has been created (JSON) |
+| `session.updated` | Session configuration has been updated (JSON) |
+| `conversation.item.created` | A conversation item was added (JSON) |
+| `conversation.item.input_audio_transcription.completed` | User speech transcription is complete (JSON) |
+| `response.created` | Response generation has started (JSON) |
+| Binary frame | Raw PCM16 audio chunk for the response |
+| `response.audio.done` | Audio generation is complete (JSON) |
+| `response.audio_transcript.delta` | Partial transcript of the response (JSON) |
+| `response.audio_transcript.done` | Full transcript of the response (JSON) |
+| `response.function_call_arguments.done` | Tool call with complete arguments (JSON) |
+| `response.done` | Response generation is complete (JSON) |
+| `error` | An error occurred (JSON) |
 
 ## Roadmap
 
