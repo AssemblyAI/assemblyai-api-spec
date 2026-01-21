@@ -201,7 +201,7 @@ IMPORTANT: Please generate an optimized transcription prompt based on the above.
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Paste a sample of your transcript here (100-500 words recommended). This helps identify your domain and common terminology patterns..."
+            placeholder="Paste a sample of your transcript here. This will help identify your domain and common terminology patterns alongside our prompt engineering best practices..."
             style={textareaStyle}
           />
         </div>
