@@ -1,467 +1,1225 @@
 ---
-title: "Speech-to-Speech"
-description: "Build real-time voice AI agents that listen and respond naturally"
+title: "Speech-to-Speech API (Beta)"
+description: "Build real-time voice AI agents using AssemblyAI's OpenAI-compatible Realtime API"
 ---
 
-Build voice-powered AI agents that have natural conversations with your users. Your agent listens to speech and responds with a natural-sounding voice—all in real-time.
+<Warning>
+  This is a beta product and is not production-ready. The API is subject to change without notice. Do not use this for production workloads.
+</Warning>
 
-<Note>
-  This is an early stage product subject to change and should not be used for
-  production usage.
-</Note>
+AssemblyAI's Speech-to-Speech API lets you build voice agents that listen and respond naturally in real-time. The API follows the OpenAI Realtime API schema, making it easy to integrate with existing tools and frameworks like LiveKit, Pipecat, and the OpenAI client libraries.
 
-## How it works
+## Quickstart
 
-```
-┌─────────────┐                 ┌─────────────────┐                 ┌─────────────┐
-│             │     Audio       │                 │      Audio      │             │
-│    User     │  ────────────►  │   Voice Agent   │  ────────────►  │    User     │
-│  (speaks)   │                 │                 │                 │   (hears)   │
-└─────────────┘                 └─────────────────┘                 └─────────────┘
-```
-
-1. **User speaks** — Your app captures microphone audio and streams it to the agent
-2. **Agent responds** — The agent processes the speech and generates a spoken response
-3. **User hears** — Your app receives audio and plays it through the speaker
-
-The entire flow happens in real-time with low latency.
-
----
-
-## Quick Start
-
-Get a voice agent up and running in 3 steps.
-
-### Step 1: Get your API key
-
-Grab your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app).
-
-### Step 2: Create your agent
-
-Create an agent by sending a POST request. Here's an example of a friendly assistant:
+Connect to the Speech-to-Speech API at `wss://speech-to-speech.assemblyai.com/v1/realtime` using your AssemblyAI API key. The API accepts audio input and returns both transcriptions and synthesized speech responses.
 
 <Tabs>
-<Tab title="cURL">
-```bash
-curl -X POST https://aaigentsv1.up.railway.app/agents \
-  -H "Authorization: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_name": "friendly_assistant",
-    "instructions": "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
-    "voice": "luna",
-    "greeting": "Say hello and ask how you can help today."
-  }'
-```
-</Tab>
-<Tab title="Python">
-```python
-import requests
-
-response = requests.post(
-"https://aaigentsv1.up.railway.app/agents",
-headers={
-"Authorization": "YOUR_API_KEY",
-"Content-Type": "application/json"
-},
-json={
-"agent_name": "friendly_assistant",
-"instructions": "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
-"voice": "luna",
-"greeting": "Say hello and ask how you can help today."
-}
-)
-
-print(response.json())
-
-````
-</Tab>
-<Tab title="JavaScript">
-```javascript
-const response = await fetch("https://aaigentsv1.up.railway.app/agents", {
-  method: "POST",
-  headers: {
-    "Authorization": "YOUR_API_KEY",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    agent_name: "friendly_assistant",
-    instructions: "You are a friendly and helpful assistant. Keep your responses concise and conversational. Be warm and personable.",
-    voice: "luna",
-    greeting: "Say hello and ask how you can help today."
-  })
-});
-
-console.log(await response.json());
-````
-
-</Tab>
-</Tabs>
-
-### Step 3: Start a conversation
-
-Connect to your agent via WebSocket and start talking:
-
-```
-wss://aaigentsv1.up.railway.app/ws/friendly_assistant
-```
-
-Once connected, send audio as binary WebSocket frames (PCM16, 16kHz, mono) and receive the agent's spoken responses back as audio.
-
-<Accordion title="Full Python example">
+<Tab title="Python (WebSocket)">
 ```python
 import asyncio
 import json
+import base64
+import os
 import websockets
 import sounddevice as sd
 import numpy as np
 
-async def voice_chat():
-uri = "wss://aaigentsv1.up.railway.app/ws/friendly_assistant"
-queue = asyncio.Queue(maxsize=100)
-session_ready = False
+ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
 
-    async with websockets.connect(uri, ping_interval=10, ping_timeout=20) as ws:
-        print("Connected! Waiting for session...")
+async def main():
+    headers = {
+        "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
 
-        # Send microphone audio to the agent
+    async with websockets.connect(URL, additional_headers=headers) as ws:
+        # Configure the session
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "model": "universal-streaming",
+                "voice": "sage",
+                "instructions": "You are a helpful assistant. Be concise and friendly.",
+                "input_audio_transcription": {
+                    "model": "universal-streaming"
+                }
+            }
+        }))
+
+        print("Connected! Start speaking...")
+
+        # Set up audio input/output
+        audio_queue = asyncio.Queue()
+
+        def audio_callback(indata, frames, time, status):
+            audio_queue.put_nowait(bytes(indata))
+
         async def send_audio():
             while True:
-                data = await queue.get()
-                if session_ready:
-                    await ws.send(data)
-                queue.task_done()
+                audio_data = await audio_queue.get()
+                audio_b64 = base64.b64encode(audio_data).decode()
+                await ws.send(json.dumps({
+                    "type": "input_audio_buffer.append",
+                    "audio": audio_b64
+                }))
 
-        asyncio.create_task(send_audio())
-        loop = asyncio.get_running_loop()
+        async def receive_messages():
+            with sd.OutputStream(samplerate=24000, channels=1, dtype='int16') as speaker:
+                async for message in ws:
+                    event = json.loads(message)
 
-        def mic_callback(indata, frames, time, status):
-            if not queue.full():
-                loop.call_soon_threadsafe(queue.put_nowait, bytes(indata))
+                    if event["type"] == "response.audio.delta":
+                        audio_bytes = base64.b64decode(event["delta"])
+                        audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+                        speaker.write(audio_array)
 
-        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=mic_callback), \
-             sd.OutputStream(samplerate=16000, channels=1, dtype='int16') as speaker:
+                    elif event["type"] == "conversation.item.input_audio_transcription.completed":
+                        print(f"You: {event['transcript']}")
 
-            while True:
-                response = await ws.recv()
+                    elif event["type"] == "response.audio_transcript.done":
+                        print(f"Agent: {event['transcript']}")
 
-                # Play audio responses
-                if isinstance(response, bytes) and len(response):
-                    speaker.write(np.frombuffer(response, dtype=np.int16))
+        with sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=audio_callback):
+            await asyncio.gather(send_audio(), receive_messages())
 
-                # Handle JSON messages
-                elif isinstance(response, str):
-                    msg = json.loads(response)
-
-                    if msg.get("type") == "session.created":
-                        print("Session ready! Start speaking...")
-                        session_ready = True
-
-                    elif msg.get("type") == "conversation.item.done":
-                        item = msg.get("item", {})
-                        role = item.get("role")
-                        text = item.get("content", [{}])[0].get("text", "")
-                        print(f"[{role}]: {text}")
-
-asyncio.run(voice_chat())
-
-````
-
-Install dependencies with:
-```bash
-pip install websockets sounddevice numpy
-````
-
-</Accordion>
-
-That's it! You now have a working voice agent.
-
----
-
-## Example agents
-
-Here are some practical examples to inspire your own agents.
-
-### Customer support agent
-
-```json
-{
-  "agent_name": "support_agent",
-  "instructions": "You are a customer support agent for a software company. Be helpful, patient, and empathetic. Ask clarifying questions to understand the customer's issue. If you can't solve a problem, offer to escalate to a human agent. Keep responses brief and focused.",
-  "voice": "celeste",
-  "greeting": "Thank the customer for calling and ask how you can help them today."
-}
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
+</Tab>
+<Tab title="JavaScript (WebSocket)">
+```javascript
+const WebSocket = require("ws");
 
-### Appointment scheduler
+const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+const URL = "wss://speech-to-speech.assemblyai.com/v1/realtime";
 
-```json
-{
-  "agent_name": "appointment_scheduler",
-  "instructions": "You are a friendly receptionist who helps schedule appointments. Collect the caller's name, preferred date and time, and reason for the appointment. Confirm all details before ending the call. Be efficient but warm.",
-  "voice": "estelle",
-  "greeting": "Welcome the caller and ask if they'd like to schedule an appointment."
-}
-```
+const ws = new WebSocket(URL, {
+  headers: {
+    Authorization: `Bearer ${ASSEMBLYAI_API_KEY}`,
+    "OpenAI-Beta": "realtime=v1",
+  },
+});
 
-### Virtual concierge
+ws.on("open", () => {
+  console.log("Connected!");
 
-```json
-{
-  "agent_name": "hotel_concierge",
-  "instructions": "You are a luxury hotel concierge. Be warm, professional, and knowledgeable. Help guests with restaurant recommendations, local attractions, transportation, and any requests. Anticipate needs and offer personalized suggestions.",
-  "voice": "orion",
-  "greeting": "Welcome the guest and ask how you can make their stay more enjoyable."
-}
-```
-
----
-
-## Choose a voice
-
-Pick a voice that matches your agent's personality.
-
-| Voice       | Style                               |
-| ----------- | ----------------------------------- |
-| `luna`      | Chill but excitable, gen-z optimist |
-| `celeste`   | Warm, laid-back, fun-loving         |
-| `orion`     | Older male, warm and happy          |
-| `ursa`      | Young male, energetic               |
-| `astra`     | Young female, wide-eyed and curious |
-| `esther`    | Older female, loving and caring     |
-| `estelle`   | Middle-aged female, sweet and kind  |
-| `andromeda` | Young female, breathy and calm      |
-
----
-
-## Add tools
-
-Tools let your agent take actions—like checking a database, calling an API, or triggering a workflow.
-
-Here's a simple example of an agent with a weather tool:
-
-```json
-{
-  "agent_name": "weather_assistant",
-  "instructions": "You help users check the weather. When they ask about weather, use the get_weather tool to look it up.",
-  "voice": "luna",
-  "tools": [
-    {
-      "name": "get_weather",
-      "description": "Get the current weather for a city",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "city": {
-            "type": "string",
-            "description": "The city name"
-          }
+  // Configure the session
+  ws.send(
+    JSON.stringify({
+      type: "session.update",
+      session: {
+        model: "universal-streaming",
+        voice: "sage",
+        instructions: "You are a helpful assistant. Be concise and friendly.",
+        input_audio_transcription: {
+          model: "universal-streaming",
         },
-        "required": ["city"]
-      }
-    }
-  ]
-}
-```
+      },
+    })
+  );
+});
 
-When a user asks "What's the weather in Tokyo?", the agent sends your client a `tool.call` event:
+ws.on("message", (data) => {
+  const event = JSON.parse(data);
 
-```json
-{
-  "type": "tool.call",
-  "call_id": "call_abc123",
-  "name": "get_weather",
-  "arguments": { "city": "Tokyo" }
-}
-```
+  switch (event.type) {
+    case "response.audio.delta":
+      // Handle audio playback - decode base64 and play
+      const audioBuffer = Buffer.from(event.delta, "base64");
+      // Play audio using your preferred audio library
+      break;
 
-Your client executes the function and sends back the result:
+    case "conversation.item.input_audio_transcription.completed":
+      console.log(`You: ${event.transcript}`);
+      break;
 
-```json
-{
-  "type": "tool.result",
-  "call_id": "call_abc123",
-  "result": "{\"temperature\": \"72°F\", \"conditions\": \"sunny\"}"
-}
-```
-
-The agent then speaks the weather information to the user.
-
----
-
-## Agent configuration
-
-Full list of options when creating an agent.
-
-| Field                   | Type   | Default  | Description                                         |
-| ----------------------- | ------ | -------- | --------------------------------------------------- |
-| `agent_name`            | string | required | Unique identifier (letters, numbers, underscores)   |
-| `instructions`          | string | -        | Personality and behavior guidelines                 |
-| `voice`                 | string | `"luna"` | Voice to use for responses                          |
-| `greeting`              | string | -        | What the agent says when a conversation starts      |
-| `temperature`           | float  | `0.8`    | Response creativity (0.0 = focused, 1.0 = creative) |
-| `max_tokens`            | int    | `4096`   | Maximum response length                             |
-| `language`              | string | `"en"`   | Language code                                       |
-| `tools`                 | array  | -        | Tool definitions (see above)                        |
-| `audio_in_sample_rate`  | int    | `16000`  | Input audio sample rate in Hz                       |
-| `audio_out_sample_rate` | int    | `16000`  | Output audio sample rate in Hz                      |
-
----
-
-## WebSocket events
-
-When connected to an agent, you'll receive these events:
-
-### session.created
-
-Sent when the connection is established and ready.
-
-```json
-{
-  "type": "session.created",
-  "session": {
-    "id": "uuid",
-    "agent_name": "my_agent"
+    case "response.audio_transcript.done":
+      console.log(`Agent: ${event.transcript}`);
+      break;
   }
+});
+
+// Send audio data (PCM16, 16kHz, mono)
+function sendAudio(audioBuffer) {
+  const base64Audio = audioBuffer.toString("base64");
+  ws.send(
+    JSON.stringify({
+      type: "input_audio_buffer.append",
+      audio: base64Audio,
+    })
+  );
 }
 ```
+</Tab>
+<Tab title="OpenAI Python Client">
+```python
+import os
+from openai import OpenAI
 
-### conversation.item.done
+client = OpenAI(
+    api_key=os.environ.get("ASSEMBLYAI_API_KEY"),
+    base_url="https://speech-to-speech.assemblyai.com/v1"
+)
 
-Sent when a speaker finishes talking. Contains the transcript.
+# Connect to the realtime API
+with client.beta.realtime.connect(
+    model="universal-streaming"
+) as connection:
+    # Configure the session
+    connection.session.update(
+        session={
+            "voice": "sage",
+            "instructions": "You are a helpful assistant.",
+            "input_audio_transcription": {
+                "model": "universal-streaming"
+            }
+        }
+    )
 
-```json
-{
-  "type": "conversation.item.done",
-  "item": {
-    "role": "user",
-    "content": [{ "type": "text", "text": "What's the weather like?" }]
-  }
-}
+    # Send audio and receive responses
+    for event in connection:
+        if event.type == "response.audio_transcript.done":
+            print(f"Agent: {event.transcript}")
+        elif event.type == "conversation.item.input_audio_transcription.completed":
+            print(f"You: {event.transcript}")
+```
+</Tab>
+</Tabs>
+
+## Integration with voice agent frameworks
+
+The Speech-to-Speech API works seamlessly with popular voice agent frameworks. Since it follows the OpenAI Realtime API schema, you can use it as a drop-in replacement.
+
+### LiveKit
+
+LiveKit's OpenAI realtime plugin automatically appends `/v1/realtime` to the base URL, so you only need to specify the base domain.
+
+```python
+import os
+from livekit.agents import AgentSession
+from livekit.plugins import openai
+from livekit.plugins.openai.realtime import AudioTranscription
+
+api_url = os.environ.get("ASSEMBLYAI_API_URL", "wss://speech-to-speech.assemblyai.com/v1")
+api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+
+if not api_key:
+    raise ValueError("ASSEMBLYAI_API_KEY environment variable is required")
+
+session = AgentSession(
+    llm=openai.realtime.RealtimeModel(
+        base_url=api_url,
+        api_key=api_key,
+        voice="sage",
+        model="universal-streaming",
+        input_audio_transcription=AudioTranscription(
+            model="universal-streaming"
+        )
+    )
+)
 ```
 
-### conversation.item.interim
+<Accordion title="Full LiveKit agent example">
+```python
+import os
+import logging
+from livekit import rtc
+from livekit.agents import (
+    AgentSession,
+    Agent,
+    RoomInputOptions,
+    function_tool,
+    RunContext,
+)
+from livekit.plugins import openai
+from livekit.plugins.openai.realtime import AudioTranscription
 
-Sent during speech with partial transcripts. Useful for showing real-time captions.
+logger = logging.getLogger("voice-agent")
 
-```json
-{
-  "type": "conversation.item.interim",
-  "item": {
-    "role": "user",
-    "content": [{ "type": "text", "text": "What's the wea..." }]
-  }
-}
+class VoiceAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a helpful voice assistant powered by AssemblyAI. 
+            Be conversational, friendly, and concise in your responses."""
+        )
+
+    @function_tool()
+    async def get_current_time(self, context: RunContext) -> str:
+        """Get the current time."""
+        from datetime import datetime
+        return datetime.now().strftime("%I:%M %p")
+
+    @function_tool()
+    async def end_conversation(self, context: RunContext) -> str:
+        """End the conversation when the user says goodbye."""
+        return "Goodbye! Have a great day."
+
+async def entrypoint(ctx):
+    api_url = os.environ.get("ASSEMBLYAI_API_URL", "wss://speech-to-speech.assemblyai.com/v1")
+    api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+
+    session = AgentSession(
+        llm=openai.realtime.RealtimeModel(
+            base_url=api_url,
+            api_key=api_key,
+            voice="sage",
+            model="universal-streaming",
+            input_audio_transcription=AudioTranscription(
+                model="universal-streaming"
+            )
+        )
+    )
+
+    agent = VoiceAgent()
+    await session.start(
+        room=ctx.room,
+        agent=agent,
+        room_input_options=RoomInputOptions()
+    )
 ```
-
-### tool.call
-
-Sent when the agent wants to use a tool. See [Add tools](#add-tools) for handling.
-
-### Audio (binary)
-
-The agent's spoken responses come as binary WebSocket frames containing PCM16 audio.
-
----
-
-## Audio format
-
-Both input and output audio use the same format:
-
-- **Encoding**: PCM16 (16-bit signed integer, little-endian)
-- **Sample rate**: 16,000 Hz (configurable)
-- **Channels**: Mono
-
----
-
-## REST API reference
-
-<Accordion title="Manage agents">
-
-**Base URL**: `https://aaigentsv1.up.railway.app`
-
-All REST endpoints require an `Authorization: YOUR_API_KEY` header.
-
-### Create or update agent
-
-`POST /agents` — Create a new agent or update an existing one.
-
-### List agents
-
-`GET /agents` — List all your agents.
-
-```json
-{
-  "agents": ["agent1", "agent2"],
-  "count": 2
-}
-```
-
-### Get agent
-
-`GET /agents/{agent_name}` — Get an agent's configuration.
-
-### Delete agent
-
-`DELETE /agents/{agent_name}` — Delete an agent.
-
 </Accordion>
 
-<Accordion title="Conversation history">
+### Pipecat
 
-### List conversations
+Pipecat supports the OpenAI Realtime API through its transport layer. Configure it to use AssemblyAI's endpoint:
 
-`GET /agents/{agent_name}/conversations` — List all conversations for an agent.
+```python
+import os
+from pipecat.transports.services.daily import DailyTransport
+from pipecat.services.openai_realtime import OpenAIRealtimeService
 
-```json
-{
-  "agent_name": "my_agent",
-  "conversations": [
+api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+
+realtime_service = OpenAIRealtimeService(
+    api_key=api_key,
+    base_url="wss://speech-to-speech.assemblyai.com/v1/realtime",
+    model="universal-streaming",
+    voice="sage",
+    system_prompt="You are a helpful assistant."
+)
+```
+
+<Accordion title="Full Pipecat pipeline example">
+```python
+import os
+import asyncio
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineTask
+from pipecat.transports.services.daily import DailyTransport, DailyParams
+from pipecat.services.openai_realtime import OpenAIRealtimeService
+
+async def main():
+    api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    daily_api_key = os.environ.get("DAILY_API_KEY")
+
+    transport = DailyTransport(
+        room_url="https://your-domain.daily.co/your-room",
+        token=daily_api_key,
+        bot_name="AssemblyAI Voice Agent",
+        params=DailyParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        )
+    )
+
+    realtime_service = OpenAIRealtimeService(
+        api_key=api_key,
+        base_url="wss://speech-to-speech.assemblyai.com/v1/realtime",
+        model="universal-streaming",
+        voice="sage",
+        system_prompt="""You are a helpful customer service agent. 
+        Be professional, empathetic, and solution-oriented."""
+    )
+
+    pipeline = Pipeline([
+        transport.input(),
+        realtime_service,
+        transport.output()
+    ])
+
+    runner = PipelineRunner()
+    task = PipelineTask(pipeline)
+    await runner.run(task)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+</Accordion>
+
+## Configuration
+
+### Session parameters
+
+Configure your session using the `session.update` event:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | required | Use `"universal-streaming"` |
+| `voice` | string | `"sage"` | Voice for audio responses |
+| `instructions` | string | - | System prompt defining agent behavior |
+| `input_audio_transcription.model` | string | - | Set to `"universal-streaming"` for transcription |
+| `temperature` | float | `0.8` | Response creativity (0.0-1.0) |
+| `max_response_output_tokens` | int | `4096` | Maximum tokens in response |
+| `turn_detection` | object | - | Configure voice activity detection |
+
+### Available voices
+
+| Voice | Description |
+|-------|-------------|
+| `sage` | Calm and professional |
+| `coral` | Warm and friendly |
+| `verse` | Clear and articulate |
+| `alloy` | Neutral and balanced |
+
+### Audio format
+
+The API uses the following audio formats:
+
+**Input audio:**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample rate: 16,000 Hz
+- Channels: Mono
+
+**Output audio:**
+- Encoding: PCM16 (16-bit signed integer, little-endian)
+- Sample rate: 24,000 Hz
+- Channels: Mono
+
+## Tool calling
+
+Enable your agent to perform actions by defining tools. Tools follow the JSON Schema format used by OpenAI's function calling.
+
+```python
+# Define tools in your session configuration
+await ws.send(json.dumps({
+    "type": "session.update",
+    "session": {
+        "model": "universal-streaming",
+        "voice": "sage",
+        "instructions": "You help users check order status. Use the check_order_status tool when asked.",
+        "tools": [
+            {
+                "type": "function",
+                "name": "check_order_status",
+                "description": "Check the status of a customer order",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "order_id": {
+                            "type": "string",
+                            "description": "The order ID to look up"
+                        }
+                    },
+                    "required": ["order_id"]
+                }
+            }
+        ]
+    }
+}))
+```
+
+When the agent decides to use a tool, you'll receive a `response.function_call_arguments.done` event:
+
+```python
+async for message in ws:
+    event = json.loads(message)
+
+    if event["type"] == "response.function_call_arguments.done":
+        tool_name = event["name"]
+        arguments = json.loads(event["arguments"])
+        call_id = event["call_id"]
+
+        # Execute the tool
+        if tool_name == "check_order_status":
+            result = await check_order_status(arguments["order_id"])
+
+            # Send the result back
+            await ws.send(json.dumps({
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(result)
+                }
+            }))
+
+            # Trigger a response
+            await ws.send(json.dumps({"type": "response.create"}))
+```
+
+## Subagent routing
+
+Route conversations to specialized subagents based on user intent. This pattern is useful for complex applications where different agents handle different domains.
+
+```python
+from livekit.agents import AgentSession, Agent, function_tool, RunContext
+from livekit.plugins import openai
+from livekit.plugins.openai.realtime import AudioTranscription
+
+class RouterAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a routing agent. Determine the user's intent and 
+            route them to the appropriate specialist:
+            - For billing questions, use transfer_to_billing
+            - For technical support, use transfer_to_support
+            - For sales inquiries, use transfer_to_sales"""
+        )
+
+    @function_tool()
+    async def transfer_to_billing(self, context: RunContext) -> str:
+        """Transfer the conversation to the billing specialist."""
+        context.session.update_agent(BillingAgent())
+        return "Transferring you to our billing specialist..."
+
+    @function_tool()
+    async def transfer_to_support(self, context: RunContext) -> str:
+        """Transfer the conversation to technical support."""
+        context.session.update_agent(SupportAgent())
+        return "Transferring you to technical support..."
+
+    @function_tool()
+    async def transfer_to_sales(self, context: RunContext) -> str:
+        """Transfer the conversation to the sales team."""
+        context.session.update_agent(SalesAgent())
+        return "Transferring you to our sales team..."
+
+class BillingAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a billing specialist. Help users with:
+            - Invoice questions
+            - Payment issues
+            - Subscription changes
+            Be professional and thorough."""
+        )
+
+    @function_tool()
+    async def lookup_invoice(self, context: RunContext, invoice_id: str) -> str:
+        """Look up an invoice by ID."""
+        # Implement invoice lookup logic
+        return f"Invoice {invoice_id}: $99.00, paid on Jan 15, 2026"
+
+class SupportAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a technical support specialist. Help users with:
+            - Troubleshooting issues
+            - Product questions
+            - Feature explanations
+            Be patient and clear in your explanations."""
+        )
+
+class SalesAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a sales specialist. Help users with:
+            - Product information
+            - Pricing questions
+            - Demo scheduling
+            Be helpful and not pushy."""
+        )
+```
+
+## Sample agents
+
+Here are complete, copy-paste-ready examples for common use cases. Set your `ASSEMBLYAI_API_KEY` environment variable and run.
+
+### Debt collection agent
+
+A professional agent for payment reminder calls with compliance-aware messaging.
+
+<Accordion title="Full code example">
+```python
+import os
+import asyncio
+import json
+import base64
+import websockets
+from datetime import datetime
+
+ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
+
+# Mock database
+ACCOUNTS = {
+    "ACC001": {"name": "John Smith", "balance": 450.00, "due_date": "2026-01-15"},
+    "ACC002": {"name": "Jane Doe", "balance": 1200.00, "due_date": "2026-01-10"},
+}
+
+INSTRUCTIONS = """You are a professional debt collection agent for ABC Financial Services. 
+Your role is to remind customers about overdue payments in a respectful and compliant manner.
+
+Guidelines:
+- Always identify yourself and the company at the start
+- Verify you're speaking with the right person before discussing account details
+- Be professional, empathetic, and non-threatening
+- Offer payment plan options when appropriate
+- Document any promises to pay
+- Never harass, threaten, or use abusive language
+- Comply with FDCPA regulations
+
+Use the available tools to look up account information and record payment arrangements."""
+
+TOOLS = [
     {
-      "conversation_id": "uuid",
-      "created_at": "2025-12-18T13:00:00Z"
-    }
-  ],
-  "count": 1
-}
-```
-
-### Get conversation
-
-`GET /agents/{agent_name}/conversations/{conversation_id}` — Get a specific conversation with all messages.
-
-```json
-{
-  "conversation_id": "uuid",
-  "agent_name": "my_agent",
-  "items": [],
-  "created_at": "2025-12-18T13:00:00Z"
-}
-```
-
-</Accordion>
-
-<Accordion title="Tool definition schema">
-
-Tools follow JSON Schema format:
-
-```json
-{
-  "name": "tool_name",
-  "description": "What this tool does",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "param_name": {
-        "type": "string",
-        "description": "What this parameter is for"
-      }
+        "type": "function",
+        "name": "lookup_account",
+        "description": "Look up a customer's account information by account ID",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "string",
+                    "description": "The customer's account ID"
+                }
+            },
+            "required": ["account_id"]
+        }
     },
-    "required": ["param_name"]
-  }
-}
+    {
+        "type": "function",
+        "name": "record_payment_promise",
+        "description": "Record a customer's promise to pay",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "account_id": {"type": "string"},
+                "amount": {"type": "number"},
+                "payment_date": {"type": "string", "description": "Date in YYYY-MM-DD format"}
+            },
+            "required": ["account_id", "amount", "payment_date"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "setup_payment_plan",
+        "description": "Set up a payment plan for the customer",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "account_id": {"type": "string"},
+                "monthly_amount": {"type": "number"},
+                "num_payments": {"type": "integer"}
+            },
+            "required": ["account_id", "monthly_amount", "num_payments"]
+        }
+    }
+]
+
+def lookup_account(account_id: str) -> dict:
+    if account_id in ACCOUNTS:
+        return {"success": True, "account": ACCOUNTS[account_id]}
+    return {"success": False, "error": "Account not found"}
+
+def record_payment_promise(account_id: str, amount: float, payment_date: str) -> dict:
+    return {
+        "success": True,
+        "confirmation": f"Payment promise recorded: ${amount} by {payment_date}",
+        "reference": f"PRM-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    }
+
+def setup_payment_plan(account_id: str, monthly_amount: float, num_payments: int) -> dict:
+    return {
+        "success": True,
+        "plan": {
+            "monthly_payment": monthly_amount,
+            "total_payments": num_payments,
+            "total_amount": monthly_amount * num_payments
+        },
+        "reference": f"PLN-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    }
+
+async def handle_tool_call(ws, event):
+    tool_name = event["name"]
+    arguments = json.loads(event["arguments"])
+    call_id = event["call_id"]
+
+    if tool_name == "lookup_account":
+        result = lookup_account(arguments["account_id"])
+    elif tool_name == "record_payment_promise":
+        result = record_payment_promise(
+            arguments["account_id"],
+            arguments["amount"],
+            arguments["payment_date"]
+        )
+    elif tool_name == "setup_payment_plan":
+        result = setup_payment_plan(
+            arguments["account_id"],
+            arguments["monthly_amount"],
+            arguments["num_payments"]
+        )
+    else:
+        result = {"error": "Unknown tool"}
+
+    await ws.send(json.dumps({
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps(result)
+        }
+    }))
+    await ws.send(json.dumps({"type": "response.create"}))
+
+async def main():
+    headers = {
+        "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
+
+    async with websockets.connect(URL, additional_headers=headers) as ws:
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "model": "universal-streaming",
+                "voice": "sage",
+                "instructions": INSTRUCTIONS,
+                "tools": TOOLS,
+                "input_audio_transcription": {"model": "universal-streaming"}
+            }
+        }))
+
+        print("Debt Collection Agent ready. Start speaking...")
+
+        async for message in ws:
+            event = json.loads(message)
+
+            if event["type"] == "response.function_call_arguments.done":
+                await handle_tool_call(ws, event)
+            elif event["type"] == "conversation.item.input_audio_transcription.completed":
+                print(f"Customer: {event['transcript']}")
+            elif event["type"] == "response.audio_transcript.done":
+                print(f"Agent: {event['transcript']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
-
-**Supported parameter types**: `string`, `number`, `boolean`, `array`, `object`
-
 </Accordion>
+
+### Interview agent
+
+An AI interviewer that conducts structured interviews and evaluates candidates.
+
+<Accordion title="Full code example">
+```python
+import os
+import asyncio
+import json
+import websockets
+from datetime import datetime
+
+ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
+
+INSTRUCTIONS = """You are an AI interviewer conducting a technical screening interview for a software engineering position.
+
+Interview structure:
+1. Introduction and rapport building (2 minutes)
+2. Background and experience questions (5 minutes)
+3. Technical questions (10 minutes)
+4. Behavioral questions using STAR method (5 minutes)
+5. Candidate questions (3 minutes)
+6. Closing
+
+Guidelines:
+- Be professional, warm, and encouraging
+- Ask follow-up questions to dig deeper into responses
+- Take notes on key points using the record_note tool
+- Score responses using the score_response tool
+- Keep track of time and move through sections appropriately
+- At the end, provide a summary using the generate_summary tool
+
+Start by introducing yourself and the interview process."""
+
+TOOLS = [
+    {
+        "type": "function",
+        "name": "record_note",
+        "description": "Record a note about the candidate's response",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["experience", "technical", "behavioral", "communication", "other"]
+                },
+                "note": {"type": "string"},
+                "sentiment": {
+                    "type": "string",
+                    "enum": ["positive", "neutral", "negative"]
+                }
+            },
+            "required": ["category", "note"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "score_response",
+        "description": "Score a candidate's response to a question",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question_topic": {"type": "string"},
+                "score": {
+                    "type": "integer",
+                    "description": "Score from 1-5"
+                },
+                "reasoning": {"type": "string"}
+            },
+            "required": ["question_topic", "score", "reasoning"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "generate_summary",
+        "description": "Generate an interview summary at the end",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "overall_impression": {"type": "string"},
+                "strengths": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "areas_for_improvement": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "recommendation": {
+                    "type": "string",
+                    "enum": ["strong_hire", "hire", "maybe", "no_hire"]
+                }
+            },
+            "required": ["overall_impression", "strengths", "areas_for_improvement", "recommendation"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "end_interview",
+        "description": "End the interview session",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string"}
+            },
+            "required": ["reason"]
+        }
+    }
+]
+
+interview_data = {
+    "notes": [],
+    "scores": [],
+    "start_time": None
+}
+
+def record_note(category: str, note: str, sentiment: str = "neutral") -> dict:
+    interview_data["notes"].append({
+        "category": category,
+        "note": note,
+        "sentiment": sentiment,
+        "timestamp": datetime.now().isoformat()
+    })
+    return {"success": True, "message": "Note recorded"}
+
+def score_response(question_topic: str, score: int, reasoning: str) -> dict:
+    interview_data["scores"].append({
+        "topic": question_topic,
+        "score": score,
+        "reasoning": reasoning
+    })
+    avg_score = sum(s["score"] for s in interview_data["scores"]) / len(interview_data["scores"])
+    return {"success": True, "current_average": round(avg_score, 2)}
+
+def generate_summary(overall_impression: str, strengths: list, areas_for_improvement: list, recommendation: str) -> dict:
+    return {
+        "success": True,
+        "summary": {
+            "overall_impression": overall_impression,
+            "strengths": strengths,
+            "areas_for_improvement": areas_for_improvement,
+            "recommendation": recommendation,
+            "average_score": sum(s["score"] for s in interview_data["scores"]) / len(interview_data["scores"]) if interview_data["scores"] else 0,
+            "notes_count": len(interview_data["notes"])
+        }
+    }
+
+async def handle_tool_call(ws, event):
+    tool_name = event["name"]
+    arguments = json.loads(event["arguments"])
+    call_id = event["call_id"]
+
+    if tool_name == "record_note":
+        result = record_note(arguments["category"], arguments["note"], arguments.get("sentiment", "neutral"))
+    elif tool_name == "score_response":
+        result = score_response(arguments["question_topic"], arguments["score"], arguments["reasoning"])
+    elif tool_name == "generate_summary":
+        result = generate_summary(
+            arguments["overall_impression"],
+            arguments["strengths"],
+            arguments["areas_for_improvement"],
+            arguments["recommendation"]
+        )
+    elif tool_name == "end_interview":
+        result = {"success": True, "message": "Interview ended", "reason": arguments["reason"]}
+        print(f"\n=== Interview Summary ===")
+        print(f"Notes: {len(interview_data['notes'])}")
+        print(f"Scores: {interview_data['scores']}")
+    else:
+        result = {"error": "Unknown tool"}
+
+    await ws.send(json.dumps({
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps(result)
+        }
+    }))
+    await ws.send(json.dumps({"type": "response.create"}))
+
+async def main():
+    interview_data["start_time"] = datetime.now()
+
+    headers = {
+        "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
+
+    async with websockets.connect(URL, additional_headers=headers) as ws:
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "model": "universal-streaming",
+                "voice": "sage",
+                "instructions": INSTRUCTIONS,
+                "tools": TOOLS,
+                "input_audio_transcription": {"model": "universal-streaming"}
+            }
+        }))
+
+        print("Interview Agent ready. The interview will begin shortly...")
+
+        # Trigger initial greeting
+        await ws.send(json.dumps({"type": "response.create"}))
+
+        async for message in ws:
+            event = json.loads(message)
+
+            if event["type"] == "response.function_call_arguments.done":
+                await handle_tool_call(ws, event)
+            elif event["type"] == "conversation.item.input_audio_transcription.completed":
+                print(f"Candidate: {event['transcript']}")
+            elif event["type"] == "response.audio_transcript.done":
+                print(f"Interviewer: {event['transcript']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+</Accordion>
+
+### Lead qualification agent
+
+A sales development agent that qualifies leads using BANT methodology.
+
+<Accordion title="Full code example">
+```python
+import os
+import asyncio
+import json
+import websockets
+from datetime import datetime
+
+ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
+
+INSTRUCTIONS = """You are a sales development representative (SDR) for TechCorp, a B2B SaaS company.
+Your goal is to qualify leads using the BANT framework:
+- Budget: Do they have budget allocated?
+- Authority: Are you speaking with a decision maker?
+- Need: Do they have a genuine need for our solution?
+- Timeline: When are they looking to implement?
+
+Guidelines:
+- Be conversational and build rapport
+- Ask open-ended questions to understand their situation
+- Listen actively and respond to what they say
+- Don't be pushy - focus on understanding their needs
+- Use the qualification tools to track BANT criteria
+- If qualified, offer to schedule a demo with an account executive
+- If not qualified, politely end the call and offer resources
+
+Start by introducing yourself and asking about their current challenges."""
+
+TOOLS = [
+    {
+        "type": "function",
+        "name": "update_qualification",
+        "description": "Update the lead's BANT qualification status",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "criterion": {
+                    "type": "string",
+                    "enum": ["budget", "authority", "need", "timeline"]
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["qualified", "not_qualified", "unknown"]
+                },
+                "notes": {"type": "string"}
+            },
+            "required": ["criterion", "status"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "record_company_info",
+        "description": "Record information about the prospect's company",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "company_name": {"type": "string"},
+                "industry": {"type": "string"},
+                "company_size": {"type": "string"},
+                "current_solution": {"type": "string"}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "name": "schedule_demo",
+        "description": "Schedule a demo with an account executive",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "preferred_date": {"type": "string"},
+                "preferred_time": {"type": "string"},
+                "attendees": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "notes": {"type": "string"}
+            },
+            "required": ["preferred_date", "preferred_time"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "send_resources",
+        "description": "Send educational resources to the prospect",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "resource_type": {
+                    "type": "string",
+                    "enum": ["case_study", "whitepaper", "product_overview", "pricing_guide"]
+                },
+                "email": {"type": "string"}
+            },
+            "required": ["resource_type", "email"]
+        }
+    },
+    {
+        "type": "function",
+        "name": "end_call",
+        "description": "End the qualification call",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "outcome": {
+                    "type": "string",
+                    "enum": ["qualified_demo_scheduled", "qualified_follow_up", "not_qualified", "callback_requested"]
+                },
+                "summary": {"type": "string"}
+            },
+            "required": ["outcome", "summary"]
+        }
+    }
+]
+
+lead_data = {
+    "qualification": {
+        "budget": {"status": "unknown", "notes": ""},
+        "authority": {"status": "unknown", "notes": ""},
+        "need": {"status": "unknown", "notes": ""},
+        "timeline": {"status": "unknown", "notes": ""}
+    },
+    "company_info": {},
+    "call_start": None
+}
+
+def update_qualification(criterion: str, status: str, notes: str = "") -> dict:
+    lead_data["qualification"][criterion] = {"status": status, "notes": notes}
+    qualified_count = sum(1 for c in lead_data["qualification"].values() if c["status"] == "qualified")
+    return {
+        "success": True,
+        "qualification_progress": f"{qualified_count}/4 criteria qualified",
+        "is_fully_qualified": qualified_count == 4
+    }
+
+def record_company_info(**kwargs) -> dict:
+    lead_data["company_info"].update(kwargs)
+    return {"success": True, "recorded_fields": list(kwargs.keys())}
+
+def schedule_demo(preferred_date: str, preferred_time: str, attendees: list = None, notes: str = "") -> dict:
+    return {
+        "success": True,
+        "confirmation": {
+            "date": preferred_date,
+            "time": preferred_time,
+            "attendees": attendees or [],
+            "meeting_link": "https://meet.techcorp.com/demo-abc123",
+            "calendar_invite_sent": True
+        }
+    }
+
+def send_resources(resource_type: str, email: str) -> dict:
+    return {
+        "success": True,
+        "message": f"{resource_type.replace('_', ' ').title()} will be sent to {email}"
+    }
+
+def end_call(outcome: str, summary: str) -> dict:
+    duration = (datetime.now() - lead_data["call_start"]).seconds if lead_data["call_start"] else 0
+    return {
+        "success": True,
+        "call_summary": {
+            "outcome": outcome,
+            "summary": summary,
+            "duration_seconds": duration,
+            "qualification_status": lead_data["qualification"],
+            "company_info": lead_data["company_info"]
+        }
+    }
+
+async def handle_tool_call(ws, event):
+    tool_name = event["name"]
+    arguments = json.loads(event["arguments"])
+    call_id = event["call_id"]
+
+    if tool_name == "update_qualification":
+        result = update_qualification(arguments["criterion"], arguments["status"], arguments.get("notes", ""))
+    elif tool_name == "record_company_info":
+        result = record_company_info(**arguments)
+    elif tool_name == "schedule_demo":
+        result = schedule_demo(
+            arguments["preferred_date"],
+            arguments["preferred_time"],
+            arguments.get("attendees"),
+            arguments.get("notes", "")
+        )
+    elif tool_name == "send_resources":
+        result = send_resources(arguments["resource_type"], arguments["email"])
+    elif tool_name == "end_call":
+        result = end_call(arguments["outcome"], arguments["summary"])
+        print(f"\n=== Call Summary ===")
+        print(json.dumps(result["call_summary"], indent=2))
+    else:
+        result = {"error": "Unknown tool"}
+
+    await ws.send(json.dumps({
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps(result)
+        }
+    }))
+    await ws.send(json.dumps({"type": "response.create"}))
+
+async def main():
+    lead_data["call_start"] = datetime.now()
+
+    headers = {
+        "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
+
+    async with websockets.connect(URL, additional_headers=headers) as ws:
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "model": "universal-streaming",
+                "voice": "coral",
+                "instructions": INSTRUCTIONS,
+                "tools": TOOLS,
+                "input_audio_transcription": {"model": "universal-streaming"}
+            }
+        }))
+
+        print("Lead Qualification Agent ready. Start the call...")
+
+        # Trigger initial greeting
+        await ws.send(json.dumps({"type": "response.create"}))
+
+        async for message in ws:
+            event = json.loads(message)
+
+            if event["type"] == "response.function_call_arguments.done":
+                await handle_tool_call(ws, event)
+            elif event["type"] == "conversation.item.input_audio_transcription.completed":
+                print(f"Prospect: {event['transcript']}")
+            elif event["type"] == "response.audio_transcript.done":
+                print(f"SDR: {event['transcript']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+</Accordion>
+
+## WebSocket events reference
+
+### Client events (you send)
+
+| Event | Description |
+|-------|-------------|
+| `session.update` | Configure session parameters, instructions, and tools |
+| `input_audio_buffer.append` | Send audio data (base64-encoded PCM16) |
+| `input_audio_buffer.commit` | Commit the audio buffer for processing |
+| `input_audio_buffer.clear` | Clear the audio buffer |
+| `conversation.item.create` | Add an item to the conversation (e.g., tool results) |
+| `response.create` | Request the model to generate a response |
+| `response.cancel` | Cancel an in-progress response |
+
+### Server events (you receive)
+
+| Event | Description |
+|-------|-------------|
+| `session.created` | Session has been created |
+| `session.updated` | Session configuration has been updated |
+| `conversation.item.created` | A conversation item was added |
+| `conversation.item.input_audio_transcription.completed` | User speech transcription is complete |
+| `response.created` | Response generation has started |
+| `response.audio.delta` | Audio chunk for the response (base64-encoded) |
+| `response.audio.done` | Audio generation is complete |
+| `response.audio_transcript.delta` | Partial transcript of the response |
+| `response.audio_transcript.done` | Full transcript of the response |
+| `response.function_call_arguments.done` | Tool call with complete arguments |
+| `response.done` | Response generation is complete |
+| `error` | An error occurred |
+
+## Roadmap
+
+The Speech-to-Speech API is under active development. Planned features include:
+
+- Additional voice options
+- Custom voice cloning
+- Improved latency optimizations
+- Enhanced turn detection
+- Multi-language support
+- Conversation history and context management
+
+## Known issues
+
+Current limitations of the beta:
+
+- Latency may vary during high-traffic periods
+- Some edge cases in turn detection may cause interruptions
+- Tool calling response times may occasionally be slower than expected
+- WebSocket connections may timeout after extended idle periods
+
+Report issues or provide feedback through your AssemblyAI account representative.
