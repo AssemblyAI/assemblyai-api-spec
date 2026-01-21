@@ -2,9 +2,11 @@
 title: "Transcribe audio files with Streaming"
 ---
 
-This guide shows you how to transcribe audio files using our Streaming API. The Streaming API is capable of transcribing WAV audio files. It can also handle audio files with different sample rates.
+This guide shows you how to transcribe **WAV audio files** with varying sample rates using our Streaming API.
 
 ## Quickstart
+
+Here is the complete AssemblyAI Python SDK script to transcribe a WAV audio file using the Streaming API.
 
 ```python
 import assemblyai as aai
@@ -226,17 +228,12 @@ finally:
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) and get your API key from your [dashboard](https://www.assemblyai.com/dashboard/api-keys).
 
-### Install/import packages & set API key
+### Install and import packages
 
-Install the package assemblyai.
+Install the AssemblyAI Python SDK and pyaudio for audio playback.
 
 ```bash
 pip install assemblyai
-```
-
-If you want to enable audio playback while streaming (optional), install pyaudio:
-
-```bash
 pip install pyaudio
 ```
 
@@ -256,7 +253,17 @@ from assemblyai.streaming.v3 import (
 )
 from typing import Type
 import sys
+```
 
+### Configure settings
+
+Replace `YOUR_API_KEY` with your API key.
+
+Set `AUDIO_FILE` to the relative or absolute path of your audio file, and set `SAMPLE_RATE` to match your file's sample rate.
+
+See [Connect the client](/docs/guides/streaming_transcribe_audio_file#connect-the-client) to configure all other stream parameters.
+
+```python
 YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your AssemblyAI API key
 AUDIO_FILE = "audio.wav"  # Path to your audio file
 SAMPLE_RATE = 48000  # Change to match the sample rate of your audio file
@@ -317,7 +324,32 @@ def on_error(self: Type[StreamingClient], error: StreamingError):
   "This function is called when an error occurs."
 
   print(f"Error occurred: {error}")
+```
 
+### Create the streaming client
+
+```python
+# Create the streaming client
+client = StreamingClient(
+  StreamingClientOptions(
+    api_key=YOUR_API_KEY
+  )
+)
+
+client.on(StreamingEvents.Begin, on_begin)
+client.on(StreamingEvents.Turn, on_turn)
+client.on(StreamingEvents.Termination, on_terminated)
+client.on(StreamingEvents.Error, on_error)
+```
+
+### Helper functions for streaming files
+
+The following helper functions are used to validate audio files, stream audio in chunks, and save the transcript output:
+- `validate_audio_file()` - Validates that the audio file is a mono WAV file with the expected sample rate.
+- `stream_file()` - Streams the audio file in 50ms chunks, optionally playing audio through speakers.
+- `save_transcript()` - Saves the transcript to a text file after the session ends.
+
+```python
 def save_transcript():
   "Save the transcript to a file in the same directory as the script."
   from pathlib import Path
@@ -341,29 +373,7 @@ def save_transcript():
       f.write(f"[Turn #{i}]: {turn}\n")
 
   print(f"Transcript saved to {output_file}")
-```
 
-### Create the streaming client
-
-```python
-# Create the streaming client
-client = StreamingClient(
-  StreamingClientOptions(
-    api_key=YOUR_API_KEY
-  )
-)
-
-client.on(StreamingEvents.Begin, on_begin)
-client.on(StreamingEvents.Turn, on_turn)
-client.on(StreamingEvents.Termination, on_terminated)
-client.on(StreamingEvents.Error, on_error)
-```
-
-### Helper functions for streaming files
-
-Create a helper function to stream your file.
-
-```python
 def validate_audio_file(filepath: str, sample_rate: int):
     """Validate audio file before streaming"""
     import wave
@@ -446,6 +456,8 @@ file_stream = stream_file(
 
 ### Connect the client
 
+A warning is printed if default turn detection parameters are used. This is fine for testing, but for best accuracy and optimal performance, see our [recommended settings](/docs/universal-streaming/turn-detection#quick-start-configurations).
+
 ```python
 # Configure streaming parameters
 streaming_params = StreamingParameters(
@@ -479,17 +491,17 @@ finally:
         save_transcript()
 ```
 
-The session will terminate once the file is finished streaming. If `SAVE_TRANSCRIPT_TO_FILE` is enabled (default), the transcript will be saved to `{audio_filename}_{session_id}.txt` in the same directory where the script is run.
+The session will terminate once the file is finished streaming. If `SAVE_TRANSCRIPT_TO_FILE` is enabled (default), the transcript will be saved to `{audio_filename}_{session_id}.txt` in the current working directory.
 
 <Note>
-The `AUDIO_FILE` path can be either relative (e.g., `audio.wav`) or absolute (e.g., `/path/to/audio.wav`). The transcript output file will always be saved in the current working directory, using just the audio filename (without path) combined with the session ID.
+The `AUDIO_FILE` path can be either relative (e.g., `audio.wav`) or absolute (e.g., `/path/to/audio.wav`).
 </Note>
 
 ## Example output
 
 Here's an example of what the console output looks like when streaming an audio file:
 
-```
+```console
 Warning: Using default turn detection parameters. For best results, fine-tune to your use case:
 https://www.assemblyai.com/docs/universal-streaming/turn-detection#quick-start-configurations
 
