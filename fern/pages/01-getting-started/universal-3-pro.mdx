@@ -19,7 +19,7 @@ Using the above altogether, you can get an entirely customized transcription out
 
 Without any prompting or changes, the model out of the box outperforms all ASR models on the market on accuracy, especially as it pertains to entities and rare words.
 
-## Quick Start
+## Quick start
 
 This example shows how you can transcribe a pre-recorded audio file with our Universal-3-Pro model and print the transcript text to your terminal.
 
@@ -103,21 +103,101 @@ while (true) {
 </Tab>
 </Tabs>
 
-<Note title="Language Support">
+<Note title="Language support">
 
 Universal-3-Pro supports English, Spanish, Portuguese, French, German, and Italian. To access all 99 languages, use `"speech_models": ["universal-3-pro", "universal"]` as shown in the code example.
 
 </Note>
 
-## Natural Language Prompting
+## Natural language prompting
 
 Prompt allows you to provide up to 1,500 words of contextual information to help the model better interpret ambiguous speech, technical terminology, and domain-specific language.
 
-*Placeholder for code example*
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
 
-## Keyterms Prompting
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assembly.ai/sports_injuries.mp3",
+    "speech_models": ["universal-3-pro", "universal"],
+    "keyterms_prompt": ["differential diagnosis", "hypertension", "Wellbutrin XL 150mg"]
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from 'axios'
+
+const baseUrl = 'https://api.assemblyai.com'
+const headers = {
+  authorization: '<YOUR_API_KEY>'
+}
+
+const data = {
+  audio_url: 'https://assembly.ai/sports_injuries.mp3',
+  speech_models: ['universal-3-pro', 'universal'],
+  keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+}
+
+const url = `${baseUrl}/v2/transcript`
+const response = await axios.post(url, data, { headers: headers })
+
+const transcriptId = response.data.id
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers
+  })
+  const transcriptionResult = pollingResponse.data
+
+  if (transcriptionResult.status === 'completed') {
+    console.log(transcriptionResult.text)
+    break
+  } else if (transcriptionResult.status === 'error') {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Keyterms prompting
 
 Keyterms prompting allows you to provide up to 1,000 words or phrases (maximum 6 words per phrase) to improve transcription accuracy for those terms and related variations or contextually similar phrases.
+
+Here is an example showing how you can use keyterms prompting to improve transcription accuracy for a name with distinctive spelling and formatting.
 
 *Insert example audio here*
 
@@ -213,9 +293,11 @@ while (true) {
 </Tab>
 </Tabs>
 
-## Code Switching
+## Code switching
 
 Universal-3-Pro has built-in code switching capabilities across English, Spanish, Portuguese, French, German, and Italian. Set `"language_detection":True`, as shown in the code example below, to automatically detect the spoken language from the audio.
+
+Here is an example of how Universal-3-Pro handles spoken audio in English and French.
 
 <audio controls style={{ width: "100%" }}>
   <source src="https://assemblyaiassets.com/audios/code_switching.mov" type="audio/mp4" />
@@ -308,11 +390,11 @@ while (true) {
 </Tab>
 </Tabs>
 
-## Verbatim Transcription
+## Verbatim transcription
 
 Verbatim mode captures natural speech patterns exactly as spoken, including fillers, repetitions, and stutters. Include examples of the verbatim elements you want to transcribe in the prompt parameter to guide the model.
 
-Here is an example of a prompt for verbatim transcription:
+Here is an example of a prompt for verbatim transcription that includes filler words, false starts, and informal speech:
 
 ```txt wordWrap
 "Prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but), and informal speech (gonna, wanna, gotta)"
@@ -398,11 +480,11 @@ while (true) {
 </Tab>
 </Tabs>
 
-## Audio Tags
+## Audio tags
 
 Audio tags capture non-speech events like music, laughter, pauses, applause, background noise, and other sounds in your audio. Include examples of audio tags you want to transcribe in the prompt parameter to guide the model.
 
-Here is an example of a prompt using audio tags:
+Here is an example of a prompt to include non-speech events like music and laughter:
 
 ```txt wordWrap
 "Prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [music], [laugher], [applause], [sound], [beep]."
