@@ -17,7 +17,7 @@ The easiest way to get started is with the AssemblyAI Python SDK. You can also u
 <Tab title="Python SDK">
 ```python
 """
-Speech-to-Speech Voice Agent using AssemblyAI Python SDK
+Minimal Speech-to-Speech Example
 
 Requirements:
     pip install assemblyai pyaudio
@@ -28,133 +28,63 @@ Usage:
 """
 
 import os
-import queue
-import threading
 
 import pyaudio
-import assemblyai as aai
+from assemblyai.speech_to_speech import SpeechToSpeechClient
 
-# Audio settings
-SAMPLE_RATE = 24000
-CHANNELS = 1
-CHUNK_SIZE = 4096
+# Setup
+client = SpeechToSpeechClient(api_key=os.getenv("ASSEMBLYAI_API_KEY"))
+audio = pyaudio.PyAudio()
 
-
-class AudioPlayer:
-    """Handles audio playback in a separate thread."""
-
-    def __init__(self):
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            output=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
-        self._queue = queue.Queue()
-        self._running = True
-        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
-        self._thread.start()
-
-    def play(self, audio_data: bytes):
-        self._queue.put(audio_data)
-
-    def _playback_loop(self):
-        while self._running:
-            try:
-                audio_data = self._queue.get(timeout=0.1)
-                self._stream.write(audio_data)
-            except queue.Empty:
-                continue
-
-    def stop(self):
-        self._running = False
-        self._thread.join(timeout=1)
-        self._stream.stop_stream()
-        self._stream.close()
-        self._audio.terminate()
+# Audio output stream
+output_stream = audio.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
 
 
-class MicrophoneStream:
-    """Streams audio from the microphone."""
-
-    def __init__(self):
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
-        self._running = True
-
-    def __iter__(self):
-        while self._running:
-            try:
-                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
-                yield data
-            except OSError:
-                break
-
-    def stop(self):
-        self._running = False
-        self._stream.stop_stream()
-        self._stream.close()
-        self._audio.terminate()
+# Handle events
+@client.on_audio
+def play(audio_bytes: bytes):
+    output_stream.write(audio_bytes)
 
 
-def main():
-    # Initialize client
-    client = aai.speech_to_speech.SpeechToSpeechClient(
-        api_key=os.environ["ASSEMBLYAI_API_KEY"]
-    )
-
-    # Initialize audio player
-    audio_player = AudioPlayer()
-
-    # Event handlers
-    @client.on_audio
-    def handle_audio(audio: bytes):
-        audio_player.play(audio)
-
-    @client.on_text
-    def handle_text(text: str):
-        print(f"\nAgent: {text}", end="", flush=True)
-
-    @client.on_transcript
-    def handle_transcript(transcript: str):
-        print(f"\nYou: {transcript}")
-
-    @client.on_error
-    def handle_error(error):
-        print(f"Error: {error}")
-
-    print("Speech-to-Speech Voice Agent")
-    print("Press Ctrl+C to stop\n")
-
-    # Connect to the API
-    client.connect(
-        instructions="You are a helpful voice assistant. Be concise and friendly.",
-        voice=aai.speech_to_speech.Voice.SAGE,
-        enable_transcription=True,
-    )
-
-    # Stream from microphone
-    mic = MicrophoneStream()
-    try:
-        client.send_audio(mic)
-    except KeyboardInterrupt:
-        print("\nStopping...")
-    finally:
-        mic.stop()
-        client.disconnect()
-        audio_player.stop()
+@client.on_text
+def show_text(text: str):
+    print(f"\nAgent: {text}")
 
 
-if __name__ == "__main__":
-    main()
+@client.on_transcript
+def show_transcript(text: str):
+    print(f"\nYou: {text}")
+
+
+@client.on_error
+def handle_error(error):
+    print(f"\nERROR: {error}")
+
+
+# Connect
+print("Connecting to AssemblyAI Speech-to-Speech API...")
+client.connect(
+    instructions="You are a helpful assistant. Be brief.",
+    output_modalities=["audio", "text"],
+    vad_threshold=0.3,
+)
+
+# Stream from microphone
+input_stream = audio.open(
+    format=pyaudio.paInt16, channels=1, rate=24000, input=True, frames_per_buffer=4096
+)
+
+try:
+    while True:
+        audio_data = input_stream.read(4096, exception_on_overflow=False)
+        client.send_audio(audio_data)
+except KeyboardInterrupt:
+    pass
+finally:
+    client.disconnect()
+    input_stream.close()
+    output_stream.close()
+    audio.terminate()
 ```
 
 <Accordion title="Full SDK example with tool calling">
@@ -171,171 +101,105 @@ Usage:
 """
 
 import os
-import queue
-import threading
 
 import pyaudio
-import assemblyai as aai
+from assemblyai.speech_to_speech import SpeechToSpeechClient
 
-# Audio settings
-SAMPLE_RATE = 24000
-CHANNELS = 1
-CHUNK_SIZE = 4096
+# Setup
+client = SpeechToSpeechClient(api_key=os.getenv("ASSEMBLYAI_API_KEY"))
+audio = pyaudio.PyAudio()
 
-
-class AudioPlayer:
-    """Handles audio playback in a separate thread."""
-
-    def __init__(self):
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            output=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
-        self._queue = queue.Queue()
-        self._running = True
-        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
-        self._thread.start()
-
-    def play(self, audio_data: bytes):
-        self._queue.put(audio_data)
-
-    def _playback_loop(self):
-        while self._running:
-            try:
-                audio_data = self._queue.get(timeout=0.1)
-                self._stream.write(audio_data)
-            except queue.Empty:
-                continue
-
-    def stop(self):
-        self._running = False
-        self._thread.join(timeout=1)
-        self._stream.stop_stream()
-        self._stream.close()
-        self._audio.terminate()
+# Audio output stream
+output_stream = audio.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
 
 
-class MicrophoneStream:
-    """Streams audio from the microphone."""
+# === Register Tools ===
 
-    def __init__(self):
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
-        self._running = True
-
-    def __iter__(self):
-        while self._running:
-            try:
-                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
-                yield data
-            except OSError:
-                break
-
-    def stop(self):
-        self._running = False
-        self._stream.stop_stream()
-        self._stream.close()
-        self._audio.terminate()
+@client.tool
+def get_current_time() -> str:
+    """Get the current time."""
+    from datetime import datetime
+    return datetime.now().strftime("%I:%M %p")
 
 
-def main():
-    # Initialize client
-    client = aai.speech_to_speech.SpeechToSpeechClient(
-        api_key=os.environ["ASSEMBLYAI_API_KEY"]
-    )
-
-    # Initialize audio player
-    audio_player = AudioPlayer()
-
-    # === Register Tools ===
-
-    @client.tool
-    def get_current_time() -> str:
-        """Get the current time."""
-        from datetime import datetime
-        return datetime.now().strftime("%I:%M %p")
-
-    @client.tool
-    def get_weather(location: str, units: str = "fahrenheit") -> dict:
-        """Get the current weather for a location."""
-        return {
-            "location": location,
-            "temperature": 72 if units == "fahrenheit" else 22,
-            "units": units,
-            "conditions": "sunny",
-        }
-
-    @client.tool
-    def set_reminder(message: str, minutes: int) -> str:
-        """Set a reminder for a specified number of minutes from now."""
-        return f"Reminder set: '{message}' in {minutes} minutes"
-
-    # === Event Handlers ===
-
-    @client.on_audio
-    def handle_audio(audio: bytes):
-        audio_player.play(audio)
-
-    @client.on_text
-    def handle_text(text: str):
-        print(f"\nAgent: {text}", end="", flush=True)
-
-    @client.on_transcript
-    def handle_transcript(transcript: str):
-        print(f"\nYou: {transcript}")
-
-    @client.on_speech_started
-    def handle_speech_started():
-        print("\nListening...", end="", flush=True)
-
-    @client.on_speech_stopped
-    def handle_speech_stopped():
-        print(" [processing]", end="", flush=True)
-
-    @client.on_error
-    def handle_error(error):
-        print(f"Error: {error}")
-
-    # === Main Loop ===
-
-    print("Speech-to-Speech Voice Agent")
-    print("Registered tools:", [t.name for t in client.tools])
-    print("Press Ctrl+C to stop\n")
-
-    # Connect to the API
-    client.connect(
-        instructions="You are a helpful voice assistant. Be concise and friendly.",
-        voice=aai.speech_to_speech.Voice.SAGE,
-        output_modalities=["audio", "text"],
-        enable_transcription=True,
-        vad_threshold=0.5,
-        vad_silence_duration_ms=500,
-    )
-
-    # Stream from microphone
-    mic = MicrophoneStream()
-    try:
-        client.send_audio(mic)
-    except KeyboardInterrupt:
-        print("\nStopping...")
-    finally:
-        mic.stop()
-        client.disconnect()
-        audio_player.stop()
+@client.tool
+def get_weather(location: str, units: str = "fahrenheit") -> dict:
+    """Get the current weather for a location."""
+    return {
+        "location": location,
+        "temperature": 72 if units == "fahrenheit" else 22,
+        "units": units,
+        "conditions": "sunny",
+    }
 
 
-if __name__ == "__main__":
-    main()
+@client.tool
+def set_reminder(message: str, minutes: int) -> str:
+    """Set a reminder for a specified number of minutes from now."""
+    return f"Reminder set: '{message}' in {minutes} minutes"
+
+
+# === Event Handlers ===
+
+@client.on_audio
+def play(audio_bytes: bytes):
+    output_stream.write(audio_bytes)
+
+
+@client.on_text
+def show_text(text: str):
+    print(f"\nAgent: {text}")
+
+
+@client.on_transcript
+def show_transcript(text: str):
+    print(f"\nYou: {text}")
+
+
+@client.on_speech_started
+def on_speech_started():
+    print("\nListening...", end="", flush=True)
+
+
+@client.on_speech_stopped
+def on_speech_stopped():
+    print(" [processing]", end="", flush=True)
+
+
+@client.on_error
+def handle_error(error):
+    print(f"\nERROR: {error}")
+
+
+# === Main ===
+
+print("Speech-to-Speech Voice Agent")
+print("Registered tools:", [t.name for t in client.tools])
+print("Press Ctrl+C to stop\n")
+
+# Connect
+client.connect(
+    instructions="You are a helpful assistant. Be brief.",
+    output_modalities=["audio", "text"],
+    vad_threshold=0.3,
+)
+
+# Stream from microphone
+input_stream = audio.open(
+    format=pyaudio.paInt16, channels=1, rate=24000, input=True, frames_per_buffer=4096
+)
+
+try:
+    while True:
+        audio_data = input_stream.read(4096, exception_on_overflow=False)
+        client.send_audio(audio_data)
+except KeyboardInterrupt:
+    pass
+finally:
+    client.disconnect()
+    input_stream.close()
+    output_stream.close()
+    audio.terminate()
 ```
 </Accordion>
 </Tab>
