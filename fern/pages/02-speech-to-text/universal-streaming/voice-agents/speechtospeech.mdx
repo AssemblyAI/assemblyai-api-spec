@@ -11,9 +11,250 @@ AssemblyAI's Speech-to-Speech API lets you build voice agents that listen and re
 
 ## Quickstart
 
-Connect to the Speech-to-Speech API at `wss://speech-to-speech.assemblyai.com/v1/realtime` using your AssemblyAI API key. The API accepts audio input and returns both transcriptions and synthesized speech responses.
+The easiest way to get started is with the AssemblyAI Python SDK. You can also use raw WebSocket connections or the OpenAI client library for more control.
 
 <Tabs>
+<Tab title="Python SDK">
+```python
+import os
+import assemblyai as aai
+
+# Initialize the client
+client = aai.speech_to_speech.SpeechToSpeechClient(
+    api_key=os.environ["ASSEMBLYAI_API_KEY"]
+)
+
+# Handle audio playback
+@client.on_audio
+def handle_audio(audio: bytes):
+    # Play audio using your preferred library (e.g., pyaudio)
+    pass
+
+# Display agent responses
+@client.on_text
+def handle_text(text: str):
+    print(f"Agent: {text}")
+
+# Display user transcriptions
+@client.on_transcript
+def handle_transcript(transcript: str):
+    print(f"You: {transcript}")
+
+# Connect and start streaming
+client.connect(
+    instructions="You are a helpful voice assistant. Be concise and friendly.",
+    voice=aai.speech_to_speech.Voice.SAGE,
+    enable_transcription=True,
+)
+
+# Stream from microphone (requires pyaudio)
+from microphone import MicrophoneStream  # See full example below
+mic = MicrophoneStream()
+mic.start()
+client.send_audio(mic)
+```
+
+<Accordion title="Full SDK example with tool calling">
+```python
+"""
+Speech-to-Speech Voice Agent with Tool Calling
+
+Requirements:
+    pip install assemblyai pyaudio
+
+Usage:
+    export ASSEMBLYAI_API_KEY=your_api_key
+    python voice_agent.py
+"""
+
+import os
+import queue
+import threading
+from typing import Optional
+
+import pyaudio
+import assemblyai as aai
+
+# Audio settings
+SAMPLE_RATE = 24000
+CHANNELS = 1
+CHUNK_SIZE = 4096
+
+
+class AudioPlayer:
+    """Handles audio playback in a separate thread."""
+
+    def __init__(self, sample_rate: int = SAMPLE_RATE):
+        self._sample_rate = sample_rate
+        self._audio = pyaudio.PyAudio()
+        self._stream: Optional[pyaudio.Stream] = None
+        self._queue: queue.Queue[bytes] = queue.Queue()
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self):
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=self._sample_rate,
+            output=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=1)
+        if self._stream:
+            self._stream.stop_stream()
+            self._stream.close()
+        self._audio.terminate()
+
+    def play(self, audio_data: bytes):
+        self._queue.put(audio_data)
+
+    def _playback_loop(self):
+        while not self._stop_event.is_set():
+            try:
+                audio_data = self._queue.get(timeout=0.1)
+                if self._stream:
+                    self._stream.write(audio_data)
+            except queue.Empty:
+                continue
+
+
+class MicrophoneStream:
+    """Streams audio from the microphone."""
+
+    def __init__(self, sample_rate: int = SAMPLE_RATE, chunk_size: int = CHUNK_SIZE):
+        self._sample_rate = sample_rate
+        self._chunk_size = chunk_size
+        self._audio = pyaudio.PyAudio()
+        self._stream: Optional[pyaudio.Stream] = None
+        self._stop_event = threading.Event()
+
+    def start(self):
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=self._sample_rate,
+            input=True,
+            frames_per_buffer=self._chunk_size,
+        )
+        self._stop_event.clear()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._stream:
+            self._stream.stop_stream()
+            self._stream.close()
+        self._audio.terminate()
+
+    def __iter__(self):
+        while not self._stop_event.is_set():
+            if self._stream:
+                try:
+                    data = self._stream.read(self._chunk_size, exception_on_overflow=False)
+                    yield data
+                except OSError:
+                    break
+
+
+def main():
+    # Initialize client
+    client = aai.speech_to_speech.SpeechToSpeechClient(
+        api_key=os.environ["ASSEMBLYAI_API_KEY"]
+    )
+
+    # Initialize audio player
+    audio_player = AudioPlayer()
+
+    # === Register Tools ===
+
+    @client.tool
+    def get_current_time() -> str:
+        """Get the current time."""
+        from datetime import datetime
+        return datetime.now().strftime("%I:%M %p")
+
+    @client.tool
+    def get_weather(location: str, units: str = "fahrenheit") -> dict:
+        """Get the current weather for a location."""
+        return {
+            "location": location,
+            "temperature": 72 if units == "fahrenheit" else 22,
+            "units": units,
+            "conditions": "sunny",
+        }
+
+    @client.tool
+    def set_reminder(message: str, minutes: int) -> str:
+        """Set a reminder for a specified number of minutes from now."""
+        return f"Reminder set: '{message}' in {minutes} minutes"
+
+    # === Event Handlers ===
+
+    @client.on_audio
+    def handle_audio(audio: bytes):
+        audio_player.play(audio)
+
+    @client.on_text
+    def handle_text(text: str):
+        print(f"\nAgent: {text}", end="", flush=True)
+
+    @client.on_transcript
+    def handle_transcript(transcript: str):
+        print(f"\nYou: {transcript}")
+
+    @client.on_speech_started
+    def handle_speech_started():
+        print("\nListening...", end="", flush=True)
+
+    @client.on_speech_stopped
+    def handle_speech_stopped():
+        print(" [processing]", end="", flush=True)
+
+    @client.on_error
+    def handle_error(error: aai.speech_to_speech.SpeechToSpeechError):
+        print(f"Error: {error}")
+
+    # === Main Loop ===
+
+    print("Speech-to-Speech Voice Agent")
+    print("Registered tools:", [t.name for t in client.tools])
+    print("Press Ctrl+C to stop\n")
+
+    audio_player.start()
+
+    client.connect(
+        instructions="You are a helpful voice assistant. Be concise and friendly.",
+        voice=aai.speech_to_speech.Voice.SAGE,
+        output_modalities=["audio", "text"],
+        enable_transcription=True,
+        vad_threshold=0.5,
+        vad_silence_duration_ms=500,
+    )
+
+    try:
+        mic = MicrophoneStream()
+        mic.start()
+        client.send_audio(mic)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+    finally:
+        mic.stop()
+        client.disconnect()
+        audio_player.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+</Accordion>
+</Tab>
 <Tab title="Python (WebSocket)">
 ```python
 import asyncio
@@ -392,9 +633,9 @@ Configure your session using the `session.update` event:
 | Voice | Description |
 |-------|-------------|
 | `sage` | Calm and professional |
-| `coral` | Warm and friendly |
-| `verse` | Clear and articulate |
-| `alloy` | Neutral and balanced |
+| `ember` | Warm and expressive |
+| `breeze` | Light and friendly |
+| `cascade` | Clear and articulate |
 
 ### Audio format
 
@@ -413,7 +654,52 @@ The API uses raw PCM16 audio sent as binary WebSocket frames (not base64 encoded
 
 ## Tool calling
 
-Enable your agent to perform actions by defining tools. Tools follow the JSON Schema format used by OpenAI's function calling.
+Enable your agent to perform actions by defining tools.
+
+<Tabs>
+<Tab title="Python SDK">
+With the SDK, use the `@client.tool` decorator to register functions as tools. The SDK automatically handles tool execution and response generation.
+
+```python
+import assemblyai as aai
+
+client = aai.speech_to_speech.SpeechToSpeechClient(
+    api_key=os.environ["ASSEMBLYAI_API_KEY"]
+)
+
+@client.tool
+def get_current_time() -> str:
+    """Get the current time."""
+    from datetime import datetime
+    return datetime.now().strftime("%I:%M %p")
+
+@client.tool
+def get_weather(location: str, units: str = "fahrenheit") -> dict:
+    """Get the current weather for a location."""
+    return {
+        "location": location,
+        "temperature": 72 if units == "fahrenheit" else 22,
+        "conditions": "sunny",
+    }
+
+@client.tool
+def check_order_status(order_id: str) -> dict:
+    """Check the status of a customer order."""
+    return {
+        "order_id": order_id,
+        "status": "shipped",
+        "estimated_delivery": "January 28, 2026",
+    }
+
+# Tools are automatically available when you connect
+client.connect(
+    instructions="You help users check order status and get weather information.",
+    voice=aai.speech_to_speech.Voice.SAGE,
+)
+```
+</Tab>
+<Tab title="WebSocket">
+With raw WebSocket, define tools using JSON Schema format and handle tool calls manually.
 
 ```python
 # Define tools in your session configuration
@@ -422,7 +708,7 @@ await ws.send(json.dumps({
     "session": {
         "model": "universal-streaming",
         "voice": "sage",
-        "instructions": "You help users check order status. Use the check_order_status tool when asked.",
+        "instructions": "You help users check order status.",
         "tools": [
             {
                 "type": "function",
@@ -472,6 +758,8 @@ async for message in ws:
             # Trigger a response
             await ws.send(json.dumps({"type": "response.create"}))
 ```
+</Tab>
+</Tabs>
 
 ## Subagent routing
 
