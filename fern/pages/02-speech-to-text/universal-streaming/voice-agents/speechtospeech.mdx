@@ -16,42 +16,145 @@ The easiest way to get started is with the AssemblyAI Python SDK. You can also u
 <Tabs>
 <Tab title="Python SDK">
 ```python
+"""
+Speech-to-Speech Voice Agent using AssemblyAI Python SDK
+
+Requirements:
+    pip install assemblyai pyaudio
+
+Usage:
+    export ASSEMBLYAI_API_KEY=your_api_key
+    python voice_agent.py
+"""
+
 import os
+import queue
+import threading
+
+import pyaudio
 import assemblyai as aai
 
-# Initialize the client
-client = aai.speech_to_speech.SpeechToSpeechClient(
-    api_key=os.environ["ASSEMBLYAI_API_KEY"]
-)
+# Audio settings
+SAMPLE_RATE = 24000
+CHANNELS = 1
+CHUNK_SIZE = 4096
 
-# Handle audio playback
-@client.on_audio
-def handle_audio(audio: bytes):
-    # Play audio using your preferred library (e.g., pyaudio)
-    pass
 
-# Display agent responses
-@client.on_text
-def handle_text(text: str):
-    print(f"Agent: {text}")
+class AudioPlayer:
+    """Handles audio playback in a separate thread."""
 
-# Display user transcriptions
-@client.on_transcript
-def handle_transcript(transcript: str):
-    print(f"You: {transcript}")
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=SAMPLE_RATE,
+            output=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._queue = queue.Queue()
+        self._running = True
+        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
+        self._thread.start()
 
-# Connect and start streaming
-client.connect(
-    instructions="You are a helpful voice assistant. Be concise and friendly.",
-    voice=aai.speech_to_speech.Voice.SAGE,
-    enable_transcription=True,
-)
+    def play(self, audio_data: bytes):
+        self._queue.put(audio_data)
 
-# Stream from microphone (requires pyaudio)
-from microphone import MicrophoneStream  # See full example below
-mic = MicrophoneStream()
-mic.start()
-client.send_audio(mic)
+    def _playback_loop(self):
+        while self._running:
+            try:
+                audio_data = self._queue.get(timeout=0.1)
+                self._stream.write(audio_data)
+            except queue.Empty:
+                continue
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=1)
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
+
+class MicrophoneStream:
+    """Streams audio from the microphone."""
+
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=SAMPLE_RATE,
+            input=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._running = True
+
+    def __iter__(self):
+        while self._running:
+            try:
+                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                yield data
+            except OSError:
+                break
+
+    def stop(self):
+        self._running = False
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
+
+def main():
+    # Initialize client
+    client = aai.speech_to_speech.SpeechToSpeechClient(
+        api_key=os.environ["ASSEMBLYAI_API_KEY"]
+    )
+
+    # Initialize audio player
+    audio_player = AudioPlayer()
+
+    # Event handlers
+    @client.on_audio
+    def handle_audio(audio: bytes):
+        audio_player.play(audio)
+
+    @client.on_text
+    def handle_text(text: str):
+        print(f"\nAgent: {text}", end="", flush=True)
+
+    @client.on_transcript
+    def handle_transcript(transcript: str):
+        print(f"\nYou: {transcript}")
+
+    @client.on_error
+    def handle_error(error):
+        print(f"Error: {error}")
+
+    print("Speech-to-Speech Voice Agent")
+    print("Press Ctrl+C to stop\n")
+
+    # Connect to the API
+    client.connect(
+        instructions="You are a helpful voice assistant. Be concise and friendly.",
+        voice=aai.speech_to_speech.Voice.SAGE,
+        enable_transcription=True,
+    )
+
+    # Stream from microphone
+    mic = MicrophoneStream()
+    try:
+        client.send_audio(mic)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+    finally:
+        mic.stop()
+        client.disconnect()
+        audio_player.stop()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 <Accordion title="Full SDK example with tool calling">
@@ -70,7 +173,6 @@ Usage:
 import os
 import queue
 import threading
-from typing import Optional
 
 import pyaudio
 import assemblyai as aai
@@ -84,83 +186,66 @@ CHUNK_SIZE = 4096
 class AudioPlayer:
     """Handles audio playback in a separate thread."""
 
-    def __init__(self, sample_rate: int = SAMPLE_RATE):
-        self._sample_rate = sample_rate
+    def __init__(self):
         self._audio = pyaudio.PyAudio()
-        self._stream: Optional[pyaudio.Stream] = None
-        self._queue: queue.Queue[bytes] = queue.Queue()
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-
-    def start(self):
         self._stream = self._audio.open(
             format=pyaudio.paInt16,
             channels=CHANNELS,
-            rate=self._sample_rate,
+            rate=SAMPLE_RATE,
             output=True,
             frames_per_buffer=CHUNK_SIZE,
         )
-        self._stop_event.clear()
+        self._queue = queue.Queue()
+        self._running = True
         self._thread = threading.Thread(target=self._playback_loop, daemon=True)
         self._thread.start()
-
-    def stop(self):
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=1)
-        if self._stream:
-            self._stream.stop_stream()
-            self._stream.close()
-        self._audio.terminate()
 
     def play(self, audio_data: bytes):
         self._queue.put(audio_data)
 
     def _playback_loop(self):
-        while not self._stop_event.is_set():
+        while self._running:
             try:
                 audio_data = self._queue.get(timeout=0.1)
-                if self._stream:
-                    self._stream.write(audio_data)
+                self._stream.write(audio_data)
             except queue.Empty:
                 continue
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=1)
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
 
 
 class MicrophoneStream:
     """Streams audio from the microphone."""
 
-    def __init__(self, sample_rate: int = SAMPLE_RATE, chunk_size: int = CHUNK_SIZE):
-        self._sample_rate = sample_rate
-        self._chunk_size = chunk_size
+    def __init__(self):
         self._audio = pyaudio.PyAudio()
-        self._stream: Optional[pyaudio.Stream] = None
-        self._stop_event = threading.Event()
-
-    def start(self):
         self._stream = self._audio.open(
             format=pyaudio.paInt16,
             channels=CHANNELS,
-            rate=self._sample_rate,
+            rate=SAMPLE_RATE,
             input=True,
-            frames_per_buffer=self._chunk_size,
+            frames_per_buffer=CHUNK_SIZE,
         )
-        self._stop_event.clear()
-
-    def stop(self):
-        self._stop_event.set()
-        if self._stream:
-            self._stream.stop_stream()
-            self._stream.close()
-        self._audio.terminate()
+        self._running = True
 
     def __iter__(self):
-        while not self._stop_event.is_set():
-            if self._stream:
-                try:
-                    data = self._stream.read(self._chunk_size, exception_on_overflow=False)
-                    yield data
-                except OSError:
-                    break
+        while self._running:
+            try:
+                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                yield data
+            except OSError:
+                break
+
+    def stop(self):
+        self._running = False
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
 
 
 def main():
@@ -218,7 +303,7 @@ def main():
         print(" [processing]", end="", flush=True)
 
     @client.on_error
-    def handle_error(error: aai.speech_to_speech.SpeechToSpeechError):
+    def handle_error(error):
         print(f"Error: {error}")
 
     # === Main Loop ===
@@ -227,8 +312,7 @@ def main():
     print("Registered tools:", [t.name for t in client.tools])
     print("Press Ctrl+C to stop\n")
 
-    audio_player.start()
-
+    # Connect to the API
     client.connect(
         instructions="You are a helpful voice assistant. Be concise and friendly.",
         voice=aai.speech_to_speech.Voice.SAGE,
@@ -238,9 +322,9 @@ def main():
         vad_silence_duration_ms=500,
     )
 
+    # Stream from microphone
+    mic = MicrophoneStream()
     try:
-        mic = MicrophoneStream()
-        mic.start()
         client.send_audio(mic)
     except KeyboardInterrupt:
         print("\nStopping...")
@@ -257,12 +341,25 @@ if __name__ == "__main__":
 </Tab>
 <Tab title="Python (WebSocket)">
 ```python
+"""
+Speech-to-Speech Voice Agent using raw WebSocket
+
+Requirements:
+    pip install websockets pyaudio
+
+Usage:
+    export ASSEMBLYAI_API_KEY=your_api_key
+    python voice_agent_ws.py
+"""
+
 import asyncio
 import json
 import os
+import queue
+import threading
+
+import pyaudio
 import websockets
-import sounddevice as sd
-import numpy as np
 
 ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
@@ -270,17 +367,83 @@ URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
 # Audio settings
 INPUT_SAMPLE_RATE = 16000  # 16kHz for input
 OUTPUT_SAMPLE_RATE = 24000  # 24kHz for output
-CHUNK_MS = 50  # 50ms chunks recommended
-CHUNK_SIZE = int(INPUT_SAMPLE_RATE * CHUNK_MS / 1000) * 2  # 1600 bytes per 50ms chunk
+CHANNELS = 1
+CHUNK_SIZE = 4096
+
+
+class AudioPlayer:
+    """Handles audio playback in a separate thread."""
+
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=OUTPUT_SAMPLE_RATE,
+            output=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._queue = queue.Queue()
+        self._running = True
+        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
+        self._thread.start()
+
+    def play(self, audio_data: bytes):
+        self._queue.put(audio_data)
+
+    def _playback_loop(self):
+        while self._running:
+            try:
+                audio_data = self._queue.get(timeout=0.1)
+                self._stream.write(audio_data)
+            except queue.Empty:
+                continue
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=1)
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
+
+class MicrophoneStream:
+    """Streams audio from the microphone."""
+
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=INPUT_SAMPLE_RATE,
+            input=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._running = True
+
+    def read(self):
+        if self._running:
+            return self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
+        return None
+
+    def stop(self):
+        self._running = False
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
 
 async def main():
+    audio_player = AudioPlayer()
+    mic = MicrophoneStream()
+
     headers = {
         "Authorization": f"Bearer {ASSEMBLYAI_API_KEY}",
         "OpenAI-Beta": "realtime=v1"
     }
 
     async with websockets.connect(URL, additional_headers=headers) as ws:
-        # Configure the session (JSON message)
+        # Configure the session
         await ws.send(json.dumps({
             "type": "session.update",
             "session": {
@@ -294,159 +457,331 @@ async def main():
         }))
 
         print("Connected! Start speaking...")
-
-        # Set up audio input/output
-        audio_buffer = bytearray()
-        audio_queue = asyncio.Queue()
-
-        def audio_callback(indata, frames, time, status):
-            audio_queue.put_nowait(bytes(indata))
+        print("Press Ctrl+C to stop\n")
 
         async def send_audio():
-            nonlocal audio_buffer
+            loop = asyncio.get_event_loop()
             while True:
-                audio_data = await audio_queue.get()
-                audio_buffer.extend(audio_data)
-
-                # Send in 50ms chunks (1600 bytes for 16kHz mono PCM16)
-                while len(audio_buffer) >= CHUNK_SIZE:
-                    chunk = bytes(audio_buffer[:CHUNK_SIZE])
-                    audio_buffer = audio_buffer[CHUNK_SIZE:]
-                    # Send raw PCM16 bytes as binary WebSocket frame
-                    await ws.send(chunk)
+                # Read from microphone in a thread to avoid blocking
+                audio_data = await loop.run_in_executor(None, mic.read)
+                if audio_data:
+                    await ws.send(audio_data)
 
         async def receive_messages():
-            with sd.OutputStream(samplerate=OUTPUT_SAMPLE_RATE, channels=1, dtype='int16') as speaker:
-                async for message in ws:
+            async for message in ws:
+                if isinstance(message, bytes):
                     # Binary frames contain audio data
-                    if isinstance(message, bytes):
-                        audio_array = np.frombuffer(message, dtype=np.int16)
-                        speaker.write(audio_array)
-                    else:
-                        # Text frames contain JSON events
-                        event = json.loads(message)
+                    audio_player.play(message)
+                else:
+                    # Text frames contain JSON events
+                    event = json.loads(message)
 
-                        if event["type"] == "conversation.item.input_audio_transcription.completed":
-                            print(f"You: {event['transcript']}")
+                    if event["type"] == "conversation.item.input_audio_transcription.completed":
+                        print(f"\nYou: {event['transcript']}")
 
-                        elif event["type"] == "response.audio_transcript.done":
-                            print(f"Agent: {event['transcript']}")
+                    elif event["type"] == "response.audio_transcript.done":
+                        print(f"\nAgent: {event['transcript']}")
 
-        with sd.InputStream(samplerate=INPUT_SAMPLE_RATE, channels=1, dtype='int16', callback=audio_callback):
+        try:
             await asyncio.gather(send_audio(), receive_messages())
+        except KeyboardInterrupt:
+            print("\nStopping...")
+        finally:
+            mic.stop()
+            audio_player.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 </Tab>
-<Tab title="JavaScript (WebSocket)">
+<Tab title="JavaScript (Browser)">
 ```javascript
-const WebSocket = require("ws");
+/**
+ * Speech-to-Speech Voice Agent using WebSocket (Browser)
+ *
+ * Usage:
+ *   1. Set your API key in the ASSEMBLYAI_API_KEY variable
+ *   2. Open this file in a browser
+ *   3. Click "Start" to begin the conversation
+ */
 
-const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+const ASSEMBLYAI_API_KEY = "your_api_key_here";
 const URL = "wss://speech-to-speech.assemblyai.com/v1/realtime";
 
 // Audio settings
-const INPUT_SAMPLE_RATE = 16000; // 16kHz for input
-const OUTPUT_SAMPLE_RATE = 24000; // 24kHz for output
-const CHUNK_MS = 50; // 50ms chunks recommended
-const CHUNK_SIZE = (INPUT_SAMPLE_RATE * CHUNK_MS / 1000) * 2; // 1600 bytes per 50ms chunk
+const INPUT_SAMPLE_RATE = 16000;
+const OUTPUT_SAMPLE_RATE = 24000;
 
-const ws = new WebSocket(URL, {
-  headers: {
-    Authorization: `Bearer ${ASSEMBLYAI_API_KEY}`,
-    "OpenAI-Beta": "realtime=v1",
-  },
-});
+let ws;
+let audioContext;
+let mediaStream;
+let audioWorklet;
 
-let audioBuffer = Buffer.alloc(0);
+async function start() {
+  // Set up WebSocket connection
+  ws = new WebSocket(URL);
+  ws.binaryType = "arraybuffer";
 
-ws.on("open", () => {
-  console.log("Connected!");
+  // Set up audio context for playback
+  audioContext = new AudioContext({ sampleRate: OUTPUT_SAMPLE_RATE });
 
-  // Configure the session (JSON message)
-  ws.send(
-    JSON.stringify({
+  ws.onopen = async () => {
+    // Send auth header via first message (browser WebSocket doesn't support headers)
+    ws.send(JSON.stringify({
       type: "session.update",
       session: {
         model: "universal-streaming",
         voice: "sage",
         instructions: "You are a helpful assistant. Be concise and friendly.",
-        input_audio_transcription: {
-          model: "universal-streaming",
-        },
+        input_audio_transcription: { model: "universal-streaming" },
       },
-    })
-  );
-});
+    }));
 
-ws.on("message", (data, isBinary) => {
-  if (isBinary) {
-    // Binary frames contain raw PCM16 audio data
-    // Play audio using your preferred audio library
-    const audioData = data;
-    // Example: speaker.write(audioData);
-  } else {
-    // Text frames contain JSON events
-    const event = JSON.parse(data.toString());
+    console.log("Connected! Start speaking...");
 
-    switch (event.type) {
-      case "conversation.item.input_audio_transcription.completed":
-        console.log(`You: ${event.transcript}`);
-        break;
+    // Start microphone capture
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: INPUT_SAMPLE_RATE, channelCount: 1 },
+    });
 
-      case "response.audio_transcript.done":
-        console.log(`Agent: ${event.transcript}`);
-        break;
+    // Process microphone audio and send to WebSocket
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    await audioContext.audioWorklet.addModule("audio-processor.js");
+    audioWorklet = new AudioWorkletNode(audioContext, "audio-processor");
+
+    audioWorklet.port.onmessage = (event) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        // Send raw PCM16 audio as binary
+        ws.send(event.data);
+      }
+    };
+
+    source.connect(audioWorklet);
+  };
+
+  ws.onmessage = (event) => {
+    if (event.data instanceof ArrayBuffer) {
+      // Binary frames contain audio - play it
+      playAudio(event.data);
+    } else {
+      // Text frames contain JSON events
+      const data = JSON.parse(event.data);
+
+      if (data.type === "conversation.item.input_audio_transcription.completed") {
+        console.log(`You: ${data.transcript}`);
+      } else if (data.type === "response.audio_transcript.done") {
+        console.log(`Agent: ${data.transcript}`);
+      }
     }
+  };
+
+  ws.onerror = (error) => console.error("WebSocket error:", error);
+  ws.onclose = () => console.log("Disconnected");
+}
+
+function playAudio(arrayBuffer) {
+  // Convert PCM16 to Float32 for Web Audio API
+  const int16Array = new Int16Array(arrayBuffer);
+  const float32Array = new Float32Array(int16Array.length);
+  for (let i = 0; i < int16Array.length; i++) {
+    float32Array[i] = int16Array[i] / 32768;
   }
-});
 
-// Send audio data as raw PCM16 in 50ms chunks (16kHz, mono)
-function sendAudio(pcm16Data) {
-  audioBuffer = Buffer.concat([audioBuffer, pcm16Data]);
+  // Create and play audio buffer
+  const audioBuffer = audioContext.createBuffer(1, float32Array.length, OUTPUT_SAMPLE_RATE);
+  audioBuffer.getChannelData(0).set(float32Array);
 
-  // Send in 50ms chunks (1600 bytes for 16kHz mono PCM16)
-  while (audioBuffer.length >= CHUNK_SIZE) {
-    const chunk = audioBuffer.subarray(0, CHUNK_SIZE);
-    audioBuffer = audioBuffer.subarray(CHUNK_SIZE);
-    // Send raw PCM16 bytes as binary WebSocket frame
-    ws.send(chunk);
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioContext.destination);
+  source.start();
+}
+
+function stop() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((track) => track.stop());
+  }
+  if (ws) {
+    ws.close();
+  }
+  if (audioContext) {
+    audioContext.close();
+  }
+  console.log("Stopped");
+}
+```
+
+Create an `audio-processor.js` file for the AudioWorklet:
+
+```javascript
+// audio-processor.js - AudioWorklet for capturing microphone audio
+class AudioProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = [];
+  }
+
+  process(inputs) {
+    const input = inputs[0];
+    if (input.length > 0) {
+      const samples = input[0];
+      // Convert Float32 to Int16 (PCM16)
+      const int16 = new Int16Array(samples.length);
+      for (let i = 0; i < samples.length; i++) {
+        int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32768));
+      }
+      this.port.postMessage(int16.buffer, [int16.buffer]);
+    }
+    return true;
   }
 }
+
+registerProcessor("audio-processor", AudioProcessor);
 ```
 </Tab>
 <Tab title="OpenAI Python Client">
 ```python
+"""
+Speech-to-Speech Voice Agent using OpenAI Python Client
+
+Requirements:
+    pip install openai pyaudio
+
+Usage:
+    export ASSEMBLYAI_API_KEY=your_api_key
+    python voice_agent_openai.py
+"""
+
 import os
+import queue
+import threading
+
+import pyaudio
 from openai import OpenAI
 
-client = OpenAI(
-    api_key=os.environ.get("ASSEMBLYAI_API_KEY"),
-    base_url="https://speech-to-speech.assemblyai.com/v1"
-)
+# Audio settings
+SAMPLE_RATE = 24000
+CHANNELS = 1
+CHUNK_SIZE = 4096
 
-# Connect to the realtime API
-with client.beta.realtime.connect(
-    model="universal-streaming"
-) as connection:
-    # Configure the session
-    connection.session.update(
-        session={
-            "voice": "sage",
-            "instructions": "You are a helpful assistant.",
-            "input_audio_transcription": {
-                "model": "universal-streaming"
-            }
-        }
+
+class AudioPlayer:
+    """Handles audio playback in a separate thread."""
+
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=SAMPLE_RATE,
+            output=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._queue = queue.Queue()
+        self._running = True
+        self._thread = threading.Thread(target=self._playback_loop, daemon=True)
+        self._thread.start()
+
+    def play(self, audio_data: bytes):
+        self._queue.put(audio_data)
+
+    def _playback_loop(self):
+        while self._running:
+            try:
+                audio_data = self._queue.get(timeout=0.1)
+                self._stream.write(audio_data)
+            except queue.Empty:
+                continue
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=1)
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
+
+class MicrophoneStream:
+    """Streams audio from the microphone."""
+
+    def __init__(self):
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            format=pyaudio.paInt16,
+            channels=CHANNELS,
+            rate=SAMPLE_RATE,
+            input=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        self._running = True
+
+    def __iter__(self):
+        while self._running:
+            try:
+                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                yield data
+            except OSError:
+                break
+
+    def stop(self):
+        self._running = False
+        self._stream.stop_stream()
+        self._stream.close()
+        self._audio.terminate()
+
+
+def main():
+    client = OpenAI(
+        api_key=os.environ.get("ASSEMBLYAI_API_KEY"),
+        base_url="https://speech-to-speech.assemblyai.com/v1"
     )
 
-    # Send audio and receive responses
-    for event in connection:
-        if event.type == "response.audio_transcript.done":
-            print(f"Agent: {event.transcript}")
-        elif event.type == "conversation.item.input_audio_transcription.completed":
-            print(f"You: {event.transcript}")
+    audio_player = AudioPlayer()
+    mic = MicrophoneStream()
+
+    print("Speech-to-Speech Voice Agent (OpenAI Client)")
+    print("Press Ctrl+C to stop\n")
+
+    with client.beta.realtime.connect(model="universal-streaming") as connection:
+        # Configure the session
+        connection.session.update(
+            session={
+                "voice": "sage",
+                "instructions": "You are a helpful assistant. Be concise and friendly.",
+                "input_audio_transcription": {
+                    "model": "universal-streaming"
+                }
+            }
+        )
+
+        # Start sending audio in a background thread
+        def send_audio():
+            for chunk in mic:
+                connection.input_audio_buffer.append(audio=chunk)
+
+        audio_thread = threading.Thread(target=send_audio, daemon=True)
+        audio_thread.start()
+
+        try:
+            # Receive and handle events
+            for event in connection:
+                if event.type == "response.audio.delta":
+                    # Play audio as it arrives
+                    audio_player.play(event.delta)
+                elif event.type == "response.audio_transcript.done":
+                    print(f"\nAgent: {event.transcript}")
+                elif event.type == "conversation.item.input_audio_transcription.completed":
+                    print(f"\nYou: {event.transcript}")
+        except KeyboardInterrupt:
+            print("\nStopping...")
+        finally:
+            mic.stop()
+            audio_player.stop()
+
+
+if __name__ == "__main__":
+    main()
 ```
 </Tab>
 </Tabs>
