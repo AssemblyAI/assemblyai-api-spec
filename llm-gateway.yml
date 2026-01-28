@@ -43,6 +43,38 @@ paths:
                   prompt: "Write a haiku about coding"
                   max_tokens: 50
                   temperature: 0.5
+              structured_output_example:
+                summary: Structured output with JSON schema
+                value:
+                  model: "gemini-2.5-flash-lite"
+                  messages:
+                    - role: "system"
+                      content: "You are a helpful math tutor. Guide the user through the solution step by step."
+                    - role: "user"
+                      content: "how can I solve 8x + 7 = -23"
+                  response_format:
+                    type: "json_schema"
+                    json_schema:
+                      name: "math_reasoning"
+                      schema:
+                        type: "object"
+                        properties:
+                          steps:
+                            type: "array"
+                            items:
+                              type: "object"
+                              properties:
+                                explanation:
+                                  type: "string"
+                                output:
+                                  type: "string"
+                              required: ["explanation", "output"]
+                              additionalProperties: false
+                          final_answer:
+                            type: "string"
+                        required: ["steps", "final_answer"]
+                        additionalProperties: false
+                      strict: true
       responses:
         "200":
           description: Successful response containing the model's choices.
@@ -214,6 +246,9 @@ components:
           description: A list of tools the model may call.
         tool_choice:
           $ref: "#/components/schemas/ToolChoice"
+        response_format:
+          $ref: "#/components/schemas/ResponseFormat"
+          description: Specifies the format of the model's response. Use this to constrain the model to output valid JSON matching a schema. Supported by OpenAI (GPT-4.1, GPT-5.x) and Gemini models only.
       required:
         - model
 
@@ -331,6 +366,40 @@ components:
             - type
             - function
       description: Controls which (if any) function is called by the model.
+
+    ResponseFormat:
+      type: object
+      description: Specifies the format of the model's response. Use `json_schema` type to constrain the model to output valid JSON matching a schema.
+      properties:
+        type:
+          type: string
+          enum: [json_schema]
+          description: The type of response format. Use `json_schema` for structured outputs.
+        json_schema:
+          $ref: "#/components/schemas/JsonSchemaConfig"
+          description: The JSON schema configuration object.
+      required:
+        - type
+        - json_schema
+
+    JsonSchemaConfig:
+      type: object
+      description: Configuration for JSON schema-based structured outputs.
+      properties:
+        name:
+          type: string
+          description: A name for the schema. Used for identification purposes.
+        schema:
+          type: object
+          description: A valid JSON Schema object that defines the structure of the expected response.
+          additionalProperties: true
+        strict:
+          type: boolean
+          description: When `true`, the model will strictly adhere to the schema. Recommended for reliable parsing.
+          default: false
+      required:
+        - name
+        - schema
 
     # Response Schemas
     Response:
