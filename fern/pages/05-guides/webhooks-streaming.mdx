@@ -1,0 +1,339 @@
+---
+title: "Webhooks for streaming speech-to-text"
+hide-nav-links: true
+description: "Get notified when a streaming transcription session ends."
+---
+
+Webhooks allow you to receive the complete transcript via HTTP callback when a streaming session ends. This is in addition to the normal WebSocket responses you receive during the session.
+
+<Note>
+  This guide covers webhooks for [streaming audio
+  transcription](/docs/speech-to-text/universal-streaming). For webhooks with
+  pre-recorded audio, see [Webhooks for pre-recorded
+  audio](/docs/deployment/webhooks).
+</Note>
+
+## Configure webhooks for a streaming session
+
+To use webhooks with streaming speech-to-text, add the following parameters to your WebSocket connection URL:
+
+| Parameter                   | Required | Description                                                               |
+| --------------------------- | -------- | ------------------------------------------------------------------------- |
+| `webhook_url`               | Yes      | The URL to send the transcript to when the session ends.                  |
+| `webhook_auth_header_name`  | No       | The name of the authentication header to include in the webhook request.  |
+| `webhook_auth_header_value` | No       | The value of the authentication header to include in the webhook request. |
+
+<Tip title="Don't have a webhook endpoint yet?">
+  Create a test webhook endpoint with [webhook.site](https://webhook.site) to
+  test your webhook integration.
+</Tip>
+
+### Example WebSocket URL with webhook parameters
+
+Add the webhook parameters as query parameters to the WebSocket URL:
+
+```
+wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&webhook_url=https://example.com/webhook
+```
+
+To include authentication:
+
+```
+wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&webhook_url=https://example.com/webhook&webhook_auth_header_name=X-My-Webhook-Secret&webhook_auth_header_value=secret-value
+```
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK">
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+def on_data(transcript: aai.RealtimeTranscript):
+    if not transcript.text:
+        return
+
+    if isinstance(transcript, aai.RealtimeFinalTranscript):
+        print(transcript.text, end="\r\n")
+    else:
+        print(transcript.text, end="\r")
+
+def on_error(error: aai.RealtimeError):
+    print("An error occurred:", error)
+
+def on_close():
+    print("Session closed")
+
+# Configure the transcriber with webhook parameters
+transcriber = aai.RealtimeTranscriber(
+    on_data=on_data,
+    on_error=on_error,
+    on_close=on_close,
+    sample_rate=16_000,
+    extra_session_information={
+        "webhook_url": "https://example.com/webhook",
+        "webhook_auth_header_name": "X-My-Webhook-Secret",  # Optional
+        "webhook_auth_header_value": "secret-value"  # Optional
+    }
+)
+
+transcriber.connect()
+
+# Stream your audio data here
+# transcriber.stream(audio_data)
+
+transcriber.close()
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { RealtimeTranscriber } from "assemblyai";
+
+const transcriber = new RealtimeTranscriber({
+  apiKey: "<YOUR_API_KEY>",
+  sampleRate: 16_000,
+  // Add webhook parameters
+  webhookUrl: "https://example.com/webhook",
+  webhookAuthHeaderName: "X-My-Webhook-Secret", // Optional
+  webhookAuthHeaderValue: "secret-value", // Optional
+});
+
+transcriber.on("transcript", (transcript) => {
+  if (!transcript.text) {
+    return;
+  }
+
+  if (transcript.message_type === "FinalTranscript") {
+    console.log(transcript.text);
+  }
+});
+
+transcriber.on("error", (error) => {
+  console.error("Error:", error);
+});
+
+transcriber.on("close", (code, reason) => {
+  console.log("Session closed:", code, reason);
+});
+
+await transcriber.connect();
+
+// Stream your audio data here
+// transcriber.sendAudio(audioData);
+
+await transcriber.close();
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import websocket
+import json
+import base64
+import urllib.parse
+
+API_KEY = "<YOUR_API_KEY>"
+SAMPLE_RATE = 16000
+WEBHOOK_URL = "https://example.com/webhook"
+
+# Build the WebSocket URL with webhook parameters
+params = {
+    "sample_rate": SAMPLE_RATE,
+    "webhook_url": WEBHOOK_URL,
+    # Optional authentication
+    "webhook_auth_header_name": "X-My-Webhook-Secret",
+    "webhook_auth_header_value": "secret-value"
+}
+
+url = f"wss://api.assemblyai.com/v2/realtime/ws?{urllib.parse.urlencode(params)}"
+
+def on_message(ws, message):
+    data = json.loads(message)
+    if data.get("message_type") == "FinalTranscript":
+        print(data.get("text", ""))
+
+def on_error(ws, error):
+    print(f"Error: {error}")
+
+def on_close(ws, close_status_code, close_msg):
+    print("Connection closed")
+
+def on_open(ws):
+    print("Connection opened")
+
+ws = websocket.WebSocketApp(
+    url,
+    header={"Authorization": API_KEY},
+    on_open=on_open,
+    on_message=on_message,
+    on_error=on_error,
+    on_close=on_close
+)
+
+ws.run_forever()
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const WebSocket = require("ws");
+
+const API_KEY = "<YOUR_API_KEY>";
+const SAMPLE_RATE = 16000;
+const WEBHOOK_URL = "https://example.com/webhook";
+
+// Build the WebSocket URL with webhook parameters
+const params = new URLSearchParams({
+  sample_rate: SAMPLE_RATE,
+  webhook_url: WEBHOOK_URL,
+  // Optional authentication
+  webhook_auth_header_name: "X-My-Webhook-Secret",
+  webhook_auth_header_value: "secret-value",
+});
+
+const url = `wss://api.assemblyai.com/v2/realtime/ws?${params.toString()}`;
+
+const ws = new WebSocket(url, {
+  headers: {
+    Authorization: API_KEY,
+  },
+});
+
+ws.on("open", () => {
+  console.log("Connection opened");
+});
+
+ws.on("message", (data) => {
+  const message = JSON.parse(data);
+  if (message.message_type === "FinalTranscript") {
+    console.log(message.text);
+  }
+});
+
+ws.on("error", (error) => {
+  console.error("Error:", error);
+});
+
+ws.on("close", () => {
+  console.log("Connection closed");
+});
+```
+
+</Tab>
+</Tabs>
+
+## Handle webhook deliveries
+
+When the streaming session ends, AssemblyAI sends a `POST` HTTP request to the URL you specified. The webhook contains the complete transcript from the session.
+
+<Note title="Static Webhook IP addresses">
+
+AssemblyAI sends all webhook deliveries from fixed IP addresses:
+
+| Region | IP Address     |
+| ------ | -------------- |
+| US     | `44.238.19.20` |
+| EU     | `54.220.25.36` |
+
+</Note>
+
+### Delivery payload
+
+The webhook delivery payload contains the complete transcript from the streaming session as a JSON object. The payload includes all the final transcript segments combined.
+
+### Example webhook receiver
+
+<Tabs>
+<Tab language="python" title="Python (Flask)">
+
+```python
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    # Verify the authentication header if you configured one
+    auth_header = request.headers.get("X-My-Webhook-Secret")
+    if auth_header != "secret-value":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Process the transcript data
+    data = request.json
+    print("Received transcript:", data)
+
+    # Return a success response
+    return jsonify({"status": "received"}), 200
+
+if __name__ == "__main__":
+    app.run(port=5000)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript (Express)">
+
+```javascript
+const express = require("express");
+const app = express();
+
+app.use(express.json());
+
+app.post("/webhook", (req, res) => {
+  // Verify the authentication header if you configured one
+  const authHeader = req.headers["x-my-webhook-secret"];
+  if (authHeader !== "secret-value") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // Process the transcript data
+  const data = req.body;
+  console.log("Received transcript:", data);
+
+  // Return a success response
+  res.status(200).json({ status: "received" });
+});
+
+app.listen(5000, () => {
+  console.log("Webhook server listening on port 5000");
+});
+```
+
+</Tab>
+</Tabs>
+
+## Authenticate webhook deliveries
+
+To secure your webhook endpoint, you can include custom authentication headers in the webhook request. When configuring your streaming session, provide the `webhook_auth_header_name` and `webhook_auth_header_value` parameters.
+
+AssemblyAI will include this header in the webhook request, allowing you to verify that the request came from AssemblyAI.
+
+```
+webhook_auth_header_name=X-My-Webhook-Secret&webhook_auth_header_value=secret-value
+```
+
+In your webhook receiver, verify the header value matches what you configured:
+
+```python
+auth_header = request.headers.get("X-My-Webhook-Secret")
+if auth_header != "secret-value":
+    return "Unauthorized", 401
+```
+
+## Best practices
+
+When implementing webhooks for streaming speech-to-text, consider the following best practices:
+
+1. **Always verify authentication**: If you configure an authentication header, always verify it in your webhook receiver to ensure requests are from AssemblyAI.
+
+2. **Respond quickly**: Return a response from your webhook endpoint as quickly as possible. If you need to perform time-consuming processing, do it asynchronously after returning the response.
+
+3. **Handle failures gracefully**: Your webhook endpoint should handle errors gracefully and return appropriate HTTP status codes.
+
+4. **Use HTTPS**: Always use HTTPS for your webhook URL to ensure the transcript data is encrypted in transit.
+
+5. **Log webhook deliveries**: Keep logs of webhook deliveries for debugging and auditing purposes.
