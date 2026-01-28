@@ -323,67 +323,52 @@ AssemblyAI sends all webhook deliveries from fixed IP addresses:
 
 ### Delivery payload
 
-The webhook delivery payload contains the complete transcript from the streaming session as a JSON object. The payload includes all the final transcript segments combined.
+The webhook delivery payload contains the complete transcript from the streaming session as a JSON object. The payload includes the session ID and an array of messages containing all the transcript turns.
 
-### Example webhook receiver
-
-<Tabs>
-<Tab language="python" title="Python (Flask)">
-
-```python
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    # Verify the authentication header if you configured one
-    auth_header = request.headers.get("X-Webhook-Secret")
-    if auth_header != "secret-value":
-        return jsonify({"error": "Unauthorized"}), 401
-
-    # Process the transcript data
-    data = request.json
-    print("Received transcript:", data)
-
-    # Return a success response
-    return jsonify({"status": "received"}), 200
-
-if __name__ == "__main__":
-    app.run(port=5000)
+```json
+{
+  "session_id": "273e79fd-99e9-4e1d-91da-90f56a132d01",
+  "messages": [
+    {
+      "turn_order": 0,
+      "turn_is_formatted": true,
+      "end_of_turn": true,
+      "transcript": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US Skylines from Maine to Maryland to Minnesota are gray and smoggy, and in some places the air.",
+      "end_of_turn_confidence": 0.5005,
+      "words": [
+        {
+          "start": 4880,
+          "end": 5040,
+          "text": "Smoke",
+          "confidence": 0.76054,
+          "word_is_final": true
+        },
+        {
+          "start": 5280,
+          "end": 5360,
+          "text": "from",
+          "confidence": 0.761065,
+          "word_is_final": true
+        }
+      ],
+      "utterance": "",
+      "type": "Turn"
+    }
+  ]
+}
 ```
 
-</Tab>
-<Tab language="javascript" title="JavaScript (Express)">
-
-```javascript
-const express = require("express");
-const app = express();
-
-app.use(express.json());
-
-app.post("/webhook", (req, res) => {
-  // Verify the authentication header if you configured one
-  const authHeader = req.headers["x-webhook-secret"];
-  if (authHeader !== "secret-value") {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  // Process the transcript data
-  const data = req.body;
-  console.log("Received transcript:", data);
-
-  // Return a success response
-  res.status(200).json({ status: "received" });
-});
-
-app.listen(5000, () => {
-  console.log("Webhook server listening on port 5000");
-});
-```
-
-</Tab>
-</Tabs>
+| Key                                 | Type    | Description                                                    |
+| ----------------------------------- | ------- | -------------------------------------------------------------- |
+| `session_id`                        | string  | The unique identifier for the streaming session.               |
+| `messages`                          | array   | An array of transcript turn objects from the session.          |
+| `messages[].turn_order`             | integer | The order of the turn in the session (0-indexed).              |
+| `messages[].turn_is_formatted`      | boolean | Whether the transcript has been formatted.                     |
+| `messages[].end_of_turn`            | boolean | Whether this message represents the end of a turn.             |
+| `messages[].transcript`             | string  | The transcribed text for this turn.                            |
+| `messages[].end_of_turn_confidence` | number  | Confidence score for the end of turn detection.                |
+| `messages[].words`                  | array   | Word-level details including timestamps and confidence scores. |
+| `messages[].type`                   | string  | The message type, typically "Turn".                            |
 
 ## Authenticate webhook deliveries
 
