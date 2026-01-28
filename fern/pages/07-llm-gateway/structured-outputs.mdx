@@ -1,0 +1,303 @@
+---
+title: "Structured Outputs"
+description: "Constrain model responses to follow a specific JSON schema for reliable, parseable outputs"
+hidden: true
+---
+
+## Overview
+
+Structured outputs allow you to constrain the model's response to follow a specific JSON schema. This ensures the model returns data in a predictable format that can be reliably parsed and processed by your application.
+
+<Note>
+Structured outputs are supported by OpenAI, Gemini, and gpt-oss models. Claude models do not currently support structured outputs.
+</Note>
+
+## Getting started
+
+To use structured outputs, include the `response_format` parameter in your request with a `json_schema` type:
+
+<Tabs>
+<Tab title="Python" language="python">
+
+```python
+import requests
+
+headers = {
+    "authorization": "<YOUR_API_KEY>",
+    "content-type": "application/json"
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "gemini-2.5-flash-lite",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful math tutor. Guide the user through the solution step by step."
+            },
+            {
+                "role": "user",
+                "content": "how can I solve 8x + 7 = -23"
+            }
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "math_reasoning",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "steps": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "explanation": {"type": "string"},
+                                    "output": {"type": "string"}
+                                },
+                                "required": ["explanation", "output"],
+                                "additionalProperties": False
+                            }
+                        },
+                        "final_answer": {"type": "string"}
+                    },
+                    "required": ["steps", "final_answer"],
+                    "additionalProperties": False
+                },
+                "strict": True
+            }
+        }
+    }
+)
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])
+```
+
+</Tab>
+<Tab title="JavaScript" language="javascript">
+
+```javascript
+const response = await fetch(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  {
+    method: "POST",
+    headers: {
+      authorization: "<YOUR_API_KEY>",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gemini-2.5-flash-lite",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful math tutor. Guide the user through the solution step by step.",
+        },
+        {
+          role: "user",
+          content: "how can I solve 8x + 7 = -23",
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "math_reasoning",
+          schema: {
+            type: "object",
+            properties: {
+              steps: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    explanation: { type: "string" },
+                    output: { type: "string" },
+                  },
+                  required: ["explanation", "output"],
+                  additionalProperties: false,
+                },
+              },
+              final_answer: { type: "string" },
+            },
+            required: ["steps", "final_answer"],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
+    }),
+  }
+);
+
+const result = await response.json();
+console.log(result.choices[0].message.content);
+```
+
+</Tab>
+<Tab title="cURL" language="bash">
+
+```bash
+curl -X POST "https://llm-gateway.assemblyai.com/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: <YOUR_API_KEY>" \
+    -d '{
+          "model": "gemini-2.5-flash-lite",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful math tutor. Guide the user through the solution step by step."
+            },
+            {
+              "role": "user",
+              "content": "how can I solve 8x + 7 = -23"
+            }
+          ],
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "math_reasoning",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "explanation": { "type": "string" },
+                        "output": { "type": "string" }
+                      },
+                      "required": ["explanation", "output"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "final_answer": { "type": "string" }
+                },
+                "required": ["steps", "final_answer"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          }
+        }'
+```
+
+</Tab>
+</Tabs>
+
+## Example response
+
+When using structured outputs, the model's response will be a JSON string that conforms to your schema:
+
+```json
+{
+  "request_id": "abc123",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "{\"steps\":[{\"explanation\":\"Start with the equation 8x + 7 = -23\",\"output\":\"8x + 7 = -23\"},{\"explanation\":\"Subtract 7 from both sides to isolate the term with x\",\"output\":\"8x = -30\"},{\"explanation\":\"Divide both sides by 8 to solve for x\",\"output\":\"x = -30/8 = -15/4 = -3.75\"}],\"final_answer\":\"x = -3.75\"}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "input_tokens": 85,
+    "output_tokens": 120,
+    "total_tokens": 205
+  }
+}
+```
+
+You can parse the content as JSON in your application:
+
+```python
+import json
+
+content = result["choices"][0]["message"]["content"]
+parsed = json.loads(content)
+
+for step in parsed["steps"]:
+    print(f"{step['explanation']}: {step['output']}")
+
+print(f"Final answer: {parsed['final_answer']}")
+```
+
+## Supported models
+
+Structured outputs are supported by the following model families:
+
+| Provider | Supported |
+| -------- | --------- |
+| OpenAI   | Yes       |
+| Gemini   | Yes       |
+| gpt-oss  | Yes       |
+| Claude   | No        |
+
+## API reference
+
+### Request parameters
+
+The `response_format` parameter controls how the model formats its response:
+
+| Key                        | Type    | Required? | Description                                                                                     |
+| -------------------------- | ------- | --------- | ----------------------------------------------------------------------------------------------- |
+| `response_format`          | object  | No        | Specifies the format of the model's response.                                                   |
+| `response_format.type`     | string  | Yes       | The type of response format. Use `"json_schema"` for structured outputs.                        |
+| `response_format.json_schema` | object | Yes      | The JSON schema configuration object.                                                           |
+
+### JSON schema object
+
+| Key                              | Type    | Required? | Description                                                                                     |
+| -------------------------------- | ------- | --------- | ----------------------------------------------------------------------------------------------- |
+| `json_schema.name`               | string  | Yes       | A name for the schema. Used for identification purposes.                                        |
+| `json_schema.schema`             | object  | Yes       | A valid JSON Schema object that defines the structure of the expected response.                 |
+| `json_schema.strict`             | boolean | No        | When `true`, the model will strictly adhere to the schema. Recommended for reliable parsing.    |
+
+### Schema definition
+
+The `schema` object follows the [JSON Schema](https://json-schema.org/) specification. Common properties include:
+
+| Property               | Type          | Description                                                                 |
+| ---------------------- | ------------- | --------------------------------------------------------------------------- |
+| `type`                 | string        | The data type: `"object"`, `"array"`, `"string"`, `"number"`, `"boolean"`.  |
+| `properties`           | object        | For objects, defines the properties and their schemas.                      |
+| `items`                | object        | For arrays, defines the schema for array items.                             |
+| `required`             | array         | List of required property names.                                            |
+| `additionalProperties` | boolean       | When `false`, prevents additional properties not defined in the schema.     |
+
+## Best practices
+
+When using structured outputs, keep these recommendations in mind:
+
+Set `strict: true` to ensure the model's response strictly adheres to your schema. This is especially important when your application depends on specific fields being present.
+
+Use `additionalProperties: false` at each level of your schema to prevent the model from adding unexpected fields to the response.
+
+Keep your schemas focused and specific. Complex schemas with many nested levels may increase latency and token usage.
+
+Include clear descriptions in your system or user messages to help the model understand what data to extract or generate for each field.
+
+## Error handling
+
+If the model cannot generate a valid response that matches your schema, you may receive an error or a response that doesn't fully conform to the schema. Always validate the parsed JSON against your expected structure:
+
+```python
+import json
+
+try:
+    content = result["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
+    
+    # Validate required fields exist
+    if "steps" not in parsed or "final_answer" not in parsed:
+        raise ValueError("Missing required fields in response")
+        
+except json.JSONDecodeError as e:
+    print(f"Failed to parse response as JSON: {e}")
+except KeyError as e:
+    print(f"Unexpected response structure: {e}")
+```
