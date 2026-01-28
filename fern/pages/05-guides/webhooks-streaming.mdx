@@ -33,148 +33,195 @@ To use webhooks with streaming speech-to-text, add the following parameters to y
 Add the webhook parameters as query parameters to the WebSocket URL:
 
 ```
-wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&webhook_url=https://example.com/webhook
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&webhook_url=https://example.com/webhook
 ```
 
 To include authentication:
 
 ```
-wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&webhook_url=https://example.com/webhook&webhook_auth_header_name=X-My-Webhook-Secret&webhook_auth_header_value=secret-value
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&webhook_url=https://example.com/webhook&webhook_auth_header_name=X-Webhook-Secret&webhook_auth_header_value=secret-value
 ```
 
 <Tabs>
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-def on_data(transcript: aai.RealtimeTranscript):
-    if not transcript.text:
-        return
-
-    if isinstance(transcript, aai.RealtimeFinalTranscript):
-        print(transcript.text, end="\r\n")
-    else:
-        print(transcript.text, end="\r")
-
-def on_error(error: aai.RealtimeError):
-    print("An error occurred:", error)
-
-def on_close():
-    print("Session closed")
-
-# Configure the transcriber with webhook parameters
-transcriber = aai.RealtimeTranscriber(
-    on_data=on_data,
-    on_error=on_error,
-    on_close=on_close,
-    sample_rate=16_000,
-    extra_session_information={
-        "webhook_url": "https://example.com/webhook",
-        "webhook_auth_header_name": "X-My-Webhook-Secret",  # Optional
-        "webhook_auth_header_value": "secret-value"  # Optional
-    }
-)
-
-transcriber.connect()
-
-# Stream your audio data here
-# transcriber.stream(audio_data)
-
-transcriber.close()
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript
-import { RealtimeTranscriber } from "assemblyai";
-
-const transcriber = new RealtimeTranscriber({
-  apiKey: "<YOUR_API_KEY>",
-  sampleRate: 16_000,
-  // Add webhook parameters
-  webhookUrl: "https://example.com/webhook",
-  webhookAuthHeaderName: "X-My-Webhook-Secret", // Optional
-  webhookAuthHeaderValue: "secret-value", // Optional
-});
-
-transcriber.on("transcript", (transcript) => {
-  if (!transcript.text) {
-    return;
-  }
-
-  if (transcript.message_type === "FinalTranscript") {
-    console.log(transcript.text);
-  }
-});
-
-transcriber.on("error", (error) => {
-  console.error("Error:", error);
-});
-
-transcriber.on("close", (code, reason) => {
-  console.log("Session closed:", code, reason);
-});
-
-await transcriber.connect();
-
-// Stream your audio data here
-// transcriber.sendAudio(audioData);
-
-await transcriber.close();
-```
-
-</Tab>
 <Tab language="python" title="Python">
 
 ```python
+import pyaudio
 import websocket
 import json
-import base64
-import urllib.parse
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
 
-API_KEY = "<YOUR_API_KEY>"
-SAMPLE_RATE = 16000
-WEBHOOK_URL = "https://example.com/webhook"
+# --- Configuration ---
+YOUR_API_KEY = "<YOUR_API_KEY>"
 
-# Build the WebSocket URL with webhook parameters
-params = {
-    "sample_rate": SAMPLE_RATE,
-    "webhook_url": WEBHOOK_URL,
-    # Optional authentication
-    "webhook_auth_header_name": "X-My-Webhook-Secret",
-    "webhook_auth_header_value": "secret-value"
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    # Webhook parameters
+    "webhook_url": "https://example.com/webhook",
+    "webhook_auth_header_name": "X-Webhook-Secret",  # Optional
+    "webhook_auth_header_value": "secret-value",  # Optional
 }
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
-url = f"wss://api.assemblyai.com/v2/realtime/ws?{urllib.parse.urlencode(params)}"
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
 
-def on_message(ws, message):
-    data = json.loads(message)
-    if data.get("message_type") == "FinalTranscript":
-        print(data.get("text", ""))
+# Global variables
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
 
-def on_error(ws, error):
-    print(f"Error: {error}")
-
-def on_close(ws, close_status_code, close_msg):
-    print("Connection closed")
 
 def on_open(ws):
-    print("Connection opened")
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
 
-ws = websocket.WebSocketApp(
-    url,
-    header={"Authorization": API_KEY},
-    on_open=on_open,
-    on_message=on_message,
-    on_error=on_error,
-    on_close=on_close
-)
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+        print("Audio streaming stopped.")
 
-ws.run_forever()
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+
+def on_message(ws, message):
+    """Called when a message is received from the WebSocket."""
+    try:
+        data = json.loads(message)
+        msg_type = data.get("type")
+
+        if msg_type == "Begin":
+            session_id = data.get("id")
+            expires_at = data.get("expires_at")
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get("transcript", "")
+            formatted = data.get("turn_is_formatted", False)
+            if formatted:
+                print("\r" + " " * 80 + "\r", end="")
+                print(transcript)
+            else:
+                print(f"\r{transcript}", end="")
+        elif msg_type == "Termination":
+            audio_duration = data.get("audio_duration_seconds", 0)
+            session_duration = data.get("session_duration_seconds", 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(2)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete.")
+
+
+if __name__ == "__main__":
+    run()
 ```
 
 </Tab>
@@ -184,44 +231,76 @@ ws.run_forever()
 const WebSocket = require("ws");
 
 const API_KEY = "<YOUR_API_KEY>";
-const SAMPLE_RATE = 16000;
-const WEBHOOK_URL = "https://example.com/webhook";
 
-// Build the WebSocket URL with webhook parameters
-const params = new URLSearchParams({
-  sample_rate: SAMPLE_RATE,
-  webhook_url: WEBHOOK_URL,
-  // Optional authentication
-  webhook_auth_header_name: "X-My-Webhook-Secret",
-  webhook_auth_header_value: "secret-value",
+const connectionParams = new URLSearchParams({
+  sample_rate: 16000,
+  format_turns: true,
+  // Webhook parameters
+  webhook_url: "https://example.com/webhook",
+  webhook_auth_header_name: "X-Webhook-Secret", // Optional
+  webhook_auth_header_value: "secret-value", // Optional
 });
 
-const url = `wss://api.assemblyai.com/v2/realtime/ws?${params.toString()}`;
+const API_ENDPOINT = `wss://streaming.assemblyai.com/v3/ws?${connectionParams.toString()}`;
 
-const ws = new WebSocket(url, {
+const ws = new WebSocket(API_ENDPOINT, {
   headers: {
     Authorization: API_KEY,
   },
 });
 
 ws.on("open", () => {
-  console.log("Connection opened");
+  console.log("WebSocket connection opened.");
+  console.log(`Connected to: ${API_ENDPOINT}`);
+
+  // Start streaming audio data here
+  // For example, using a microphone input library
 });
 
 ws.on("message", (data) => {
-  const message = JSON.parse(data);
-  if (message.message_type === "FinalTranscript") {
-    console.log(message.text);
+  try {
+    const message = JSON.parse(data);
+    const msgType = message.type;
+
+    if (msgType === "Begin") {
+      const sessionId = message.id;
+      const expiresAt = new Date(message.expires_at * 1000);
+      console.log(`\nSession began: ID=${sessionId}, ExpiresAt=${expiresAt}`);
+    } else if (msgType === "Turn") {
+      const transcript = message.transcript || "";
+      const formatted = message.turn_is_formatted || false;
+      if (formatted) {
+        process.stdout.write("\r" + " ".repeat(80) + "\r");
+        console.log(transcript);
+      } else {
+        process.stdout.write(`\r${transcript}`);
+      }
+    } else if (msgType === "Termination") {
+      const audioDuration = message.audio_duration_seconds || 0;
+      const sessionDuration = message.session_duration_seconds || 0;
+      console.log(
+        `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+      );
+    }
+  } catch (e) {
+    console.error("Error handling message:", e);
   }
 });
 
 ws.on("error", (error) => {
-  console.error("Error:", error);
+  console.error("WebSocket Error:", error);
 });
 
-ws.on("close", () => {
-  console.log("Connection closed");
+ws.on("close", (code, reason) => {
+  console.log(`WebSocket Disconnected: Status=${code}, Msg=${reason}`);
 });
+
+// To gracefully close the session, send a Terminate message
+function terminateSession() {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "Terminate" }));
+  }
+}
 ```
 
 </Tab>
@@ -259,7 +338,7 @@ app = Flask(__name__)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     # Verify the authentication header if you configured one
-    auth_header = request.headers.get("X-My-Webhook-Secret")
+    auth_header = request.headers.get("X-Webhook-Secret")
     if auth_header != "secret-value":
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -285,7 +364,7 @@ app.use(express.json());
 
 app.post("/webhook", (req, res) => {
   // Verify the authentication header if you configured one
-  const authHeader = req.headers["x-my-webhook-secret"];
+  const authHeader = req.headers["x-webhook-secret"];
   if (authHeader !== "secret-value") {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -313,13 +392,13 @@ To secure your webhook endpoint, you can include custom authentication headers i
 AssemblyAI will include this header in the webhook request, allowing you to verify that the request came from AssemblyAI.
 
 ```
-webhook_auth_header_name=X-My-Webhook-Secret&webhook_auth_header_value=secret-value
+webhook_auth_header_name=X-Webhook-Secret&webhook_auth_header_value=secret-value
 ```
 
 In your webhook receiver, verify the header value matches what you configured:
 
 ```python
-auth_header = request.headers.get("X-My-Webhook-Secret")
+auth_header = request.headers.get("X-Webhook-Secret")
 if auth_header != "secret-value":
     return "Unauthorized", 401
 ```
