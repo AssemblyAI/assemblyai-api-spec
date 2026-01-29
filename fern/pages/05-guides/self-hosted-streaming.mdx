@@ -104,10 +104,10 @@ LICENSE_AND_USAGE_PROXY_IMAGE=<CUSTOM_IMAGE>
 For ease of reference in this doc, the current image references are below:
 
 ```bash
-STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.3.0
-STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.3.0
-STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.3.0
-LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.3.0
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.4.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.4.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.4.0
+LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.4.0
 USAGE_TRACKING_API_KEY=<your_usage_tracking_api_key_here>
 ```
 
@@ -191,6 +191,7 @@ services:
       - SERVER_PORT=50051
       - LOGGING_LEVEL=INFO
       - USE_STRUCTURED_LOGGING=False
+      - MAX_OPEN_STREAMS=48
     healthcheck:
       test: ["CMD", "grpc_health_probe", "-addr=:50051"]
       interval: 10s
@@ -215,6 +216,7 @@ services:
       - SERVER_PORT=50051
       - LOGGING_LEVEL=INFO
       - USE_STRUCTURED_LOGGING=False
+      - MAX_OPEN_STREAMS=48
     healthcheck:
       test: ["CMD", "grpc_health_probe", "-addr=:50051"]
       interval: 10s
@@ -942,9 +944,34 @@ The `/v1/status` endpoint provides real-time information about the license valid
 
 - **Deployment Strategy**: Do gradual rollouts to ensure stability. Both Blue/Green and rolling deployments are good strategies, as the streaming-api can reconnect to a new streaming-asr container if a persistent connection gets disrupted with minimal state loss.
 - **Hardware Requirements**: The services can run on NVIDIA T4 or newer GPUs. We recommend allocating at least 4 CPU and 16GB of RAM per container.
-- **Autoscaling**: You can set up autoscaling based on the number of active sessions. A container with recommended hardware can generally handle up to 28 concurrent sessions.
+- **Autoscaling**: You can set up autoscaling based on the number of active sessions. A container with recommended hardware can generally handle up to 48 concurrent sessions.
 - **Monitoring**: Always monitor logs during deployment to catch any potential issues early.
 - **Health Checks**: Use the healthcheck command provided in the docker-compose.yml to monitor container health.
+
+## Changelog
+
+### v0.4.0
+
+#### English ASR Model
+
+Major improvements to short utterance handling and hallucination reduction:
+
+- **100% reduction in hallucinations**
+- **12.8% improvement on short utterances** - Better performance for voice agent use cases
+- **7.39% improvement on digit sequence error rate**
+- **1.75% improvement on proper nouns**
+- **0.46% improvement on CI segments**
+- **0.39% improvement on accented speech**
+
+#### Multilingual ASR Model
+
+- **Context biasing support** - Customers can now use context biasing (model-based biasing) with the multilingual model
+
+#### Other Improvements
+
+- Increased concurrent session handling per container, leading to reduced deployment costs
+- Improved observability for the license-and-usage-proxy service
+- Various bug fixes and stability improvements
 
 ## Current limitations
 
@@ -1126,10 +1153,10 @@ cd ~/assemblyai-streaming
 
 # Create .env file with image references
 cat > .env << 'EOF'
-STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.3.0
-STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.3.0
-STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.3.0
-LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.3.0
+STREAMING_API_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-api:release-v0.4.0
+STREAMING_ASR_ENGLISH_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-english:release-v0.4.0
+STREAMING_ASR_MULTILANG_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-asr-multilang:release-v0.4.0
+LICENSE_AND_USAGE_PROXY_IMAGE=344839248844.dkr.ecr.us-west-2.amazonaws.com/self-hosted-streaming-license-and-usage-proxy:release-v0.4.0
 USAGE_TRACKING_API_KEY=<your_usage_tracking_api_key_here>
 EOF
 
