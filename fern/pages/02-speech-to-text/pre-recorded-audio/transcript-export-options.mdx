@@ -1,0 +1,710 @@
+---
+title: "Transcript export options"
+---
+
+import { LanguageTable } from "../../../assets/components/LanguagesTable";
+
+This page explains the different ways you can export and format your transcript data, including SRT/VTT caption files, paragraphs and sentences, and word-level timestamps.
+
+## Export SRT or VTT caption files
+
+You can export completed transcripts in SRT or VTT format, which can be used for subtitles and closed captions in videos.
+
+You can also customize the maximum number of characters per caption by specifying the `chars_per_caption` parameter.
+
+<CodeBlocks>
+
+```python title="Python SDK" highlight={15-18} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig()
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+srt = transcript.export_subtitles_srt(
+  # Optional: Customize the maximum number of characters per caption
+  chars_per_caption=32
+  )
+
+with open(f"transcript_{transcript.id}.srt", "w") as srt_file:
+  srt_file.write(srt)
+
+# vtt = transcript.export_subtitles_vtt()
+
+# with open(f"transcript_{transcript_id}.vtt", "w") as vtt_file:
+#   vtt_file.write(vtt)
+
+```
+
+```python title="Python" highlight={41} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+# chars_per_caption is optional
+srt_response = requests.get(f"{polling_endpoint}/srt?chars_per_caption=32", headers=headers)
+
+with open(f"transcript_{transcript_id}.srt", "w") as srt_file:
+  srt_file.write(srt_response.text)
+
+# vtt_response = requests.get(f"{polling_endpoint}/vtt", headers=headers)
+
+# with open(f"transcript_{transcript_id}.vtt", "w") as vtt_file:
+#   vtt_file.write(vtt_response.text)
+```
+
+```javascript title="JavaScript SDK" highlight={19} maxLines=15
+import { AssemblyAI } from "assemblyai";
+import fs from "fs";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  let srt = await client.transcripts.subtitles(transcript.id, "srt", 32);
+  fs.writeFileSync(`transcript_${transcript.id}.srt`, srt);
+
+  // let vtt = await client.transcripts.subtitles(transcript.id, 'vtt', 32)
+  // fs.writeFileSync(`transcript_${transcript.id}.vtt`, vtt)
+};
+
+run();
+```
+
+```javascript title="JavaScript" highlight={44} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
+const srtEndpoint = `${baseUrl}/v2/transcript/${transcriptId}/srt?chars_per_caption=32`;
+const srtResponse = await axios.get(srtEndpoint, { headers });
+const srt = srtResponse.data;
+
+fs.writeFileSync(`transcript_${transcriptId}.srt`, srt);
+
+// const vttEndpoint = `${baseUrl}/v2/transcript/${transcriptId}/vtt?chars_per_caption=32`
+// const vttResponse = await axios.get(vttEndpoint, { headers })
+// const vtt = vttResponse.data
+
+// fs.writeFileSync(`transcript_${transcriptId}.vtt`, vtt)
+```
+
+</CodeBlocks>
+
+## Export paragraphs
+
+You can retrieve transcripts that are automatically segmented into paragraphs. The text of the transcript is broken down by paragraphs, along with additional metadata.
+
+<CodeBlocks>
+
+```python title="Python SDK" highlight={15-18} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig()
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+paragraphs = transcript.get_paragraphs()
+for paragraph in paragraphs:
+  print(paragraph.text)
+  print()
+```
+
+```python title="Python" highlight={40-43} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+paragraphs = requests.get(polling_endpoint + '/paragraphs', headers=headers).json()['paragraphs']
+for paragraph in paragraphs:
+  print(paragraph['text'])
+  print()
+```
+
+```javascript title="JavaScript SDK" highlight={16-19} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  const { paragraphs } = await client.transcripts.paragraphs(transcript.id);
+  for (const paragraph of paragraphs) {
+    console.log(paragraph.text);
+  }
+};
+
+run();
+```
+
+```javascript title="JavaScript" highlight={43-51} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
+const paragraphsEndpoint = `${baseUrl}/v2/transcript/${transcriptId}/paragraphs`;
+
+const paragraphsResponse = await axios.get(paragraphsEndpoint, { headers });
+const paragraphs = paragraphsResponse.data.paragraphs;
+
+for (const paragraph of paragraphs) {
+  console.log(paragraph.text);
+  console.log();
+}
+```
+
+</CodeBlocks>
+
+## Export sentences
+
+You can retrieve transcripts that are automatically segmented into sentences, for a more reader-friendly experience. The text of the transcript is broken down by sentences, along with additional metadata.
+
+<CodeBlocks>
+
+```python title="Python SDK" highlight={15-18} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig()
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+sentences = transcript.get_sentences()
+for sentence in sentences:
+  print(sentence.text)
+  print()
+```
+
+```python title="Python" highlight={40-43} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+sentences = requests.get(polling_endpoint + '/sentences', headers=headers).json()['sentences']
+for sentence in sentences:
+  print(sentence['text'])
+  print()
+```
+
+```javascript title="JavaScript SDK" highlight={16-20} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  const { sentences } = await client.transcripts.sentences(transcript.id);
+  for (const sentence of sentences) {
+    console.log(sentence.text);
+  }
+};
+
+run();
+```
+
+```javascript title="JavaScript" highlight={45-51} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
+const sentencesEndpoint = `${baseUrl}/v2/transcript/${transcriptId}/sentences`;
+
+const sentencesResponse = await axios.get(sentencesEndpoint, { headers });
+const sentences = sentencesResponse.data.sentences;
+
+for (const sentence of sentences) {
+  console.log(sentence.text);
+  console.log();
+}
+```
+
+</CodeBlocks>
+
+The response is an array of objects, each representing a sentence or a paragraph in the transcript. See the [API reference](https://www.assemblyai.com/docs/api-reference/transcripts/get-sentences) for more info.
+
+## Word-level timestamps
+
+The response also includes an array with information about each word:
+
+<CodeBlocks>
+
+```python title="Python SDK" highlight={13} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig()
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for word in transcript.words:
+  print(f"Word: {word.text}, Start: {word.start}, End: {word.end}, Confidence: {word.confidence}")
+```
+
+```python title="Python" highlight={31-32} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url # You can also use a URL to an audio or video file on the web
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    for word in transcription_result['words']:
+      print(f"Word: {word['text']}, Start: {word['start']}, End: {word['end']}, Confidence: {word['confidence']}")
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+```
+
+```javascript title="JavaScript SDK" highlight={22} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.text);
+
+  // Print word-level details
+  for (const word of transcript.words) {
+    console.log(
+      `Word: ${word.text}, Start: ${word.start}, End: ${word.end}, Confidence: ${word.confidence}`
+    );
+  }
+};
+
+run();
+```
+
+```javascript title="JavaScript" highlight={36-39} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    // Print word-level details
+    for (const word of transcriptionResult.words) {
+      console.log(
+        `Word: ${word.text}, Start: ${word.start}, End: ${word.end}, Confidence: ${word.confidence}`
+      );
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</CodeBlocks>
+
+### API Reference
+
+<Json
+  json={{
+    words: [
+      {
+        text: "Smoke",
+        start: 240,
+        end: 640,
+        confidence: 0.70473,
+        speaker: null,
+      },
+      {
+        text: "from",
+        start: 680,
+        end: 968,
+        confidence: 0.99967,
+        speaker: null,
+      },
+      {
+        text: "hundreds",
+        start: 1024,
+        end: 1416,
+        confidence: 0.99795,
+        speaker: null,
+      },
+      {
+        text: "of",
+        start: 1448,
+        end: 1592,
+        confidence: 0.99926,
+        speaker: null,
+      },
+      {
+        text: "wildfires",
+        start: 1616,
+        end: 2248,
+        confidence: 0.99838,
+        speaker: null,
+      },
+      {
+        text: "in",
+        start: 2264,
+        end: 2440,
+        confidence: 0.99782,
+        speaker: null,
+      },
+      {
+        text: "Canada",
+        start: 2480,
+        end: 2968,
+        confidence: 0.99977,
+        speaker: null,
+      },
+    ],
+  }}
+/>
+
+## Additional resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Is there a way to generate SRT or VTT captions with speaker labels?"
+    icon="fa-regular fa-circle-question"
+    href="/docs/faq/is-there-a-way-to-generate-srt-or-vtt-captions-with-speaker-labels"
+  >
+    Learn how to create caption files that include speaker identification.
+  </Card>
+</CardGroup>
