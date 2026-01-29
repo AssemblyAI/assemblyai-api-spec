@@ -111,107 +111,6 @@ Universal-3-Pro supports English, Spanish, Portuguese, French, German, and Itali
 
 </Note>
 
-## Natural language prompting
-
-Natural Language prompting allows you to provide up to 1,500 words of contextual information using the `prompt` parameter to help the model better interpret ambiguous speech, technical terminology, and domain-specific language.
-
-<AudioPlayer src="https://assemblyaiassets.com/audios/nlp_prompting.mp3" />
-
-Without Prompting:
-
-```txt wordWrap
-I just want to move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I do. I take Ramipril. Okay. And I take Metformin, and there's another one that begins with G for the diabetes. Glicoside. Excellent. Okay. And do you know the dosage of the Ramipril? I think it's 5mg. 5mg, and do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? I did have an awful cough to start with, but that's stopped now. It's settled, good. Okay, and do you know the metformin, do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
-```
-
-With prompting, you can preserve natural speech elements like filler words and stutters while correcting specialized terms. For instance, adding 'clinical history evaluation' as context corrects 'Glicoside' to 'Glycoside'.
-
-```txt wordWrap
-I just wanna move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I, I do. I take, um, I take Ramipril. Okay, mhm. And I take Metformin, and there's another one that begins with G for the diabetes. So glycosi— glycosi— glycoside. Excellent. Okay, and do you know the dosage of the Ramipril? Uh, I think it's 5mg. 5mg. And do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? Um, I did have an awful cough to start with, but that's, that's stopped now. It's settled, good. Okay, and do you know, erm, the metformin? Do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
-```
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-data = {
-    "audio_url": "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
-    "language_detection": True,
-    "speech_models": ["universal-3-pro", "universal"],
-    "prompt": "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-    response.raise_for_status()
-
-transcript_response = response.json()
-transcript_id = transcript_response["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript["text"])
-        break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
-    else:
-        time.sleep(3)
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-
-```javascript
-import axios from "axios";
-
-const baseUrl = "https://api.assemblyai.com";
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-};
-
-const data = {
-  audio_url: "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
-  language_detection: true,
-  speech_models: ["universal-3-pro", "universal"],
-  prompt:
-    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
-};
-
-const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
-
-const transcriptId = response.data.id;
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers,
-  });
-  const transcriptionResult = pollingResponse.data;
-
-  if (transcriptionResult.status === "completed") {
-    console.log(transcriptionResult.text);
-    break;
-  } else if (transcriptionResult.status === "error") {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-  } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-}
-```
-
-</Tab>
-</Tabs>
-
 ## Keyterms prompting
 
 Keyterms prompting allows you to provide up to 1,000 words or phrases (maximum 6 words per phrase) using the `keyterms_prompt` parameter to improve transcription accuracy for those terms and related variations or contextually similar phrases.
@@ -317,18 +216,22 @@ while (true) {
 </Tab>
 </Tabs>
 
-## Code switching
+## Natural language prompting
 
-Universal-3-Pro has built-in code switching capabilities across English, Spanish, Portuguese, French, German, and Italian. Set `"language_detection":True`, as shown in the code example below, to automatically detect the spoken language from the audio.
+Natural Language prompting allows you to provide up to 1,500 words of contextual information using the `prompt` parameter to help the model better interpret ambiguous speech, technical terminology, and domain-specific language.
 
-Here is an example of how Universal-3-Pro handles spoken audio in English and Spanish.
+<AudioPlayer src="https://assemblyaiassets.com/audios/nlp_prompting.mp3" />
 
-<AudioPlayer src="https://assemblyaiassets.com/audios/code_switching.mp3" />
-
-Example output:
+Without Prompting:
 
 ```txt wordWrap
-You would definitely think I spoke Spanish if you heard me speak Spanish, but I still make mistakes. Soy Gwyneth Paltrow, soy la fundadora de Goop. Thank you. Thank you for doing that.
+I just want to move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I do. I take Ramipril. Okay. And I take Metformin, and there's another one that begins with G for the diabetes. Glicoside. Excellent. Okay. And do you know the dosage of the Ramipril? I think it's 5mg. 5mg, and do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? I did have an awful cough to start with, but that's stopped now. It's settled, good. Okay, and do you know the metformin, do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
+```
+
+With prompting, you can preserve natural speech elements like filler words and stutters while correcting specialized terms. For instance, adding 'clinical history evaluation' as context corrects 'Glicoside' to 'Glycoside'.
+
+```txt wordWrap
+I just wanna move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I, I do. I take, um, I take Ramipril. Okay, mhm. And I take Metformin, and there's another one that begins with G for the diabetes. So glycosi— glycosi— glycoside. Excellent. Okay, and do you know the dosage of the Ramipril? Uh, I think it's 5mg. 5mg. And do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? Um, I did have an awful cough to start with, but that's, that's stopped now. It's settled, good. Okay, and do you know, erm, the metformin? Do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
 ```
 
 <Tabs groupId="language">
@@ -342,9 +245,10 @@ base_url = "https://api.assemblyai.com"
 headers = {"authorization": "<YOUR_API_KEY>"}
 
 data = {
-    "audio_url": "https://assemblyaiassets.com/audios/code_switching.mp3",
+    "audio_url": "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
     "language_detection": True,
-    "speech_models": ["universal-3-pro", "universal"]
+    "speech_models": ["universal-3-pro", "universal"],
+    "prompt": "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
 }
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
@@ -380,9 +284,11 @@ const headers = {
 };
 
 const data = {
-  audio_url: "https://assemblyaiassets.com/audios/code_switching.mp3",
+  audio_url: "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
   language_detection: true,
   speech_models: ["universal-3-pro", "universal"],
+  prompt:
+    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
 };
 
 const url = `${baseUrl}/v2/transcript`;
@@ -832,6 +738,100 @@ while (true) {
 </Tab>
 </Tabs>
 
+## Code switching
+
+Universal-3-Pro has built-in code switching capabilities across English, Spanish, Portuguese, French, German, and Italian. Set `"language_detection":True`, as shown in the code example below, to automatically detect the spoken language from the audio.
+
+Here is an example of how Universal-3-Pro handles spoken audio in English and Spanish.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/code_switching.mp3" />
+
+Example output:
+
+```txt wordWrap
+You would definitely think I spoke Spanish if you heard me speak Spanish, but I still make mistakes. Soy Gwyneth Paltrow, soy la fundadora de Goop. Thank you. Thank you for doing that.
+```
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/code_switching.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal"]
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/code_switching.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal"],
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
 ## 99 languages coverage
 
 With the `speech_models` parameter, you can list multiple speech models in priority order, allowing our system to automatically route your audio based on language support.
@@ -844,7 +844,6 @@ Check out [this guide](https://www.assemblyai.com/docs/pre-recorded-audio/prompt
 
 ## Known limitations during early access
 
-- Increased processing times - As of the week of 1/19, processing long audio files takes longer than our existing production models. Processing times for the official release will be much faster.
 - In some edge cases, timestamps might not be accurate for a small number of words in a transcript.
 - Currently, `keyterms_prompt` and `prompt` cannot be used in the same request. We will be adding support for using these features together with the official release. Until then, if you want to pass specific key terms, you can add them to your `prompt` as shown in this code example:
 
