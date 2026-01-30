@@ -4,7 +4,7 @@ title: "Customizing transcription results using Prompt Engineering"
 
 import { PromptGenerator } from "../../../assets/components/PromptGenerator";
 
-Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription, based on extensive testing (~1,000+ prompt variations).
+Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription.
 
 ## Prompt generator
 
@@ -29,6 +29,7 @@ All five components matter, but examples are critical to drive changes in transc
 | Principle | Implementation | Impact |
 |-----------|----------------|--------|
 | **Explicit examples** | Show 2-3 examples of the error pattern being corrected | Massive |
+| **Avoid negative, not language** | Avoid using "not", "never", "avoid", "optional" | Massive |
 | **Pushy, authoritative language** | Use "Non-negotiable", "Mandatory", "Strict requirement" | Critical |
 | **Specific instruction** | State exactly what accuracy you need | High |
 | **Keep concise** | 3-5 instructions maximum | High |
@@ -42,16 +43,22 @@ Limit prompts to 3-5 instructions maximum (including base instruction). Overly v
 The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-Fix vowel substitution errors in pharmaceutical terms (omeprazole not omeprizole, metformin not metforman)
+Fix vowel substitution errors in pharmaceutical terms (omeprazole over omeprizole, metformin over metforman)
 ```
 
 The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs in the transcript, including ones not in your examples.
+
+### Edit temperature for additional benefits
+
+In addition to prompting, the model supports the parameter `temperature` which defaults to `0` and can be in the range of `[0.0, 2.0]`. Modifying `temperature` will increase the variance in the results the model returns between API requests with the same prompts, but in some cases can help with rare words and entity accuracy.
+
+Beyond prompting, we recommend experimenting with `temperature` in the range of `[0.0, 0.5]`. Higher values are likely to shorten words (`It is` becomes `It's`) and remove disfluencies. Lower values are likely to try to be more verbatim with words encountered and based on phonetics over contextual correctness in the sentence.
 
 ## Prompt components
 
 ### Base transcription instructions
 
-Choose based on your transcription needs:
+Some example base instructions based on your needs look like the below:
 
 | Style | Base instruction | Use for |
 |-------|------------------|----------|
@@ -79,9 +86,9 @@ Some specific instructions include concepts like:
 
 | Specific instruction | Use for |
 |------------------|-------|
-| `Non-negotiable: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)` | Max accuracy of pharmaceutical drugs |
+| `Non-negotiable: Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)` | Max accuracy of pharmaceutical drugs |
 | `Mandatory: Respect patient's medical history (IBD, Chron's)` | Max accuracy of any terms related to patient's specific condition(s) listed |
-| `Strict requirement: All diseases and prescriptions must be found in common reference materials (aminosalicylates not aminoselicylates)` | Max accuracy of medical prognosis to training data |
+| `Strict requirement: All diseases and prescriptions must be found in common reference materials (aminosalicylates over aminoselicylates)` | Max accuracy of medical prognosis to training data |
 
 ### Explicit examples of tanscript corrections
 
@@ -90,7 +97,7 @@ Some specific instructions include concepts like:
 The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-(omeprazole not omeprizole, metformin not metforman)
+(omeprazole over omeprizole, metformin over metforman)
 ```
 
 The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs, including ones not in your examples.
@@ -99,17 +106,17 @@ The model learns: "Fix vowel substitution errors in pharmaceutical terms" and ap
 
 1. **Identify the error pattern** in your domain (vowel swaps, similar-sounding words, acronyms for common words, etc.)
 2. **Choose 2-3 common terms** where this error frequently occurs (they do not need to be in the audio file, but representative of the issue)
-3. **Show correct to incorrect** format: `(correct not incorrect)`
+3. **Show correct to incorrect** format: `(correct over incorrect)`
 
 #### Example patterns by error type
 
 | Error type | Example format |
 |------------|----------------|
-| Vowel substitution | `(omeprazole not omeprizole)` |
-| Sound-alike confusion | `(CABG not cabbage)` |
-| Phonetic spelling | `(prescription not perscription)` |
-| Technical terms | `(kubernetes not kubernetties)` |
-| Proper nouns | `(Salesforce not sales force)` |
+| Vowel substitution | `(omeprazole over omeprizole)` |
+| Sound-alike confusion | `(CABG over cabbage)` |
+| Phonetic spelling | `(prescription over perscription)` |
+| Technical terms | `(kubernetes over kubernetties)` |
+| Proper nouns | `(Salesforce over sales force)` |
 
 ### Audio tags
 
@@ -121,9 +128,35 @@ Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
 
 When there is a pause in the speech where a non-speech sound is detected, audio tags will be added like `[NOISE]`, `[MUSIC]`, `[APPLAUSE]`, etc.
 
+### Handling languages, code switching, and dialects
+
+The model is multilingual by nature and will attempt to code switch when Automatic Language Detection is enabled on your request (`language_detection` as `True`). If a language code is specified on the request, the model will overly try and transcribe that language - so use caution if you think your files will be multilingual. Multilingual does not degrade performance of other languages.
+
+When doing code switching, dialects can be of particular interest. By default, the model will infer the code switching based on its training data. Specific instructions for dialects can produce better results, especially for languages like Spanglish which intermix one language with another language's words in the same sentence.
+
+```text
+Transcribe verbatim, preserving natural code-switching between English and Spanish.
+Non-negotiable: Retain the spoken language as-is over translation (correct "I was hablando con mi manager").
+Mandatory: Resolve sound-alike and accent-driven errors using bilingual context (correct pero over perro; meeting over mitin).
+Strict requirement: Preserve fillers, repetitions, stutters, false starts across both languages (correct "eh, o sea— I mean").
+Mandatory: Tag all non-speech sounds precisely (correct [laughter], [silence], [noise]).
+```
+
 ## Prompts components that don't work
 
 Based on testing, avoid these patterns:
+
+### Negative instructions and examples
+
+```text
+Don't write "omeprizole" or "metforman"
+(omeprazole not omeprizole)
+Do NOT mess up medication names
+```
+
+The word `Not` and other negative instructions confuse the model. Any instructions should always be done in the positive instruction with examples of what you would like to see. `Not` instructions have a tendency to hallucinate.
+
+Examples need what you WANT to see. If you only include what you don't want, the model won't know what changes to make to transcription.
 
 ### Context setting
 
@@ -151,7 +184,7 @@ With no error pattern for the model to learn from, these examples will only prov
 
 We found in testing the sweet spot for length is:
 - 3-5 instructions
-- 50-80 words
+- 50-100 words
 
 #### Overly long prompts
 
@@ -183,14 +216,6 @@ It would be nice to have accurate terms.
 
 The model doesn't prioritize non-authoritative requests well. The instruction will be followed weakly versus others provided and is less likely to override the base model's system prompts.
 
-### Examples of what you DON'T want only
-
-```text
-Don't write "omeprizole" or "metforman"
-```
-
-Examples need what you WANT to see. If you only include what you don't want, the model won't know what changes to make to transcription.
-
 ## How to build your prompt
 
 ### Step 1: Choose your base
@@ -211,7 +236,7 @@ Examples need what you WANT to see. If you only include what you don't want, the
 
 ### Step 4: Add 2-3 explicit examples per specific instruction
 
-- `(correct not incorrect, correct2 not incorrect2)`
+- `(correct over incorrect, correct2 over incorrect2)`
 
 ### Final prompt format
 
@@ -483,561 +508,3 @@ The walkthrough demonstrates several important patterns:
 3. **Bidirectional control** - You can move in both directions: more verbose with disfluency prompts or cleaner with readability-focused prompts.
 
 4. **Consistent patterns** - The same audio produces consistently different outputs based on prompt formulation, demonstrating reliable prompt engineering effects.
-
-## Use case templates
-
-The following templates are optimized for specific industries and applications. Each includes recommended prompts and common error patterns to address.
-
-### AI-powered meeting intelligence
-
-**Use case**: Transcribing business meetings for summaries, action items, and searchable archives.
-
-**Common errors**: Company names, product names, project codenames, attendee names, acronyms.
-
-**Recommended prompt (full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Proper noun accuracy (Salesforce not sales force, Asana not a sauna, Figma not fig ma)
-```
-
-**Minimal (for polished summaries only):**
-
-```text
-Transcribe verbatim. Non-negotiable: Product and company name accuracy (Kubernetes not kubernetties, Elasticsearch not elastic search, MongoDB not mongo DB)
-```
-
-**Tips:**
-- Use full verbatim for raw transcripts; minimal for auto-summarization pipelines
-- Add your specific company/product names as examples if they're commonly misheard
-- For recurring meetings, identify which terms get mangled and add those as examples
-
-### Call centers and contact centers
-
-**Use case**: Customer service calls, support tickets, quality assurance, compliance monitoring.
-
-**Common errors**: Product names, policy terms, ticket/case numbers, customer account references.
-
-**Recommended prompt (full verbatim - required for compliance):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Policy term accuracy (warranty not warrenty, reimbursement not reimbersment, eligibility not eligability)
-```
-
-**For compliance-focused transcription:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Customer service accuracy (cancellation not cancelation, subscription not subsciption, representative not representive)
-```
-
-**Tips:**
-- Full verbatim is critical for compliance - captures exact phrasing like "I, uh, I guess I agree" vs "I agree"
-- Disfluencies reveal customer confusion (false starts), frustration (repetitions), hesitation (fillers)
-- Replace examples with your product-specific terms that get misheard
-
-### Call tracking and analytics
-
-**Use case**: Marketing attribution, lead tracking, campaign performance analysis.
-
-**Common errors**: Campaign names, promo codes, URL mentions, phone numbers spoken aloud.
-
-**Recommended prompt (full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Marketing term accuracy (referral not referal, campaign not campain, promotional not promotial)
-```
-
-**Minimal (for analytics pipelines):**
-
-```text
-Transcribe verbatim. Strict requirement: Alphanumeric accuracy for codes and references. Marketing terminology (coupon not cupon, discount not disount)
-```
-
-**Tips:**
-- Full verbatim captures caller intent signals (hesitation before providing info)
-- If tracking specific campaign names, add them as examples
-- Promo codes are challenging - consider post-processing validation
-
-### Code-switching audio (bilingual speech)
-
-<Note>
-These prompts complement the [Code Switching](/docs/speech-to-text/pre-recorded-audio/code-switching) feature. First, enable code switching using either `language_codes` (manual) or automatic language detection with `code_switching=True`. Then use prompting to further boost accuracy.
-</Note>
-
-**Use case**: Transcribing bilingual conversations where speakers naturally switch between languages mid-sentence (e.g., Spanish-English "Spanglish").
-
-**Common errors**: Translating instead of transcribing, missing accent marks, normalizing code-switches, inconsistent language preservation.
-
-**Benchmark results**: Testing on Spanish-English code-switching audio showed prompts can reduce WER by up to ~32% (relative).
-
-**Recommended prompt (best performing):**
-
-```text
-Transcription task: This audio contains bilingual Spanish-English speech. Follow these guidelines carefully. First, listen for the language of each word. Second, transcribe Spanish words using correct Spanish spelling including accent marks (á, é, í, ó, ú) and special characters (ñ, ü). Third, transcribe English words in English, even when they appear in the middle of Spanish sentences. Fourth, do not translate any portion of the speech. Fifth, preserve all natural speech elements including filler words like 'um', 'uh', 'este', 'pues', and 'like'. Sixth, include any hesitations, repetitions, or false starts exactly as they occur. The goal is a verbatim transcript that captures the authentic bilingual speech.
-```
-
-**Alternative prompt:**
-
-```text
-You are transcribing a recording of a natural conversation between bilingual Spanish-English speakers. These speakers are fluent in both languages and switch between them naturally, sometimes multiple times within a single sentence. This phenomenon is called code-switching and is common among bilingual communities. Your task is to transcribe every word exactly as spoken, preserving the language of each word. Do not translate. Do not normalize. Do not correct perceived errors. Spanish words should be spelled with proper Spanish orthography including accent marks. English words should remain in English even when surrounded by Spanish. Capture all filler words, hesitations, and repetitions in both languages.
-```
-
-**Concise prompt:**
-
-```text
-Natural Spanglish conversation. Code-switching throughout. Preserve every language switch exactly. Spanish with accents. English as English. Verbatim.
-```
-
-**Tips:**
-- Explicitly state "do not translate" - models tend to normalize bilingual speech into one language
-- Include accent marks instruction (á, é, í, ó, ú, ñ) for proper Spanish orthography
-- Mention bilingual filler words from both languages ('um', 'uh', 'este', 'pues', 'like')
-- Longer, more detailed prompts performed better than concise ones for code-switching
-- These prompts work for Spanish-English; adapt the language pair and filler word examples for other bilingual combinations
-
-### Education
-
-**Use case**: Lecture transcription, tutoring sessions, educational content, accessibility.
-
-**Common errors**: Academic terminology, subject-specific vocabulary, citation references.
-
-**Recommended prompt (full verbatim - for tutoring/interactive sessions):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Academic terminology accuracy (curriculum not curiculum, pedagogy not pedogogy, assessment not assesment)
-```
-
-**For STEM lectures (polished output):**
-
-```text
-Transcribe verbatim. Strict requirement: Scientific term accuracy (algorithm not algorythm, hypothesis not hypothesus, variable not varable)
-```
-
-**For humanities:**
-
-```text
-Transcribe verbatim. MANDATORY: Academic vocabulary (bibliography not bibilography, dissertation not disertation, methodology not methodolgy)
-```
-
-**Tips:**
-- Full verbatim for tutoring captures student thinking process and confusion points
-- Minimal works for polished lecture recordings meant for captions
-- For language learning content, disfluencies are pedagogically valuable - use full verbatim
-- Different subjects have different terminology - customize examples per course/subject
-
-### Hiring and recruiting
-
-**Use case**: Interview transcription, candidate screening, hiring analytics.
-
-**Common errors**: Job titles, company names, technical skills, certifications.
-
-**Recommended prompt (full verbatim - critical for interview analysis):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Professional terminology accuracy (LinkedIn not linked in, resume not resumay, candidate not canadate)
-```
-
-**For technical roles:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Technical skill accuracy (JavaScript not java script, PostgreSQL not post-gress, Kubernetes not kubernetties)
-```
-
-**Tips:**
-- Full verbatim is essential - hesitations, self-corrections, and false starts reveal candidate thinking patterns
-- Stutters on technical questions vs fluent answers are meaningful signals
-- Add role-specific technical terms as examples based on job requirements
-
-### Online meeting platforms
-
-**Use case**: General video conferencing transcription, closed captions, meeting records.
-
-**Common errors**: Participant names, screen-shared content references, technical terms.
-
-**Recommended prompt (full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Proper noun accuracy (Zoom not zoom, Microsoft Teams not microsoft teams, Google Meet not google meet)
-```
-
-**Minimal (for live captions where brevity matters):**
-
-```text
-Transcribe verbatim. MANDATORY: Professional vocabulary (agenda not agender, minutes not minuts, action item not action itam)
-```
-
-**Tips:**
-- Full verbatim for meeting records; minimal for live captions
-- For live captions, speed matters more than capturing every "um"
-- Allow users to add custom vocabulary for their organization
-
-### Medical platforms
-
-**Use case**: Clinical documentation, patient encounters, telehealth, medical dictation.
-
-**Recommended prompt (patient conversations - full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Pharmaceutical accuracy required (omeprazole not omeprizole, metformin not metforman)
-```
-
-**For clinical dictation (polished output):**
-
-```text
-Transcribe verbatim. MANDATORY: Publication-quality drug names (acetaminophen not acetaminophin, ibuprofen not ibuprofin)
-```
-
-**For specialty-specific:**
-
-```text
-Transcribe verbatim. Strict requirement: Medical terminology accuracy (diagnosis not diagnosus, prescription not perscription, symptoms not simptoms)
-```
-
-**Common medical error patterns:**
-- `-azole` endings: omeprazole, fluconazole, metronidazole
-- `-statin` endings: atorvastatin, simvastatin, rosuvastatin
-- `-pril` endings: lisinopril, enalapril, ramipril
-- Complex compounds: acetaminophen, hydrochlorothiazide
-
-**Tips:**
-- Full verbatim for patient conversations captures symptom descriptions: "It hurts, um, kind of here- no, more like here"
-- Minimal for physician dictation where speech is already polished
-- Drug name accuracy is critical for patient safety - vowel errors like "omeprizole" could cause dispensing errors
-- The model generalizes from examples: showing vowel errors in common drugs fixes the pattern in ALL drugs
-
-### Productivity software/tools
-
-**Use case**: Voice notes, dictation, task capture, voice commands.
-
-**Common errors**: App names, action verbs, proper nouns.
-
-**Recommended prompt (voice notes - full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Application name accuracy (Notion not no shun, Todoist not to do ist, Trello not trel oh)
-```
-
-**For voice commands (minimal - precision over verbatim):**
-
-```text
-Transcribe verbatim. MANDATORY: Action clarity (schedule not schedual, reminder not remindre, deadline not deadlin)
-```
-
-**Tips:**
-- Full verbatim for brainstorming voice notes: "I want to, um, maybe add a- no wait, let's do..." captures thought process
-- Minimal for voice commands where you just need the action
-- Add your integrated app names as examples
-
-### Revenue/Sales intelligence and coaching
-
-**Use case**: Sales call analysis, coaching insights, deal intelligence, competitive intel.
-
-**Common errors**: Competitor names, pricing terms, objection handling phrases, sales methodology terms.
-
-**Recommended prompt (full verbatim - essential for coaching):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Sales terminology accuracy (procurement not procurment, revenue not revenu, quarterly not quartly)
-```
-
-**For methodology-specific coaching:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Business vocabulary accuracy (stakeholder not stakholder, implementation not implimentation, integration not intergration)
-```
-
-**For competitive intelligence:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Strict requirement: Company name accuracy (Salesforce not sales force, HubSpot not hub spot, Atlassian not atlassion)
-```
-
-**Tips:**
-- Full verbatim captures coaching moments - confident rep: "The price is fifty thousand" vs hesitant rep: "The, uh, the price is... fifty thousand"
-- Customer buying signals show in disfluencies - "We, um, we might be interested" (hesitation) vs "We're interested" (commitment)
-- False starts reveal objections forming - "I don't- well, I mean, the budget is..."
-- Replace company name examples with your actual competitors
-
-### Avatar/dubbing
-
-**Use case**: Voice synthesis input, dubbing preparation, lip-sync content.
-
-**Common errors**: Timing-critical - need accurate word boundaries; pronunciation preservation.
-
-**Recommended prompt (full verbatim - required for lip-sync):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Preserve exact speech patterns. No smoothing or corrections.
-```
-
-**For dubbing prep:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Exact syllable preservation (going to not gonna, want to not wanna) for lip-sync accuracy
-```
-
-**Tips:**
-- Full verbatim is mandatory - every "um" and pause affects lip-sync timing
-- Colloquial forms matter for mouth shapes: "gonna" (2 syllables) vs "going to" (3 syllables) changes lip movement
-- False starts and stutters: "I th-thought" must be preserved exactly for natural dubbing
-- Word-level timestamps are critical - verify alignment
-
-### Podcast recording and editing
-
-**Use case**: Episode transcription, show notes, searchable archives, audiograms.
-
-**Common errors**: Guest names, show names, sponsor names, niche topic vocabulary.
-
-**Recommended prompt (full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Media term accuracy (podcast not pod cast, episode not episod, subscriber not subscirber)
-```
-
-**For interview podcasts:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Proper noun accuracy (Spotify not spot-ify, Patreon not patron, YouTube not you tube)
-```
-
-**Tips:**
-- Full verbatim helps editors find cut points - natural pauses after "um" or false starts are good edit locations
-- Disfluencies show authentic conversation vs scripted - "I, I actually think..." sounds more genuine
-- Replace platform examples with your show name, guest names, and sponsor names
-
-### Video editing
-
-**Use case**: Subtitle generation, content editing, searchable video archives.
-
-**Common errors**: Speaker names, on-screen text references, technical terms.
-
-**Recommended prompt (full verbatim):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Video term accuracy (thumbnail not thumnail, subscribe not subscibe, notification not notifcation)
-```
-
-**For tutorial content:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Strict requirement: Technical term accuracy (tutorial not tutoreal, demonstration not demonstation, screenshot not screen shot)
-```
-
-**Tips:**
-- Full verbatim helps find edit points - cut after "um" or before false starts for clean edits
-- Disfluencies in raw footage: "So, um, click here and then- actually, first go to..." shows where to trim
-- Speaker diarization complements transcription - use both features
-
-### Legal tech and e-discovery platforms
-
-**Use case**: Depositions, court proceedings, legal document review, compliance.
-
-**Common errors**: Legal terminology, party names, case citations, Latin phrases.
-
-**Recommended prompt (depositions - full verbatim required):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Legal terminology accuracy (plaintiff not plantiff, defendant not defendent, subpoena not supena)
-```
-
-**For court proceedings:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Legal term precision (adjudicate not ajudicate, injunction not injuntion, testimony not testimoney)
-```
-
-**For contract review:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Strict requirement: Legal vocabulary (indemnification not indemnication, arbitration not arbritration, jurisdiction not juristiction)
-```
-
-**Common legal error patterns:**
-- Latin terms: habeas corpus, pro bono, ex parte, voir dire
-- Process terms: deposition, adjudication, litigation, arbitration
-- Document types: affidavit, subpoena, injunction, stipulation
-
-**Tips:**
-- Full verbatim is legally required - "I, uh, don't recall" vs "I don't recall" have different evidentiary weight
-- Hesitation captured: "Did you see the defendant?" "I... I think so" vs "I think so" - the pause matters
-- False starts show witness uncertainty: "He was- I mean, she was there"
-- Party names and case numbers require post-processing validation
-
-### Market intelligence research
-
-**Use case**: Focus groups, consumer interviews, competitive research, survey responses.
-
-**Common errors**: Brand names, product names, competitor mentions, industry jargon.
-
-**Recommended prompt (full verbatim - critical for sentiment):**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Non-negotiable: Consumer research accuracy (preference not preferance, recommendation not recomendation, satisfaction not satisfation)
-```
-
-**For focus groups:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- MANDATORY: Brand accuracy (Nike not nikey, Adidas not adeedas, Lululemon not lulu lemon)
-```
-
-**For competitive research:**
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Strict requirement: Industry term accuracy (demographic not demograhic, analytics not analitics, segmentation not segmantation)
-```
-
-**Tips:**
-- Full verbatim reveals true consumer sentiment - "I, um, I guess I like it" (lukewarm) vs "I like it" (appears positive)
-- Hesitation before brand mentions: "I usually buy... um... Nike" suggests weak brand loyalty
-- False starts show conflicting opinions: "I love- well, I don't love it, but..."
-- Replace brand examples with the specific brands you're researching
