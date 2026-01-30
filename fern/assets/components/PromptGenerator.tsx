@@ -21,6 +21,30 @@ Analyze the transcript sample to identify domain-specific terminology that might
 
 // Limit transcript to approximately 1000 words (roughly 6000 characters)
 const MAX_TRANSCRIPT_CHARS = 6000;
+// Limit instructions to approximately 500 words (roughly 3000 characters)
+const MAX_INSTRUCTIONS_CHARS = 3000;
+
+// Helper function to truncate text at the last sentence boundary (period, exclamation, or question mark)
+const truncateAtSentenceBoundary = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  
+  // Find the last sentence-ending punctuation before the limit
+  const truncated = text.substring(0, maxLength);
+  const lastPeriod = truncated.lastIndexOf('.');
+  const lastExclamation = truncated.lastIndexOf('!');
+  const lastQuestion = truncated.lastIndexOf('?');
+  
+  // Find the latest punctuation mark
+  const lastPunctuation = Math.max(lastPeriod, lastExclamation, lastQuestion);
+  
+  // If we found punctuation and it's not too close to the start (at least 100 chars), use it
+  if (lastPunctuation > 100) {
+    return text.substring(0, lastPunctuation + 1);
+  }
+  
+  // Fallback: just truncate at the limit
+  return truncated;
+};
 
 export function PromptGenerator() {
   const [transcript, setTranscript] = React.useState("");
@@ -33,25 +57,23 @@ export function PromptGenerator() {
     let transcriptText = transcript || "(No transcript sample provided)";
     let instructionsText = instructions || "(No specific instructions provided - generate a general transcription prompt based on the transcript sample)";
     
-    // Truncate transcript if it exceeds the character limit
-    if (transcriptText.length > MAX_TRANSCRIPT_CHARS) {
-      transcriptText = transcriptText.substring(0, MAX_TRANSCRIPT_CHARS) + "\n\n[Transcript truncated to first ~1000 words]";
+    // Truncate instructions first (max 500 words / 3000 chars)
+    if (instructionsText.length > MAX_INSTRUCTIONS_CHARS) {
+      instructionsText = truncateAtSentenceBoundary(instructionsText, MAX_INSTRUCTIONS_CHARS) + "\n\n[Instructions truncated to ~500 words]";
     }
     
-    // Further truncate for URL length if needed
+    // Calculate remaining space for transcript after accounting for instructions
+    const instructionsLength = instructionsText.length;
+    
+    // Truncate transcript if it exceeds the character limit
+    let transcriptLimit = MAX_TRANSCRIPT_CHARS;
     if (maxContentLength) {
-      const totalLength = transcriptText.length + instructionsText.length;
-      if (totalLength > maxContentLength) {
-        const transcriptAllocation = Math.floor(maxContentLength * 0.7);
-        const instructionsAllocation = maxContentLength - transcriptAllocation;
-        
-        if (transcriptText.length > transcriptAllocation) {
-          transcriptText = transcriptText.substring(0, transcriptAllocation) + "\n\n[Transcript truncated due to URL length - provide full transcript directly to the AI if needed]";
-        }
-        if (instructionsText.length > instructionsAllocation) {
-          instructionsText = instructionsText.substring(0, instructionsAllocation) + "\n\n[Instructions truncated]";
-        }
-      }
+      // Reserve space for instructions, then use remaining for transcript
+      transcriptLimit = Math.min(MAX_TRANSCRIPT_CHARS, maxContentLength - instructionsLength);
+    }
+    
+    if (transcriptText.length > transcriptLimit && transcriptLimit > 100) {
+      transcriptText = truncateAtSentenceBoundary(transcriptText, transcriptLimit) + "\n\n[Transcript sample truncated - provide full transcript directly to the AI if needed]";
     }
     
     return `${LLM_CONTEXT}
