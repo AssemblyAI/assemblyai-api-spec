@@ -1,37 +1,9 @@
 "use client";
 import * as React from "react";
 
-type TranscriptionStyle = "readability" | "readable-disfluencies" | "max-verbatim" | "max-verbatim-audio-tags";
-
-const STYLE_PROMPTS: Record<TranscriptionStyle, string> = {
-  "readability": `Transcribe audio verbatim.`,
-  "readable-disfluencies": `Transcribe audio verbatim:
-- Include all disfluencies`,
-  "max-verbatim": `Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)`,
-  "max-verbatim-audio-tags": `Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-Tag sounds: [laughter], [silence], [noise], [cough], [sigh].`,
-};
-
-const STYLE_LABELS: Record<TranscriptionStyle, string> = {
-  "readability": "Readability",
-  "readable-disfluencies": "Readable with disfluencies",
-  "max-verbatim": "Max verbatim",
-  "max-verbatim-audio-tags": "Max verbatim with audio tags",
-};
-
 const HELP_ARTICLE_URL = "https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering";
 
-const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's description of their desired output, generate an optimized transcription prompt.
+const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample and their description of desired output, generate an optimized transcription prompt.
 
 Key principles for effective prompts:
 1. Use authoritative language: "Non-negotiable:", "Mandatory:", "Strict requirement:"
@@ -42,45 +14,63 @@ Key principles for effective prompts:
 6. The model is multilingual and supports code switching when language_detection is True
 
 Generate a prompt that follows this structure:
-[Base instruction based on style]
+[Base instruction based on desired output style]
 [Authoritative language] + [Specific instruction] + [2-3 explicit examples using "over" format]
 
-Based on the user's description, identify the domain and create appropriate examples for terminology that might be misheard.`;
+Analyze the transcript sample to identify domain-specific terminology that might be misheard and create appropriate examples. Use the user's description to understand what output format and accuracy they need.`;
+
+// Limit transcript to approximately 1000 words (roughly 6000 characters)
+const MAX_TRANSCRIPT_CHARS = 6000;
 
 export function PromptGenerator() {
   const [transcript, setTranscript] = React.useState("");
-  const [style, setStyle] = React.useState<TranscriptionStyle>("readability");
+  const [instructions, setInstructions] = React.useState("");
 
   // Max URL length to avoid browser errors (conservative limit)
   const MAX_URL_LENGTH = 8000;
 
-  const buildLLMPrompt = (maxDescriptionLength?: number) => {
-    const styleLabel = STYLE_LABELS[style];
-    const basePrompt = STYLE_PROMPTS[style];
+  const buildLLMPrompt = (maxContentLength?: number) => {
+    let transcriptText = transcript || "(No transcript sample provided)";
+    let instructionsText = instructions || "(No specific instructions provided - generate a general transcription prompt based on the transcript sample)";
     
-    let descriptionText = transcript || "(No description provided - generate a general prompt for this style)";
+    // Truncate transcript if it exceeds the character limit
+    if (transcriptText.length > MAX_TRANSCRIPT_CHARS) {
+      transcriptText = transcriptText.substring(0, MAX_TRANSCRIPT_CHARS) + "\n\n[Transcript truncated to first ~1000 words]";
+    }
     
-    // Truncate description if needed
-    if (maxDescriptionLength && descriptionText.length > maxDescriptionLength) {
-      descriptionText = descriptionText.substring(0, maxDescriptionLength) + "\n\n[Description truncated due to length - please provide the full description directly to the AI if needed]";
+    // Further truncate for URL length if needed
+    if (maxContentLength) {
+      const totalLength = transcriptText.length + instructionsText.length;
+      if (totalLength > maxContentLength) {
+        const transcriptAllocation = Math.floor(maxContentLength * 0.7);
+        const instructionsAllocation = maxContentLength - transcriptAllocation;
+        
+        if (transcriptText.length > transcriptAllocation) {
+          transcriptText = transcriptText.substring(0, transcriptAllocation) + "\n\n[Transcript truncated due to URL length - provide full transcript directly to the AI if needed]";
+        }
+        if (instructionsText.length > instructionsAllocation) {
+          instructionsText = instructionsText.substring(0, instructionsAllocation) + "\n\n[Instructions truncated]";
+        }
+      }
     }
     
     return `${LLM_CONTEXT}
 
-User's selected transcription style: ${styleLabel}
-Base prompt for this style:
-${basePrompt}
+User's transcript sample:
+${transcriptText}
 
-User's description of what they want in the output:
-${descriptionText}
+User's description of desired output:
+${instructionsText}
 
-IMPORTANT: Please generate an optimized transcription prompt based on the user's description and the prompt engineering best practices. Use "over" instead of "not" in all examples (e.g., "omeprazole over omeprizole"). For detailed best practices, check the help article: ${HELP_ARTICLE_URL}`;
+IMPORTANT: Please generate an optimized transcription prompt based on the transcript sample and user's instructions. Use "over" instead of "not" in all examples (e.g., "omeprazole over omeprizole"). For detailed best practices, check the help article: ${HELP_ARTICLE_URL}`;
   };
 
-  const getMaxDescriptionLength = (baseUrl: string) => {
-    // Calculate how much space we have for the description
-    const promptWithoutDescription = buildLLMPrompt(0).replace(transcript || "(No description provided - generate a general prompt for this style)", "");
-    const encodedBaseLength = baseUrl.length + encodeURIComponent(promptWithoutDescription).length;
+  const getMaxContentLength = (baseUrl: string) => {
+    // Calculate how much space we have for content
+    const promptWithoutContent = buildLLMPrompt(0)
+      .replace(transcript || "(No transcript sample provided)", "")
+      .replace(instructions || "(No specific instructions provided - generate a general transcription prompt based on the transcript sample)", "");
+    const encodedBaseLength = baseUrl.length + encodeURIComponent(promptWithoutContent).length;
     const availableLength = MAX_URL_LENGTH - encodedBaseLength;
     // Account for URL encoding overhead (roughly 3x for special chars)
     return Math.floor(availableLength / 3);
@@ -88,21 +78,21 @@ IMPORTANT: Please generate an optimized transcription prompt based on the user's
 
   const openInClaude = () => {
     const baseUrl = "https://claude.ai/new?q=";
-    const maxLength = getMaxDescriptionLength(baseUrl);
+    const maxLength = getMaxContentLength(baseUrl);
     const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
     window.open(`${baseUrl}${prompt}`, "_blank");
   };
 
   const openInChatGPT = () => {
     const baseUrl = "https://chat.openai.com/?q=";
-    const maxLength = getMaxDescriptionLength(baseUrl);
+    const maxLength = getMaxContentLength(baseUrl);
     const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
     window.open(`${baseUrl}${prompt}`, "_blank");
   };
 
   const openInGemini = () => {
     const baseUrl = "https://aistudio.google.com/prompts/new_chat?prompt=";
-    const maxLength = getMaxDescriptionLength(baseUrl);
+    const maxLength = getMaxContentLength(baseUrl);
     const prompt = encodeURIComponent(buildLLMPrompt(maxLength));
     window.open(`${baseUrl}${prompt}`, "_blank");
   };
@@ -135,14 +125,10 @@ IMPORTANT: Please generate an optimized transcription prompt based on the user's
     color: "var(--grayscale-12, #111827)",
   };
 
-  const selectStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "8px",
-    border: "1px solid var(--grayscale-a4, #d1d5db)",
-    borderRadius: "6px",
-    fontSize: "14px",
-    backgroundColor: "var(--grayscale-1, #ffffff)",
-    color: "var(--grayscale-12, #111827)",
+  const charCountStyle: React.CSSProperties = {
+    fontSize: "12px",
+    color: "var(--grayscale-11, #6b7280)",
+    marginTop: "4px",
   };
 
   const buttonBaseStyle: React.CSSProperties = {
@@ -169,31 +155,30 @@ IMPORTANT: Please generate an optimized transcription prompt based on the user's
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div>
           <label style={labelStyle}>
-            Describe what you want in your transcription output
+            Paste your transcript sample
           </label>
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Describe your use case and what you want in the output. For example: 'Medical transcription for patient encounters, need accurate drug names like omeprazole and metformin, capture hesitations and false starts' or 'Sales call transcription with accurate company names like Salesforce and HubSpot'..."
+            placeholder="Paste a sample of your transcript here. This helps identify domain-specific terminology and common speech patterns in your audio..."
             style={textareaStyle}
           />
+          <div style={charCountStyle}>
+            {transcript.length > 0 && `${transcript.length.toLocaleString()} / ${MAX_TRANSCRIPT_CHARS.toLocaleString()} characters (approximately ${Math.round(transcript.split(/\s+/).filter(w => w).length)} words)`}
+            {transcript.length > MAX_TRANSCRIPT_CHARS && " - will be truncated"}
+          </div>
         </div>
 
         <div>
           <label style={labelStyle}>
-            Select transcription style
+            Describe how you want the transcript to look
           </label>
-          <select
-            value={style}
-            onChange={(e) => setStyle(e.target.value as TranscriptionStyle)}
-            style={selectStyle}
-          >
-            {Object.entries(STYLE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <textarea
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Describe the output format and accuracy requirements you need. For example: 'I need verbatim transcription with all filler words (um, uh) and hesitations preserved. This is medical audio so drug names like omeprazole and metformin must be accurate. Include audio tags like [laughter] and [cough].' Or: 'Clean, readable transcript for a sales call. Company names like Salesforce and HubSpot should be capitalized correctly. Remove stutters and false starts.'"
+            style={{ ...textareaStyle, height: "120px" }}
+          />
         </div>
 
         <div style={{ marginTop: "8px" }}>
@@ -246,7 +231,7 @@ IMPORTANT: Please generate an optimized transcription prompt based on the user's
             </button>
           </div>
           <p style={helpTextStyle}>
-            Click a button to open your preferred AI assistant with your description and style pre-loaded. The AI will generate an optimized prompt based on our prompt engineering best practices.
+            Click a button to open your preferred AI assistant with your transcript sample and instructions pre-loaded. The AI will generate an optimized prompt based on our prompt engineering best practices.
           </p>
         </div>
       </div>
