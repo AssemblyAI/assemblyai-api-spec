@@ -135,12 +135,9 @@ The Speaker Diarization model lets you detect multiple speakers in an audio file
 
 If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
 
-<Info>
-  Looking to identify speakers by name across multiple audio files? Check out
-  our [Speaker Identification
-  guide](/docs/speech-understanding/speaker-identification) to learn how to
-  match speaker labels with actual speaker names.
-</Info>
+<Tip title="Want to name your speakers?">
+  Speaker Diarization assigns generic labels like "Speaker A" and "Speaker B" to distinguish between speakers. If you want to replace these labels with actual names or roles (e.g., "John Smith" or "Customer"), use [Speaker Identification](/docs/speech-understanding/speaker-identification). Speaker Identification analyzes the conversation content to infer who is speaking and transforms your transcript from generic labels to meaningful identifiers.
+</Tip>
 
 ## Quickstart
 
@@ -1527,7 +1524,7 @@ curl https://api.assemblyai.com/v2/transcript \
 | Key                                 | Type   | Description                                                                                                                                                |
 | ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `utterances`                        | array  | A turn-by-turn temporal sequence of the transcript, where the i-th element is an object containing information about the i-th utterance in the audio file. |
-| `utterances[i].confidence`          | number | The confidence score for the transcript of this utterance.                                                                                                 |
+| `utterances[i].confidence`          | number | A score between 0 and 1 indicating the model's confidence in the accuracy of the transcribed text for this utterance.                                      |
 | `utterances[i].end`                 | number | The ending time, in milliseconds, of the utterance in the audio file.                                                                                      |
 | `utterances[i].speaker`             | string | The speaker of this utterance, where each speaker is assigned a sequential capital letter. For example, "A" for Speaker A, "B" for Speaker B, and so on.   |
 | `utterances[i].start`               | number | The starting time, in milliseconds, of the utterance in the audio file.                                                                                    |
@@ -1540,6 +1537,141 @@ curl https://api.assemblyai.com/v2/transcript \
 | `utterances[i].words[j].speaker`    | string | The speaker who uttered the j-th word in the i-th utterance.                                                                                               |
 
 The response also includes the request parameters used to generate the transcript.
+
+## Identify speakers by name
+
+Speaker Diarization assigns generic labels like "Speaker A" and "Speaker B" to each speaker. If you want to replace these labels with actual names or roles, you can use Speaker Identification to transform your transcript.
+
+**Before Speaker Identification:**
+
+```txt
+Speaker A: Good morning, and welcome to the show.
+Speaker B: Thanks for having me.
+```
+
+**After Speaker Identification:**
+
+```txt
+Michel Martin: Good morning, and welcome to the show.
+Peter DeCarlo: Thanks for having me.
+```
+
+The following example shows how to transcribe audio with Speaker Diarization and then apply Speaker Identification to replace the generic speaker labels with actual names.
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python maxLines=30
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+audio_url = "https://assembly.ai/wildfires.mp3"
+
+# Configure transcript with speaker diarization and speaker identification
+data = {
+    "audio_url": audio_url,
+    "speaker_labels": True,
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "name",
+                "known_values": ["Michel Martin", "Peter DeCarlo"]
+            }
+        }
+    }
+}
+
+# Submit the transcription request
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll for transcription results
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+
+# Print utterances with identified speaker names
+for utterance in transcript["utterances"]:
+    print(f"{utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript maxLines=30
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  "authorization": "<YOUR_API_KEY>",
+  "content-type": "application/json"
+};
+
+const audioUrl = "https://assembly.ai/wildfires.mp3";
+
+// Configure transcript with speaker diarization and speaker identification
+const data = {
+  audio_url: audioUrl,
+  speaker_labels: true,
+  speech_understanding: {
+    request: {
+      speaker_identification: {
+        speaker_type: "name",
+        known_values: ["Michel Martin", "Peter DeCarlo"]
+      }
+    }
+  }
+};
+
+async function main() {
+  // Submit the transcription request
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data)
+  });
+
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll for transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcript = await pollingResponse.json();
+
+    if (transcript.status === "completed") {
+      // Print utterances with identified speaker names
+      for (const utterance of transcript.utterances) {
+        console.log(`${utterance.speaker}: ${utterance.text}`);
+      }
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+}
+
+main().catch(console.error);
+```
+
+</Tab>
+</Tabs>
+
+For more details on Speaker Identification, including how to identify speakers by role and how to apply it to existing transcripts, see the [Speaker Identification guide](/docs/speech-understanding/speaker-identification).
 
 ## Frequently asked questions & troubleshooting
 
