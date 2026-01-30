@@ -23,8 +23,8 @@ Analyze the transcript sample to identify domain-specific terminology that might
 const MAX_TRANSCRIPT_CHARS = 6000;
 // Minimum transcript characters to always include
 const MIN_TRANSCRIPT_CHARS = 1000;
-// Limit instructions to 500 characters
-const MAX_INSTRUCTIONS_CHARS = 500;
+// Limit instructions to 1000 characters
+const MAX_INSTRUCTIONS_CHARS = 1000;
 
 // Helper function to truncate text at the last sentence boundary (period, exclamation, or question mark)
 const truncateAtSentenceBoundary = (text: string, maxLength: number): string => {
@@ -48,6 +48,23 @@ const truncateAtSentenceBoundary = (text: string, maxLength: number): string => 
   return truncated;
 };
 
+// Helper function to truncate text at the last word boundary (space)
+const truncateAtWordBoundary = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  
+  // Find the last space before the limit
+  const truncated = text.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  
+  // If we found a space and it's not too close to the start (at least 50 chars), use it
+  if (lastSpace > 50) {
+    return text.substring(0, lastSpace);
+  }
+  
+  // Fallback: just truncate at the limit
+  return truncated;
+};
+
 export function PromptGenerator() {
   const [transcript, setTranscript] = React.useState("");
   const [instructions, setInstructions] = React.useState("");
@@ -59,9 +76,9 @@ export function PromptGenerator() {
     let transcriptText = transcript || "(No transcript sample provided)";
     let instructionsText = instructions || "(No specific instructions provided - generate a general transcription prompt based on the transcript sample)";
     
-    // Truncate instructions first (max 500 chars)
+    // Truncate instructions first (max 1000 chars) at word boundary
     if (instructionsText.length > MAX_INSTRUCTIONS_CHARS) {
-      instructionsText = truncateAtSentenceBoundary(instructionsText, MAX_INSTRUCTIONS_CHARS) + "\n\n[Instructions truncated to 500 characters]";
+      instructionsText = truncateAtWordBoundary(instructionsText, MAX_INSTRUCTIONS_CHARS) + "\n\n[Instructions truncated to 1000 characters]";
     }
     
     // Calculate remaining space for transcript after accounting for instructions
