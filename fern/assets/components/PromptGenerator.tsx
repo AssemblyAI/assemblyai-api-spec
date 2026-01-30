@@ -21,8 +21,10 @@ Analyze the transcript sample to identify domain-specific terminology that might
 
 // Limit transcript to approximately 1000 words (roughly 6000 characters)
 const MAX_TRANSCRIPT_CHARS = 6000;
-// Limit instructions to approximately 500 words (roughly 3000 characters)
-const MAX_INSTRUCTIONS_CHARS = 3000;
+// Minimum transcript characters to always include
+const MIN_TRANSCRIPT_CHARS = 1000;
+// Limit instructions to 500 characters
+const MAX_INSTRUCTIONS_CHARS = 500;
 
 // Helper function to truncate text at the last sentence boundary (period, exclamation, or question mark)
 const truncateAtSentenceBoundary = (text: string, maxLength: number): string => {
@@ -57,22 +59,24 @@ export function PromptGenerator() {
     let transcriptText = transcript || "(No transcript sample provided)";
     let instructionsText = instructions || "(No specific instructions provided - generate a general transcription prompt based on the transcript sample)";
     
-    // Truncate instructions first (max 500 words / 3000 chars)
+    // Truncate instructions first (max 500 chars)
     if (instructionsText.length > MAX_INSTRUCTIONS_CHARS) {
-      instructionsText = truncateAtSentenceBoundary(instructionsText, MAX_INSTRUCTIONS_CHARS) + "\n\n[Instructions truncated to ~500 words]";
+      instructionsText = truncateAtSentenceBoundary(instructionsText, MAX_INSTRUCTIONS_CHARS) + "\n\n[Instructions truncated to 500 characters]";
     }
     
     // Calculate remaining space for transcript after accounting for instructions
     const instructionsLength = instructionsText.length;
     
     // Truncate transcript if it exceeds the character limit
+    // Ensure at least MIN_TRANSCRIPT_CHARS (1000) for transcript
     let transcriptLimit = MAX_TRANSCRIPT_CHARS;
     if (maxContentLength) {
       // Reserve space for instructions, then use remaining for transcript
-      transcriptLimit = Math.min(MAX_TRANSCRIPT_CHARS, maxContentLength - instructionsLength);
+      // But always ensure at least MIN_TRANSCRIPT_CHARS for transcript
+      transcriptLimit = Math.max(MIN_TRANSCRIPT_CHARS, Math.min(MAX_TRANSCRIPT_CHARS, maxContentLength - instructionsLength));
     }
     
-    if (transcriptText.length > transcriptLimit && transcriptLimit > 100) {
+    if (transcriptText.length > transcriptLimit) {
       transcriptText = truncateAtSentenceBoundary(transcriptText, transcriptLimit) + "\n\n[Transcript sample truncated - provide full transcript directly to the AI if needed]";
     }
     
