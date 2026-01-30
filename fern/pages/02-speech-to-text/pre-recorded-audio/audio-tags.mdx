@@ -2,87 +2,111 @@
 title: "Audio Tags"
 ---
 
-Audio tags allow you to capture non-speech events in your audio, such as laughter, silence, noise, coughs, and sighs. When enabled, the model will detect and tag these sounds in your transcript.
+import { AudioPlayer } from "../../../assets/components/AudioPlayer";
 
-## How audio tags work
+Audio tags identify and label non-speech sounds in your transcript, such as music, laughter, applause, or background noise. By default, these sounds are not tagged in transcripts. Use the `prompt` parameter to specify which audio events you want tagged in your transcript.
 
-When there is a pause in the speech where a non-speech sound is detected, audio tags will be added to the transcript like `[NOISE]`, `[MUSIC]`, `[APPLAUSE]`, etc.
+## Overview
 
-## Enabling audio tags
+Audio tags capture non-speech events like music, laughter, pauses, applause, background noise, and other sounds in your audio. Include examples of audio tags you want to transcribe in the prompt parameter to guide the model.
 
-To enable audio tags, include the following instruction in your prompt:
+<AudioPlayer src="https://assemblyaiassets.com/audios/audio_tag.mp3" />
 
-```text
-Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
+Without prompting audio tags:
+
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options.
 ```
 
-## Supported audio tags
+After prompting audio tags:
 
-The model can detect and tag the following non-speech events:
-
-| Tag | Description |
-|-----|-------------|
-| `[NOISE]` | General background noise |
-| `[MUSIC]` | Music playing |
-| `[APPLAUSE]` | Clapping or applause |
-| `[LAUGHTER]` | Laughter |
-| `[SILENCE]` | Extended silence |
-| `[COUGH]` | Coughing |
-| `[SIGH]` | Sighing |
-
-## Example usage
-
-<CodeBlocks>
-
-```python title="Python SDK"
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-audio_file = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig(
-    speech_models=["universal-3-pro"],
-    prompt="Tag sounds: [laughter], [silence], [noise], [cough], [sigh]."
-)
-
-transcript = aai.Transcriber(config=config).transcribe(audio_file)
-
-if transcript.status == "error":
-    raise RuntimeError(f"Transcription failed: {transcript.error}")
-
-print(transcript.text)
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options. [beep]
 ```
 
-```javascript title="JavaScript SDK"
-import { AssemblyAI } from "assemblyai";
+Here are some examples of audio tags you can prompt for: [music], [laugher], [applause], [noise], [pause], [inaudible], [sigh], [gasp], [cheering], [sound], [screaming], [bell], [beep], [sound effect], [buzzer], and more.
 
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
+## Quickstart
 
-const audioFile = "https://assembly.ai/wildfires.mp3";
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
 
-const params = {
-  audio: audioFile,
-  speech_models: ["universal-3-pro"],
-  prompt: "Tag sounds: [laughter], [silence], [noise], [cough], [sigh]."
+```python {10}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/audio_tag.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal"],
+    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {11-12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
 };
 
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params);
-  console.log(transcript.text);
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/audio_tag.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal"],
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]",
 };
 
-run();
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
 ```
 
-</CodeBlocks>
-
-## Best practices
-
-- Audio tags work best with Universal-3-Pro model
-- Combine audio tags with other prompt instructions for comprehensive transcription control
-- Audio tags are most useful for content analysis, accessibility features, and detailed transcription requirements
-
-For more information on prompt engineering and customizing transcription output, see [Natural language prompting](/docs/speech-to-text/pre-recorded-audio/natural-language-prompting).
+</Tab>
+</Tabs>
