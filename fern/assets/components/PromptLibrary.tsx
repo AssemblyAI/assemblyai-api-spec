@@ -1,9 +1,58 @@
 "use client";
 import * as React from "react";
 
-// Supabase configuration - will be set via environment or props
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// Supabase configuration
+const SUPABASE_URL = "https://iejauyqxykvyvztblitn.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_lZ5bLVPypmNzmNXRHNCeIA_K8sPesqD";
+
+// Helper function to make Supabase REST API calls
+const supabaseQuery = async (
+  table: string,
+  options: {
+    method?: 'GET' | 'POST' | 'PATCH';
+    select?: string;
+    filter?: string;
+    body?: object;
+    order?: string;
+  } = {}
+) => {
+  const { method = 'GET', select, filter, body, order } = options;
+  
+  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  const params = new URLSearchParams();
+  if (select) params.append('select', select);
+  if (filter) url += `?${filter}`;
+  if (order) params.append('order', order);
+  
+  const queryString = params.toString();
+  if (queryString && !filter) url += `?${queryString}`;
+  else if (queryString && filter) url += `&${queryString}`;
+
+  const headers: Record<string, string> = {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (method === 'POST') {
+    headers['Prefer'] = 'return=representation';
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Supabase error: ${response.status} - ${errorText}`);
+  }
+
+  // For POST/PATCH, response might be empty
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+};
 
 // Simple profanity filter - basic list of words to block
 const PROFANITY_LIST = [
@@ -84,13 +133,48 @@ const MOCK_PROMPTS: Prompt[] = [
 
 export function PromptLibrary() {
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [prompts, setPrompts] = React.useState<Prompt[]>(MOCK_PROMPTS);
+  const [prompts, setPrompts] = React.useState<Prompt[]>([]);
   const [filteredPrompts, setFilteredPrompts] = React.useState<Prompt[]>([]);
   const [topPrompts, setTopPrompts] = React.useState<Prompt[]>([]);
   const [newPrompt, setNewPrompt] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitStatus, setSubmitStatus] = React.useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   const [votedPrompts, setVotedPrompts] = React.useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+
+  // Fetch prompts from Supabase on mount
+  React.useEffect(() => {
+    const fetchPrompts = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        
+        // Fetch approved prompts from Supabase
+        const data = await supabaseQuery('prompts', {
+          filter: 'status=eq.approved',
+          select: 'id,content,upvotes,downvotes,created_at',
+          order: 'upvotes.desc'
+        });
+        
+        if (data && Array.isArray(data)) {
+          setPrompts(data);
+        } else {
+          // Fall back to mock data if no prompts in database
+          setPrompts(MOCK_PROMPTS);
+        }
+      } catch (error) {
+        console.error('Failed to fetch prompts:', error);
+        setLoadError('Unable to load prompts from the database. Showing sample prompts.');
+        // Fall back to mock data on error
+        setPrompts(MOCK_PROMPTS);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPrompts();
+  }, []);
 
   // Initialize top prompts and filtered prompts
   React.useEffect(() => {
@@ -304,9 +388,45 @@ export function PromptLibrary() {
     color: "var(--grayscale-12, #111827)",
   };
 
+  const loadingStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "40px",
+    color: "var(--grayscale-11, #6b7280)",
+    fontSize: "14px",
+  };
+
+  const errorBannerStyle: React.CSSProperties = {
+    padding: "12px",
+    borderRadius: "6px",
+    fontSize: "14px",
+    marginBottom: "16px",
+    backgroundColor: "#fef3c7",
+    color: "#92400e",
+    border: "1px solid #fcd34d",
+  };
+
   return (
     <div style={containerStyle}>
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        {/* Loading State */}
+        {isLoading && (
+          <div style={loadingStyle}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite", marginRight: "8px" }}>
+              <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+            </svg>
+            Loading prompts...
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {loadError && !isLoading && (
+          <div style={errorBannerStyle}>
+            {loadError}
+          </div>
+        )}
+
         {/* Search Section */}
         <div>
           <label style={labelStyle}>Search prompts</label>
@@ -322,6 +442,11 @@ export function PromptLibrary() {
         {/* Top Prompts Carousel */}
         <div>
           <div style={sectionTitleStyle}>Top prompts by community votes</div>
+          {isLoading ? (
+            <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>Loading...</div>
+          ) : topPrompts.length === 0 ? (
+            <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>No prompts available yet. Be the first to submit one!</div>
+          ) : (
           <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
             {topPrompts.map((prompt, index) => (
               <div key={prompt.id} style={topCardStyle}>
@@ -379,6 +504,7 @@ export function PromptLibrary() {
               </div>
             ))}
           </div>
+          )}
         </div>
 
         {/* Search Results / All Prompts */}
