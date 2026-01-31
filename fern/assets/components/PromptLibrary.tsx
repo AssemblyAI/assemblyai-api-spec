@@ -5,6 +5,21 @@ import * as React from "react";
 const SUPABASE_URL = "https://iejauyqxykvyvztblitn.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_lZ5bLVPypmNzmNXRHNCeIA_K8sPesqD";
 
+// Edge Function URLs
+const SUBMIT_PROMPT_URL = `${SUPABASE_URL}/functions/v1/submit-prompt`;
+const VOTE_PROMPT_URL = `${SUPABASE_URL}/functions/v1/vote-prompt`;
+
+// Generate or retrieve a session ID for vote tracking
+const getSessionId = (): string => {
+  if (typeof window === 'undefined') return 'server';
+  let sessionId = sessionStorage.getItem('prompt_library_session_id');
+  if (!sessionId) {
+    sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    sessionStorage.setItem('prompt_library_session_id', sessionId);
+  }
+  return sessionId;
+};
+
 // Helper function to make Supabase REST API calls
 const supabaseQuery = async (
   table: string,
@@ -213,8 +228,44 @@ export function PromptLibrary() {
     }));
     setVotedPrompts(prev => new Set([...prev, promptId]));
 
-    // TODO: Send vote to Supabase
-    // await supabase.from('votes').insert({ prompt_id: promptId, vote_type: voteType });
+    // Send vote to Edge Function
+    try {
+      const response = await fetch(VOTE_PROMPT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          prompt_id: promptId,
+          vote_type: voteType,
+          session_id: getSessionId(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Vote failed:', error);
+        // Revert optimistic update on failure
+        setPrompts(prev => prev.map(p => {
+          if (p.id === promptId) {
+            return {
+              ...p,
+              upvotes: voteType === 'up' ? p.upvotes - 1 : p.upvotes,
+              downvotes: voteType === 'down' ? p.downvotes - 1 : p.downvotes
+            };
+          }
+          return p;
+        }));
+        setVotedPrompts(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(promptId);
+          return newSet;
+        });
+      }
+    } catch (error) {
+      console.error('Vote request failed:', error);
+    }
   };
 
   const handleSubmit = async () => {
@@ -247,16 +298,20 @@ export function PromptLibrary() {
     setSubmitStatus({ type: null, message: '' });
 
     try {
-      // TODO: Send to Supabase with status='pending' for moderation
-      // const { data, error } = await supabase.from('prompts').insert({
-      //   content: newPrompt,
-      //   status: 'pending',
-      //   upvotes: 0,
-      //   downvotes: 0
-      // });
+      const response = await fetch(SUBMIT_PROMPT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ content: newPrompt }),
+      });
 
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit prompt');
+      }
 
       setSubmitStatus({ 
         type: 'success', 
@@ -264,7 +319,8 @@ export function PromptLibrary() {
       });
       setNewPrompt("");
     } catch (error) {
-      setSubmitStatus({ type: 'error', message: 'Failed to submit prompt. Please try again.' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit prompt. Please try again.';
+      setSubmitStatus({ type: 'error', message: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
