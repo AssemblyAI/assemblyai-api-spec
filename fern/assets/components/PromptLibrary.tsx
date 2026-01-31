@@ -244,8 +244,17 @@ export function PromptLibrary() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('Vote failed:', error);
+        // Handle non-JSON responses
+        const contentType = response.headers.get('content-type');
+        let errorMsg = 'Vote failed';
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json();
+          errorMsg = error.error || errorMsg;
+        } else {
+          const text = await response.text();
+          errorMsg = `Server error: ${response.status} - ${text || 'Unknown error'}`;
+        }
+        console.error('Vote failed:', errorMsg);
         // Revert optimistic update on failure
         setPrompts(prev => prev.map(p => {
           if (p.id === promptId) {
@@ -306,6 +315,13 @@ export function PromptLibrary() {
         },
         body: JSON.stringify({ content: newPrompt }),
       });
+
+      // Handle non-JSON responses (e.g., "Method not allowed")
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Server error: ${response.status} - ${text || 'Unknown error'}`);
+      }
 
       const result = await response.json();
 
