@@ -17,19 +17,18 @@ This prompt generator helps you create a starting prompt based on your selected 
 ### The winning prompt structure
 
 ```text
-[Base instruction]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Audio tags instruction]
 ```
 
-All five components matter, but examples are critical to drive changes in transcription output:
+All three components matter, but examples are critical to drive changes in transcription output:
 
 | Principle | Implementation | Impact |
 |-----------|----------------|--------|
 | **Explicit examples** | Show 2-3 examples of the error pattern being corrected | Massive |
 | **Avoid negative, not language** | Avoid using "not", "never", "avoid", "optional" | Massive |
+| **Conflicting instructions** | Avoid instructions which conflict with one another (i.e. "capitalize nouns" but "preserve informal speech") | Massive |
 | **Pushy, authoritative language** | Use "Non-negotiable", "Mandatory", "Strict requirement" | Critical |
 | **Specific instruction** | State exactly what accuracy you need | High |
 | **Keep concise** | 3-5 instructions maximum | High |
@@ -52,19 +51,24 @@ The model learns: "Fix vowel substitution errors in pharmaceutical terms" and ap
 
 In addition to prompting, the model supports the parameter `temperature` which defaults to `0` and can be in the range of `[0.0, 2.0]`. Modifying `temperature` will increase the variance in the results the model returns between API requests with the same prompts, but in some cases can help with rare words and entity accuracy.
 
-Beyond prompting, we recommend experimenting with `temperature` in the range of `[0.0, 0.5]`. Higher values are likely to shorten words (`It is` becomes `It's`) and remove disfluencies. Lower values are likely to try to be more verbatim with words encountered and based on phonetics over contextual correctness in the sentence.
+Beyond prompting, we recommend experimenting with `temperature` in the range of `[0.0, 0.3]`. Higher values are likely to shorten words (`It is` becomes `It's`) and remove disfluencies. Lower values are likely to try to be more verbatim with words encountered and based on phonetics over contextual correctness in the sentence.
+
+Our testing has shown that prompting provides more value than temperature. We recommend working with your prompts first before you experiment with temperature.
 
 ## Prompt components
 
-### Base transcription instructions
+### Sample transcription instructions
 
-Some example base instructions based on your needs look like the below:
+Some example instructions based on your needs look like the below:
 
-| Style | Base instruction | Use for |
-|-------|------------------|----------|
-| **Readability** | `Transcribe audio verbatim.` | Transcript readabilitiy, Removes speech errors |
-| **Readable with disfluencies** | `Transcribe audio verbatim:`<br/>`- Include all disfluencies` | Conversational accuracy, Capturing basic speech patterns |
-| **Full verbatim** | `Transcribe verbatim:`<br/>`- Fillers: yes (um, uh, like, you know)`<br/>`- Repetitions: yes (I I, the the the)`<br/>`- Stutters: yes (th-that, b-but)`<br/>`- False starts: yes (I was- I went)` | Maximum speech accuracy, Linguistic analysis of transcript |
+| Instruction type | Instruction | Output |
+|------------------|-------------|--------|
+| **Formatting** | `Transcribe this audio with beautiful punctuation and formatting.` | Readable transcript sentences and styling. |
+| **Disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` | Preserve natural speech patterns and verbatim transcription. |
+| **Entity Accuracy** | `Use standard spelling and the most contextually correct spelling of all words and names, brands, drug names, medical terms, person names, and all proper nouns.` | Accurate, contextual transcription of proper nouns and entities. |
+| **Code Switching** | `Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.` | Handle multilingual audio in the same transcript. |
+| **Audio Tags [Non-speech]** | `Preserve non-speech audio in tags to indicate when the audio occurred.` | Add audio beyond speech to the transcript. |
+| **Speaker Tags** | `Tag speaker changes and add context like name, role, gender, etc. based on speech content.` | Add speaker labels with custom diarization labels. |
 
 ### Pushy, authoritative language
 
@@ -218,34 +222,33 @@ The model doesn't prioritize non-authoritative requests well. The instruction wi
 
 ## How to build your prompt
 
-### Step 1: Choose your base
+### Step 1: Choose your instructions
 
-- Readability: `Transcribe verbatim.`
-- Readable with disfluencies: `Transcribe verbatim:\n- Include all disfluencies`
-- Full verbatim: `Transcribe verbatim:\n- Fillers: yes (um, uh, like, you know)\n- Repetitions: yes (I I, the the the)\n- Stutters: yes (th-that, b-but)\n- False starts: yes (I was- I went)`
+Select from the sample transcription instructions based on your needs:
+
+| Instruction type | Instruction | Output |
+|------------------|-------------|--------|
+| **Formatting** | `Transcribe this audio with beautiful punctuation and formatting.` | Readable transcript sentences and styling. |
+| **Disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` | Preserve natural speech patterns and verbatim transcription. |
+| **Entity Accuracy** | `Use standard spelling and the most contextually correct spelling of all words and names, brands, drug names, medical terms, person names, and all proper nouns.` | Accurate, contextual transcription of proper nouns and entities. |
+| **Code Switching** | `Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.` | Handle multilingual audio in the same transcript. |
+| **Audio Tags [Non-speech]** | `Preserve non-speech audio in tags to indicate when the audio occurred.` | Add audio beyond speech to the transcript. |
+| **Speaker Tags** | `Tag speaker changes and add context like name, role, gender, etc. based on speech content.` | Add speaker labels with custom diarization labels. |
 
 ### Step 2: Add pushy, authoritative language
 
 - `Non-negotiable:` / `Mandatory:` / `Strict requirement:` / `Required:`
 
-### Step 3: State the specific instruction
-
-- `Pharmaceutical accuracy required`
-- `Legal terminology accuracy`
-- `Technical term precision`
-
-### Step 4: Add 2-3 explicit examples per specific instruction
+### Step 3: Add 2-3 explicit examples per specific instruction
 
 - `(correct over incorrect, correct2 over incorrect2)`
 
 ### Final prompt format
 
 ```text
-[Base instruction]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
 [Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Audio tags instruction]
 ```
 
 ## Testing your prompts
