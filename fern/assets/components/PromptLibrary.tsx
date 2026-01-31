@@ -2,12 +2,12 @@
 import * as React from "react";
 
 // Supabase configuration
-// The URL is public and safe to hardcode. The anon key is also designed to be public (security comes from RLS policies).
-// Environment variables can override these defaults if configured in the build system.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://iejauyqxykvyvztblitn.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// The URL is public and safe to hardcode.
+// Edge Functions are deployed with --no-verify-jwt for public access (security is handled server-side).
+const SUPABASE_URL = "https://iejauyqxykvyvztblitn.supabase.co";
 
-// Edge Function URLs
+// Edge Function URLs (all deployed with --no-verify-jwt)
+const GET_PROMPTS_URL = `${SUPABASE_URL}/functions/v1/get-prompts`;
 const SUBMIT_PROMPT_URL = `${SUPABASE_URL}/functions/v1/submit-prompt`;
 const VOTE_PROMPT_URL = `${SUPABASE_URL}/functions/v1/vote-prompt`;
 
@@ -20,55 +20,6 @@ const getSessionId = (): string => {
     sessionStorage.setItem('prompt_library_session_id', sessionId);
   }
   return sessionId;
-};
-
-// Helper function to make Supabase REST API calls
-const supabaseQuery = async (
-  table: string,
-  options: {
-    method?: 'GET' | 'POST' | 'PATCH';
-    select?: string;
-    filter?: string;
-    body?: object;
-    order?: string;
-  } = {}
-) => {
-  const { method = 'GET', select, filter, body, order } = options;
-  
-  let url = `${SUPABASE_URL}/rest/v1/${table}`;
-  const params = new URLSearchParams();
-  if (select) params.append('select', select);
-  if (filter) url += `?${filter}`;
-  if (order) params.append('order', order);
-  
-  const queryString = params.toString();
-  if (queryString && !filter) url += `?${queryString}`;
-  else if (queryString && filter) url += `&${queryString}`;
-
-  const headers: Record<string, string> = {
-    'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-  };
-
-  if (method === 'POST') {
-    headers['Prefer'] = 'return=representation';
-  }
-
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Supabase error: ${response.status} - ${errorText}`);
-  }
-
-  // For POST/PATCH, response might be empty
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
 };
 
 // Simple profanity filter - basic list of words to block
@@ -160,22 +111,29 @@ export function PromptLibrary() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  // Fetch prompts from Supabase on mount
+  // Fetch prompts from Edge Function on mount
   React.useEffect(() => {
     const fetchPrompts = async () => {
       try {
         setIsLoading(true);
         setLoadError(null);
         
-        // Fetch approved prompts from Supabase
-        const data = await supabaseQuery('prompts', {
-          filter: 'status=eq.approved',
-          select: 'id,content,upvotes,downvotes,created_at',
-          order: 'upvotes.desc'
+        // Fetch approved prompts via Edge Function (no auth required)
+        const response = await fetch(GET_PROMPTS_URL, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         });
         
-        if (data && Array.isArray(data)) {
-          setPrompts(data);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch prompts: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.prompts && Array.isArray(result.prompts) && result.prompts.length > 0) {
+          setPrompts(result.prompts);
         } else {
           // Fall back to mock data if no prompts in database
           setPrompts(MOCK_PROMPTS);
@@ -230,13 +188,12 @@ export function PromptLibrary() {
     }));
     setVotedPrompts(prev => new Set([...prev, promptId]));
 
-    // Send vote to Edge Function
+    // Send vote to Edge Function (no auth required - deployed with --no-verify-jwt)
     try {
       const response = await fetch(VOTE_PROMPT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           prompt_id: promptId,
@@ -309,11 +266,11 @@ export function PromptLibrary() {
     setSubmitStatus({ type: null, message: '' });
 
     try {
+      // Submit via Edge Function (no auth required - deployed with --no-verify-jwt)
       const response = await fetch(SUBMIT_PROMPT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ content: newPrompt }),
       });
