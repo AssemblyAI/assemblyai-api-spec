@@ -61,44 +61,6 @@ interface Prompt {
   created_at: string;
 }
 
-// Mock data for development/demo - will be replaced with Supabase calls
-const MOCK_PROMPTS: Prompt[] = [
-  {
-    id: "1",
-    content: "Transcribe verbatim:\n- Fillers: yes (um, uh, like, you know)\n- Repetitions: yes (I I, the the the)\n- Stutters: yes (th-that, b-but)\n- False starts: yes (I was- I went)\n- Colloquial: yes (gonna, wanna, gotta)",
-    upvotes: 42,
-    downvotes: 3,
-    created_at: "2024-01-15T10:00:00Z"
-  },
-  {
-    id: "2",
-    content: "Non-negotiable: Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)\nMandatory: Respect patient's medical history terminology\nStrict requirement: All diseases and prescriptions must use standard medical spelling",
-    upvotes: 38,
-    downvotes: 2,
-    created_at: "2024-01-14T15:30:00Z"
-  },
-  {
-    id: "3",
-    content: "Transcribe this audio with beautiful punctuation and formatting.\nNon-negotiable: Use standard spelling for all company names (Salesforce over sales force, HubSpot over hub spot)\nMandatory: Remove stutters and false starts for readability",
-    upvotes: 35,
-    downvotes: 4,
-    created_at: "2024-01-13T09:15:00Z"
-  },
-  {
-    id: "4",
-    content: "Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.\nNon-negotiable: Retain the spoken language as-is over translation\nMandatory: Resolve sound-alike errors using bilingual context",
-    upvotes: 28,
-    downvotes: 1,
-    created_at: "2024-01-12T14:00:00Z"
-  },
-  {
-    id: "5",
-    content: "Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.\nPreserve non-speech audio in tags to indicate when the audio occurred.\nTag sounds: [laughter], [silence], [noise], [cough], [sigh]",
-    upvotes: 25,
-    downvotes: 2,
-    created_at: "2024-01-11T11:45:00Z"
-  }
-];
 
 export function PromptLibrary() {
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -133,17 +95,15 @@ export function PromptLibrary() {
         
         const result = await response.json();
         
-        if (result.prompts && Array.isArray(result.prompts) && result.prompts.length > 0) {
+        if (result.prompts && Array.isArray(result.prompts)) {
           setPrompts(result.prompts);
         } else {
-          // Fall back to mock data if no prompts in database
-          setPrompts(MOCK_PROMPTS);
+          setPrompts([]);
         }
       } catch (error) {
         console.error('Failed to fetch prompts:', error);
-        setLoadError('Unable to load prompts from the database. Showing sample prompts.');
-        // Fall back to mock data on error
-        setPrompts(MOCK_PROMPTS);
+        setLoadError('Unable to load prompts from the database.');
+        setPrompts([]);
       } finally {
         setIsLoading(false);
       }
@@ -152,10 +112,10 @@ export function PromptLibrary() {
     fetchPrompts();
   }, []);
 
-  // Initialize top prompts and filtered prompts
+  // Initialize top prompts and filtered prompts (sorted by score, top 6)
   React.useEffect(() => {
     const sorted = [...prompts].sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
-    setTopPrompts(sorted.slice(0, 3));
+    setTopPrompts(sorted.slice(0, 6));
     setFilteredPrompts(sorted);
   }, [prompts]);
 
@@ -349,9 +309,9 @@ export function PromptLibrary() {
 
   const topCardStyle: React.CSSProperties = {
     ...cardStyle,
-    flex: "1",
+    flex: "1 1 calc(50% - 8px)",
     minWidth: "280px",
-    maxWidth: "350px",
+    maxWidth: "calc(50% - 8px)",
   };
 
   const buttonStyle: React.CSSProperties = {
@@ -393,8 +353,8 @@ export function PromptLibrary() {
     whiteSpace: "pre-wrap",
     color: "var(--grayscale-12, #111827)",
     marginBottom: "12px",
-    maxHeight: "120px",
-    overflow: "hidden",
+    maxHeight: "150px",
+    overflow: "auto",
   };
 
   const statusStyle = (type: 'success' | 'error'): React.CSSProperties => ({
@@ -471,73 +431,75 @@ export function PromptLibrary() {
           />
         </div>
 
-        {/* Top Prompts Carousel */}
-        <div>
-          <div style={sectionTitleStyle}>Top prompts by community votes</div>
-          {isLoading ? (
-            <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>Loading...</div>
-          ) : topPrompts.length === 0 ? (
-            <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>No prompts available yet. Be the first to submit one!</div>
-          ) : (
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-            {topPrompts.map((prompt, index) => (
-              <div key={prompt.id} style={topCardStyle}>
-                <div style={{ display: "flex", alignItems: "center", marginBottom: "8px" }}>
-                  <span style={{ 
-                    backgroundColor: index === 0 ? "#fbbf24" : index === 1 ? "#9ca3af" : "#cd7f32",
-                    color: "#ffffff",
-                    padding: "2px 8px",
-                    borderRadius: "4px",
-                    fontSize: "12px",
-                    fontWeight: 600
-                  }}>
-                    #{index + 1}
-                  </span>
-                  <span style={scoreStyle}>
-                    {prompt.upvotes - prompt.downvotes} points
-                  </span>
+        {/* Top Prompts - Hidden when searching */}
+        {!searchQuery && (
+          <div>
+            <div style={sectionTitleStyle}>Top prompts by community votes</div>
+            {isLoading ? (
+              <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>Loading...</div>
+            ) : topPrompts.length === 0 ? (
+              <div style={{ color: "var(--grayscale-11, #6b7280)", fontSize: "14px" }}>No prompts available yet. Be the first to submit one!</div>
+            ) : (
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              {topPrompts.map((prompt, index) => (
+                <div key={prompt.id} style={topCardStyle}>
+                  <div style={{ display: "flex", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ 
+                      backgroundColor: index === 0 ? "#fbbf24" : index === 1 ? "#9ca3af" : "#cd7f32",
+                      color: "#ffffff",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      fontWeight: 600
+                    }}>
+                      #{index + 1}
+                    </span>
+                    <span style={scoreStyle}>
+                      {prompt.upvotes - prompt.downvotes} points
+                    </span>
+                  </div>
+                  <div style={promptTextStyle}>{prompt.content}</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => handleVote(prompt.id, 'up')}
+                      disabled={votedPrompts.has(prompt.id)}
+                      style={votedPrompts.has(prompt.id) ? disabledVoteButtonStyle : voteButtonStyle}
+                      title={votedPrompts.has(prompt.id) ? "You've already voted" : "Upvote"}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                      </svg>
+                      {prompt.upvotes}
+                    </button>
+                    <button
+                      onClick={() => handleVote(prompt.id, 'down')}
+                      disabled={votedPrompts.has(prompt.id)}
+                      style={votedPrompts.has(prompt.id) ? disabledVoteButtonStyle : voteButtonStyle}
+                      title={votedPrompts.has(prompt.id) ? "You've already voted" : "Downvote"}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
+                      </svg>
+                      {prompt.downvotes}
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(prompt.content)}
+                      style={{ ...voteButtonStyle, marginLeft: "auto" }}
+                      title="Copy prompt"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
                 </div>
-                <div style={promptTextStyle}>{prompt.content}</div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => handleVote(prompt.id, 'up')}
-                    disabled={votedPrompts.has(prompt.id)}
-                    style={votedPrompts.has(prompt.id) ? disabledVoteButtonStyle : voteButtonStyle}
-                    title={votedPrompts.has(prompt.id) ? "You've already voted" : "Upvote"}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-                    </svg>
-                    {prompt.upvotes}
-                  </button>
-                  <button
-                    onClick={() => handleVote(prompt.id, 'down')}
-                    disabled={votedPrompts.has(prompt.id)}
-                    style={votedPrompts.has(prompt.id) ? disabledVoteButtonStyle : voteButtonStyle}
-                    title={votedPrompts.has(prompt.id) ? "You've already voted" : "Downvote"}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
-                    </svg>
-                    {prompt.downvotes}
-                  </button>
-                  <button
-                    onClick={() => copyToClipboard(prompt.content)}
-                    style={{ ...voteButtonStyle, marginLeft: "auto" }}
-                    title="Copy prompt"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    Copy
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            )}
           </div>
-          )}
-        </div>
+        )}
 
         {/* Search Results / All Prompts */}
         {searchQuery && (
