@@ -3,7 +3,8 @@ import * as React from "react";
 
 // Supabase configuration
 // The URL is public and safe to hardcode.
-// Edge Functions are deployed with --no-verify-jwt for public access (security is handled server-side).
+// All Edge Functions are deployed with --no-verify-jwt for public access.
+// Security is handled server-side via validation and moderation queue.
 const SUPABASE_URL = "https://iejauyqxykvyvztblitn.supabase.co";
 
 // Edge Function URLs (all deployed with --no-verify-jwt)
