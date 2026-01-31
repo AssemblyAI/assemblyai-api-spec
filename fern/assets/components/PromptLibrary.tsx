@@ -1,9 +1,10 @@
 "use client";
 import * as React from "react";
 
-// Supabase configuration - credentials injected via environment variables at build time
-// Environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+// Supabase configuration
+// The URL is public and safe to hardcode. The anon key is also designed to be public (security comes from RLS policies).
+// Environment variables can override these defaults if configured in the build system.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://iejauyqxykvyvztblitn.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 // Edge Function URLs
