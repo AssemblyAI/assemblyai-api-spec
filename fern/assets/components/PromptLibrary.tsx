@@ -1,9 +1,9 @@
 "use client";
 import * as React from "react";
 
-// Supabase configuration
-const SUPABASE_URL = "https://iejauyqxykvyvztblitn.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_lZ5bLVPypmNzmNXRHNCeIA_K8sPesqD";
+// Supabase configuration - credentials injected via environment variables at build time
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 // Edge Function URLs
 const SUBMIT_PROMPT_URL = `${SUPABASE_URL}/functions/v1/submit-prompt`;
