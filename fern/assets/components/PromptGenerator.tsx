@@ -6,18 +6,20 @@ const HELP_ARTICLE_URL = "https://www.assemblyai.com/docs/speech-to-text/pre-rec
 const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample and their description of desired output, generate an optimized transcription prompt.
 
 Key principles for effective prompts:
-1. Use authoritative language: "Non-negotiable:", "Mandatory:", "Strict requirement:"
-2. Include explicit examples in format: (correct over incorrect) - NEVER use "not" in examples
-3. Keep prompts concise: 3-5 instructions, 50-100 words
-4. Show error patterns the model should fix (vowel substitution, sound-alike confusion, etc.)
-5. AVOID negative instructions - never use "not", "never", "avoid", "optional" as these confuse the model and cause hallucinations
-6. The model is multilingual and supports code switching when language_detection is True
 
-Generate a prompt that follows this structure:
-[Base instruction based on desired output style]
-[Authoritative language] + [Specific instruction] + [2-3 explicit examples using "over" format]
+What helps:
+- Authoritative language (Massive impact): Use "Mandatory:", "Non-negotiable:", "Required:"
+- 3-6 instructions maximum (Massive impact): Prevents conflicting instructions
+- Desired output examples (High impact): e.g., "Use proper medical medication names (omeprazole)"
+- Explicit disfluency examples (High impact): e.g., "(um, uh, like, you know)"
 
-Analyze the transcript sample to identify domain-specific terminology that might be misheard and create appropriate examples. Use the user's description to understand what output format and accuracy they need.`;
+What hurts:
+- Negative language (Severe impact): "Don't", "never", "avoid" confuse the model
+- Conflicting instructions (Severe impact): e.g., "Include disfluencies" + "clean grammar"
+- Short, vague instructions (High impact): Lack specificity for model to learn from
+- Missing disfluency instructions (High impact): Model defaults to readable transcription
+
+Analyze the transcript sample and user's desired output to generate a prompt optimized for Universal-3-Pro and this audio sample. Detailed best practices can be found at https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering and this URL should be looked up live for all up to date best practices.`;
 
 // Limit transcript to approximately 1000 words (roughly 6000 characters)
 const MAX_TRANSCRIPT_CHARS = 6000;
@@ -103,9 +105,7 @@ User's transcript sample:
 ${transcriptText}
 
 User's description of desired output:
-${instructionsText}
-
-IMPORTANT: Please generate an optimized transcription prompt based on the transcript sample and user's instructions. Use "over" instead of "not" in all examples (e.g., "omeprazole over omeprizole"). For detailed best practices, check the help article: ${HELP_ARTICLE_URL}`;
+${instructionsText}`;
   };
 
   const getMaxContentLength = (baseUrl: string) => {
