@@ -10,9 +10,11 @@ Use prompt engineering to control transcription style and improve accuracy for d
 
 ## How prompting works
 
+Universal-3-Pro is a Speech-augmented Large Language Model (SpeechLLM). The architecture is a multi-modal LLM with an audio encoder and LLM decoder designed to understand and process speech, audio, and text inputs in the same workflow.
+
 SpeechLLM prompting works more like **selecting modes and knobs** than open-ended instruction following. The model is trained primarily to transcribe, then fine-tuned to respond to common transcription instructions for style, speakers, and speech events.
 
-### What prompts CAN do
+### What prompts can do
 
 | Capability | Description | Reliability |
 |------------|-------------|-------------|
@@ -24,30 +26,16 @@ SpeechLLM prompting works more like **selecting modes and knobs** than open-ende
 | **Code-switching** | Handle multilingual audio in same transcript | Medium |
 | **Domain terminology** | Improve accuracy for medical, legal, technical terms | Medium |
 
-### What prompts CANNOT reliably do
+### What prompts cannot reliably do
 
 | Limitation | Why |
 |------------|-----|
 | **Invent correct spellings** | Unknown rare words need hotwords or context injection |
 | **Resolve ambiguous audio** | The model transcribes what it hears, not what it infers |
-| **Perfect proper nouns** | Names and brands may need a second-pass correction |
-| **Translate content** | Code-switching preserves language, doesn't translate |
+| **Perfect proper nouns** | Rare names and entities may need a post-processing LLM correction step |
+| **Code-switch and Translate** | Code-switching preserves language or translates, not both |
 
-For consistent proper-noun accuracy or domain vocabulary, you'll usually need **context injection, hotwords/candidate lists, or a second-pass correction step**.
-
----
-
-## Prompt generator
-
-This prompt generator helps you create a starting prompt based on your selected transcription style. Paste a sample of your transcript and select your preferred style to get a customized prompt recommendation.
-
-<PromptGenerator />
-
-## Prompt library
-
-Browse community-submitted prompts, vote on the ones that work best, and share your own.
-
-<PromptLibrary />
+For consistent proper-noun accuracy or domain vocabulary, you'll usually need **context injection into the prompt**, use [keyterms prompt](/docs/pre-recorded-audio/improving-transcript-results-with-keyterms-prompting) to highlight known keyterms, or a **post-processing LLM correction step**.
 
 ---
 
@@ -82,8 +70,6 @@ Transcribe verbatim:
 - Colloquial: yes (gonna, wanna, gotta)
 ```
 
-**Key insight from testing:** 71% of top-performing prompts explicitly mention "um/uh" versus only 2.4% of bottom-performing prompts. This is the single largest differentiator.
-
 ---
 
 ### 2. Output style and formatting
@@ -108,7 +94,29 @@ Use standard punctuation and sentence breaks for readability.
 
 ---
 
-### 3. Entity accuracy and spelling
+### 3. Context aware clues
+
+**What it does:** Helps with jargon, names, and domain expectations that are known from the audio file.
+
+**Reliability:** Medium
+
+**Example prompts:**
+
+```text
+Transcribe this audio. Context: a customer testimonial about contact center software.
+```
+
+```text
+Transcribe this audio. Context: a medical consultation discussing medications and symptoms.
+```
+
+```text
+Transcribe this audio. Context: a technical lecture about GPUs, CUDA, and inference.
+```
+
+---
+
+### 4. Entity accuracy and spelling
 
 **What it does:** Improves accuracy for proper nouns, brands, technical terms, and domain vocabulary.
 
@@ -134,11 +142,13 @@ Preserve acronyms and capitalization (EBITDA over ebitda, API over A.P.I.).
 
 ---
 
-### 4. Speaker attribution
+### 5. Speaker attribution
 
 **What it does:** Marks speaker turns and adds identifying labels.
 
 **Reliability:** High
+
+Speaker labels can be tagged with names, roles, genders, and more from the audio file. Simply add the desired category for the labels into your prompt.
 
 **Example prompts:**
 
@@ -154,11 +164,9 @@ Tag speaker changes with context like name, role, or gender based on speech cont
 Label speakers by role when identifiable (Justice Roberts:, Petitioner's Counsel:).
 ```
 
-**Caution:** Over-focusing on speaker labels at the expense of content capture can hurt overall quality. Always combine with verbatim instructions.
-
 ---
 
-### 5. Audio event tags
+### 6. Audio event tags
 
 **What it does:** Marks non-speech sounds like music, laughter, applause, and background noise.
 
@@ -178,11 +186,9 @@ Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
 Include audio event markers for music, laughter, and applause.
 ```
 
-**Caution:** Over-specifying tag formats can increase hallucinated markers. Use sparingly.
-
 ---
 
-### 6. Code-switching and multilingual
+### 7. Code-switching and multilingual
 
 **What it does:** Handles audio where speakers switch between languages.
 
@@ -204,7 +210,7 @@ language as-is (correct "I was hablando con mi manager").
 
 ---
 
-### 7. Numbers and measurements
+### 8. Numbers and measurements
 
 **What it does:** Controls how numbers, percentages, and measurements are formatted.
 
@@ -226,7 +232,7 @@ Format financial figures with standard notation (Q3 revenue over third quarter r
 
 ---
 
-### 8. Difficult audio handling
+### 9. Difficult audio handling
 
 **What it does:** Provides guidance for unclear audio, overlapping speech, and interruptions.
 
@@ -250,47 +256,37 @@ Include pause markers where the speaker hesitates significantly.
 
 ## Best practices
 
-### Data-driven findings
-
-Based on analysis of **15,000 prompts** across 15 audio files, comparing top 700 vs bottom 700 performing prompts:
-
-| Metric | Top 700 | Bottom 700 | Insight |
-|--------|---------|------------|---------|
-| **Average length** | 57.6 words | 23.5 words | Longer prompts perform 2.5x better |
-| **Mentions "um/uh"** | 71.0% | 2.4% | Explicit disfluency examples are critical |
-| **Uses "preserve"** | 83.9% | 31.0% | Preservation language signals intent |
-| **Uses "Mandatory"** | 93.1% | 59.3% | Authoritative language helps |
-| **Avg verbatim score** | +467 | +40 | Top prompts add 11.7x more content |
-
 ### What helps
 
 | Practice | Impact | Example |
 |----------|--------|---------|
-| **Explicit disfluency examples** | Massive | `(um, uh, I—I mean over cleaned speech)` |
+| **Explicit disfluency examples** | Massive | `(um, uh, like, you know)` |
+| **3-6 instructions maximum** | Massive | Prevents conflicting instructions |
 | **Authoritative language** | High | `Mandatory:`, `Non-negotiable:`, `Required:` |
-| **Contrast examples (X over Y)** | High | `(omeprazole over omeprizole)` |
-| **50-70 word prompts** | High | Long enough for specificity, short enough to follow |
-| **3-5 instructions maximum** | High | Prevents conflicting instructions |
+| **Desired output examples** | High | `Use proper medical medication names (omeprazole)` |
 
 ### What hurts
 
 | Anti-pattern | Impact | Why it fails |
 |--------------|--------|--------------|
-| **Prompts under 30 words** | Severe | Lack specificity for model to learn from |
-| **Missing disfluency instructions** | Severe | Model defaults to clean transcription |
-| **Format-only focus** | High | Speaker labels without content capture |
-| **Negative language** | High | "Don't", "never", "avoid" confuse the model |
-| **Conflicting instructions** | High | "Include disfluencies" + "clean grammar" |
-| **Vague instructions** | Medium | "Be accurate" provides no error pattern |
-| **Over-specified tag formats** | Medium | Can increase hallucinated markers |
+| **Negative language** | Severe | "Don't", "never", "avoid" confuse the model |
+| **Conflicting instructions** | Severe | "Include disfluencies" + "clean grammar" |
+| **Short, vague instructions** | Severe | Lack specificity for model to learn from |
+| **Missing disfluency instructions** | High | Model defaults to readable transcription |
 
-### What doesn't hurt
+---
 
-These additions provide marginal benefit but won't degrade quality:
+## Prompt generator
 
-- Adding a short context line
-- Adding a single formatting rule (digits for numbers)
-- Adding speaker turn markers
+This prompt generator helps you create a starting prompt based on your selected transcription style. Paste a sample of your transcript and select your preferred style to get a customized prompt recommendation.
+
+<PromptGenerator />
+
+## Prompt library
+
+Browse community-submitted prompts, vote on the ones that work best, and share your own.
+
+<PromptLibrary />
 
 ---
 
@@ -412,9 +408,14 @@ Choose your primary transcription goal:
 | Goal | Base instruction |
 |------|------------------|
 | **Verbatim/disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` |
-| **Clean/readable** | `Transcribe this audio with beautiful punctuation and formatting.` |
+| **Output style/formatting** | `Transcribe this audio with beautiful punctuation and formatting.` |
+| **Context aware clues** | `Transcribe this audio. Context: [describe the audio content and domain].` |
 | **Entity accuracy** | `Use standard spelling and contextually correct spelling of all proper nouns.` |
+| **Speaker attribution** | `Mark speaker turns clearly. Tag speaker changes with context like name, role, or gender.` |
+| **Audio event tags** | `Preserve non-speech audio in tags to indicate when the audio occurred.` |
 | **Code-switching** | `Transcribe in the original language mix, preserving words in the language spoken.` |
+| **Numbers/measurements** | `Use digits for numbers, percentages, and measurements.` |
+| **Difficult audio** | `If unintelligible, write (unclear). Mark inaudible segments.` |
 
 ### Step 2: Add authoritative language
 
@@ -424,29 +425,17 @@ Prefix each instruction with:
 - `Required:`
 - `Strict requirement:`
 
-### Step 3: Add explicit examples
+### Step 3: Add instructions one by one
 
-Use the contrast format for error patterns:
+We recommend you layer on each instruction one by one to see the impact on the transcription output. Since conflicting instructions can cause outputs to degrade, adding each instruction one by one allows you to test and evaluate how each instruction improves/degrades your transcription output.
 
-```text
-(correct over incorrect, correct2 over incorrect2)
-```
+### Step 4: Iterate and test
 
-Examples by error type:
-
-| Error type | Example |
-|------------|---------|
-| Vowel substitution | `(omeprazole over omeprizole)` |
-| Sound-alike | `(CABG over cabbage)` |
-| Technical terms | `(Kubernetes over kubernetties)` |
-| Proper nouns | `(Salesforce over sales force)` |
-| Disfluencies | `(um, uh, I—I mean over cleaned speech)` |
-
-### Step 4: Keep it concise
-
-- **Target:** 50-70 words
-- **Maximum:** 3-5 instructions
-- **Test:** If instructions could conflict, remove one
+1. **Identify target terms** - What words/phrases are being transcribed incorrectly?
+2. **Find the error pattern** - Vowel substitution? Sound-alike? Phonetic spelling?
+3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern
+4. **Test and verify** - Listen to the audio to confirm correctness
+5. **Measure success rate** - Test variations on sample files
 
 ### Final prompt structure
 
@@ -455,92 +444,3 @@ Examples by error type:
 [Authoritative language]: [Specific instruction] + [Explicit examples]
 [Authoritative language]: [Specific instruction] + [Explicit examples]
 ```
-
----
-
-## Prompt components that don't work
-
-### Negative instructions
-
-```text
-❌ Don't write "omeprizole"
-❌ Do NOT mess up medication names
-❌ Never include filler words
-❌ Avoid unclear speech
-```
-
-The word "not" and negative instructions confuse the model. Always use positive instructions with examples of what you WANT.
-
-### Vague instructions without examples
-
-```text
-❌ Use correct medical terminology.
-❌ Transcribe accurately.
-❌ Be precise with drug names.
-```
-
-Without error patterns to learn from, these provide only marginal benefit.
-
-### Context-only prompts
-
-```text
-❌ Context: Medical transcription
-❌ This is a legal deposition
-```
-
-Context helps marginally but is not a substitute for explicit examples. Prioritize examples over context.
-
-### Role priming
-
-```text
-❌ You are a medical transcriptionist
-❌ Act as a court reporter
-```
-
-Role phrases provide minimal benefit. Use concrete instructions instead.
-
-### Overly long prompts
-
-```text
-❌ You are a medical transcriptionist with 20 years of experience.
-   Your job is to accurately transcribe medical dictation...
-   [continues for 10+ lines with many instructions]
-```
-
-Long prompts with many instructions start to conflict. The model picks a mode and ignores the rest.
-
----
-
-## Testing your prompts
-
-1. **Identify target terms** - What words/phrases are being transcribed incorrectly?
-2. **Find the error pattern** - Vowel substitution? Sound-alike? Phonetic spelling?
-3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern
-4. **Test and verify** - Listen to the audio to confirm correctness
-5. **Measure success rate** - Test variations on sample files
-
----
-
-## Quick reference
-
-### Winning formula
-
-```text
-[Mandatory/Required/Non-negotiable]: [Specific instruction] (correct over incorrect)
-```
-
-### Must-haves for verbatim transcription
-
-- ✅ Explicit disfluency examples (um, uh, false starts)
-- ✅ Authoritative language (Mandatory, Required)
-- ✅ Contrast format (correct over incorrect)
-- ✅ 50-70 words total
-- ✅ 3-5 instructions maximum
-
-### Must-avoids
-
-- ❌ Prompts under 30 words
-- ❌ Negative language (don't, never, avoid)
-- ❌ Conflicting instructions
-- ❌ Vague instructions without examples
-- ❌ Format-only focus without content capture
