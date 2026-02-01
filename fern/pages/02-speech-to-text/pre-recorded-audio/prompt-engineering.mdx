@@ -5,512 +5,450 @@ title: "Customizing transcription results using Prompt Engineering"
 import { PromptGenerator } from "../../../assets/components/PromptGenerator";
 import { PromptLibrary } from "../../../assets/components/PromptLibrary";
 
+
 Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription.
 
-## Prompt generator
+## How prompting works
 
-This prompt generator helps you create a starting prompt based on your selected transcription style. Paste a sample of your transcript and select your preferred style to get a customized prompt recommendation from your preferred LLM. Note LLMs will still be learning to index this content, so you may need to experiment some to get the best output.
+Universal-3-Pro is a Speech-augmented Large Language Model (SpeechLLM). The architecture is a multi-modal LLM with an audio encoder and LLM decoder designed to understand and process speech, audio, and text inputs in the same workflow.
 
-<PromptGenerator />
+SpeechLLM prompting works more like **selecting modes and knobs** than open-ended instruction following. The model is trained primarily to transcribe, then fine-tuned to respond to common transcription instructions for style, speakers, and speech events.
 
-## Prompt library
+### What prompts can do
 
-Browse community-submitted prompts, vote on the ones that work best, and share your own. Search for prompts by use case or keyword to find inspiration for your transcription needs.
+| Capability | Description | Reliability |
+|------------|-------------|-------------|
+| **Verbatim transcription and disfluencies** | Include um, uh, false starts, repetitions, stutters | High |
+| **Output style and formatting** | Control punctuation, capitalization, number formatting | High |
+| **Context aware clues** | Help with jargon, names, and domain expectations | Medium |
+| **Entity accuracy and spelling** | Improve accuracy for proper nouns, brands, technical terms | Medium |
+| **Speaker attribution** | Mark speaker turns and add labels | High |
+| **Audio event tags** | Mark laughter, music, applause, background sounds | Medium |
+| **Code-switching and multilingual** | Handle multilingual audio in same transcript | Medium |
+| **Numbers and measurements** | Control how numbers, percentages, and measurements are formatted | Medium |
+| **Difficult audio handling** | Guidance for unclear audio, overlapping speech, interruptions | Medium |
 
-<PromptLibrary />
+### What prompts cannot reliably do
 
-## Core prompt principles
+| Limitation | Why |
+|------------|-----|
+| **Invent correct spellings** | Unknown rare words need hotwords or context injection |
+| **Resolve ambiguous audio** | The model transcribes what it hears, not what it infers |
+| **Perfect proper nouns** | Rare names and entities may need a post-processing LLM correction step |
+| **Code-switch and Translate** | Code-switching preserves language or translates, not both |
 
-### The winning prompt structure
+For consistent proper-noun accuracy or domain vocabulary, you'll usually need **context injection into the prompt**, use [keyterms prompt](/docs/pre-recorded-audio/improving-transcript-results-with-keyterms-prompting) to highlight known keyterms, or a **post-processing LLM correction step**.
 
-```text
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-```
+---
 
-Here are some best practices to consider in the writing style for your prompts:
+## Prompt capabilities
 
-| Principle | Implementation | Impact |
-|-----------|----------------|--------|
-| **Explicit examples** | Show 2-3 examples of the error pattern being corrected | Massive |
-| **Avoid negative, not language** | Avoid using "not", "never", "avoid", "optional" | Massive |
-| **Conflicting instructions** | Avoid instructions which conflict with one another (i.e. "capitalize nouns" but "preserve informal speech") | Massive |
-| **Pushy, authoritative language** | Use "Non-negotiable", "Mandatory", "Strict requirement" | Critical |
-| **Specific instruction** | State exactly what accuracy you need | High |
-| **Keep concise** | 3-5 instructions maximum | High |
+Each capability below acts as a "knob" you can turn. Combine 3-6 capabilities maximum for best results.
 
-### Sample transcription instructions
+### 1. Verbatim transcription and disfluencies
 
-Some example instructions based on your needs look like the below:
+**What it does:** Preserves natural speech patterns including filler words, false starts, repetitions, and self-corrections.
 
-| Instruction type | Instruction | Output |
-|------------------|-------------|--------|
-| **Formatting** | `Transcribe this audio with beautiful punctuation and formatting.` | Readable transcript sentences and styling. |
-| **Disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` | Preserve natural speech patterns and verbatim transcription. |
-| **Entity Accuracy** | `Use standard spelling and the most contextually correct spelling of all words and names, brands, drug names, medical terms, person names, and all proper nouns.` | Accurate, contextual transcription of proper nouns and entities. |
-| **Code Switching** | `Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.` | Handle multilingual audio in the same transcript. |
-| **Audio Tags [Non-speech]** | `Preserve non-speech audio in tags to indicate when the audio occurred.` | Add audio beyond speech to the transcript. |
-| **Speaker Tags** | `Tag speaker changes and add context like name, role, gender, etc. based on speech content.` | Add speaker labels with custom diarization labels. |
+**Reliability:** High
 
-### Keep it concise
-
-Limit prompts to 3-5 instructions maximum (including base instruction). Overly verbose/long prompts don't improve accuracy. Each instruction should be actionable and specific.
-
-### Show, don't just tell
-
-The model learns **error patterns** from examples, not just specific words. When you show:
+**Example prompts:**
 
 ```text
-Fix vowel substitution errors in pharmaceutical terms (omeprazole over omeprizole, metformin over metforman)
+Include spoken filler words like "um," "uh," "you know," "like," plus repetitions
+and false starts when clearly spoken.
 ```
-
-The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs in the transcript, including ones not in your examples.
-
-## Prompt components
-
-### Pushy, authoritative language
-
-The model responds to authoritative, non-negotiable language. Use one of:
-
-| Phrase | Effectiveness |
-|--------|---------------|
-| `Non-negotiable:` | High |
-| `Mandatory:` | High |
-| `Strict requirement:` | High |
-| `Must follow:` | Medium-High |
-| `Required:` | Medium-High |
-
-### Specific transcription instructions
-
-Based on the content of your audio file, you should understand the common speech patterns of your end users. You will want to provide these patterns as instructions for the model to focus on.
-
-Some specific instructions include concepts like:
-
-| Specific instruction | Use for |
-|------------------|-------|
-| `Non-negotiable: Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)` | Max accuracy of pharmaceutical drugs |
-| `Mandatory: Respect patient's medical history (IBD, Chron's)` | Max accuracy of any terms related to patient's specific condition(s) listed |
-| `Strict requirement: All diseases and prescriptions must be found in common reference materials (aminosalicylates over aminoselicylates)` | Max accuracy of medical prognosis to training data |
-
-### Explicit examples of tanscript corrections
-
-#### Why examples work
-
-The model learns **error patterns** from examples, not just specific words. When you show:
 
 ```text
-(omeprazole over omeprizole, metformin over metforman)
+Preserve all disfluencies exactly as spoken including verbal hesitations,
+restarts, and self-corrections (um, uh, I—I mean).
 ```
 
-The model learns: "Fix vowel substitution errors in pharmaceutical terms" and applies this to ALL drugs, including ones not in your examples.
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was— I went)
+- Colloquial: yes (gonna, wanna, gotta)
+```
 
-#### How to construct examples
+---
 
-1. **Identify the error pattern** in your domain (vowel swaps, similar-sounding words, acronyms for common words, etc.)
-2. **Choose 2-3 common terms** where this error frequently occurs (they do not need to be in the audio file, but representative of the issue)
-3. **Show correct to incorrect** format: `(correct over incorrect)`
+### 2. Output style and formatting
 
-#### Example patterns by error type
+**What it does:** Controls punctuation, capitalization, and readability without changing words.
 
-| Error type | Example format |
-|------------|----------------|
-| Vowel substitution | `(omeprazole over omeprizole)` |
-| Sound-alike confusion | `(CABG over cabbage)` |
-| Phonetic spelling | `(prescription over perscription)` |
-| Technical terms | `(kubernetes over kubernetties)` |
-| Proper nouns | `(Salesforce over sales force)` |
+**Reliability:** High
 
-### Audio tags
+**Example prompts:**
 
-The model will attempt to capture non-speech events in the audio with audio tags. You can choose to include these by prompting an instructions for audio tag inclusion.
+```text
+Transcribe this audio with beautiful punctuation and formatting.
+```
+
+```text
+Use expressive punctuation to reflect emotion and prosody.
+```
+
+```text
+Use standard punctuation and sentence breaks for readability.
+```
+
+---
+
+### 3. Context aware clues
+
+**What it does:** Helps with jargon, names, and domain expectations that are known from the audio file.
+
+**Reliability:** Medium
+
+**Example prompts:**
+
+```text
+Transcribe this audio. Context: a customer testimonial about contact center software.
+```
+
+```text
+Transcribe this audio. Context: a medical consultation discussing medications and symptoms.
+```
+
+```text
+Transcribe this audio. Context: a technical lecture about GPUs, CUDA, and inference.
+```
+
+---
+
+### 4. Entity accuracy and spelling
+
+**What it does:** Improves accuracy for proper nouns, brands, technical terms, and domain vocabulary.
+
+**Reliability:** Medium (works best with explicit examples)
+
+**Example prompts:**
+
+```text
+Use standard spelling and the most contextually correct spelling of all words
+including names, brands, drug names, medical terms, and proper nouns.
+```
+
+```text
+Non-negotiable: Pharmaceutical accuracy required (omeprazole over omeprizole,
+metformin over metforman).
+```
+
+```text
+Preserve acronyms and capitalization (EBITDA over ebitda, API over A.P.I.).
+```
+
+**Caution:** Over instructing the model to follow examples can cause hallucinations when these examples are encountered.
+
+---
+
+### 5. Speaker attribution
+
+**What it does:** Marks speaker turns and adds identifying labels.
+
+**Reliability:** High
+
+**Example prompts:**
+
+```text
+Mark speaker turns clearly.
+```
+
+```text
+Tag speaker changes with context like name, role, or gender based on speech content.
+```
+
+```text
+Label speakers by role when identifiable (Justice Roberts:, Petitioner's Counsel:).
+```
+
+Speaker labels can be tagged with names, roles, genders, and more from the audio file. Simply add the desired category for the labels into your prompt.
+
+---
+
+### 6. Audio event tags
+
+**What it does:** Marks non-speech sounds like music, laughter, applause, and background noise.
+
+**Reliability:** Medium
+
+**Example prompts:**
+
+```text
+Preserve non-speech audio in tags to indicate when the audio occurred.
+```
 
 ```text
 Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
 ```
 
-When there is a pause in the speech where a non-speech sound is detected, audio tags will be added like `[NOISE]`, `[MUSIC]`, `[APPLAUSE]`, etc.
-
-### Handling languages, code switching, and dialects
-
-The model is multilingual by nature and will attempt to code switch when Automatic Language Detection is enabled on your request (`language_detection` as `True`). If a language code is specified on the request, the model will overly try and transcribe that language - so use caution if you think your files will be multilingual. Multilingual does not degrade performance of other languages.
-
-When doing code switching, dialects can be of particular interest. By default, the model will infer the code switching based on its training data. Specific instructions for dialects can produce better results, especially for languages like Spanglish which intermix one language with another language's words in the same sentence.
-
 ```text
-Transcribe verbatim, preserving natural code-switching between English and Spanish.
-Non-negotiable: Retain the spoken language as-is over translation (correct "I was hablando con mi manager").
-Mandatory: Resolve sound-alike and accent-driven errors using bilingual context (correct pero over perro; meeting over mitin).
-Strict requirement: Preserve fillers, repetitions, stutters, false starts across both languages (correct "eh, o sea— I mean").
-Mandatory: Tag all non-speech sounds precisely (correct [laughter], [silence], [noise]).
+Include audio event markers for music, laughter, and applause.
 ```
 
-## Prompts components that don't work
+---
 
-Based on testing, avoid these patterns:
+### 7. Code-switching and multilingual
 
-### Negative instructions and examples
+**What it does:** Handles audio where speakers switch between languages.
 
-```text
-Don't write "omeprizole" or "metforman"
-(omeprazole not omeprizole)
-Do NOT mess up medication names
-```
+**Reliability:** Medium
 
-The word `Not` and other negative instructions confuse the model. Any instructions should always be done in the positive instruction with examples of what you would like to see. `Not` instructions have a tendency to hallucinate.
-
-Examples need what you WANT to see. If you only include what you don't want, the model won't know what changes to make to transcription.
-
-### Context setting
-
-Context phrases like `Context: Medical transcription` provide marginal benefit at best.
-
-Context is not a substitute for concrete examples. If you're limited on prompt length, prioritize examples over context.
-
-### Role priming
-
-Role phrases like `You are a pharmacist reviewer` provide marginal benefit at best.
-
-Role phrases work best when combined with affirmative language like `You are a superstar doctor with world class diagnosis skills`. Generally you are better off prioritizing examples over role priming.
-
-### Vague instructions without examples
+**Example prompts:**
 
 ```text
-Use correct medical terminology.
-Transcribe accurately.
-Be precise with drug names.
+Transcribe in the original language mix (code-switching), preserving words
+in the language they are spoken.
 ```
-
-With no error pattern for the model to learn from, these examples will only provide marginal benefits to accuracy.
-
-### Overly short or long prompts
-
-We found in testing the sweet spot for length is:
-- 3-5 instructions
-- 50-100 words
-
-#### Overly long prompts
 
 ```text
-You are a medical transcriptionist with 20 years of experience.
-Your job is to accurately transcribe medical dictation...
-[continues for 10 more lines]
+Preserve natural code-switching between English and Spanish. Retain spoken
+language as-is (correct "I was hablando con mi manager").
 ```
 
-With longer prompts with more instructions, the instructions start to conflict one another. The model thus starts to degragde in transcription quality versus improve as it tries to process conflicting instructions.
+**Note:** Requires `language_detection: true` on your request. If a single language code is specified, the model will try to transcribe only that language.
 
-#### Overly short prompts
+---
+
+### 8. Numbers and measurements
+
+**What it does:** Controls how numbers, percentages, and measurements are formatted.
+
+**Reliability:** Medium
+
+**Example prompts:**
 
 ```text
-Use correct medical terminology.
-Transcribe accurately.
-Be precise with drug names.
+Convert spoken numbers to digits.
 ```
-
-With shorter prompts with less examples, the model struggles to produce corrections since there are not enough examples to draw on. Transcription quality won't degrade, but it won't be as accurate as it would be with explicit examples.
-
-### Polite, non-authoritative language
 
 ```text
-Please try to use correct spelling.
-If possible, verify drug names.
-It would be nice to have accurate terms.
+Use digits for numbers, percentages, and measurements.
 ```
 
-The model doesn't prioritize non-authoritative requests well. The instruction will be followed weakly versus others provided and is less likely to override the base model's system prompts.
+```text
+Format financial figures with standard notation (Q3 revenue over third quarter revenue).
+```
+
+---
+
+### 9. Difficult audio handling
+
+**What it does:** Provides guidance for unclear audio, overlapping speech, and interruptions.
+
+**Reliability:** Medium (YMMV)
+
+**Example prompts:**
+
+```text
+If unintelligible, write (unclear).
+```
+
+```text
+Mark inaudible segments. Preserve overlapping speech and crosstalk.
+```
+
+```text
+Include pause markers where the speaker hesitates significantly.
+```
+
+---
+
+## Best practices
+
+### What helps
+
+| Practice | Impact | Example |
+|----------|--------|---------|
+| **Authoritative language** | Massive | `Mandatory:`, `Non-negotiable:`, `Required:` |
+| **3-6 instructions maximum** | Massive | Prevents conflicting instructions |
+| **Desired output examples** | High | `Use proper medical medication names (omeprazole)` |
+| **Explicit disfluency examples** | High | `(um, uh, like, you know)` |
+
+### What hurts
+
+| Anti-pattern | Impact | Why it fails |
+|--------------|--------|--------------|
+| **Negative language** | Severe | "Don't", "never", "avoid" confuse the model |
+| **Conflicting instructions** | Severe | "Include disfluencies" + "clean grammar" |
+| **Short, vague instructions** | High | Lack specificity for model to learn from |
+| **Missing disfluency instructions** | High | Model defaults to readable transcription |
+
+---
+
+## Prompt generator
+
+This prompt generator helps you create a starting prompt based on your selected transcription style. Paste a sample of your transcript and select your preferred style to get a customized prompt recommendation.
+
+<PromptGenerator />
+
+## Prompt library
+
+Browse community-submitted prompts, vote on the ones that work best, and share your own.
+
+<PromptLibrary />
+
+---
+
+## Domain-specific sample prompts
+
+### Legal transcription
+
+Best for: Court proceedings, depositions, legal hearings
+
+```text
+Mandatory: Transcribe legal proceedings with precise terminology intact.
+
+Required: Preserve all disfluencies including verbal pauses, false starts, and
+self-corrections (uh, um, I—I mean over cleaned speech).
+
+Non-negotiable: Distinguish between speakers through clear attribution
+(Justice Roberts: over generic labels).
+
+Capture Latin legal phrases exactly as spoken (certiorari, habeas corpus,
+amicus curiae).
+```
+
+**Why it works:** Combines authoritative language (Mandatory, Required, Non-negotiable), explicit disfluency examples with contrast format, speaker attribution guidance, and domain terminology.
+
+---
+
+### Medical transcription
+
+Best for: Clinical consultations, medical dictation, patient encounters
+
+```text
+Mandatory: Preserve all clinical terminology exactly as spoken including drug
+names, dosages, and diagnostic terms.
+
+Required: Capture every hesitation, false start, and filler word (um, uh, ah)
+as spoken.
+
+Non-negotiable: Pharmaceutical accuracy (omeprazole over omeprizole,
+metformin over metforman, hypertension over high blood pressure).
+
+Label physician and patient speech clearly when identifiable.
+```
+
+**Why it works:** Prioritizes medical accuracy with explicit drug name examples showing error patterns, while preserving verbatim speech for documentation compliance.
+
+---
+
+### Financial/Earnings calls
+
+Best for: Quarterly earnings calls, investor presentations, financial meetings
+
+```text
+Mandatory: Corporate earnings call transcription with precise financial
+terminology.
+
+Required: Preserve all speaker disfluencies including hesitations, false starts,
+and filler words (um, uh, you know) exactly as spoken.
+
+Non-negotiable: Financial term accuracy (EBITDA over ebitda, year-over-year
+over y-o-y, basis points over bps).
+
+Format numerical data with standard notation. Label executive speakers by role
+when identifiable (CEO:, CFO:, Analyst:).
+```
+
+**Why it works:** Balances financial terminology precision with verbatim capture of executive speech patterns important for tone analysis.
+
+---
+
+### Software/Technical meetings
+
+Best for: Engineering standups, code reviews, technical discussions
+
+```text
+Mandatory: Technical meeting transcription with multiple participants.
+
+Required: Preserve all verbal disfluencies including hesitations, false starts,
+and thinking sounds (um, uh, hmm, so) exactly as spoken.
+
+Non-negotiable: Technical terminology accuracy (Kubernetes over kubernetties,
+PostgreSQL over postgres, API over A.P.I.).
+
+Mark speaker transitions explicitly. Capture self-corrections and restarts
+(I was— I went, th-that).
+```
+
+**Why it works:** Preserves natural developer speech patterns while ensuring technical terms are spelled correctly.
+
+---
+
+### Code-switching (Bilingual)
+
+Best for: Multilingual conversations, Spanglish, language mixing
+
+```text
+Mandatory: Transcribe verbatim, preserving natural code-switching between
+English and Spanish.
+
+Required: Retain spoken language as-is without translation
+(correct "I was hablando con mi manager").
+
+Non-negotiable: Preserve fillers, repetitions, and false starts across both
+languages (eh, o sea— I mean, you know).
+
+Resolve sound-alike errors using bilingual context (pero over perro,
+meeting over mitin).
+```
+
+**Why it works:** Explicitly instructs preservation over translation, handles cross-language disfluencies, and addresses common bilingual transcription errors.
+
+---
 
 ## How to build your prompt
 
-### Step 1: Choose your instructions
+### Step 1: Start with your base need
 
-Select from the sample transcription instructions based on your needs:
+Choose your primary transcription goal:
 
-| Instruction type | Instruction | Output |
-|------------------|-------------|--------|
-| **Formatting** | `Transcribe this audio with beautiful punctuation and formatting.` | Readable transcript sentences and styling. |
-| **Disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` | Preserve natural speech patterns and verbatim transcription. |
-| **Entity Accuracy** | `Use standard spelling and the most contextually correct spelling of all words and names, brands, drug names, medical terms, person names, and all proper nouns.` | Accurate, contextual transcription of proper nouns and entities. |
-| **Code Switching** | `Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.` | Handle multilingual audio in the same transcript. |
-| **Audio Tags [Non-speech]** | `Preserve non-speech audio in tags to indicate when the audio occurred.` | Add audio beyond speech to the transcript. |
-| **Speaker Tags** | `Tag speaker changes and add context like name, role, gender, etc. based on speech content.` | Add speaker labels with custom diarization labels. |
+| Goal | Base instruction |
+|------|------------------|
+| **Verbatim/disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` |
+| **Output style/formatting** | `Transcribe this audio with beautiful punctuation and formatting.` |
+| **Context aware clues** | `Transcribe this audio. Context: [describe the audio content and domain].` |
+| **Entity accuracy** | `Use standard spelling and contextually correct spelling of all proper nouns.` |
+| **Speaker attribution** | `Mark speaker turns clearly. Tag speaker changes with context like name, role, or gender.` |
+| **Audio event tags** | `Preserve non-speech audio in tags to indicate when the audio occurred.` |
+| **Code-switching** | `Transcribe in the original language mix, preserving words in the language spoken.` |
+| **Numbers/measurements** | `Use digits for numbers, percentages, and measurements.` |
+| **Difficult audio** | `If unintelligible, write (unclear). Mark inaudible segments.` |
 
-### Step 2: Add pushy, authoritative language
+### Step 2: Add authoritative language
 
-- `Non-negotiable:` / `Mandatory:` / `Strict requirement:` / `Required:`
+Prefix each instruction with:
+- `Non-negotiable:`
+- `Mandatory:`
+- `Required:`
+- `Strict requirement:`
 
-### Step 3: Add 2-3 explicit examples per specific instruction
+### Step 3: Add instructions one by one
 
-- `(correct over incorrect, correct2 over incorrect2)`
+We recommend you layer on each instruction one by one to see the impact on the transcription output. Since conflicting instructions can cause outputs to degrade, adding each instruction one by one allows you to test and evaluate how each instruction improves/degrades your transcription output.
 
-### Final prompt format
+### Step 4: Iterate and test
 
-```text
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-[Pushy, authoritative language] + [Specific instruction] + [Explicit examples]
-```
+1. **Identify target terms** - What words/phrases are being transcribed incorrectly?
+2. **Find the error pattern** - Vowel substitution? Sound-alike? Phonetic spelling?
+3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern
+4. **Test and verify** - Listen to the audio to confirm correctness
+5. **Measure success rate** - Test variations on sample files
 
-## Testing your prompts
-
-1. **Identify your target terms** - What specific words/phrases are being transcribed incorrectly?
-2. **Find the error pattern** - Is it vowel substitution? Sound-alike confusion? Phonetic spelling? Make this your set of specific instructions.
-3. **Choose example terms** - Pick 2-3 common terms with the SAME error pattern (not the exact terms you're trying to fix, but examples the model can draw from).
-4. **Test and human verify** - The model is often times capturing verbatim transcription humans struggle with. You will need to listen to the file and determine correctness vs the output.
-5. **Measure success rate** - Evaluate a few prompt variations on sample files and confirm what works best.
-
-## Prompt engineering walkthrough: Virtual meeting
-
-This walkthrough demonstrates how different prompts affect transcription output using a real virtual business meeting recording. The baseline is Universal-3-Pro without any prompt, which produces clean, readable transcription with 4,418 words. To listen along as you use this guide, access the [GitLab virtual meeting here on YouTube](https://www.youtube.com/watch?v=rOqgRiNMVqg).
-
-### Baseline vs prompts comparison
-
-The following examples show how prompts can increase or decrease verbosity compared to the baseline. Each example uses the same audio file to demonstrate the effect of different prompt formulations. 
-
-**Source audio:** Virtual business meeting (team staff meeting)
-
-| Prompt type | Words | Change vs baseline |
-|-------------|-------|-------------------|
-| Baseline (no prompt) | 4,418 | — |
-| Basic disfluencies | 4,698 | +280 (+6.3%) |
-| Enhanced disfluencies | 4,709 | +291 (+6.6%) |
-| Maximum verbatim | 4,753 | +335 (+7.6%) |
-| Maximum verbatim with audio tags | 4,820 | +402 (+9.1%) |
-
-### Basic disfluency prompt
-
-Use this prompt when you need to capture conversational disfluencies while maintaining readability.
+### Final prompt structure
 
 ```text
-This is a virtual business meeting. Transcribe the audio verbatim, including all disfluencies and false starts.
+[Authoritative language]: [Specific instruction] + [Explicit examples]
+[Authoritative language]: [Specific instruction] + [Explicit examples]
+[Authoritative language]: [Specific instruction] + [Explicit examples]
 ```
 
-This prompt adds filler words like "um" and "uh" to the output and captures false starts with em-dashes. That being said, as it has no explicit examples, it doesn't transcribe everything:
-- Readability of disfluencies is prioritized over verbatim
-  - If it finds repeated "uh uh uh" it will only transcribe a single filler word
-  - If filler words are considered disfluencies like "like", it may or may not capture them correctly
-- For false starts, performance is varied
-  - If there is a false start or studder, there is no example how those should be handled in the output
+---
 
-<Accordion title="Compare baseline vs basic disfluencies output">
+## Need help?
 
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once.
-```
-  </Tab>
-  <Tab title="Basic disfluencies prompt">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. Um, and, uh, that's our meeting for September 14th 
-or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
-midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
-this meeting because it's really late for you. Uh, it may— so, but I'm glad. 
-Thanks for coming at least once.
-```
-  </Tab>
-</Tabs>
-
-</Accordion>
-
-### Enhanced disfluency prompt
-
-Use this prompt for aggressive disfluency capture with explicit emphasis. This tries to maintain readability with emphasis on capturing all speech patterns.
-
-```text
-This is a virtual business meeting. Transcribe the audio verbatim, overly trying to capture hesitations, disfluencies, and false starts. This should be as close to a human transcriptionist as possible.
-```
-
-Using intensifying language like "overly trying" and comparing to a human transcriptionist increases capture rates. However, the lack of explicit examples prevents this prompt from capturing all of the potential known speech challenges inside the file.
-
-<Accordion title="Compare baseline vs enhanced disfluencies output">
-
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time.
-```
-  </Tab>
-  <Tab title="Enhanced disfluencies prompt">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. Um, and, uh, that's our meeting for, uh, September 
-14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's 
-midnight? We could talk— uh, glad you're here. Don't make it happen to come to 
-this meeting since it's really late for you. Uh, it may— so, but I'm glad. 
-Thanks for coming at least once. So, um, news and events. Uh, I've got a lot of 
-things on the agenda today because of some of this. Uh, so apologies for that, 
-but I think it's going to go down over time.
-```
-  </Tab>
-</Tabs>
-
-</Accordion>
-
-### Maximum verbatim prompt
-
-Use this prompt when you need the highest fidelity transcription with all speech patterns captured.
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-```
-
-Providing concrete examples of disfluencies to capture produces the highest word count and captures repeated hesitations. This is ideal for human level verbatim transcription and communication pattern analysis.
-
-<Accordion title="Compare baseline vs maximum verbatim output">
-
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Maximum verbatim prompt">
-```text
-So it is the SEC, meaning secure and govern growth, and data science, meaning
-applied ML, MLOps, and anti-abuse team meeting. That's a big mouthful. We might
-get a better name over time. Um, and, uh, that's our meeting for, uh, September
-14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here when it's
-midnight? We could talk— uh, glad you're here. Don't make it a habit to come to
-this meeting since it's really late for you. Uh, it may— so, but I'm glad. Thanks
-for coming at least once. So, um, news and events. Uh, I've got a lot of things
-on the agenda today because of some of this. Uh, so apologies for that, but I
-think it's gonna go down over time. Based on feedback, I'll work— I'm gonna work
-to do more summarized communications to improve the signal-to-noise ra-ratio in
-my communications to groups of people, including this group of people. Uh, this
-was worked in for this group, adding more items to our staff meeting agenda,
-often as read-only, rather than posting to our Slack channel. And I am gonna be
-assuming that people leaders on the team will attend this meeting or read the
-notes and not rely on the Slack channel. So keep that in, in mind. Uh, let's see.
-B is a read-only item unless anybody wants to discuss it. And C, Phil has— Hi, um,
-welcome, Alan, uh, to the, to the meeting. Um, I've asked Alan to step in as
-acting full-stack manager for security policies, um, while I hire an EM. Um, Alan
-has graciously accepted, um, this, this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-</Tabs>
-
-</Accordion>
-
-### Maximum verbatim with audio tags prompt
-
-Use this prompt when you need the highest fidelity transcription with all speech patterns captured and wish to capture non-speech events.
-
-```text
-Transcribe verbatim:
-- Fillers: yes (um, uh, like, you know)
-- Repetitions: yes (I I, the the the)
-- Stutters: yes (th-that, b-but)
-- False starts: yes (I was- I went)
-- Colloquial: yes (gonna, wanna, gotta)
-- Audio tags: yes [in brackets]
-```
-
-Providing concrete examples of disfluencies to capture produces the highest word count and captures repeated hesitations. This is ideal for human level verbatim transcription and communication pattern analysis.
-
-<Accordion title="Compare baseline vs maximum verbatim output">
-
-<Tabs groupId="comparison">
-  <Tab title="Baseline (no prompt)">
-```text
-So it is the SEC, meaning Secure and Govern Growth, and Data Science, meaning 
-Applied ML, MLOps, and Anti-Abuse Team Meeting. That's a big mouthful. We might 
-get a better name over time. And that's our meeting for September 14th or 15th 
-in APAC. And Hi, Alan. Glad you're here. Why are you here when it's midnight? 
-We can talk. Glad you're here. Don't make it happen to come to this meeting 
-because it's really late for you. So, but I'm glad. Thanks for coming at least 
-once. So, news and events. I've got a lot of things on the agenda today because 
-of some of this. So apologies for that, but I think it's going to go down over 
-time. Based on feedback, I'm going to work to do more summarized communications 
-to improve the signal-to-noise ratio in my communications to groups of people, 
-including this group of people. This will result in, for this group, adding more 
-items to our staff meeting agenda, often as read-only, rather than posting to 
-our Slack channel. And I am going to be assuming that people leaders on the team 
-will attend this meeting or read the notes and not rely on the Slack channel. 
-So keep that in mind. B is a read-only item unless anybody wants to discuss it. 
-And C, Phil has. Hi, welcome, Alan, to the meeting. I've asked Alan to step in 
-as acting full-stack manager for security policies while I hire an EM. Alan has 
-graciously accepted this wonderful opportunity. So welcome, Alan.
-```
-  </Tab>
-  <Tab title="Maximum verbatim prompt with audio tags">
-```text
-[APPLAUSE] So it is the SEC, meaning secure and govern growth, and data science,
-meaning applied ML, MLOps, and anti-abuse team meeting. That's a big mouthful.
-We might get a better name over time. Um, and, uh, that's our meeting for, uh,
-September 14th or 15th in APAC. And Hi, Alan. Glad you're here. Why are you here
-when it's midnight? We could talk— uh, glad you're here. Don't make it a habit
-to come to this meeting since it's really late for you. Uh, it may— so, but I'm
-glad. Thanks for coming at least once. [MUSIC] So, um, news and events. Uh, I've
-got a lot of things on the agenda today because of some of this. Uh, so apologies
-for that, but I think it's gonna go down over time. Based on feedback, I'll work—
-I'm gonna work to do more summarized communications to improve the signal-to-noise
-ra-ratio in my communications to groups of people, including this group of people.
-Uh, this was worked in for this group, adding more items to our staff meeting
-agenda, often as read-only, rather than posting to our Slack channel. And I am
-gonna be assuming that people leaders on the team will attend this meeting or read
-the notes and not rely on the Slack channel. So keep that in, in mind. [MUSIC] Uh,
-let's see. B is a read-only item unless anybody wants to discuss it. And C, Phil
-has— [MUSIC] Hi, um, welcome, Alan, uh, to the, to the meeting. Um, I've asked Alan
-to step in as acting full-stack manager for security policies, um, while I hire an
-EM. Um, Alan has graciously accepted, um, this, this wonderful opportunity. So
-welcome, Alan.
-```
-  </Tab>
-</Tabs>
-
-</Accordion>
-
-### Key observations
-
-The walkthrough demonstrates several important patterns:
-
-1. **Concrete examples drive behavior** - The maximum verbatim prompt includes specific examples like "um, uhs, you know, stud-stud-studder" which produces the highest disfluency capture rate.
-
-2. **Intensifying language works** - Phrases like "overly trying" and "as close to a human transcriptionist as possible" measurably increase capture rates.
-
-3. **Bidirectional control** - You can move in both directions: more verbose with disfluency prompts or cleaner with readability-focused prompts.
-
-4. **Consistent patterns** - The same audio produces consistently different outputs based on prompt formulation, demonstrating reliable prompt engineering effects.
+Prompt engineering is a new and evolving concept with SpeechLLM models. If you need help generating a prompt, our Engineering team is happy to support. Feel free to open a new live chat or send an email in the widget in the bottom right hand corner ([more contact info here](https://www.assemblyai.com/contact/support)).
