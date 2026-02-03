@@ -1,92 +1,112 @@
 ---
-title: "Improving Transcript Accuracy with Keyterms Prompting"
+title: "Keyterms Prompting"
 ---
 
-## Using Slam-1 (Recommended)
+import { AudioPlayer } from "../../../assets/components/AudioPlayer";
 
-Improve transcription accuracy by leveraging Slam-1's contextual understanding capabilities by prompting the model with certain words or phrases that are likely to appear frequently in your audio file.
+Keyterms prompting allows you to provide up to 1,000 words or phrases (maximum 6 words per phrase) using the `keyterms_prompt` parameter to improve transcription accuracy for those terms and related variations or contextually similar phrases.
 
-Rather than simply increasing the likelihood of detecting specific words, Slam-1's multi-modal architecture actually understands the semantic meaning and context of the terminology you provide, enhancing transcription quality not just of the exact terms you specify, but also related terminology, variations, and contextually similar phrases.
+## Using Universal-3-Pro (Recommended)
 
-Provide up to 1000 domain-specific words or phrases (maximum 6 words per phrase) that may appear in your audio using the optional `keyterms_prompt` parameter:
+Here is an example showing how you can use keyterms prompting to improve transcription accuracy for a name with distinctive spelling and formatting.
+
+<AudioPlayer
+  src="https://assemblyaiassets.com/audios/keyterms_prompting.wav"
+  type="audio/wav"
+/>
+
+Without keyterms prompting:
+
+```txt
+Hi, this is Kelly Byrne Donahue
+```
+
+With keyterms prompting:
+
+```txt
+Hi, this is Kelly Byrne-Donoghue
+```
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-    ```python
-    import requests
-    import time
+<Tab language="python" title="Python" default>
 
-    base_url = "https://api.assemblyai.com"
-    headers = {"authorization": "<YOUR_API_KEY>"}
+```python {12}
+import requests
+import time
 
-    data = {
-        "audio_url": "https://assembly.ai/sports_injuries.mp3",
-        "speech_model": "slam-1",
-        "keyterms_prompt": ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
-    }
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-    response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/keyterms_prompting.wav",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal"],
+    "keyterms_prompt": ["Kelly Byrne-Donoghue"]
+}
 
-    if response.status_code != 200:
-        print(f"Error: {response.status_code}, Response: {response.text}")
-        response.raise_for_status()
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
 
-    transcript_response = response.json()
-    transcript_id = transcript_response["id"]
-    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
 
-    while True:
-        transcript = requests.get(polling_endpoint, headers=headers).json()
-        if transcript["status"] == "completed":
-            print(transcript["text"])
-            break
-        elif transcript["status"] == "error":
-            raise RuntimeError(f"Transcription failed: {transcript['error']}")
-        else:
-            time.sleep(3)
-    ```
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
 
-  </Tab>
-  <Tab language="javascript" title="JavaScript">
-    ```javascript
-      import axios from 'axios'
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
 
-      const baseUrl = 'https://api.assemblyai.com'
+</Tab>
+<Tab language="javascript" title="JavaScript">
 
-      const headers = {
-        authorization: '<YOUR_API_KEY>'
-      }
+```javascript {13}
+import axios from "axios";
 
-      const data = {
-        audio_url: 'https://assembly.ai/sports_injuries.mp3',
-        speech_model: 'slam-1',
-        keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
-      }
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
 
-      const url = `${baseUrl}/v2/transcript`
-      const response = await axios.post(url, data, { headers: headers })
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/keyterms_prompting.wav",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal"],
+  keyterms_prompt: ["Kelly Byrne-Donoghue"],
+};
 
-      const transcriptId = response.data.id
-      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
 
-      while (true) {
-        const pollingResponse = await axios.get(pollingEndpoint, {
-          headers: headers
-        })
-        const transcriptionResult = pollingResponse.data
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
-        if (transcriptionResult.status === 'completed') {
-          console.log(transcriptionResult.text)
-          break
-        } else if (transcriptionResult.status === 'error') {
-          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-        }
-      }
-    ```
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
 
-  </Tab>
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
 </Tabs>
 
 <Note title="Keyword count limits">
@@ -100,24 +120,44 @@ For optimal results, use shorter phrases when possible and be mindful of your to
 
 </Note>
 
-## Using Universal (Beta)
+## Using Universal-2 (Beta)
 
 <Warning>
 
-`keyterms_prompt` for Universal is currently available at no additional cost while we gather feedback and refine functionality.
+`keyterms_prompt` for Universal-2 is currently available at no additional cost while we gather feedback and refine functionality.
 Pricing may be introduced as the feature moves out of beta. We'll notify all users well in advance of any pricing changes.
 
 As we continue to develop this feature, functionality may evolve. For the latest updates and code examples, please check back on this page.
 
 </Warning>
 
-If you're currently using our `universal` model, the `keyterms_prompt` parameter is in Beta for English files.
+If you're currently using our `universal-2` model, the `keyterms_prompt` parameter is in Beta for English files.
 
-The maximum number of keyterms with Universal is 200. Keyterms shorter than 5 characters or longer than 50 characters are ignored.
+The maximum number of keyterms with Universal-2 is 200. Keyterms shorter than 5 characters or longer than 50 characters are ignored.
 
 <Tabs groupId="language">
-  <Tab language="python" title="Python" default>
-    ```python
+  <Tab language="python-sdk" title="Python SDK" default>
+    ```python {10}
+    import assemblyai as aai
+
+    aai.settings.api_key = "<YOUR_API_KEY>"
+
+    audio_file = "https://assembly.ai/sports_injuries.mp3"
+
+    config = aai.TranscriptionConfig(
+        speech_model="universal-2",
+        language_detection=True,
+        keyterms_prompt=['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+    )
+
+    transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+    print(transcript.text)
+    ```
+
+  </Tab>
+  <Tab language="python" title="Python">
+    ```python {12}
     import requests
     import time
 
@@ -126,7 +166,8 @@ The maximum number of keyterms with Universal is 200. Keyterms shorter than 5 ch
 
     data = {
         "audio_url": "https://assembly.ai/sports_injuries.mp3",
-        "speech_model": "universal",
+        "speech_model": "universal-2",
+        "language_detection": True,
         "keyterms_prompt": ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
     }
 
@@ -152,43 +193,67 @@ The maximum number of keyterms with Universal is 200. Keyterms shorter than 5 ch
     ```
 
   </Tab>
+  <Tab language="javascript-sdk" title="JavaScript SDK">
+    ```javascript {10}
+    import { AssemblyAI } from "assemblyai";
+
+    const client = new AssemblyAI({
+      apiKey: "<YOUR_API_KEY>",
+    });
+
+    const audioFile = "https://assembly.ai/sports_injuries.mp3";
+
+    const params = {
+      audio: audioFile,
+      speech_model: "universal-2",
+      language_detection: true,
+      keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+    };
+
+    const transcript = await client.transcripts.transcribe(params);
+
+    console.log(transcript.text);
+    ```
+
+  </Tab>
   <Tab language="javascript" title="JavaScript">
-    ```javascript
-      import axios from 'axios'
+    ```javascript {13}
+    import axios from 'axios'
 
-      const baseUrl = 'https://api.assemblyai.com'
+    const baseUrl = 'https://api.assemblyai.com'
 
-      const headers = {
-        authorization: '<YOUR_API_KEY>'
+    const headers = {
+      authorization: '<YOUR_API_KEY>'
+    }
+
+    const data = {
+      audio_url: 'https://assembly.ai/sports_injuries.mp3',
+      speech_model: 'universal-2',
+      language_detection: true,
+      keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
+    }
+
+    const url = `${baseUrl}/v2/transcript`
+    const response = await axios.post(url, data, { headers: headers })
+
+    const transcriptId = response.data.id
+    const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
+
+    while (true) {
+      const pollingResponse = await axios.get(pollingEndpoint, {
+        headers: headers
+      })
+      const transcriptionResult = pollingResponse.data
+
+      if (transcriptionResult.status === 'completed') {
+        console.log(transcriptionResult.text)
+        break
+      } else if (transcriptionResult.status === 'error') {
+        throw new Error(`Transcription failed: ${transcriptionResult.error}`)
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
       }
-
-      const data = {
-        audio_url: 'https://assembly.ai/sports_injuries.mp3',
-        speech_model: 'universal',
-        keyterms_prompt: ['differential diagnosis', 'hypertension', 'Wellbutrin XL 150mg']
-      }
-
-      const url = `${baseUrl}/v2/transcript`
-      const response = await axios.post(url, data, { headers: headers })
-
-      const transcriptId = response.data.id
-      const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`
-
-      while (true) {
-        const pollingResponse = await axios.get(pollingEndpoint, {
-          headers: headers
-        })
-        const transcriptionResult = pollingResponse.data
-
-        if (transcriptionResult.status === 'completed') {
-          console.log(transcriptionResult.text)
-          break
-        } else if (transcriptionResult.status === 'error') {
-          throw new Error(`Transcription failed: ${transcriptionResult.error}`)
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-        }
-      }
+    }
     ```
 
   </Tab>

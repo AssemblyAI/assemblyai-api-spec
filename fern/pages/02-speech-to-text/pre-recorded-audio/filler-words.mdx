@@ -1,37 +1,125 @@
 ---
-title: "Filler Words"
+title: "Verbatim"
 ---
 
-import { LanguageTable } from "../../../assets/components/LanguagesTable";
+import { AudioPlayer } from "../../../assets/components/AudioPlayer";
 
-<AccordionGroup>
+Verbatim transcription preserves natural speech patterns including filler words (um, uh), false starts, repetitions, and stutters. By default, these elements are removed for readability. Use the `prompt` parameter to specify which verbatim elements you want included in your transcript.
 
-<Accordion title="Supported languages">
-  <LanguageTable
-    languages={[
-      { name: "Global English", code: "en" },
-      { name: "Australian English", code: "en_au" },
-      { name: "British English", code: "en_uk" },
-      { name: "US English", code: "en_us" },
-    ]}
-    columns={2}
-  />
-  <br />
-</Accordion>
+## Overview
 
-<Accordion title="Supported models">
-  <LanguageTable
-    languages={[{ name: "Universal", code: "universal" }]}
-    columns={2}
-  />
-  <br />
-</Accordion>
+Capture natural speech patterns exactly as spoken. Include examples of the verbatim elements you want to transcribe in the prompt parameter to guide the model.
 
-<Accordion title="Supported regions">
-  US & EU <br />
-</Accordion>
+<AudioPlayer src="https://assemblyaiassets.com/audios/verbatim.mp3" />
 
-</AccordionGroup>
+Without prompting verbatim:
+
+```txt wordWrap
+Do you and Quentin still socialize when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we're friends. What do you do with him?
+```
+
+With prompting verbatim:
+
+```txt wordWrap
+Do you and Quentin still socialize, uh, when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we, we, we're friends. What do you do with him?
+```
+
+Here are examples of verbatim transcription that you can prompt for:
+
+- fillers (um, uh, like, you know, I mean)
+- repetitions (I I I, the the)
+- restarts (I was- I went)
+- stutters (th-that, b-but)
+- informal speech (gonna, wanna, gotta)
+
+## Quickstart
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/verbatim.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {11-12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/verbatim.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Filler words (legacy)
+
+Universal-2 offers filler word detection through the `disfluencies` parameter.
 
 The following filler words are removed by default:
 
@@ -57,7 +145,11 @@ aai.settings.api_key = "<YOUR_API_KEY>"
 # audio_file = "./local_file.mp3"
 audio_file = "https://assembly.ai/wildfires.mp3"
 
-config = aai.TranscriptionConfig(disfluencies=True)
+config = aai.TranscriptionConfig(
+    speech_models=["universal-2"],
+    language_detection=True,
+    disfluencies=True
+)
 
 transcript = aai.Transcriber(config=config).transcribe(audio_file)
 
@@ -86,6 +178,8 @@ upload_url = response.json()["upload_url"]
 
 data = {
     "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-2"],
+    "language_detection": True,
     "disfluencies": True
 }
 
@@ -122,6 +216,8 @@ const audioFile = "https://assembly.ai/wildfires.mp3";
 
 const params = {
   audio: audioFile,
+  speech_models: ["universal-2"],
+  language_detection: true,
   disfluencies: true,
 };
 
@@ -153,6 +249,8 @@ const uploadUrl = uploadResponse.data.upload_url;
 
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-2"],
+  language_detection: true,
   disfluencies: true,
 };
 
@@ -245,11 +343,13 @@ class Program
 
     static async Task<Transcript> CreateTranscriptAsync(string audioUrl, HttpClient httpClient)
     {
-        var data = new
-        {
-            audio_url = audioUrl,
-            disfluencies = true
-        };
+                var data = new
+                {
+                    audio_url = audioUrl,
+                    speech_models = new[] { "universal-2" },
+                    language_detection = true,
+                    disfluencies = true
+                };
 
         var content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
 
@@ -311,6 +411,8 @@ upload_url = JSON.parse(upload_response.body)["upload_url"]
 
 data = {
     "audio_url" => upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models" => ["universal-2"],
+    "language_detection" => true,
     "disfluencies" => true
 }
 
@@ -383,6 +485,8 @@ curl_close($ch);
 
 $data = array(
     "audio_url" => $upload_url, // You can also use a URL to an audio or video file on the web
+    "speech_models" => ["universal-2"],
+    "language_detection" => true,
     "disfluencies" => true
 );
 
