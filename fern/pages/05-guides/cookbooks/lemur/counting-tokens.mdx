@@ -1,76 +1,194 @@
 ---
-title: "Estimate Input Token Costs for LeMUR"
+title: "Estimate Input Token Costs for LLM Gateway"
 ---
 
-AssemblyAI's [LeMUR](https://www.assemblyai.com/blog/lemur/) (Leveraging Large Language Models to Understand Recognized Speech) framework is a powerful way to extract insights from transcripts generated from audio and video files. Given how varied the type of input and output could be for these use cases, the [pricing](https://www.assemblyai.com/pricing) for LeMUR is based on input and output tokens.
+AssemblyAI's [LLM Gateway](/docs/llm-gateway/overview) is a unified API providing access to 15+ models from Claude, GPT, and Gemini through a single interface.
+It's a powerful way to extract insights from transcripts generated from audio and video files. Given how varied the type of input and output could be for these use cases, the [pricing](https://www.assemblyai.com/pricing) for LLM Gateway is based on **both** input and output tokens.
 
-Output tokens can be controlled via LeMUR's [max_output_size](https://www.assemblyai.com/docs/lemur/advanced/customize-parameters#change-the-maximum-output-size) parameter, but how do you determine the amount of input tokens you'll be sending to LeMUR? How many tokens does an audio file contain? This Colab will show you how to calculate that information to help predict LeMUR's cost ahead of time.
+Output tokens will vary depending on the model and the complexity of your request, but how do you determine the amount of input tokens you'll be sending to LLM Gateway?
+How many tokens does an audio file and your prompt contain? This guide will show you how to roughly calculate that information to help predict LLM Gateway's input token cost ahead of time.
+
+<Note>
+This guide calculates **input token costs only**.
+Output token costs will vary based on the model used and the length of the generated response.
+
+To see the specific cost of each model (per 1M input and output tokens) applicable to your AssemblyAI account, refer to the Rates table on the [Billing page](https://www.assemblyai.com/dashboard/account/billing) of the dashboard.
+
+</Note>
 
 ## Quickstart
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "YOUR_API_KEY"}
 
-transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
-character_count = len(transcript.text)
-count_in_thousands = character_count / 1000
+# Transcribe audio file
+audio_url = "https://assembly.ai/wildfires.mp3"
+data = {"audio_url": audio_url}
 
-sonnet_cost = 0.003 * count_in_thousands
-opus_cost = 0.015 * count_in_thousands
-haiku_cost = 0.00025 * count_in_thousands
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
-print(f"LeMUR Claude 3.5 Sonnet Cost: ${sonnet_cost}")
-print(f"LeMUR Default | LeMUR Claude 2.1 | LeMUR Claude 3 Opus Cost: ${opus_cost}")
-print(f"LeMUR Claude 3 Haiku Cost: ${haiku_cost}")
+# Poll for completion
+print("Waiting for transcription to complete...")
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    time.sleep(3)
+
+# Define your prompt
+prompt = "Provide a brief summary of the transcript."
+
+# Calculate character count (transcript + prompt)
+transcript_chars = len(transcript["text"])
+prompt_chars = len(prompt)
+total_chars = transcript_chars + prompt_chars
+print(f"\nTotal characters: {total_chars}")
+
+# Estimate tokens (roughly 4 characters = 1 token)
+estimated_tokens = total_chars / 4
+tokens_in_millions = estimated_tokens / 1_000_000
+
+# Calculate input costs for different models
+gpt5_cost = 1.25 * tokens_in_millions
+claude_sonnet_cost = 3.00 * tokens_in_millions
+gemini_pro_cost = 1.25 * tokens_in_millions
+
+print(f"Estimated input tokens: {estimated_tokens:,.0f}")
+print(f"\nEstimated input costs:")
+print(f"GPT-5: ${gpt5_cost:.4f}")
+print(f"Claude 4.5 Sonnet: ${claude_sonnet_cost:.4f}")
+print(f"Gemini 2.5 Pro: ${gemini_pro_cost:.4f}")
 ```
 
 ## Step-by-Step Guide
 
-To get started, you'll need to install the AssemblyAI Python SDK, which we'll use to transcribe our file.
+### Install dependencies
+
+Install the requests library if you haven't already:
 
 ```bash
-pip install -U assemblyai
+pip install requests
 ```
 
-Now we'll import these files and set our AssemblyAI API key, which can be found on your account [dashboard](https://www.assemblyai.com/app/account).
+### Set up your API key
+
+Import the necessary libraries and set your AssemblyAI API key, which can be found on your account [dashboard](https://www.assemblyai.com/dashboard/api-keys):
 
 ```python
-import assemblyai as aai
+import requests
+import time
 
-aai.settings.api_key = "API_KEY"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "YOUR_API_KEY"}
 ```
 
-Next we'll transcribe our file using AssemblyAI.
+### Transcribe your audio file
+
+Transcribe your audio file using AssemblyAI:
 
 ```python
-transcriber = aai.Transcriber()
+audio_url = "https://assembly.ai/wildfires.mp3"
+data = {"audio_url": audio_url}
 
-transcript = transcriber.transcribe("https://github.com/AssemblyAI-Examples/audio-examples/raw/main/20230607_me_canadian_wildfires.mp3")
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll for completion
+print("Waiting for transcription to complete...")
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    time.sleep(3)
 ```
 
-LeMUR counts tokens based solely on character count, so we'll be using Python's built-in `len()` function to count the characters in our transcript.
+### Calculate character count
+
+We'll count the characters in both the transcript and your prompt:
 
 ```python
-character_count = len(transcript.text)
+# Define your prompt
+prompt = "Provide a brief summary of the transcript."
 
-print(character_count)
+# Calculate character count (transcript + prompt)
+transcript_chars = len(transcript["text"])
+prompt_chars = len(prompt)
+total_chars = transcript_chars + prompt_chars
+print(f"\nTotal characters: {total_chars}")
 ```
 
-For this specific file, we got 4,928 tokens. LeMUR's pricing is calculated per 1K tokens, and is prorated for amounts below this.
+For this specific file with the example prompt, the transcript contains approximately 4,880 characters and the prompt contains 42 characters, for a total of 4,922 characters.
+
+### Estimate tokens
+
+Different LLM providers use different tokenization methods, but a rough estimate is that **4 characters equals approximately 1 token**. This is based on guidance from:
+
+- [Claude tokenization documentation](https://docs.claude.com/en/docs/about-claude/pricing#frequently-asked-questions)
+- [OpenAI token counting guide](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them)
+- [Gemini tokens documentation](https://ai.google.dev/gemini-api/docs/tokens?lang=python)
 
 ```python
-count_in_thousands = character_count / 1000
+# Estimate tokens (roughly 4 characters = 1 token)
+estimated_tokens = total_chars / 4
+tokens_in_millions = estimated_tokens / 1_000_000
 
-sonnet_cost = 0.003 * count_in_thousands
-opus_cost = 0.015 * count_in_thousands
-haiku_cost = 0.00025 * count_in_thousands
-
-print(f"LeMUR Claude 3.5 Sonnet Cost: ${sonnet_cost}")
-print(f"LeMUR Default | LeMUR Claude 2.1 | LeMUR Claude 3 Opus Cost: ${opus_cost}")
-print(f"LeMUR Claude 3 Haiku Cost: ${haiku_cost}")
+print(f"Estimated input tokens: {estimated_tokens:,.0f}")
 ```
 
-Here we've determined how much the input tokens from our transcript will cost with LeMUR, not including the tokens of our prompt. To calculate how much the input tokens will cost for your prompt, or how much the amount of output tokens you're limited to will cost, you can follow this same method, replacing `transcript.text` with the text of your prompt, or `num_tokens` with the `max_output_size` amount you've specified to LeMUR.
+<Note title="Language considerations">
+  Token counts can differ significantly across languages. Non-English languages
+  typically require more tokens per character than English. For instance, text
+  in languages like Spanish, Chinese, or Arabic may use 2-3 characters per token
+  instead of 4, resulting in higher token costs for the same amount of content.
+</Note>
+
+### Calculate input token costs
+
+LLM Gateway's pricing is calculated per 1M input tokens. Here are the [current rates](https://www.assemblyai.com/pricing) for popular models:
+
+```python
+# Calculate input costs for different models (rates per 1M tokens)
+gpt5_cost = 1.25 * tokens_in_millions
+claude_sonnet_cost = 3.00 * tokens_in_millions
+gemini_pro_cost = 1.25 * tokens_in_millions
+
+print(f"\nEstimated input costs:")
+print(f"GPT-5: ${gpt5_cost:.4f}")
+print(f"Claude 4.5 Sonnet: ${claude_sonnet_cost:.4f}")
+print(f"Gemini 2.5 Pro: ${gemini_pro_cost:.4f}")
+```
+
+For our example file with approximately 1,230 input tokens:
+
+- **GPT-5** (`gpt-5`): ~$0.0015
+- **Claude 4.5 Sonnet** (`claude-sonnet-4-5-20250929`): ~$0.0037
+- **Gemini 2.5 Pro** (`gemini-2.5-pro`): ~$0.0015
+
+<Note>
+These calculations estimate **input token costs only**. Output tokens are not included and will vary based on:
+- The model you choose
+- The complexity of your request
+- The length of the generated response
+
+To see the complete pricing for both input and output tokens for all available models, visit the Rates table on the [Billing page](https://www.assemblyai.com/dashboard/account/billing) of your dashboard.
+
+</Note>
+
+## Next steps
+
+- [LLM Gateway Overview](/docs/llm-gateway/overview) - Learn about all available models and capabilities
+- [Apply LLM Gateway to Audio Transcripts](/docs/lemur/apply-llms-to-audio-files) - Complete guide to using LLM Gateway with transcripts
+- [Billing page](https://www.assemblyai.com/dashboard/account/billing) - View LLM pricing for your account

@@ -9,8 +9,18 @@ description: "Learn how to transcribe streaming audio."
 
 By the end of this tutorial, you'll be able to transcribe audio from your microphone.
 
-<Note title="Supported languages">
-  Streaming Speech-to-Text is only available for English.
+<Note>
+  By default, Universal-Streaming is set to transcribe English audio. If you'd
+  like to enable multilingual streaming (support for English, Spanish, French,
+  German, Italian, and Portuguese), enable [multilingual
+  transcription](/docs/speech-to-text/universal-streaming/multilingual-transcription)
+  instead.
+</Note>
+
+<Note>
+  Streaming is now available in EU-West via `streaming.eu.assemblyai.com`. To
+  use the EU streaming endpoint, replace `streaming.assemblyai.com` with
+  `streaming.eu.assemblyai.com` in your connection configuration.
 </Note>
 
 ## Before you begin
@@ -54,13 +64,6 @@ def on_begin(self: Type[StreamingClient], event: BeginEvent):
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
     print(f"{event.transcript} ({event.end_of_turn})")
 
-    if event.end_of_turn and not event.turn_is_formatted:
-        params = StreamingSessionParameters(
-            format_turns=True,
-        )
-
-        self.set_params(params)
-
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
     print(
@@ -103,6 +106,7 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
 </Tab>
 
 <Tab language="python" title="Python">
@@ -149,24 +153,24 @@ def save_wav_file():
     if not recorded_frames:
         print("No audio data recorded.")
         return
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"recorded_audio_{timestamp}.wav"
-    
+
     try:
         with wave.open(filename, 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(2)  # 16-bit = 2 bytes
             wf.setframerate(SAMPLE_RATE)
-            
+
             # Write all recorded frames
             with recording_lock:
                 wf.writeframes(b''.join(recorded_frames))
-        
+
         print(f"Audio saved to: {filename}")
         print(f"Duration: {len(recorded_frames) * FRAMES_PER_BUFFER / SAMPLE_RATE:.2f} seconds")
-        
+
     except Exception as e:
         print(f"Error saving WAV file: {e}")
 
@@ -184,11 +188,11 @@ def on_open(ws):
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                
+
                 # Store audio data for WAV recording
                 with recording_lock:
                     recorded_frames.append(audio_data)
-                
+
                 # Send audio data as binary message
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
@@ -242,10 +246,10 @@ def on_error(ws, error):
 def on_close(ws, close_status_code, close_msg):
     """Called when the WebSocket connection is closed."""
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    
+
     # Save recorded audio to WAV file
     save_wav_file()
-    
+
     # Ensure audio resources are released
     global stream, audio
     stop_event.set()  # Signal audio thread just in case it's still running
@@ -355,9 +359,9 @@ if __name__ == "__main__":
 <Tab language="javascript-sdk" title="JavaScript SDK" default>
 
 ```javascript
-import { Readable } from 'stream'
-import { AssemblyAI } from 'assemblyai'
-import recorder from 'node-record-lpcm16'
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
 
 const run = async () => {
   const client = new AssemblyAI({
@@ -366,7 +370,7 @@ const run = async () => {
 
   const transcriber = client.streaming.transcriber({
     sampleRate: 16_000,
-    formatTurns: true
+    formatTurns: true,
   });
 
   transcriber.on("open", ({ id }) => {
@@ -378,7 +382,7 @@ const run = async () => {
   });
 
   transcriber.on("close", (code, reason) =>
-    console.log("Session closed:", code, reason),
+    console.log("Session closed:", code, reason)
   );
 
   transcriber.on("turn", (turn) => {
@@ -467,26 +471,26 @@ function formatTimestamp(timestamp) {
 
 function createWavHeader(sampleRate, channels, dataLength) {
   const buffer = Buffer.alloc(44);
-  
+
   // RIFF header
-  buffer.write('RIFF', 0);
+  buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + dataLength, 4);
-  buffer.write('WAVE', 8);
-  
+  buffer.write("WAVE", 8);
+
   // fmt chunk
-  buffer.write('fmt ', 12);
+  buffer.write("fmt ", 12);
   buffer.writeUInt32LE(16, 16); // fmt chunk size
-  buffer.writeUInt16LE(1, 20);  // PCM format
+  buffer.writeUInt16LE(1, 20); // PCM format
   buffer.writeUInt16LE(channels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
   buffer.writeUInt16LE(channels * 2, 32); // block align
   buffer.writeUInt16LE(16, 34); // bits per sample
-  
+
   // data chunk
-  buffer.write('data', 36);
+  buffer.write("data", 36);
   buffer.writeUInt32LE(dataLength, 40);
-  
+
   return buffer;
 }
 
@@ -495,26 +499,27 @@ function saveWavFile() {
     console.log("No audio data recorded.");
     return;
   }
-  
+
   // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `recorded_audio_${timestamp}.wav`;
-  
+
   try {
     // Combine all recorded frames
     const audioData = Buffer.concat(recordedFrames);
     const dataLength = audioData.length;
-    
+
     // Create WAV header
     const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
-    
+
     // Write WAV file
     const wavFile = Buffer.concat([wavHeader, audioData]);
     fs.writeFileSync(filename, wavFile);
-    
+
     console.log(`Audio saved to: ${filename}`);
-    console.log(`Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`);
-    
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
   } catch (error) {
     console.error(`Error saving WAV file: ${error}`);
   }
@@ -603,7 +608,7 @@ function startMicrophone() {
       if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
         // Store audio data for WAV recording
         recordedFrames.push(Buffer.from(data));
-        
+
         // Send audio data to WebSocket
         ws.send(data);
       }
@@ -688,6 +693,7 @@ function setupTerminationHandlers() {
 // Start the application
 run();
 ```
+
 </Tab>
 </Tabs>
 
@@ -699,11 +705,12 @@ run();
 <Steps>
   <Step>
 
-Install the AssemblyAI Python SDK via PIP: 
+Install the AssemblyAI Python SDK via PIP:
 
 ```bash
 pip install assemblyai
 ```
+
   </Step>
   <Step>
 
@@ -726,9 +733,9 @@ from assemblyai.streaming.v3 import (
     TurnEvent,
 )
 ```
+
   </Step>
 </Steps>
-
 
 </Tab>
 <Tab language="python" title="Python">
@@ -741,6 +748,7 @@ Install the required Python packages:
 ```bash
 pip install pyaudio websocket-client
 ```
+
   </Step>
   <Step>
 
@@ -756,6 +764,7 @@ import wave
 from urllib.parse import urlencode
 from datetime import datetime
 ```
+
   </Step>
 </Steps>
 
@@ -771,23 +780,45 @@ Run `npm init` to create an NPM package, and then install the necessary packages
 ```bash
 npm install assemblyai node-record-lpcm16
 ```
+
+  <Note>
+    The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+
+    For Mac OS:
+
+    ```bash
+    brew install sox
+    ```
+
+    For most linux disto's:
+
+    ```bash
+    sudo apt-get install sox libsox-fmt-all
+    ```
+
+    For Windows:
+
+    [download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+
+  </Note>
+
   </Step>
   <Step>
 
 Create a file called `main.js` and import the packages at the top of your file:
 
 ```javascript
-import { Readable } from 'stream'
-import { AssemblyAI } from 'assemblyai'
-import recorder from 'node-record-lpcm16'
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
 ```
+
   </Step>
 </Steps>
 
 </Tab>
 
 <Tab language="javascript" title="JavaScript">
-
 
 <Steps>
   <Step>
@@ -796,6 +827,7 @@ import recorder from 'node-record-lpcm16'
     ```bash
     npm install ws mic
     ```
+
   </Step>
   <Step>
 
@@ -813,9 +845,6 @@ const fs = require("fs");
 
 </Tab>
 </Tabs>
-
-
-
 
 ## Step 2: Configure the API key
 
@@ -879,11 +908,12 @@ const API_KEY = "<YOUR_API_KEY>";
 </Steps>
 
 <Note title="Authenticate with a temporary token">
-If you need to authenticate on the client, you can avoid exposing your API key by using [temporary authentication tokens](/docs/speech-to-text/universal-streaming#authenticate-with-a-temporary-token). 
+  If you need to authenticate on the client, you can avoid exposing your API key
+  by using [temporary authentication
+  tokens](/docs/speech-to-text/universal-streaming#authenticate-with-a-temporary-token).
 </Note>
 
 ## Step 3: Set up audio and websocket configuration
-
 
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
@@ -906,6 +936,7 @@ API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
 ```
+
 </Step>
 
 <Step>
@@ -932,33 +963,30 @@ def save_wav_file():
     if not recorded_frames:
         print("No audio data recorded.")
         return
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"recorded_audio_{timestamp}.wav"
-    
+
     try:
         with wave.open(filename, 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(2)  # 16-bit = 2 bytes
             wf.setframerate(SAMPLE_RATE)
-            
+
             # Write all recorded frames
             with recording_lock:
                 wf.writeframes(b''.join(recorded_frames))
-        
+
         print(f"Audio saved to: {filename}")
         print(f"Duration: {len(recorded_frames) * FRAMES_PER_BUFFER / SAMPLE_RATE:.2f} seconds")
-        
+
     except Exception as e:
         print(f"Error saving WAV file: {e}")
 ```
 
-
 </Step>
 </Steps>
-
-
 
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK" default>
@@ -968,7 +996,7 @@ Create a new streaming service from the AssemblyAI client and add it to your asy
 ```javascript
 const transcriber = client.streaming.transcriber({
   sampleRate: 16_000,
-  formatTurns: true
+  formatTurns: true,
 });
 ```
 
@@ -991,6 +1019,7 @@ const CONNECTION_PARAMS = {
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
 ```
+
 </Step>
 <Step>
 Prepare your audio input settings and recording logic. This configuration controls how microphone data is streamed in real-time:
@@ -1015,26 +1044,26 @@ function formatTimestamp(timestamp) {
 }
 function createWavHeader(sampleRate, channels, dataLength) {
   const buffer = Buffer.alloc(44);
-  
+
   // RIFF header
-  buffer.write('RIFF', 0);
+  buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + dataLength, 4);
-  buffer.write('WAVE', 8);
-  
+  buffer.write("WAVE", 8);
+
   // fmt chunk
-  buffer.write('fmt ', 12);
+  buffer.write("fmt ", 12);
   buffer.writeUInt32LE(16, 16); // fmt chunk size
-  buffer.writeUInt16LE(1, 20);  // PCM format
+  buffer.writeUInt16LE(1, 20); // PCM format
   buffer.writeUInt16LE(channels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
   buffer.writeUInt16LE(channels * 2, 32); // block align
   buffer.writeUInt16LE(16, 34); // bits per sample
-  
+
   // data chunk
-  buffer.write('data', 36);
+  buffer.write("data", 36);
   buffer.writeUInt32LE(dataLength, 40);
-  
+
   return buffer;
 }
 function saveWavFile() {
@@ -1042,35 +1071,35 @@ function saveWavFile() {
     console.log("No audio data recorded.");
     return;
   }
-  
+
   // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `recorded_audio_${timestamp}.wav`;
-  
+
   try {
     // Combine all recorded frames
     const audioData = Buffer.concat(recordedFrames);
     const dataLength = audioData.length;
-    
+
     // Create WAV header
     const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
-    
+
     // Write WAV file
     const wavFile = Buffer.concat([wavHeader, audioData]);
     fs.writeFileSync(filename, wavFile);
-    
+
     console.log(`Audio saved to: ${filename}`);
-    console.log(`Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`);
-    
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
   } catch (error) {
     console.error(`Error saving WAV file: ${error}`);
   }
 }
 ```
+
 </Step>
 </Steps>
-
-
 
 </Tab>
 </Tabs>
@@ -1085,10 +1114,10 @@ The handlers will respond to session lifecycle events, transcription turns, erro
 <Tab language="python-sdk" title="Python SDK">
 Implement basic event handlers. These handlers let your app respond to key streaming events:
 
-* `on_begin` – Logs when the session starts.
-* `on_turn` – Handles each transcription turn and optionally enables formatted turns.
-* `on_terminated` – Logs when the session ends and how much audio was processed.
-* `on_error` – Captures and prints any errors during streaming.
+- `on_begin` – Logs when the session starts.
+- `on_turn` – Handles each transcription turn and optionally enables formatted turns.
+- `on_terminated` – Logs when the session ends and how much audio was processed.
+- `on_error` – Captures and prints any errors during streaming.
 
 ```python
 logging.basicConfig(level=logging.INFO)
@@ -1100,13 +1129,6 @@ def on_begin(self: Type[StreamingClient], event: BeginEvent):
 
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
     print(f"{event.transcript} ({event.end_of_turn})")
-
-    if event.end_of_turn and not event.turn_is_formatted:
-        params = StreamingSessionParameters(
-            format_turns=True,
-        )
-
-        self.set_params(params)
 
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
@@ -1124,11 +1146,10 @@ def on_error(self: Type[StreamingClient], error: StreamingError):
 
 Implement basic event handlers. These handlers let your app respond to key streaming events:
 
-* `on_open` – Starts streaming microphone audio in a background thread.
-* `on_message` – Handles transcription events like `Begin`, `Turn`, and `Termination`.
-* `on_error` – Logs any connection or streaming errors and triggers cleanup.
-* `on_close` – Cleans up audio resources and saves a WAV recording when the session ends.
-
+- `on_open` – Starts streaming microphone audio in a background thread.
+- `on_message` – Handles transcription events like `Begin`, `Turn`, and `Termination`.
+- `on_error` – Logs any connection or streaming errors and triggers cleanup.
+- `on_close` – Cleans up audio resources and saves a WAV recording when the session ends.
 
 ```python
 # --- WebSocket Event Handlers ---
@@ -1143,11 +1164,11 @@ def on_open(ws):
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                
+
                 # Store audio data for WAV recording
                 with recording_lock:
                     recorded_frames.append(audio_data)
-                
+
                 # Send audio data as binary message
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
@@ -1194,10 +1215,10 @@ def on_error(ws, error):
 def on_close(ws, close_status_code, close_msg):
     """Called when the WebSocket connection is closed."""
     print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    
+
     # Save recorded audio to WAV file
     save_wav_file()
-    
+
     # Ensure audio resources are released
     global stream, audio
     stop_event.set()  # Signal audio thread just in case it's still running
@@ -1213,37 +1234,38 @@ def on_close(ws, close_status_code, close_msg):
     if audio_thread and audio_thread.is_alive():
         audio_thread.join(timeout=1.0)
 ```
+
 </Tab>
 
 <Tab language="javascript-sdk" title="JavaScript SDK" default>
 
 Add basic event handlers to your async function. These handlers let your app respond to key streaming events:
 
-* `open` – Triggered when the session starts; logs the session ID.
-* `error` – Logs any errors that occur during the session.
-* `close` – Triggered when the session ends; logs the close code and reason.
-* `turn` – Handles each transcription turn and logs the transcript if available.
+- `open` – Triggered when the session starts; logs the session ID.
+- `error` – Logs any errors that occur during the session.
+- `close` – Triggered when the session ends; logs the close code and reason.
+- `turn` – Handles each transcription turn and logs the transcript if available.
 
 ```javascript
-  transcriber.on("open", ({ id }) => {
-    console.log(`Session opened with ID: ${id}`);
-  });
+transcriber.on("open", ({ id }) => {
+  console.log(`Session opened with ID: ${id}`);
+});
 
-  transcriber.on("error", (error) => {
-    console.error("Error:", error);
-  });
+transcriber.on("error", (error) => {
+  console.error("Error:", error);
+});
 
-  transcriber.on("close", (code, reason) =>
-    console.log("Session closed:", code, reason),
-  );
+transcriber.on("close", (code, reason) =>
+  console.log("Session closed:", code, reason)
+);
 
-  transcriber.on("turn", (turn) => {
-    if (!turn.transcript) {
-      return;
-    }
+transcriber.on("turn", (turn) => {
+  if (!turn.transcript) {
+    return;
+  }
 
-    console.log("Turn:", turn.transcript);
-  });
+  console.log("Turn:", turn.transcript);
+});
 ```
 
 </Tab>
@@ -1252,11 +1274,10 @@ Add basic event handlers to your async function. These handlers let your app res
 
 Create an async function. Within it you'll initialize the the WebSocket and set the event handlers:
 
-* `open` – Triggered when the WebSocket connection is established; starts the microphone stream.
-* `message` – Handles incoming messages like `Begin`, `Turn`, and `Termination`, and displays transcripts in real time.
-* `error` – Logs connection or message errors and triggers cleanup.
-* `close` – Called when the connection closes; logs status and reason, and cleans up resources.
-
+- `open` – Triggered when the WebSocket connection is established; starts the microphone stream.
+- `message` – Handles incoming messages like `Begin`, `Turn`, and `Termination`, and displays transcripts in real time.
+- `error` – Logs connection or message errors and triggers cleanup.
+- `close` – Called when the connection closes; logs status and reason, and cleans up resources.
 
 ```javascript
 async function run() {
@@ -1323,11 +1344,13 @@ async function run() {
 </Tabs>
 
 <Tip title="Message sequence and turn events">
-To get a better understanding of the turn event and the message sequences, check out our [Message Sequence Breakdown](/docs/speech-to-text/universal-streaming/message-sequence) page. This object is how you'll receive your transcripts.
+  To get a better understanding of the turn event and the message sequences,
+  check out our [Message Sequence
+  Breakdown](/docs/speech-to-text/universal-streaming/message-sequence) page.
+  This object is how you'll receive your transcripts.
 </Tip>
 
 ## Step 5: Connect and start transcription
-
 
 Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) to stream audio to AssemblyAI. This requires first establishing a connection to the API.
 
@@ -1337,36 +1360,38 @@ Streaming Speech-to-Text uses [WebSockets](https://developer.mozilla.org/en-US/d
   <Step>
   In the `main` function create a `client` and connect to the streaming service:
 
-  ```python
-      client = StreamingClient(
-          StreamingClientOptions(
-              api_key=api_key,
-              api_host="streaming.assemblyai.com",
-          )
-      )
+```python
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
 
-      client.on(StreamingEvents.Begin, on_begin)
-      client.on(StreamingEvents.Turn, on_turn)
-      client.on(StreamingEvents.Termination, on_terminated)
-      client.on(StreamingEvents.Error, on_error)
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
 
-      client.connect(
-          StreamingParameters(
-              sample_rate=16000,
-              format_turns=True,
-          )
-      )
-  ```
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+        )
+    )
+```
+
   </Step>
   <Step>
   Next, create a microphone stream and begin transcribing audio. Make sure the `sample_rate` matches the value you specified in the `StreamingParameters` when initializing the streaming client.
 
-  ```python
-      try:
-          client.stream(
-            aai.extras.MicrophoneStream(sample_rate=16000)
-          )
-  ```
+```python
+    try:
+        client.stream(
+          aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+```
+
   </Step>
 </Steps>
 
@@ -1400,6 +1425,7 @@ def run():
             audio.terminate()
         return  # Exit if microphone cannot be opened
 ```
+
 </Step>
 
 <Step>
@@ -1454,9 +1480,9 @@ In your async function, connect to the transcriber. Create a new microphone stre
 <Step>
 
 <Note title="Initializing WebSocket">
-The WebSocket was initialized in at the beginning of the `main` function in [Step 4](#step-4-create-event-handlers).
+  The WebSocket was initialized in at the beginning of the `main` function in
+  [Step 4](#step-4-create-event-handlers).
 </Note>
-
 
 </Step>
 <Step>
@@ -1476,7 +1502,7 @@ function startMicrophone() {
       if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
         // Store audio data for WAV recording
         recordedFrames.push(Buffer.from(data));
-        
+
         // Send audio data to WebSocket
         ws.send(data);
       }
@@ -1494,17 +1520,14 @@ function startMicrophone() {
   }
 }
 ```
+
 </Step>
 </Steps>
-
 
 </Tab>
 </Tabs>
 
-
 ## Step 6: Close the connection
-
-
 
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK">
@@ -1515,6 +1538,7 @@ Disconnect the client when you're done:
     finally:
         client.disconnect(terminate=True)
 ```
+
 The connection will also close automatically when you press Ctrl+C. In both cases, the `.disconnect()` handler will clean up the audio resources.
 
 </Tab>
@@ -1561,6 +1585,7 @@ Close the WebSocket connection when you're done:
             audio.terminate()
         print("Cleanup complete. Exiting.")
 ```
+
 The connection will also close automatically when you press Ctrl+C. In both cases, the `.close()` handler will clean up the audio resources.
 
 </Tab>
@@ -1593,6 +1618,7 @@ Terminate the session when you're done:
 <Tab language="javascript" title="JavaScript">
 
 Terminate the session when you're done:
+
 ```javascript
 function cleanup() {
   stopRequested = true;
@@ -1649,11 +1675,16 @@ function setupTerminationHandlers() {
   });
 }
 ```
+
 The connection will also close automatically when you press Ctrl+C. In both cases, the `cleanup` function will clean up the audio resources.
+
 </Tab>
 </Tabs>
 
-<Warning>Note: Pricing is based on session duration so it is very important to close sessions properly to avoid unexpected usage and cost.</Warning>
+<Warning>
+  Note: Pricing is based on session duration so it is very important to close
+  sessions properly to avoid unexpected usage and cost.
+</Warning>
 
 ## Next steps
 

@@ -1,0 +1,920 @@
+---
+title: Whisper streaming
+description: Transcribe audio in 99 languages using Whisper
+---
+
+<Accordion title="Supported languages">
+  Afrikaans, Albanian, Amharic, Arabic, Armenian, Assamese, Azerbaijani, Bashkir, Basque, Belarusian, Bengali, Bosnian, Breton, Bulgarian, Cantonese, Catalan, Chinese, Croatian, Czech, Danish, Dutch, English, Estonian, Faroese, Finnish, French, Galician, Georgian, German, Greek, Gujarati, Haitian Creole, Hausa, Hawaiian, Hebrew, Hindi, Hungarian, Icelandic, Indonesian, Italian, Japanese, Javanese, Kannada, Kazakh, Khmer, Korean, Lao, Latin, Latvian, Lingala, Lithuanian, Luxembourgish, Macedonian, Malagasy, Malay, Malayalam, Maltese, Maori, Marathi, Mongolian, Myanmar, Nepali, Norwegian, Nynorsk, Occitan, Pashto, Persian, Polish, Portuguese, Punjabi, Romanian, Russian, Sanskrit, Serbian, Shona, Sindhi, Sinhala, Slovak, Slovenian, Somali, Spanish, Sundanese, Swahili, Swedish, Tagalog, Tajik, Tamil, Tatar, Telugu, Thai, Tibetan, Turkish, Turkmen, Ukrainian, Urdu, Uzbek, Vietnamese, Welsh, Yiddish, Yoruba
+</Accordion>
+
+Whisper streaming allows you to transcribe audio streams in 99 languages using the [WhisperLiveKit](https://pypi.org/project/whisperlivekit/) model.
+
+## Configuration
+
+To utilize Whisper streaming, you need to include `"speech_model":"whisper-streaming"` as a query parameter in the WebSocket URL.
+
+<Note>
+  The `whisper-streaming` model does not support the `language` parameter. The model automatically detects the language being spoken. Do not include a `language` parameter when using this model.
+</Note>
+
+## Supported languages
+
+Whisper streaming supports 99 languages:
+
+<Accordion title="Language codes">
+| Code | Language |
+|------|----------|
+| af | Afrikaans |
+| am | Amharic |
+| ar | Arabic |
+| as | Assamese |
+| az | Azerbaijani |
+| ba | Bashkir |
+| be | Belarusian |
+| bg | Bulgarian |
+| bn | Bengali |
+| bo | Tibetan |
+| br | Breton |
+| bs | Bosnian |
+| ca | Catalan |
+| cs | Czech |
+| cy | Welsh |
+| da | Danish |
+| de | German |
+| el | Greek |
+| en | English |
+| es | Spanish |
+| et | Estonian |
+| eu | Basque |
+| fa | Persian |
+| fi | Finnish |
+| fo | Faroese |
+| fr | French |
+| gl | Galician |
+| gu | Gujarati |
+| ha | Hausa |
+| haw | Hawaiian |
+| he | Hebrew |
+| hi | Hindi |
+| hr | Croatian |
+| ht | Haitian Creole |
+| hu | Hungarian |
+| hy | Armenian |
+| id | Indonesian |
+| is | Icelandic |
+| it | Italian |
+| ja | Japanese |
+| jw | Javanese |
+| ka | Georgian |
+| kk | Kazakh |
+| km | Khmer |
+| kn | Kannada |
+| ko | Korean |
+| la | Latin |
+| lb | Luxembourgish |
+| ln | Lingala |
+| lo | Lao |
+| lt | Lithuanian |
+| lv | Latvian |
+| mg | Malagasy |
+| mi | Maori |
+| mk | Macedonian |
+| ml | Malayalam |
+| mn | Mongolian |
+| mr | Marathi |
+| ms | Malay |
+| mt | Maltese |
+| my | Myanmar |
+| ne | Nepali |
+| nl | Dutch |
+| nn | Nynorsk |
+| no | Norwegian |
+| oc | Occitan |
+| pa | Punjabi |
+| pl | Polish |
+| ps | Pashto |
+| pt | Portuguese |
+| ro | Romanian |
+| ru | Russian |
+| sa | Sanskrit |
+| sd | Sindhi |
+| si | Sinhala |
+| sk | Slovak |
+| sl | Slovenian |
+| sn | Shona |
+| so | Somali |
+| sq | Albanian |
+| sr | Serbian |
+| su | Sundanese |
+| sv | Swedish |
+| sw | Swahili |
+| ta | Tamil |
+| te | Telugu |
+| tg | Tajik |
+| th | Thai |
+| tk | Turkmen |
+| tl | Tagalog |
+| tr | Turkish |
+| tt | Tatar |
+| uk | Ukrainian |
+| ur | Urdu |
+| uz | Uzbek |
+| vi | Vietnamese |
+| yi | Yiddish |
+| yo | Yoruba |
+| yue | Cantonese |
+| zh | Chinese |
+</Accordion>
+
+## Language detection
+
+The Whisper streaming model supports automatic language detection, allowing you to identify which language is being spoken in real-time. When enabled, the model returns the detected language code and confidence score with each complete utterance and final turn.
+
+### Configuration
+
+To enable language detection, include `language_detection=true` as a query parameter in the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=whisper-streaming&language_detection=true
+```
+
+### Output format
+
+When language detection is enabled, each Turn message (with either a **complete utterance** or `end_of_turn: true`) will include two additional fields:
+
+- `language_code`: The language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
+- `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
+
+<Note>
+  The `language_code` and `language_confidence` fields only appear when either:
+  - The `utterance` field is non-empty and contains a complete utterance
+  - The `end_of_turn` field is `true`
+</Note>
+
+### Example response
+
+Here's an example Turn message with language detection enabled, showing Spanish being detected:
+
+```json
+{
+  "turn_order": 0,
+  "turn_is_formatted": false,
+  "end_of_turn": true,
+  "transcript": "buenos días",
+  "end_of_turn_confidence": 1.0,
+  "words": [
+    {
+      "start": 1200,
+      "end": 2596,
+      "text": "buenos",
+      "confidence": 0.0,
+      "word_is_final": true
+    },
+    {
+      "start": 2828,
+      "end": 3760,
+      "text": "días",
+      "confidence": 0.0,
+      "word_is_final": true
+    }
+  ],
+  "utterance": "Buenos días.",
+  "language_code": "es",
+  "language_confidence": 0.846999,
+  "type": "Turn"
+}
+```
+
+In this example, the model detected Spanish (`"es"`) with a confidence of `0.846999`.
+
+## Non-speech tags
+
+The Whisper streaming model can detect and transcribe non-speech audio events. These are returned as bracketed tags in the `utterance` field. Common non-speech tags include:
+
+- `[Silence]` - Periods of silence or no speech
+- `[Música]` / `[Music]` - Background music detected
+- Other audio events may appear in similar bracketed format
+
+### Example response with non-speech
+
+Here's an example Turn message showing silence detection:
+
+```json
+{
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": true,
+  "transcript": " silence  silence",
+  "end_of_turn_confidence": 1.0,
+  "words": [
+    {
+      "start": 6300,
+      "end": 6338,
+      "text": "",
+      "confidence": 0.0,
+      "word_is_final": true
+    },
+    {
+      "start": 6376,
+      "end": 6687,
+      "text": "silence",
+      "confidence": 0.0,
+      "word_is_final": true
+    }
+  ],
+  "utterance": "[ Silence] [ Silence]",
+  "language_code": "fr",
+  "language_confidence": 0.480619,
+  "type": "Turn"
+}
+```
+
+<Note>
+  Non-speech tags appear in the `utterance` field with brackets. The `transcript` field contains the raw text without formatting. You can filter out non-speech turns by checking if the `utterance` contains bracketed tags like `[Silence]` or `[Music]`.
+</Note>
+
+## Understanding formatting
+
+By default, the Whisper streaming model returns unformatted transcripts. To receive formatted transcripts with proper punctuation and capitalization, you must set `format_turns=true` as a query parameter.
+
+<Warning>
+  Enabling `format_turns` adds additional latency to the transcription. We recommend keeping it **off for voice agents** where low latency is critical, and **on for notetaking applications** where formatted output is more important than speed.
+</Warning>
+
+### Configuration
+
+To enable formatted transcripts, include `format_turns=true` in the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=whisper-streaming&format_turns=true
+```
+
+### Example comparison
+
+Here's how the same Spanish phrase appears with and without formatting:
+
+**Unformatted** (`format_turns=false`, default):
+```json
+{
+  "transcript": "buenos días",
+  "turn_is_formatted": false
+}
+```
+
+**Formatted** (`format_turns=true`):
+```json
+{
+  "transcript": "Buenos días.",
+  "turn_is_formatted": true
+}
+```
+
+When formatting is enabled, the transcript includes proper capitalization and punctuation.
+
+## Quickstart
+
+<Tabs>
+
+Firstly, install the required dependencies.
+
+<Tab language="python" title="Python">
+
+```bash
+pip install websockets pyaudio
+```
+
+<Note>
+  The Python example uses the `websockets` library. If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
+</Note>
+
+</Tab>
+
+<Tab language="python-sdk" title="Python SDK">
+
+```bash
+pip install assemblyai
+```
+
+</Tab>
+
+<Tab language="javascript" title="Javascript">
+
+```bash
+npm install ws mic
+```
+
+</Tab>
+
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```bash
+npm install assemblyai node-record-lpcm16
+```
+
+<Note>
+  The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+
+For Mac OS:
+
+```bash
+brew install sox
+```
+
+For most linux disto's:
+
+```bash
+sudo apt-get install sox libsox-fmt-all
+```
+
+For Windows:
+
+[download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+
+</Note>
+
+</Tab>
+
+</Tabs>
+
+<Tabs>
+
+<Tab language="python" title="Python">
+
+```python {26}
+import websockets
+import asyncio
+import json
+from urllib.parse import urlencode
+
+import pyaudio
+
+FRAMES_PER_BUFFER = 3200
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 48000
+p = pyaudio.PyAudio()
+
+stream = p.open(
+    format=FORMAT,
+    channels=CHANNELS,
+    rate=RATE,
+    input=True,
+    frames_per_buffer=FRAMES_PER_BUFFER
+)
+
+BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+CONNECTION_PARAMS = {
+    "sample_rate": RATE,
+    "speech_model": "whisper-streaming",
+    "language_detection": True,
+}
+URL = f"{BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+async def send_receive():
+
+    print(f'Connecting websocket to url ${URL}')
+
+    async with websockets.connect(
+        URL,
+        additional_headers={"Authorization": "YOUR-API-KEY"},
+        ping_interval=5,
+        ping_timeout=20
+    ) as _ws:
+        await asyncio.sleep(0.1)
+        print("Receiving SessionBegins ...")
+
+        session_begins = await _ws.recv()
+        print(session_begins)
+        print("Sending messages ...")
+
+        async def send():
+            while True:
+                try:
+                    data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    await _ws.send(data)
+                except websockets.exceptions.ConnectionClosedError as e:
+                    print(e)
+                except Exception as e:
+                    print(e)
+                await asyncio.sleep(0.01)
+
+        async def receive():
+            while True:
+                try:
+                    result_str = await _ws.recv()
+                    data = json.loads(result_str)
+                    transcript = data['transcript']
+                    utterance = data['utterance']
+
+                    if data['type'] == 'Turn':
+                        if not data.get('end_of_turn') and transcript:
+                            print(f"[PARTIAL TURN TRANSCRIPT]: {transcript}")
+                        if data.get('utterance'):
+                            print(f"[PARTIAL TURN UTTERANCE]: {utterance}")
+                            # Display language detection info if available
+                            if 'language_code' in data:
+                                print(f"[UTTERANCE LANGUAGE DETECTION]: {data['language_code']} - {data['language_confidence']:.2%}")
+                        if data.get('end_of_turn'):
+                            print(f"[FULL TURN TRANSCRIPT]: {transcript}")
+                            # Display language detection info if available
+                            if 'language_code' in data:
+                                print(f"[END OF TURN LANGUAGE DETECTION]: {data['language_code']} - {data['language_confidence']:.2%}")
+                    else:
+                        pass
+
+                except websockets.exceptions.ConnectionClosed:
+                    break
+                except Exception as e:
+                    print(f"\nError receiving data: {e}")
+                    break
+
+        try:
+            await asyncio.gather(send(), receive())
+        except KeyboardInterrupt:
+            await _ws.send({"type": "Terminate"})
+            # Wait for the server to close the connection after receiving the message
+            await _ws.wait_closed()
+            print("Session terminated and connection closed.")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(send_receive())
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+```
+
+</Tab>
+
+<Tab language="python-sdk" title="Python SDK">
+
+```python {27}
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+
+api_key = "<YOUR_API_KEY>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Connecting websocket to url")
+    print(f"Session started: {event.id}")
+    print(f"Receiving SessionBegins ...")
+    print(f"Sending messages ...")
+
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    if not event.end_of_turn and event.transcript:
+        print(f"[PARTIAL TURN TRANSCRIPT]: {event.transcript}")
+    if event.utterance:
+        print(f"[PARTIAL TURN UTTERANCE]: {event.utterance}")
+        # Display language detection info if available
+        if event.language_code:
+            print(f"[UTTERANCE LANGUAGE DETECTION]: {event.language_code} - {event.language_confidence:.2%}")
+    if event.end_of_turn:
+        print(f"[FULL TURN TRANSCRIPT]: {event.transcript}")
+        # Display language detection info if available
+        if event.language_code:
+            print(f"[END OF TURN LANGUAGE DETECTION]: {event.language_code} - {event.language_confidence:.2%}")
+
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=48000,
+            speech_model="whisper-streaming",
+            language_detection=True,
+        )
+    )
+
+    try:
+        client.stream(
+          aai.extras.MicrophoneStream(sample_rate=48000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
+
+<Tab language="javascript" title="Javascript">
+
+```js {11}
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+const fs = require("fs");
+
+// --- Configuration ---
+const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
+const CONNECTION_PARAMS = {
+  sample_rate: 48000,
+  speech_model: "whisper-streaming",
+  language_detection: true,
+};
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+// Audio Configuration
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+// Global variables
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+
+// WAV recording variables
+let recordedFrames = []; // Store audio frames for WAV file
+
+// --- Helper functions ---
+function clearLine() {
+  process.stdout.write("\r" + " ".repeat(80) + "\r");
+}
+
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
+}
+
+function createWavHeader(sampleRate, channels, dataLength) {
+  const buffer = Buffer.alloc(44);
+
+  // RIFF header
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write("WAVE", 8);
+
+  // fmt chunk
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16); // fmt chunk size
+  buffer.writeUInt16LE(1, 20); // PCM format
+  buffer.writeUInt16LE(channels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
+  buffer.writeUInt16LE(channels * 2, 32); // block align
+  buffer.writeUInt16LE(16, 34); // bits per sample
+
+  // data chunk
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataLength, 40);
+
+  return buffer;
+}
+
+function saveWavFile() {
+  if (recordedFrames.length === 0) {
+    console.log("No audio data recorded.");
+    return;
+  }
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `recorded_audio_${timestamp}.wav`;
+
+  try {
+    // Combine all recorded frames
+    const audioData = Buffer.concat(recordedFrames);
+    const dataLength = audioData.length;
+
+    // Create WAV header
+    const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
+
+    // Write WAV file
+    const wavFile = Buffer.concat([wavHeader, audioData]);
+    fs.writeFileSync(filename, wavFile);
+
+    console.log(`Audio saved to: ${filename}`);
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
+  } catch (error) {
+    console.error(`Error saving WAV file: ${error}`);
+  }
+}
+
+// --- Main function ---
+async function run() {
+  console.log("Starting AssemblyAI real-time transcription...");
+  console.log("Audio will be saved to a WAV file when the session ends.");
+
+  console.log(`Connecting websocket to url ${API_ENDPOINT}`);
+
+  // Initialize WebSocket connection
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      Authorization: YOUR_API_KEY,
+    },
+  });
+
+  // Setup WebSocket event handlers
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+    console.log("Receiving SessionBegins ...");
+    // Start the microphone
+    startMicrophone();
+  });
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === "Begin") {
+        console.log(JSON.stringify(data));
+        console.log("Sending messages ...");
+      } else if (msgType === "Turn") {
+        const transcript = data.transcript || "";
+        const utterance = data.utterance || "";
+
+        if (!data.end_of_turn && transcript) {
+          console.log(`[PARTIAL TURN TRANSCRIPT]: ${transcript}`);
+        }
+        if (data.utterance) {
+          console.log(`[PARTIAL TURN UTTERANCE]: ${utterance}`);
+          // Display language detection info if available
+          if (data.language_code) {
+            const langConfidence = (data.language_confidence * 100).toFixed(2);
+            console.log(
+              `[UTTERANCE LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
+            );
+          }
+        }
+        if (data.end_of_turn) {
+          console.log(`[FULL TURN TRANSCRIPT]: ${transcript}`);
+          // Display language detection info if available
+          if (data.language_code) {
+            const langConfidence = (data.language_confidence * 100).toFixed(2);
+            console.log(
+              `[END OF TURN LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
+            );
+          }
+        }
+      } else if (msgType === "Termination") {
+        const audioDuration = data.audio_duration_seconds;
+        const sessionDuration = data.session_duration_seconds;
+        console.log(
+          `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+        );
+      }
+    } catch (error) {
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`\nWebSocket Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
+    cleanup();
+  });
+
+  // Handle process termination
+  setupTerminationHandlers();
+}
+
+function startMicrophone() {
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
+    });
+
+    micInputStream = micInstance.getAudioStream();
+
+    micInputStream.on("data", (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        // Store audio data for WAV recording
+        recordedFrames.push(Buffer.from(data));
+
+        // Send audio data to WebSocket
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on("error", (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
+}
+
+function cleanup() {
+  stopRequested = true;
+
+  // Save recorded audio to WAV file
+  saveWavFile();
+
+  // Stop microphone if it's running
+  if (micInstance) {
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
+    micInstance = null;
+  }
+
+  // Close WebSocket connection if it's open
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      // Send termination message if possible
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
+  }
+
+  console.log("Cleanup complete.");
+}
+
+function setupTerminationHandlers() {
+  // Handle Ctrl+C and other termination signals
+  process.on("SIGINT", () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  // Handle uncaught exceptions
+  process.on("uncaughtException", (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
+run();
+```
+
+</Tab>
+
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {11}
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    speechModel: "whisper-streaming",
+    languageDetection: true,
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Connecting websocket to url`);
+    console.log(`Session opened with ID: ${id}`);
+    console.log(`Receiving SessionBegins ...`);
+    console.log(`Sending messages ...`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.end_of_turn && turn.transcript) {
+      console.log(`[PARTIAL TURN TRANSCRIPT]: ${turn.transcript}`);
+    }
+    if (turn.utterance) {
+      console.log(`[PARTIAL TURN UTTERANCE]: ${turn.utterance}`);
+      // Display language detection info if available
+      if (turn.language_code) {
+        const langConfidence = (turn.language_confidence * 100).toFixed(2);
+        console.log(
+          `[UTTERANCE LANGUAGE DETECTION]: ${turn.language_code} - ${langConfidence}%`
+        );
+      }
+    }
+    if (turn.end_of_turn) {
+      console.log(`[FULL TURN TRANSCRIPT]: ${turn.transcript}`);
+      // Display language detection info if available
+      if (turn.language_code) {
+        const langConfidence = (turn.language_confidence * 100).toFixed(2);
+        console.log(
+          `[END OF TURN LANGUAGE DETECTION]: ${turn.language_code} - ${langConfidence}%`
+        );
+      }
+    }
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C.
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+</Tab>
+
+</Tabs>

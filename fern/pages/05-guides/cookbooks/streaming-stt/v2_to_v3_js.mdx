@@ -13,6 +13,7 @@ The migration involves several key improvements:
 - **Graceful Shutdown**: Proper termination handling
 
 You can follow the step-by-step guide below to make changes to your existing code but here is what your code should look like in the end:
+
 ```javascript
 const WebSocket = require("ws");
 const mic = require("mic");
@@ -52,26 +53,26 @@ function formatTimestamp(timestamp) {
 
 function createWavHeader(sampleRate, channels, dataLength) {
   const buffer = Buffer.alloc(44);
-  
+
   // RIFF header
-  buffer.write('RIFF', 0);
+  buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + dataLength, 4);
-  buffer.write('WAVE', 8);
-  
+  buffer.write("WAVE", 8);
+
   // fmt chunk
-  buffer.write('fmt ', 12);
+  buffer.write("fmt ", 12);
   buffer.writeUInt32LE(16, 16); // fmt chunk size
-  buffer.writeUInt16LE(1, 20);  // PCM format
+  buffer.writeUInt16LE(1, 20); // PCM format
   buffer.writeUInt16LE(channels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
   buffer.writeUInt16LE(channels * 2, 32); // block align
   buffer.writeUInt16LE(16, 34); // bits per sample
-  
+
   // data chunk
-  buffer.write('data', 36);
+  buffer.write("data", 36);
   buffer.writeUInt32LE(dataLength, 40);
-  
+
   return buffer;
 }
 
@@ -80,26 +81,27 @@ function saveWavFile() {
     console.log("No audio data recorded.");
     return;
   }
-  
+
   // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `recorded_audio_${timestamp}.wav`;
-  
+
   try {
     // Combine all recorded frames
     const audioData = Buffer.concat(recordedFrames);
     const dataLength = audioData.length;
-    
+
     // Create WAV header
     const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
-    
+
     // Write WAV file
     const wavFile = Buffer.concat([wavHeader, audioData]);
     fs.writeFileSync(filename, wavFile);
-    
+
     console.log(`Audio saved to: ${filename}`);
-    console.log(`Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`);
-    
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
   } catch (error) {
     console.error(`Error saving WAV file: ${error}`);
   }
@@ -188,7 +190,7 @@ function startMicrophone() {
       if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
         // Store audio data for WAV recording
         recordedFrames.push(Buffer.from(data));
-        
+
         // Send audio data to WebSocket
         ws.send(data);
       }
@@ -281,6 +283,7 @@ For more information on our Universal Streaming feature, see [this section](/doc
 ### 1. Update API endpoint and configuration
 
 **Before (v2):**
+
 ```javascript
 const API_KEY = "<YOUR_API_KEY>";
 const SAMPLE_RATE = 16000; // 16kHz sample rate
@@ -296,6 +299,7 @@ const ws = new WebSocket(
 ```
 
 **After (v3):**
+
 ```javascript
 // --- Configuration ---
 const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
@@ -315,6 +319,7 @@ ws = new WebSocket(API_ENDPOINT, {
 ```
 
 **Key Changes:**
+
 - New base URL: `streaming.assemblyai.com` instead of `api.assemblyai.com`
 - Version upgrade: `/v3/ws` instead of `/v2/realtime/ws`
 - Configuration via URL parameters using `querystring`
@@ -323,45 +328,49 @@ ws = new WebSocket(API_ENDPOINT, {
 ### 2. Audio configuration
 
 **Before (v2):**
+
 ```javascript
-const SAMPLE_RATE = 16000; 
-const CHANNELS = 1; 
+const SAMPLE_RATE = 16000;
+const CHANNELS = 1;
 ```
 
 **After (v3):**
+
 ```javascript
 const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
 const CHANNELS = 1;
 ```
 
 **Key Changes:**
+
 - Sample rate now references the configuration parameter
 
 ### 3. Update message handling schema
 
 **Before (v2):**
+
 ```javascript
 ws.on("message", (message) => {
   try {
     const msg = JSON.parse(message);
     const msgType = msg.message_type;
 
-    if (msgType === 'SessionBegins') {
+    if (msgType === "SessionBegins") {
       const sessionId = msg.session_id;
       console.log("Session ID:", sessionId);
       return;
     }
 
-    const text = msg.text || '';
+    const text = msg.text || "";
     if (!text) {
       return;
     }
 
-    if (msgType === 'PartialTranscript') {
+    if (msgType === "PartialTranscript") {
       console.log("Partial:", text);
-    } else if (msgType === 'FinalTranscript') {
+    } else if (msgType === "FinalTranscript") {
       console.log("Final:", text);
-    } else if (msgType === 'error') {
+    } else if (msgType === "error") {
       console.error("Error:", msg.error);
     }
   } catch (error) {
@@ -371,41 +380,43 @@ ws.on("message", (message) => {
 ```
 
 **After (v3):**
+
 ```javascript
-  ws.on("message", (message) => {
-    try {
-      const data = JSON.parse(message);
-      const msgType = data.type;
-      if (msgType === "Begin") {
-        const sessionId = data.id;
-        const expiresAt = data.expires_at;
-        console.log(
-          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
-        );
-      } else if (msgType === "Turn") {
-        const transcript = data.transcript || "";
-        const formatted = data.turn_is_formatted;
-        if (formatted) {
-          clearLine();
-          console.log(transcript);
-        } else {
-          process.stdout.write(`\r${transcript}`);
-        }
-      } else if (msgType === "Termination") {
-        const audioDuration = data.audio_duration_seconds;
-        const sessionDuration = data.session_duration_seconds;
-        console.log(
-          `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
-        );
+ws.on("message", (message) => {
+  try {
+    const data = JSON.parse(message);
+    const msgType = data.type;
+    if (msgType === "Begin") {
+      const sessionId = data.id;
+      const expiresAt = data.expires_at;
+      console.log(
+        `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
+      );
+    } else if (msgType === "Turn") {
+      const transcript = data.transcript || "";
+      const formatted = data.turn_is_formatted;
+      if (formatted) {
+        clearLine();
+        console.log(transcript);
+      } else {
+        process.stdout.write(`\r${transcript}`);
       }
-    } catch (error) {
-      console.error(`\nError handling message: ${error}`);
-      console.error(`Message data: ${message}`);
+    } else if (msgType === "Termination") {
+      const audioDuration = data.audio_duration_seconds;
+      const sessionDuration = data.session_duration_seconds;
+      console.log(
+        `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+      );
     }
-  });
+  } catch (error) {
+    console.error(`\nError handling message: ${error}`);
+    console.error(`Message data: ${message}`);
+  }
+});
 ```
 
 **Key Changes:**
+
 - Message types renamed: `SessionBegins` → `Begin`, `PartialTranscript`/`FinalTranscript` → `Turn`
 - Field names updated: `message_type` → `type`, `session_id` → `id`, `text` → `transcript`
 - Added session expiration timestamp handling (`expires_at`)
@@ -415,10 +426,10 @@ ws.on("message", (message) => {
 - Added `Termination` message with session statistics
 - Error handling moved from message-based to WebSocket events
 
-
 ### 4. Add graceful shutdown handling and improve error handling and logging
 
 **Before (v2):**
+
 ```javascript
 ws.on("close", (code, reason) => onClose(ws, code, reason));
 
@@ -444,6 +455,7 @@ process.on("SIGINT", async function () {
 ```
 
 **After (v3):**
+
 ```javascript
 ws.on("close", (code, reason) => {
   console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
@@ -508,6 +520,7 @@ function setupTerminationHandlers() {
 ```
 
 **Key Changes:**
+
 - Proper KeyboardInterrupt handling
 - Graceful termination message sending
 - Detailed error context and timestamps
@@ -515,8 +528,10 @@ function setupTerminationHandlers() {
 - Resource cleanup on all error paths
 - Connection status checking before operations
 
-<Warning>Note: Pricing is based on session duration so it is very important to close sessions properly to avoid unexpected usage and cost.</Warning>
-
+<Warning>
+  Note: Pricing is based on session duration so it is very important to close
+  sessions properly to avoid unexpected usage and cost.
+</Warning>
 
 ## Migration checklist
 
@@ -541,9 +556,11 @@ function setupTerminationHandlers() {
 ## Common migration issues
 
 ### Issue: "WebSocket connection failed"
+
 **Solution**: Verify you're using the new v3 endpoint URL and proper authentication header format.
 
 ### Issue: "Message type not recognized"
+
 **Solution**: Update message type handling from old names (`SessionBegins`, `PartialTranscript`) to new ones (`Begin`, `Turn`).
 
 ## Benefits of migration

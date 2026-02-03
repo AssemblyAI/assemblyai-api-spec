@@ -16,14 +16,20 @@ servers:
 channels:
   streaming:
     address: /v3/ws
-    description: Main channel for bi-directional audio and transcription data
+    description: |
+      Main channel for bi-directional audio and transcription data.
+
+      <Note> To use our EU server for Streaming STT, replace `streaming.assemblyai.com` with
+      `streaming.eu.assemblyai.com`. </Note>
     servers:
       - $ref: "#/servers/production"
     parameters:
       sample_rate:
         description: Sample rate of the audio stream
         location: $message.payload#/sample_rate
-        examples: ["16000", "48000"]
+        schema:
+          type: integer
+        examples: [16000, 48000]
 
       encoding:
         description: Encoding of the audio stream
@@ -39,11 +45,30 @@ channels:
           - "0.7"
         default: "0.4"
 
+      # filter_profanity:
+      #   description: Filter profanity from the transcribed text, can be true or false.
+      #   location: $message.payload#/filter_profanity
+      #   enum: ["true", "false"]
+      #   default: "false"
+
       format_turns:
         description: Whether to return formatted final transcripts
         location: $message.payload#/format_turns
         enum: ["true", "false"]
         default: "false"
+
+      inactivity_timeout:
+        description: Optional time in seconds of inactivity before session is terminated. If not set, no inactivity timeout is applied.
+        location: $message.payload#/inactivity_timeout
+        schema:
+          type: integer
+          minimum: 5
+          maximum: 3600
+        examples:
+          - 5
+          - 3600
+        default: None
+        format: s
 
       keyterms_prompt:
         description: A list of words and phrases to improve recognition accuracy for.
@@ -54,11 +79,11 @@ channels:
             x-label: Word
             type: string
 
-      language:
-        description: The language of your audio stream.
-        location: $message.payload#/language
-        enum: ["en", "multi"]
-        default: "en"
+      language_detection:
+        description: Whether to detect the language and return language metadata on utterances and final turns. Only available for the multilingual model.
+        location: $message.payload#/language_detection
+        enum: ["true", "false"]
+        default: "false"
 
       min_end_of_turn_silence_when_confident:
         description: The minimum amount of silence in milliseconds required to detect end of turn when confident
@@ -78,9 +103,28 @@ channels:
         default: "1280"
         format: ms
 
+      language:
+        description: The language of your audio stream.
+        location: $message.payload#/language
+        enum: ["en", "multi"]
+        default: "en"
+        deprecated: true
+
+      speech_model:
+        description: The speech model used for your Streaming session.
+        location: $message.payload#/speech_model
+        enum:
+          ["universal-streaming-english", "universal-streaming-multilingual"]
+        default: "universal-streaming-english"
+
       token:
         description: API token for authentication
         location: $message.payload#/token
+
+      vad_threshold:
+        description: The confidence threshold (0.0 to 1.0) for classifying audio frames as silence. Frames with VAD confidence below this value are considered silent. Increase for noisy environments to reduce false speech detection.
+        location: $message.payload#/vad_threshold
+        default: "0.4"
 
       ApiKey:
         description: >-
@@ -88,6 +132,7 @@ channels:
         location: $message.header#/Authorization
         examples:
           - token YOUR_ASSEMBLYAI_API_KEY
+
     messages:
       updateConfiguration:
         $ref: "#/components/messages/UpdateConfiguration"
@@ -200,11 +245,13 @@ components:
     AudioChunk:
       name: AudioChunk
       title: Audio Data Chunk
-      summary: Client sends audio data as a base64-encoded string within a JSON object.
-      type: string
-      format: base64
+      summary: Client sends audio data as raw binary.
+      contentType: application/octet-stream
+      payload:
+        type: string
+        format: binary
       examples:
-        - payload: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+        - payload: '\x10\x00\x20\x00\x30\x00\x40\x00\x30\x00\x20\x00\x10\x00\x00\x00\xf0\xff\xe0\xff\xd0\xff\xc0\xff'
 
     SessionBegins:
       name: SessionBegins
@@ -342,6 +389,15 @@ components:
         utterance:
           type: string
           description: Transcript of all finalized words when an utterance is complete. Can be multiple utterances in a turn.
+        language_code:
+          type: string
+          description: The language of the turn. Only populated when language detection is enabled and an utterance is complete or turn is final.
+        language_confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: The confidence score for the detected language, between 0 (low confidence) and 1 (high confidence). Only populated when language detection is enabled and an utterance is complete or turn is final.
         end_of_turn_confidence:
           type: number
           format: float

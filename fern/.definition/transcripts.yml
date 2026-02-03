@@ -590,24 +590,17 @@ types:
   SpeechModel:
     docs: The speech model to use for the transcription.
     enum:
-      - docs: >-
-          The model optimized for accuracy, low latency, ease of use, and
-          mutli-language support.
-        name: Best
-        value: best
-      - docs: A contextual model optimized for customization.
-        name: Slam1
-        value: slam-1
-      - docs: >-
-          The model optimized for accuracy, low latency, ease of use, and
-          mutli-language support.
-        name: Universal
-        value: universal
+      - docs: Our fastest model with the broadest language coverage.
+        name: Universal2
+        value: universal-2
+      - docs: Our highest accuracy model with fine-tuning support and customization via prompting.
+        name: Universal3Pro
+        value: universal-3-pro
     source:
       openapi: ../openapi.yml
   SubstitutionPolicy:
     docs: >-
-      The replacement logic for detected PII, can be "entity_name" or "hash".
+      The replacement logic for detected PII, can be `entity_name` or `hash`.
       See [PII redaction](https://www.assemblyai.com/docs/models/pii-redaction)
       for more details.
     enum:
@@ -703,10 +696,6 @@ types:
   Transcript:
     docs: A transcript object
     properties:
-      acoustic_model:
-        availability: deprecated
-        docs: The acoustic model that was used for the transcript
-        type: string
       audio_channels:
         docs: >-
           The number of audio channels in the audio file. This is only present
@@ -738,9 +727,6 @@ types:
         docs: Whether Key Phrases is enabled, either true or false
         type: boolean
       auto_highlights_result: optional<AutoHighlightsResult>
-      boost_param:
-        docs: The word boost parameter value
-        type: optional<string>
       chapters:
         docs: An array of temporally sequential chapters for the audio file
         type: optional<list<Chapter>>
@@ -762,21 +748,10 @@ types:
       custom_spelling:
         docs: Customize how words are spelled and formatted using to and from values
         type: optional<list<TranscriptCustomSpelling>>
-      custom_topics:
-        availability: deprecated
-        docs: Whether custom topics is enabled, either true or false
-        type: optional<boolean>
       disfluencies:
         docs: >-
           Transcribe Filler Words, like "umm", in your media file; can be true
           or false
-        type: optional<boolean>
-      dual_channel:
-        availability: deprecated
-        docs: >-
-          Whether [Dual channel
-          transcription](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription)
-          was enabled in the transcription request, either true or false
         type: optional<boolean>
       entities:
         docs: >
@@ -818,8 +793,8 @@ types:
           format: uuid
       keyterms_prompt:
         docs: >
-          Improve accuracy with up to 1000 domain-specific words or phrases
-          (maximum 6 words per phrase).
+                    Improve accuracy with up to 200 (for Universal-2) or 1000 (for Universal-3-Pro)
+                    domain-specific words or phrases (maximum 6 words per phrase).
         type: optional<list<string>>
       language_code:
         docs: >
@@ -830,6 +805,13 @@ types:
 
           The default value is 'en_us'.
         type: optional<TranscriptLanguageCode>
+      language_codes:
+        docs: >
+          The language codes of your audio file. Used for [Code
+          switching](/docs/speech-to-text/pre-recorded-audio/code-switching)
+
+          One of the values specified must be `en`.
+        type: optional<list<TranscriptLanguageCode>>
       language_confidence:
         docs: >-
           The confidence score for the detected language, between 0.0 (low
@@ -848,13 +830,12 @@ types:
       language_detection:
         docs: >-
           Whether [Automatic language
-          detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection)
-          is enabled, either true or false
+          detection](/docs/pre-recorded-audio/automatic-language-detection) is
+          enabled, either true or false
         type: optional<boolean>
-      language_model:
-        availability: deprecated
-        docs: The language model that was used for the transcript
-        type: string
+      language_detection_options:
+        docs: Specify options for Automatic Language Detection.
+        type: optional<TranscriptLanguageDetectionOptions>
       multichannel:
         docs: >-
           Whether [Multichannel
@@ -862,10 +843,10 @@ types:
           was enabled in the transcription request, either true or false
         type: optional<boolean>
       prompt:
-        availability: deprecated
-        docs: >-
-          This parameter does not currently have any functionality attached to
-          it.
+        docs: >
+          Provide natural language prompting of up to 1,500 words of contextual information to the model.
+          
+          Note: This parameter is only supported for the Universal-3-Pro model.
         type: optional<string>
       punctuate:
         docs: Whether Automatic Punctuation is enabled, either true or false
@@ -896,8 +877,8 @@ types:
         type: optional<list<PiiPolicy>>
       redact_pii_sub:
         docs: >-
-          The replacement logic for detected PII, can be "entity_type" or
-          "hash". See [PII
+          The replacement logic for detected PII, can be `entity_type` or
+          `hash`. See [PII
           redaction](https://www.assemblyai.com/docs/models/pii-redaction) for
           more details.
         type: optional<SubstitutionPolicy>
@@ -929,7 +910,14 @@ types:
           diarization](https://www.assemblyai.com/docs/models/speaker-diarization)
           for more details.
         type: optional<integer>
-      speech_model: optional<SpeechModel>
+      speech_model_used:
+        docs: The speech model that was actually used for the transcription.
+        type: optional<SpeechModel>
+      speech_models:
+        docs: >
+          List multiple speech models in priority order, allowing our system to
+          automatically route your audio to the best available option.
+        type: optional<list<SpeechModel>>
       speech_threshold:
         docs: >
           Defaults to null. Reject audio files that contain less than this
@@ -937,10 +925,11 @@ types:
 
           Valid values are in the range [0, 1] inclusive.
         type: optional<float>
-      speed_boost:
-        availability: deprecated
-        docs: Whether speed boost is enabled
-        type: optional<boolean>
+      speech_understanding:
+        docs: >-
+          Enable speech understanding tasks like translation, speaker
+          identification, and custom formatting
+        type: optional<TranscriptSpeechUnderstanding>
       status:
         docs: >-
           The status of your transcript. Possible values are queued, processing,
@@ -980,9 +969,9 @@ types:
           True while a request is throttled and false when a request is no
           longer throttled
         type: optional<boolean>
-      topics:
-        docs: The list of custom topics provided if custom topics is enabled
-        type: optional<list<string>>
+      translated_texts:
+        docs: Translated text keyed by language code
+        type: optional<TranscriptTranslatedTexts>
       utterances:
         docs: >
           When multichannel or speaker_labels is enabled, a list of turn-by-turn
@@ -1017,10 +1006,6 @@ types:
           One request when a transcript is completed or failed, and one request
           when the redacted audio is ready if redact_pii_audio is enabled.
         type: optional<string>
-      word_boost:
-        availability: deprecated
-        docs: The list of custom vocabulary to boost transcription probability for
-        type: optional<list<string>>
       words:
         docs: >
           An array of temporally-sequential word objects, one for each word in
@@ -1030,6 +1015,31 @@ types:
           recognition](https://www.assemblyai.com/docs/models/speech-recognition)
           for more information.
         type: optional<list<TranscriptWord>>
+      acoustic_model:
+        availability: deprecated
+        docs: The acoustic model that was used for the transcript
+        type: string
+      custom_topics:
+        availability: deprecated
+        docs: This parameter does not currently have any functionality attached to it.
+        type: optional<boolean>
+      language_model:
+        availability: deprecated
+        docs: The language model that was used for the transcript
+        type: string
+      speech_model:
+        availability: deprecated
+        docs: >
+          This parameter has been replaced with the `speech_models` parameter, learn more about the `speech_models` parameter [here](https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model).
+        type: optional<SpeechModel>
+      speed_boost:
+        availability: deprecated
+        docs: Whether speed boost is enabled
+        type: optional<boolean>
+      topics:
+        availability: deprecated
+        docs: This parameter does not currently have any functionality attached to it.
+        type: optional<list<string>>
     source:
       openapi: ../openapi.yml
   TranscriptBoostParam:
@@ -1164,6 +1174,41 @@ types:
       - yo
     source:
       openapi: ../openapi.yml
+  TranscriptLanguageDetectionOptions:
+    docs: Specify options for Automatic Language Detection.
+    inline: true
+    properties:
+      code_switching:
+        default: false
+        docs: |
+          Whether code switching should be detected.
+        type: optional<boolean>
+      code_switching_confidence_threshold:
+        default: 0.3
+        docs: >
+          The confidence threshold for code switching detection. If the code
+          switching confidence is below this threshold, the transcript will be
+          processed in the language with the highest
+          `language_detection_confidence` score.
+        type: optional<double>
+        validation:
+          max: 1
+          min: 0
+      expected_languages:
+        docs: >-
+          List of languages expected in the audio file. Defaults to `["all"]`
+          when unspecified.
+        type: optional<list<unknown>>
+      fallback_language:
+        default: auto
+        docs: >
+          If the detected language of the audio file is not in the list of
+          expected languages, the `fallback_language` is used. Specify
+          `["auto"]` to let our model choose the fallback language from
+          `expected_languages` with the highest confidence score.
+        type: optional<string>
+    source:
+      openapi: ../openapi.yml
   TranscriptList:
     docs: >-
       A list of transcripts. Transcripts are sorted from newest to oldest. The
@@ -1228,9 +1273,6 @@ types:
         default: false
         docs: Enable Key Phrases, either true or false
         type: optional<boolean>
-      boost_param:
-        docs: How much to boost specified words
-        type: optional<TranscriptBoostParam>
       content_safety:
         default: false
         docs: >-
@@ -1250,24 +1292,11 @@ types:
       custom_spelling:
         docs: Customize how words are spelled and formatted using to and from values
         type: optional<list<TranscriptCustomSpelling>>
-      custom_topics:
-        availability: deprecated
-        default: false
-        docs: Enable custom topics, either true or false
-        type: optional<boolean>
       disfluencies:
         default: false
         docs: >-
           Transcribe Filler Words, like "umm", in your media file; can be true
           or false
-        type: optional<boolean>
-      dual_channel:
-        availability: deprecated
-        default: false
-        docs: >-
-          Enable [Dual
-          Channel](https://www.assemblyai.com/docs/models/speech-recognition#dual-channel-transcription)
-          transcription, can be true or false.
         type: optional<boolean>
       entity_detection:
         default: false
@@ -1293,13 +1322,17 @@ types:
         type: optional<boolean>
       keyterms_prompt:
         docs: >
-          <Warning>`keyterms_prompt` is only supported when the `speech_model`
-          is specified as `slam-1`</Warning>
-
-          Improve accuracy with up to 1000 domain-specific words or phrases
-          (maximum 6 words per phrase).
+                    Improve accuracy with up to 200 (for Universal-2) or 1000 (for Universal-3-Pro)
+                    domain-specific words or phrases (maximum 6 words per phrase).
         type: optional<list<string>>
       language_code: optional<TranscriptLanguageCode>
+      language_codes:
+        docs: >
+          The language codes of your audio file. Used for [Code
+          switching](/docs/speech-to-text/pre-recorded-audio/code-switching)
+
+          One of the values specified must be `en`.
+        type: optional<list<TranscriptLanguageCode>>
       language_confidence_threshold:
         docs: >
           The confidence threshold for the automatically detected language.
@@ -1316,6 +1349,9 @@ types:
           detection](https://www.assemblyai.com/docs/models/speech-recognition#automatic-language-detection),
           either true or false.
         type: optional<boolean>
+      language_detection_options:
+        docs: Specify options for Automatic Language Detection.
+        type: optional<TranscriptOptionalParamsLanguageDetectionOptions>
       multichannel:
         default: false
         docs: >-
@@ -1324,10 +1360,10 @@ types:
           transcription, can be true or false.
         type: optional<boolean>
       prompt:
-        availability: deprecated
-        docs: >-
-          This parameter does not currently have any functionality attached to
-          it.
+        docs: >
+          Provide natural language prompting of up to 1,500 words of contextual information to the model.
+          
+          Note: This parameter is only supported for the Universal-3-Pro model.
         type: optional<string>
       punctuate:
         default: true
@@ -1347,6 +1383,9 @@ types:
           redaction](https://www.assemblyai.com/docs/models/pii-redaction) for
           more details.
         type: optional<boolean>
+      redact_pii_audio_options:
+        docs: Specify options for PII redacted audio files.
+        type: optional<TranscriptOptionalParamsRedactPiiAudioOptions>
       redact_pii_audio_quality:
         docs: >-
           Controls the filetype of the audio created by redact_pii_audio.
@@ -1375,6 +1414,9 @@ types:
           diarization](https://www.assemblyai.com/docs/models/speaker-diarization),
           can be true or false
         type: optional<boolean>
+      speaker_options:
+        docs: Specify options for speaker diarization.
+        type: optional<TranscriptOptionalParamsSpeakerOptions>
       speakers_expected:
         docs: >-
           Tells the speaker label model how many speakers it should attempt to
@@ -1382,12 +1424,21 @@ types:
           diarization](https://www.assemblyai.com/docs/models/speaker-diarization)
           for more details.
         type: optional<integer>
-      speech_model: optional<SpeechModel>
+      speech_models:
+        docs: >
+          List multiple speech models in priority order, allowing our system to
+          automatically route your audio to the best available option.
+        type: optional<list<SpeechModel>>
       speech_threshold:
         docs: |
           Reject audio files that contain less than this fraction of speech.
           Valid values are in the range [0, 1] inclusive.
         type: optional<float>
+      speech_understanding:
+        docs: >-
+          Enable speech understanding tasks like translation, speaker
+          identification, and custom formatting
+        type: optional<TranscriptOptionalParamsSpeechUnderstanding>
       summarization:
         default: false
         docs: >-
@@ -1401,9 +1452,6 @@ types:
       summary_type:
         docs: The type of summary
         type: optional<SummaryType>
-      topics:
-        docs: The list of custom topics
-        type: optional<list<string>>
       webhook_auth_header_name:
         docs: >-
           The header name to be sent with the transcript completed or failed
@@ -1423,12 +1471,107 @@ types:
           One request when a transcript is completed or failed, and one request
           when the redacted audio is ready if redact_pii_audio is enabled.
         type: optional<string>
-      word_boost:
+      custom_topics:
         availability: deprecated
-        docs: The list of custom vocabulary to boost transcription probability for
+        default: false
+        docs: This parameter does not currently have any functionality attached to it.
+        type: optional<boolean>
+      speech_model:
+        availability: deprecated
+        docs: >
+          This parameter has been replaced with the `speech_models` parameter, learn more about the `speech_models` parameter [here](https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model).
+        type: optional<SpeechModel>
+      topics:
+        availability: deprecated
+        docs: This parameter does not currently have any functionality attached to it.
         type: optional<list<string>>
     source:
       openapi: ../openapi.yml
+  TranscriptOptionalParamsLanguageDetectionOptions:
+    docs: Specify options for Automatic Language Detection.
+    inline: true
+    properties:
+      code_switching:
+        default: false
+        docs: |
+          Whether code switching should be detected.
+        type: optional<boolean>
+      code_switching_confidence_threshold:
+        default: 0.3
+        docs: >
+          The confidence threshold for code switching detection. If the code
+          switching confidence is below this threshold, the transcript will be
+          processed in the language with the highest
+          `language_detection_confidence` score.
+        type: optional<double>
+        validation:
+          max: 1
+          min: 0
+      expected_languages:
+        docs: >-
+          List of languages expected in the audio file. Defaults to `["all"]`
+          when unspecified.
+        type: optional<list<unknown>>
+      fallback_language:
+        default: auto
+        docs: >
+          If the detected language of the audio file is not in the list of
+          expected languages, the `fallback_language` is used. Specify
+          `["auto"]` to let our model choose the fallback language from
+          `expected_languages` with the highest confidence score.
+        type: optional<string>
+    source:
+      openapi: ../openapi.yml
+  TranscriptOptionalParamsRedactPiiAudioOptions:
+    docs: Specify options for PII redacted audio files.
+    inline: true
+    properties:
+      return_redacted_no_speech_audio:
+        default: false
+        docs: >-
+          By default, audio redaction provides redacted audio URLs only when
+          speech is detected. However, if your use-case specifically requires
+          redacted audio files even for silent audio files without any dialogue,
+          you can opt to receive these URLs by setting this parameter to `true`.
+        type: optional<boolean>
+    source:
+      openapi: ../openapi.yml
+  TranscriptOptionalParamsSpeakerOptions:
+    docs: Specify options for speaker diarization.
+    inline: true
+    properties:
+      max_speakers_expected:
+        default: 10
+        docs: >
+          <Warning>Setting this parameter too high may hurt model
+          accuracy</Warning>
+
+          The maximum number of speakers expected in the audio file.
+        type: optional<integer>
+      min_speakers_expected:
+        default: 1
+        docs: The minimum number of speakers expected in the audio file.
+        type: optional<integer>
+    source:
+      openapi: ../openapi.yml
+  TranscriptOptionalParamsSpeechUnderstanding:
+    docs: >-
+      Enable speech understanding tasks like translation, speaker
+      identification, and custom formatting
+    inline: true
+    properties:
+      request: TranscriptOptionalParamsSpeechUnderstandingRequest
+    source:
+      openapi: ../openapi.yml
+  TranscriptOptionalParamsSpeechUnderstandingRequest:
+    discriminated: false
+    inline: true
+    source:
+      openapi: ../openapi.yml
+    union:
+      - root.TranslationRequestBody
+      - root.SpeakerIdentificationRequestBody
+      - root.CustomFormattingRequestBody
   TranscriptParagraph:
     properties:
       confidence:
@@ -1507,6 +1650,34 @@ types:
         type: list<TranscriptWord>
     source:
       openapi: ../openapi.yml
+  TranscriptSpeechUnderstanding:
+    docs: >-
+      Enable speech understanding tasks like translation, speaker
+      identification, and custom formatting
+    inline: true
+    properties:
+      request: TranscriptSpeechUnderstandingRequest
+      response: optional<TranscriptSpeechUnderstandingResponse>
+    source:
+      openapi: ../openapi.yml
+  TranscriptSpeechUnderstandingRequest:
+    discriminated: false
+    inline: true
+    source:
+      openapi: ../openapi.yml
+    union:
+      - root.TranslationRequestBody
+      - root.SpeakerIdentificationRequestBody
+      - root.CustomFormattingRequestBody
+  TranscriptSpeechUnderstandingResponse:
+    discriminated: false
+    inline: true
+    source:
+      openapi: ../openapi.yml
+    union:
+      - root.TranslationResponse
+      - root.SpeakerIdentificationResponse
+      - root.CustomFormattingResponse
   TranscriptStatus:
     docs: >-
       The status of your transcript. Possible values are queued, processing,
@@ -1520,6 +1691,15 @@ types:
         value: completed
       - docs: An error occurred while processing the audio file.
         value: error
+    source:
+      openapi: ../openapi.yml
+  TranscriptTranslatedTexts:
+    docs: Translated text keyed by language code
+    inline: true
+    properties:
+      language_code:
+        docs: Translated text for this language code
+        type: optional<string>
     source:
       openapi: ../openapi.yml
   TranscriptUtterance:
@@ -1551,6 +1731,12 @@ types:
       text:
         docs: The text for this utterance
         type: string
+      translated_texts:
+        docs: >-
+          Translations keyed by language code (e.g., `{"es": "Texto traducido",
+          "de": "Übersetzter Text"}`). Only present when
+          `match_original_utterance` is enabled with translation.
+        type: optional<map<string, string>>
       words:
         docs: The words in the utterance.
         type: list<TranscriptWord>
@@ -1639,13 +1825,16 @@ service:
   base-path: ""
   endpoints:
     delete:
-      auth: true
       display-name: Delete transcript
       docs: >
         <Note>To delete your transcriptions on our EU server, replace
         `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>
 
         Remove the data from the transcript and mark it as deleted.
+
+        <Warning>Files uploaded via the `/upload` endpoint are immediately
+        deleted alongside the transcript when you make a DELETE request,
+        ensuring your data is removed from our systems right away.</Warning>
       errors:
         - root.BadRequestError
         - root.UnauthorizedError
@@ -1675,7 +1864,6 @@ service:
               custom_spelling: null
               custom_topics: null
               disfluencies: true
-              dual_channel: null
               entities: null
               entity_detection: false
               error: null
@@ -1730,7 +1918,6 @@ service:
       source:
         openapi: ../openapi.yml
     get:
-      auth: true
       display-name: Get transcript
       docs: >
         <Note>To retrieve your transcriptions on our EU server, replace
@@ -1747,7 +1934,9 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - path-parameters:
+        - headers:
+            Authorization: "[object Object]"
+          path-parameters:
             transcript_id: transcript_id
           response:
             body:
@@ -1868,7 +2057,6 @@ service:
                       - end: 13434
                         start: 12308
                 status: success
-              boost_param: high
               chapters:
                 - end: 28840
                   gist: Smoggy air quality alerts across US
@@ -1931,9 +2119,7 @@ service:
                 summary:
                   disasters: 0.9940800441842205
                   health_issues: 0.9216489289040967
-              custom_topics: true
               disfluencies: false
-              dual_channel: false
               entities:
                 - end: 3130
                   entity_type: location
@@ -2051,12 +2237,19 @@ service:
               keyterms_prompt:
                 - keyterms_prompt
               language_code: en_us
+              language_codes:
+                - en
               language_confidence: 0.9959
               language_confidence_threshold: 0.7
               language_detection: true
+              language_detection_options:
+                code_switching: true
+                code_switching_confidence_threshold: 1.1
+                expected_languages:
+                  - key: value
+                fallback_language: fallback_language
               language_model: assemblyai_default
               multichannel: false
-              prompt: prompt
               punctuate: true
               redact_pii: true
               redact_pii_audio: true
@@ -2069,8 +2262,15 @@ service:
               speaker_labels: true
               speakers_expected: 2
               speech_model: best
+              speech_model_used: best
+              speech_models:
+                - best
               speech_threshold: 0.5
-              speed_boost: true
+              speech_understanding:
+                request:
+                  translation:
+                    target_languages:
+                      - target_languages
               status: completed
               summarization: true
               summary: >-
@@ -2164,8 +2364,8 @@ service:
                 and Engineering at Johns Hopkins University. Sergeant Carlo,
                 thanks so much for joining us and sharing this expertise with
                 us. Thank you for having me.
-              topics:
-                - topics
+              translated_texts:
+                language_code: language_code
               utterances:
                 - channel: channel
                   confidence: 0.9359033333333334
@@ -2181,6 +2381,8 @@ service:
                     and why, so we called Peter de Carlo, an associate professor
                     in the Department of Environmental Health and Engineering at
                     Johns Hopkins University Varsity. Good morning, professor.
+                  translated_texts:
+                    key: value
                   words:
                     - confidence: 0.97503
                       end: 650
@@ -2261,10 +2463,6 @@ service:
               webhook_auth_header_name: webhook-secret
               webhook_status_code: 200
               webhook_url: https://your-webhook-url.tld/path
-              word_boost:
-                - aws
-                - azure
-                - google cloud
               words:
                 - channel: channel
                   confidence: 0.97465
@@ -2369,7 +2567,6 @@ service:
       source:
         openapi: ../openapi.yml
     getParagraphs:
-      auth: true
       display-name: Get paragraphs in transcript
       docs: >
         <Note>To retrieve your transcriptions on our EU server, replace
@@ -2387,7 +2584,9 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - path-parameters:
+        - headers:
+            Authorization: "[object Object]"
+          path-parameters:
             transcript_id: transcript_id
           response:
             body:
@@ -2410,18 +2609,22 @@ service:
                   words:
                     - confidence: 0.73033
                       end: 650
+                      speaker: null
                       start: 250
                       text: Smoke
                     - confidence: 1
                       end: 1022
+                      speaker: null
                       start: 730
                       text: from
                     - confidence: 0.99992
                       end: 1466
+                      speaker: null
                       start: 1076
                       text: hundreds
                     - confidence: 1
                       end: 1646
+                      speaker: null
                       start: 1498
                       text: of
                 - confidence: 0.99667
@@ -2440,14 +2643,17 @@ service:
                   words:
                     - confidence: 0.99667
                       end: 28262
+                      speaker: null
                       start: 27850
                       text: Good
                     - confidence: 0.99742
                       end: 28920
+                      speaker: null
                       start: 28316
                       text: morning.
                     - confidence: 0.94736
                       end: 29702
+                      speaker: null
                       start: 29290
                       text: So
       method: GET
@@ -2463,11 +2669,14 @@ service:
       source:
         openapi: ../openapi.yml
     getRedactedAudio:
-      auth: true
       display-name: Get redacted audio
       docs: >
-        <Note>To retrieve your transcriptions on our EU server, replace
-        `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>
+        <Note>To retrieve the redacted audio on the EU server, replace
+        `api.assemblyai.com` with `api.eu.assemblyai.com` in the `GET` request
+        above.</Note>
+
+        <Note>Redacted audio files are only available for 24 hours. Make sure to
+        download the file within this time frame.</Note>
 
         Retrieve the redacted audio object containing the status and URL to the
         redacted audio.
@@ -2480,7 +2689,9 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - path-parameters:
+        - headers:
+            Authorization: "[object Object]"
+          path-parameters:
             transcript_id: transcript_id
           response:
             body:
@@ -2502,7 +2713,6 @@ service:
       source:
         openapi: ../openapi.yml
     getSentences:
-      auth: true
       display-name: Get sentences in transcript
       docs: >
         <Note>To retrieve your transcriptions on our EU server, replace
@@ -2520,7 +2730,9 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - path-parameters:
+        - headers:
+            Authorization: "[object Object]"
+          path-parameters:
             transcript_id: transcript_id
           response:
             body:
@@ -2539,18 +2751,22 @@ service:
                   words:
                     - confidence: 0.72412
                       end: 650
+                      speaker: null
                       start: 250
                       text: Smoke
                     - confidence: 0.99996
                       end: 1022
+                      speaker: null
                       start: 730
                       text: from
                     - confidence: 0.99992
                       end: 1466
+                      speaker: null
                       start: 1076
                       text: hundreds
                     - confidence: 1
                       end: 1646
+                      speaker: null
                       start: 1498
                       text: of
                 - channel: channel
@@ -2564,26 +2780,32 @@ service:
                   words:
                     - confidence: 0.99819
                       end: 7306
+                      speaker: null
                       start: 6500
                       text: Skylines
                     - confidence: 0.99987
                       end: 7534
+                      speaker: null
                       start: 7338
                       text: from
                     - confidence: 0.9972
                       end: 7962
+                      speaker: null
                       start: 7572
                       text: Maine
                     - confidence: 1
                       end: 8206
+                      speaker: null
                       start: 8026
                       text: to
                     - confidence: 0.5192
                       end: 8650
+                      speaker: null
                       start: 8228
                       text: Maryland
                     - confidence: 1
                       end: 8926
+                      speaker: null
                       start: 8730
                       text: to
       method: GET
@@ -2599,7 +2821,6 @@ service:
       source:
         openapi: ../openapi.yml
     getSubtitles:
-      auth: true
       display-name: Get subtitles for transcript
       docs: >
         <Note>To retrieve your transcriptions on our EU server, replace
@@ -2637,13 +2858,12 @@ service:
       source:
         openapi: ../openapi.yml
     list:
-      auth: true
       display-name: List transcripts
       docs: >
         <Note>To retrieve your transcriptions on our EU server, replace
         `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>
 
-        Retrieve a list of transcripts you created. 
+        Retrieve a list of transcripts you created.
 
         Transcripts are sorted from newest to oldest and can be retrieved for
         the last 90 days of usage. The previous URL always points to a page with
@@ -2661,7 +2881,16 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - response:
+        - headers:
+            Authorization: "[object Object]"
+          query-parameters:
+            after_id: after_id
+            before_id: before_id
+            created_on: created_on
+            limit: 1
+            status: queued
+            throttled_only: true
+          response:
             body:
               page_details:
                 current_url: https://api.assemblyai.com/v2/transcript?limit=3
@@ -2731,6 +2960,7 @@ service:
             docs: Filter by transcript status
             type: optional<TranscriptStatus>
           throttled_only:
+            availability: deprecated
             default: false
             docs: Only get throttled transcripts, overrides the status filter
             type: optional<boolean>
@@ -2743,7 +2973,6 @@ service:
       source:
         openapi: ../openapi.yml
     submit:
-      auth: true
       display-name: Transcribe audio
       docs: >
         <Note>To use our EU server for transcription, replace
@@ -2759,21 +2988,20 @@ service:
         - root.ServiceUnavailableError
         - root.GatewayTimeoutError
       examples:
-        - request:
+        - headers:
+            Authorization: "[object Object]"
+          request:
             audio_end_at: 280
             audio_start_from: 10
             audio_url: https://assembly.ai/wildfires.mp3
             auto_chapters: true
             auto_highlights: true
-            boost_param: high
             content_safety: true
             custom_spelling:
               - from:
                   - dicarlo
                 to: Decarlo
-            custom_topics: true
             disfluencies: false
-            dual_channel: false
             entity_detection: true
             filter_profanity: true
             format_text: true
@@ -2793,19 +3021,22 @@ service:
             sentiment_analysis: true
             speaker_labels: true
             speakers_expected: 2
+            speech_model: null
             speech_threshold: 0.5
+            speech_understanding:
+              request:
+                translation:
+                  formal: true
+                  match_original_utterance: true
+                  target_languages:
+                    - es
+                    - de
             summarization: true
             summary_model: informative
             summary_type: bullets
-            topics:
-              - topics
             webhook_auth_header_name: webhook-secret
             webhook_auth_header_value: webhook-secret-value
             webhook_url: https://your-webhook-url/path
-            word_boost:
-              - aws
-              - azure
-              - google cloud
           response:
             body:
               acoustic_model: assemblyai_default
@@ -2925,7 +3156,6 @@ service:
                       - end: 13434
                         start: 12308
                 status: success
-              boost_param: high
               chapters:
                 - end: 28840
                   gist: Smoggy air quality alerts across US
@@ -2988,9 +3218,7 @@ service:
                 summary:
                   disasters: 0.9940800441842205
                   health_issues: 0.9216489289040967
-              custom_topics: true
               disfluencies: false
-              dual_channel: false
               entities:
                 - end: 3130
                   entity_type: location
@@ -3108,12 +3336,19 @@ service:
               keyterms_prompt:
                 - keyterms_prompt
               language_code: en_us
+              language_codes:
+                - en
               language_confidence: 0.9959
               language_confidence_threshold: 0.7
               language_detection: true
+              language_detection_options:
+                code_switching: true
+                code_switching_confidence_threshold: 1.1
+                expected_languages:
+                  - key: value
+                fallback_language: fallback_language
               language_model: assemblyai_default
               multichannel: false
-              prompt: prompt
               punctuate: true
               redact_pii: true
               redact_pii_audio: true
@@ -3126,8 +3361,15 @@ service:
               speaker_labels: true
               speakers_expected: 2
               speech_model: best
+              speech_model_used: best
+              speech_models:
+                - best
               speech_threshold: 0.5
-              speed_boost: true
+              speech_understanding:
+                request:
+                  translation:
+                    target_languages:
+                      - target_languages
               status: completed
               summarization: true
               summary: >-
@@ -3221,8 +3463,8 @@ service:
                 and Engineering at Johns Hopkins University. Sergeant Carlo,
                 thanks so much for joining us and sharing this expertise with
                 us. Thank you for having me.
-              topics:
-                - topics
+              translated_texts:
+                language_code: language_code
               utterances:
                 - channel: channel
                   confidence: 0.9359033333333334
@@ -3238,6 +3480,8 @@ service:
                     and why, so we called Peter de Carlo, an associate professor
                     in the Department of Environmental Health and Engineering at
                     Johns Hopkins University Varsity. Good morning, professor.
+                  translated_texts:
+                    key: value
                   words:
                     - confidence: 0.97503
                       end: 650
@@ -3318,10 +3562,6 @@ service:
               webhook_auth_header_name: webhook-secret
               webhook_status_code: 200
               webhook_url: https://your-webhook-url.tld/path
-              word_boost:
-                - aws
-                - azure
-                - google cloud
               words:
                 - channel: channel
                   confidence: 0.97465
@@ -3432,7 +3672,6 @@ service:
       source:
         openapi: ../openapi.yml
     wordSearch:
-      auth: true
       display-name: Search words in transcript
       docs: >
         <Note>To search through a transcription created on our EU server,

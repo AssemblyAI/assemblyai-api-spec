@@ -4,8 +4,17 @@ description: "Transcribe live audio with Streaming Speech-to-Text"
 ---
 
 <Note>
-  Universal-Streaming currently only supports English, although we are working
-  on adding support for more languages in the coming months.
+  By default, Universal-Streaming is set to transcribe English audio. If you'd
+  like to enable multilingual streaming (support for English, Spanish, French,
+  German, Italian, and Portuguese), enable [multilingual
+  transcription](/docs/speech-to-text/universal-streaming/multilingual-transcription)
+  instead.
+</Note>
+
+<Note>
+  Streaming is now available in EU-West via `streaming.eu.assemblyai.com`. To
+  use the EU streaming endpoint, replace `streaming.assemblyai.com` with
+  `streaming.eu.assemblyai.com` in your connection configuration.
 </Note>
 
 ## Quickstart
@@ -83,7 +92,25 @@ To run the quickstart:
     ```bash
     npm install assemblyai node-record-lpcm16
     ```
+    <Note>
+      The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
 
+      For Mac OS:
+
+      ```bash
+      brew install sox
+      ```
+
+      For most linux disto's:
+
+      ```bash
+      sudo apt-get install sox libsox-fmt-all
+      ```
+
+      For Windows:
+
+      [download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+    </Note>
     </Step>
     <Step>
     Run with `node main.js`
@@ -146,13 +173,6 @@ print(f"Session started: {event.id}")
 
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
 print(f"{event.transcript} ({event.end_of_turn})")
-
-    if event.end_of_turn and not event.turn_is_formatted:
-        params = StreamingSessionParameters(
-            format_turns=True,
-        )
-
-        self.set_params(params)
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
 print(
@@ -890,6 +910,33 @@ To optimize for latency when building a voice agent, we recommend using the unfo
   </Note>
 </ParamField>
 
+<ParamField path="keyterms_prompt" type="list of strings" required={false}>
+
+A list of words and phrases to improve recognition accuracy for.
+
+<Note>
+  [Keyterms
+  prompts](/docs/speech-to-text/universal-streaming/keyterms-prompting) longer
+  than 50 characters are ignored. Requests containing more than 100 keyterms
+  will result in an error.
+</Note>
+
+</ParamField>
+
+<ParamField path="speech_model" type="string" required={false} default={"universal-streaming-english"}>
+
+The speech model for the Streaming session. If not specified, defaults to `universal-streaming-english`.
+Allowed values: `universal-streaming-english`, `universal-streaming-multi`.
+
+<Note>
+  [Multilingual
+  transcription](/docs/speech-to-text/universal-streaming/multilingual-transcription)
+  is currently in beta and supports English, Spanish, French, German, Italian,
+  and Portuguese.
+</Note>
+
+</ParamField>
+
 <ParamField path="end_of_turn_confidence_threshold" type="float" default={0.4}>
   The confidence threshold `(0.0 to 1.0)` to use when determining if the end of a turn has been
   reached.
@@ -931,8 +978,8 @@ You send:
 <AccordionGroup>
 <Accordion title="Audio data">
 
-```json
-"UklGRtjIAABXQVZFZ"
+```
+"\x52\x49\x46\x46\xd8\xc8\x00\x00\x57\x41\x56\x45\x46"
 ```
 
 </Accordion>

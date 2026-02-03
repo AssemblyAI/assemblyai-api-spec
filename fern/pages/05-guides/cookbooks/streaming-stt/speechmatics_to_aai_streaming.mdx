@@ -22,35 +22,39 @@ import threading
 import time
 
 # --- Configuration ---
-YOUR_API_KEY = "YOUR-API-KEY"  # Replace with your actual API key
+
+YOUR_API_KEY = "YOUR-API-KEY" # Replace with your actual API key
 
 CONNECTION_PARAMS = {
-    "language": "en",
-    "enable_partials": True,
-    "max_delay": 2.0
+"language": "en",
+"enable_partials": True,
+"max_delay": 2.0
 }
 API_ENDPOINT = "wss://eu2.rt.speechmatics.com/v2/en"
 
 # Audio Configuration
-FRAMES_PER_BUFFER = 1024  # Chunk size
-SAMPLE_RATE = None  # Will be set based on device capabilities
+
+FRAMES_PER_BUFFER = 1024 # Chunk size
+SAMPLE_RATE = None # Will be set based on device capabilities
 CHANNELS = 1
-FORMAT = pyaudio.paFloat32  # Speechmatics uses float32 format
+FORMAT = pyaudio.paFloat32 # Speechmatics uses float32 format
 
 # Global variables for audio stream and websocket
+
 audio = None
 stream = None
 ws_app = None
 audio_thread = None
-stop_event = threading.Event()  # To signal the audio thread to stop
-audio_seq_no = 0  # Track number of audio chunks sent
+stop_event = threading.Event() # To signal the audio thread to stop
+audio_seq_no = 0 # Track number of audio chunks sent
 
 # --- WebSocket Event Handlers ---
+
 def on_open(ws):
-    """Called when the WebSocket connection is established."""
-    print("WebSocket connection opened.")
-    print(f"Connected to: {API_ENDPOINT}")
-    
+"""Called when the WebSocket connection is established."""
+print("WebSocket connection opened.")
+print(f"Connected to: {API_ENDPOINT}")
+
     # Send StartRecognition message
     start_message = {
         "message": "StartRecognition",
@@ -68,16 +72,16 @@ def on_open(ws):
     ws.send(json.dumps(start_message))
 
 def on_message(ws, message):
-    global audio_seq_no
-    
+global audio_seq_no
+
     try:
         data = json.loads(message)
         msg_type = data.get('message')
-        
+
         if msg_type == "RecognitionStarted":
             session_id = data.get('id')
             print(f"\nSession began: ID={session_id}")
-            
+
             # Start sending audio data in a separate thread
             def stream_audio():
                 global audio_seq_no, stream
@@ -100,45 +104,43 @@ def on_message(ws, message):
                 True  # Allow main thread to exit even if this thread is running
             )
             audio_thread.start()
-            
+
         elif msg_type == "AddPartialTranscript":
             transcript = data.get('metadata', {}).get('transcript', '')
             if transcript:
                 print(f"\r{transcript}", end='')
-                
+
         elif msg_type == "AddTranscript":
             transcript = data.get('metadata', {}).get('transcript', '')
             if transcript:
                 # Clear previous line for final messages
                 print('\r' + ' ' * 80 + '\r', end='')
                 print(transcript)
-                
+
         elif msg_type == "EndOfTranscript":
             print("\nSession Terminated: Transcription complete")
-            
+
         elif msg_type == "Error":
             error_type = data.get('type')
             reason = data.get('reason')
             print(f"\nWebSocket Error: {error_type} - {reason}")
             stop_event.set()
-            
+
     except json.JSONDecodeError as e:
         print(f"Error decoding message: {e}")
     except Exception as e:
         print(f"Error handling message: {e}")
 
 def on_error(ws, error):
-    """Called when a WebSocket error occurs."""
-    print(f"\nWebSocket Error: {error}")
-    # Attempt to signal stop on error
-    stop_event.set()
+"""Called when a WebSocket error occurs."""
+print(f"\nWebSocket Error: {error}") # Attempt to signal stop on error
+stop_event.set()
 
 def on_close(ws, close_status_code, close_msg):
-    """Called when the WebSocket connection is closed."""
-    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    # Ensure audio resources are released
-    global stream, audio
-    stop_event.set()  # Signal audio thread just in case it's still running
+"""Called when the WebSocket connection is closed."""
+print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}") # Ensure audio resources are released
+global stream, audio
+stop_event.set() # Signal audio thread just in case it's still running
 
     if stream:
         if stream.is_active():
@@ -153,17 +155,18 @@ def on_close(ws, close_status_code, close_msg):
         audio_thread.join(timeout=1.0)
 
 # --- Main Execution ---
+
 def run():
-    global audio, stream, ws_app, SAMPLE_RATE
+global audio, stream, ws_app, SAMPLE_RATE
 
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
-    
+
     # Get default input device (can alter to specify specific device)
     default_device = audio.get_default_input_device_info()
     device_index = default_device['index']
     SAMPLE_RATE = int(audio.get_device_info_by_index(device_index)['defaultSampleRate'])
-    
+
     print(f"Using microphone: {default_device['name']}")
 
     # Open microphone stream
@@ -245,9 +248,10 @@ def run():
             audio.terminate()
         print("Cleanup complete. Exiting.")
 
-if __name__ == "__main__":
-    run()
-```
+if **name** == "**main**":
+run()
+
+````
 </Tab>
 
 <Tab language="aai" title="AssemblyAI">
@@ -448,7 +452,8 @@ def run():
 
 if __name__ == "__main__":
     run()
-```
+````
+
 </Tab>
 </Tabs>
 
@@ -465,6 +470,7 @@ Install the required Python packages.
 ```bash
 pip install websocket-client pyaudio
 ```
+
 </Tab>
 <Tab language="aai" title="AssemblyAI">
 
@@ -473,6 +479,7 @@ Install the required Python packages:
 ```bash
 pip install websocket-client pyaudio
 ```
+
 </Tab>
 </Tabs>
 
@@ -499,7 +506,7 @@ In this step, you'll configure your API key to authenticate your requests.
 <Tabs groupId="language">
 <Tab language="speechmatics" title="Speechmatics">
 
-Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key. 
+Store your API key in a variable. Replace `<YOUR_API_KEY>` with your copied API key.
 
 ```python
 import pyaudio
@@ -510,6 +517,7 @@ import time
 
 YOUR_API_KEY = "YOUR-API-KEY"
 ```
+
 </Tab>
 <Tab language="aai" title="AssemblyAI">
 
@@ -526,6 +534,7 @@ from datetime import datetime
 
 YOUR_API_KEY = "YOUR-API-KEY"
 ```
+
 </Tab>
 </Tabs> 
 </Step>
@@ -547,11 +556,12 @@ def generate_temp_token(api_key, ttl=60):
     payload = {
         "ttl": ttl
     }
-    
+
     response = requests.post(url, json=payload, headers=headers)
     data = response.json()
     return data.get("key_value")
 ```
+
   <Note title="Token usage">
     Instead of authorizing your request with `YOUR_API_KEY` (via request header), use the temporary token generated by this function when establishing the [WebSocket connection](/docs/guides/speechmatics_to_aai_streaming#step-1-4).
     ```python
@@ -571,9 +581,9 @@ def generate_temp_token(api_key, ttl=60):
   import requests
   from urllib.parse import urlencode
 
-  def generate_temp_token(api_key, expires_in_seconds=60):
-      """Generate a temporary authentication token that expires after the specified time."""
-      url = "https://streaming.assemblyai.com/v3/token"
+def generate_temp_token(api_key, expires_in_seconds=60):
+"""Generate a temporary authentication token that expires after the specified time."""
+url = "https://streaming.assemblyai.com/v3/token"
 
       response = requests.get(
           f"{url}?{urlencode({'expires_in_seconds': expires_in_seconds})}",
@@ -581,23 +591,24 @@ def generate_temp_token(api_key, ttl=60):
       )
       data = response.json()
       return data.get("token")
-  ```
 
-  <Note title="Token usage">
-    Instead of authorizing your request with `YOUR_API_KEY` (via request header), use the temporary token generated by this function when establishing the [WebSocket connection](/docs/guides/speechmatics_to_aai_streaming#step-1-4).
-    ```python
-      API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}&token={generate_temp_token(api_key)}"
-      ws_app = websocket.WebSocketApp(
-        API_ENDPOINT,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close,
-      )
-    ```
-  </Note>
-  </Tab>
-  </Tabs>
+````
+
+<Note title="Token usage">
+  Instead of authorizing your request with `YOUR_API_KEY` (via request header), use the temporary token generated by this function when establishing the [WebSocket connection](/docs/guides/speechmatics_to_aai_streaming#step-1-4).
+  ```python
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}&token={generate_temp_token(api_key)}"
+    ws_app = websocket.WebSocketApp(
+      API_ENDPOINT,
+      on_open=on_open,
+      on_message=on_message,
+      on_error=on_error,
+      on_close=on_close,
+    )
+  ```
+</Note>
+</Tab>
+</Tabs>
 </Accordion>
 </Steps>
 
@@ -627,36 +638,37 @@ stop_event = threading.Event()  # To signal the audio thread to stop
 audio_seq_no = 0  # Track number of audio chunks sent
 
 def run():
-    global audio, stream, ws_app, SAMPLE_RATE
+  global audio, stream, ws_app, SAMPLE_RATE
 
-    # Initialize PyAudio
-    audio = pyaudio.PyAudio()
-    
-    # Get default input device (can alter to specify specific device)
-    default_device = audio.get_default_input_device_info()
-    device_index = default_device['index']
-    SAMPLE_RATE = int(audio.get_device_info_by_index(device_index)['defaultSampleRate'])
-    
-    print(f"Using microphone: {default_device['name']}")
+  # Initialize PyAudio
+  audio = pyaudio.PyAudio()
 
-    # Open microphone stream
-    try:
-        stream = audio.open(
-            input=True,
-            frames_per_buffer=FRAMES_PER_BUFFER,
-            channels=CHANNELS,
-            format=FORMAT,
-            rate=SAMPLE_RATE,
-            input_device_index=device_index
-        )
-        print("Microphone stream opened successfully.")
-        print("Speak into your microphone. Press Ctrl+C to stop.")
-    except Exception as e:
-        print(f"Error opening microphone stream: {e}")
-        if audio:
-            audio.terminate()
-        return  # Exit if microphone cannot be opened
-```
+  # Get default input device (can alter to specify specific device)
+  default_device = audio.get_default_input_device_info()
+  device_index = default_device['index']
+  SAMPLE_RATE = int(audio.get_device_info_by_index(device_index)['defaultSampleRate'])
+
+  print(f"Using microphone: {default_device['name']}")
+
+  # Open microphone stream
+  try:
+      stream = audio.open(
+          input=True,
+          frames_per_buffer=FRAMES_PER_BUFFER,
+          channels=CHANNELS,
+          format=FORMAT,
+          rate=SAMPLE_RATE,
+          input_device_index=device_index
+      )
+      print("Microphone stream opened successfully.")
+      print("Speak into your microphone. Press Ctrl+C to stop.")
+  except Exception as e:
+      print(f"Error opening microphone stream: {e}")
+      if audio:
+          audio.terminate()
+      return  # Exit if microphone cannot be opened
+````
+
 <Tip title="Sample rate">
 **Speechmatics** recommends using a `16 kHz` sample rate for speech audio. Anything higher will be downsampled server-side.
 </Tip>
@@ -666,25 +678,27 @@ def run():
 import pyaudio
 
 CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "format_turns": True,  # Request formatted final transcripts
+"sample_rate": 16000,
+"format_turns": True, # Request formatted final transcripts
 }
 
 # Audio Configuration
-FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+
+FRAMES_PER_BUFFER = 800 # 50ms of audio (0.05s \* 16000Hz)
 SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
 
 # Global variables for audio stream and websocket
+
 audio = None
 stream = None
 ws_app = None
 audio_thread = None
-stop_event = threading.Event()  # To signal the audio thread to stop
+stop_event = threading.Event() # To signal the audio thread to stop
 
 def run():
-    global audio, stream, ws_app
+global audio, stream, ws_app
 
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
@@ -705,7 +719,8 @@ def run():
         if audio:
             audio.terminate()
         return  # Exit if microphone cannot be opened
-```
+
+````
 <Tip title="Sample rate">
 Using a sample rate of `16 kHz` and encoding of `pcm_s16le` is recommended, as our STT model operates at a `16 kHz` sample rate.
 If the incoming audio uses a different rate, we perform additional sampling rate conversion under the hood, which might marginally increase latency.
@@ -745,7 +760,7 @@ def on_open(ws):
     """Called when the WebSocket connection is established."""
     print("WebSocket connection opened.")
     print(f"Connected to: {API_ENDPOINT}")
-    
+
     # Send StartRecognition message
     start_message = {
         "message": "StartRecognition",
@@ -786,7 +801,8 @@ def on_close(ws, close_status_code, close_msg):
     # Try to join the audio thread to ensure clean exit
     if audio_thread and audio_thread.is_alive():
         audio_thread.join(timeout=1.0)
-```
+````
+
 </Tab>
 
 <Tab language="aai" title="AssemblyAI">
@@ -794,9 +810,9 @@ def on_close(ws, close_status_code, close_msg):
 import threading
 
 def on_open(ws):
-    """Called when the WebSocket connection is established."""
-    print("WebSocket connection opened.")
-    print(f"Connected to: {API_ENDPOINT}")
+"""Called when the WebSocket connection is established."""
+print("WebSocket connection opened.")
+print(f"Connected to: {API_ENDPOINT}")
 
     # Start sending audio data in a separate thread
     def stream_audio():
@@ -821,17 +837,15 @@ def on_open(ws):
     audio_thread.start()
 
 def on_error(ws, error):
-    """Called when a WebSocket error occurs."""
-    print(f"\nWebSocket Error: {error}")
-    # Attempt to signal stop on error
-    stop_event.set()
+"""Called when a WebSocket error occurs."""
+print(f"\nWebSocket Error: {error}") # Attempt to signal stop on error
+stop_event.set()
 
 def on_close(ws, close_status_code, close_msg):
-    """Called when the WebSocket connection is closed."""
-    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
-    # Ensure audio resources are released
-    global stream, audio
-    stop_event.set()  # Signal audio thread just in case it's still running
+"""Called when the WebSocket connection is closed."""
+print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}") # Ensure audio resources are released
+global stream, audio
+stop_event.set() # Signal audio thread just in case it's still running
 
     if stream:
         if stream.is_active():
@@ -844,7 +858,8 @@ def on_close(ws, close_status_code, close_msg):
     # Try to join the audio thread to ensure clean exit
     if audio_thread and audio_thread.is_alive():
         audio_thread.join(timeout=1.0)
-```
+
+````
 
 </Tab>
 </Tabs>
@@ -870,15 +885,15 @@ For more on the Turn object, see **Streaming** [Core concepts](/docs/speech-to-t
 ```python
 def on_message(ws, message):
     global audio_seq_no
-    
+
     try:
         data = json.loads(message)
         msg_type = data.get('message')
-        
+
         if msg_type == "RecognitionStarted":
             session_id = data.get('id')
             print(f"\nSession began: ID={session_id}")
-            
+
             # Start sending audio data in a separate thread
             def stream_audio():
                 global audio_seq_no, stream
@@ -901,33 +916,34 @@ def on_message(ws, message):
                 True  # Allow main thread to exit even if this thread is running
             )
             audio_thread.start()
-            
+
         elif msg_type == "AddPartialTranscript":
             transcript = data.get('metadata', {}).get('transcript', '')
             if transcript:
                 print(f"\r{transcript}", end='')
-                
+
         elif msg_type == "AddTranscript":
             transcript = data.get('metadata', {}).get('transcript', '')
             if transcript:
                 # Clear previous line for final messages
                 print('\r' + ' ' * 80 + '\r', end='')
                 print(transcript)
-                
+
         elif msg_type == "EndOfTranscript":
             print("\nSession Terminated: Transcription complete")
-            
+
         elif msg_type == "Error":
             error_type = data.get('type')
             reason = data.get('reason')
             print(f"\nWebSocket Error: {error_type} - {reason}")
             stop_event.set()
-            
+
     except json.JSONDecodeError as e:
         print(f"Error decoding message: {e}")
     except Exception as e:
         print(f"Error handling message: {e}")
-```
+````
+
 </Tab>
 <Tab language="aai" title="AssemblyAI">
 ```python
@@ -935,9 +951,9 @@ import json
 from datetime import datetime
 
 def on_message(ws, message):
-    try:
-        data = json.loads(message)
-        msg_type = data.get('type')
+try:
+data = json.loads(message)
+msg_type = data.get('type')
 
         if msg_type == "Begin":
             session_id = data.get('id')
@@ -961,7 +977,8 @@ def on_message(ws, message):
         print(f"Error decoding message: {e}")
     except Exception as e:
         print(f"Error handling message: {e}")
-```
+
+````
 </Tab>
 </Tabs>
 </Step>
@@ -985,7 +1002,8 @@ def on_message(ws, message):
     "turn_is_formatted": false,
     # Other transcript data...
   }
-  ```
+````
+
 </Note>
 </Steps>
 
@@ -1017,7 +1035,8 @@ def run():
     ws_thread = threading.Thread(target=lambda: ws_app.run_forever(ping_interval=30, ping_timeout=10))
     ws_thread.daemon = True
     ws_thread.start()
-```
+
+````
 
 </Tab>
 <Tab language="aai" title="AssemblyAI">
@@ -1046,12 +1065,15 @@ def run():
     ws_thread = threading.Thread(target=ws_app.run_forever)
     ws_thread.daemon = True
     ws_thread.start()
-```
+````
+
 </Tab>
 </Tabs>
 
 <Note title="Authorization ">
-  Note that while both services use an `Authorization` header to authenticate the WebSocket connection, **Speechmatics** uses a `Bearer` prefix, while **AssemblyAI** does not.
+  Note that while both services use an `Authorization` header to authenticate
+  the WebSocket connection, **Speechmatics** uses a `Bearer` prefix, while
+  **AssemblyAI** does not.
 </Note>
 
 </Step>
@@ -1168,7 +1190,8 @@ def run():
         if audio:
             audio.terminate()
         print("Cleanup complete. Exiting.")
-```
+
+````
 
 </Tab>
 </Tabs>
@@ -1188,7 +1211,7 @@ Finally, run the main function to start the main execution.
 ```python
 if __name__ == "__main__":
     run()
-```
+````
 
 </Tab>
 <Tab language="aai" title="AssemblyAI">
@@ -1204,10 +1227,12 @@ if __name__ == "__main__":
 To learn more about both Streaming APIs, their key differences, and how to best migrate, see the following resources:
 
 **AssemblyAI**
+
 - [Streaming Speech-to-Text](/docs/speech-to-text/streaming)
 - [Streaming API reference](https://assemblyai.com/docs/api-reference/streaming)
 
 **Speechmatics**
+
 - [Transcribe in Real-Time](https://docs.speechmatics.com/introduction/rt-guide)
 - [Using Microphone Input](https://docs.speechmatics.com/tutorials/using-mic)
 - [Real-Time API Reference](https://docs.speechmatics.com/rt-api-ref)

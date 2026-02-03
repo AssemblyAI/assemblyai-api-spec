@@ -1,29 +1,21 @@
 ---
-title: "Multilingual streaming (Beta)"
+title: "Multilingual streaming"
 description: "Transcribe audio in multiple languages"
 ---
 
 <Accordion title="Supported languages">
-    English, Spanish, French, German, Italian, and Portuguese
+  English, Spanish, French, German, Italian, and Portuguese
 </Accordion>
-
-<Tip title="Coming soon" icon="rocket">
-    Our multilingual feature is currently in Beta. We're actively working on improvements to our multilingual offering including reduced latency, returning language codes, and adding more languages. Check our [public roadmap](assemblyai.com/roadmap) to see what's currently being worked on.
-</Tip>
 
 Multilingual streaming allows you to transcribe audio streams in multiple languages.
 
 ## Configuration
 
-<Warning>
-    Keyterms prompting is not supported with multilingual streaming.
-</Warning>
+To utilize multilingual streaming, you need to include `"speech_model":"universal-streaming-multilingual"` as a query parameter in the WebSocket URL.
 
-To utilize multilingual streaming, you need to include `"language":"multi"` as a query parameter in the WebSocket URL.
+## Supported languages
 
-### Supported languages
-
-Multilingual currently supports  English, Spanish, French, German, Italian, and Portuguese.
+Multilingual currently supports: English, Spanish, French, German, Italian, and Portuguese.
 
 ## Quickstart
 
@@ -31,11 +23,52 @@ Multilingual currently supports  English, Spanish, French, German, Italian, and 
 
 Firstly, install the required dependencies.
 
+<Tab language="python-sdk" title="Python SDK">
+
+```bash
+pip install assemblyai
+```
+
+</Tab>
+
 <Tab language="python" title="Python">
 
 ```bash
 pip install websockets pyaudio
 ```
+
+<Note>
+  The Python example uses the `websockets` library. If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
+</Note>
+
+</Tab>
+
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```bash
+npm install assemblyai node-record-lpcm16
+```
+
+<Note>
+  The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+
+For Mac OS:
+
+```bash
+brew install sox
+```
+
+For most linux disto's:
+
+```bash
+sudo apt-get install sox libsox-fmt-all
+```
+
+For Windows:
+
+[download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+
+</Note>
 
 </Tab>
 
@@ -50,6 +83,97 @@ npm install ws mic
 </Tabs>
 
 <Tabs>
+
+<Tab language="python-sdk" title="Python SDK">
+
+```python {27}
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+
+api_key = "<YOUR_API_KEY>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Connecting websocket to url")
+    print(f"Session started: {event.id}")
+    print(f"Receiving SessionBegins ...")
+    print(f"Sending messages ...")
+
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    if not event.end_of_turn and event.transcript:
+        print(f"[PARTIAL TURN TRANSCRIPT]: {event.transcript}")
+    if event.utterance:
+        print(f"[PARTIAL TURN UTTERANCE]: {event.utterance}")
+        # Display language detection info if available
+        if event.language_code:
+            print(f"[UTTERANCE LANGUAGE DETECTION]: {event.language_code} - {event.language_confidence:.2%}")
+    if event.end_of_turn:
+        print(f"[FULL TURN TRANSCRIPT]: {event.transcript}")
+        # Display language detection info if available
+        if event.language_code:
+            print(f"[END OF TURN LANGUAGE DETECTION]: {event.language_code} - {event.language_confidence:.2%}")
+
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=48000,
+            speech_model="universal-streaming-multilingual",
+            language_detection=True,
+        )
+    )
+
+    try:
+        client.stream(
+          aai.extras.MicrophoneStream(sample_rate=48000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
 
 <Tab language="python" title="Python">
 
@@ -78,8 +202,8 @@ stream = p.open(
 BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 CONNECTION_PARAMS = {
     "sample_rate": RATE,
-    "format_turns": True,
-    "language": "multi",
+    "speech_model": "universal-streaming-multilingual",
+    "language_detection": True,
 }
 URL = f"{BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
@@ -89,7 +213,7 @@ async def send_receive():
 
     async with websockets.connect(
         URL,
-        extra_headers={"Authorization": "YOUR-API-KEY"},
+        additional_headers={"Authorization": "YOUR-API-KEY"},
         ping_interval=5,
         ping_timeout=20
     ) as _ws:
@@ -117,13 +241,21 @@ async def send_receive():
                     result_str = await _ws.recv()
                     data = json.loads(result_str)
                     transcript = data['transcript']
+                    utterance = data['utterance']
 
                     if data['type'] == 'Turn':
-                        if data.get('turn_is_formatted'):
-                            print(f"\r{transcript}")
-                        else:
-                            print(f"\r{transcript}", end="")
-                            print(data)
+                        if not data.get('end_of_turn') and transcript:
+                            print(f"[PARTIAL TURN TRANSCRIPT]: {transcript}")
+                        if data.get('utterance'):
+                            print(f"[PARTIAL TURN UTTERANCE]: {utterance}")
+                            # Display language detection info if available
+                            if 'language_code' in data:
+                                print(f"[UTTERANCE LANGUAGE DETECTION]: {data['language_code']} - {data['language_confidence']:.2%}")
+                        if data.get('end_of_turn'):
+                            print(f"[FULL TURN TRANSCRIPT]: {transcript}")
+                            # Display language detection info if available
+                            if 'language_code' in data:
+                                print(f"[END OF TURN LANGUAGE DETECTION]: {data['language_code']} - {data['language_confidence']:.2%}")
                     else:
                         pass
 
@@ -163,9 +295,9 @@ const fs = require("fs");
 // --- Configuration ---
 const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
 const CONNECTION_PARAMS = {
-  sample_rate: 16000,
-  format_turns: true, // Request formatted final transcripts
-  language: "multi"
+  sample_rate: 48000,
+  speech_model: "universal-streaming-multilingual",
+  language_detection: true,
 };
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
@@ -253,6 +385,8 @@ async function run() {
   console.log("Starting AssemblyAI real-time transcription...");
   console.log("Audio will be saved to a WAV file when the session ends.");
 
+  console.log(`Connecting websocket to url ${API_ENDPOINT}`);
+
   // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
@@ -263,7 +397,7 @@ async function run() {
   // Setup WebSocket event handlers
   ws.on("open", () => {
     console.log("WebSocket connection opened.");
-    console.log(`Connected to: ${API_ENDPOINT}`);
+    console.log("Receiving SessionBegins ...");
     // Start the microphone
     startMicrophone();
   });
@@ -274,20 +408,34 @@ async function run() {
       const msgType = data.type;
 
       if (msgType === "Begin") {
-        const sessionId = data.id;
-        const expiresAt = data.expires_at;
-        console.log(
-          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
-        );
+        console.log(JSON.stringify(data));
+        console.log("Sending messages ...");
       } else if (msgType === "Turn") {
         const transcript = data.transcript || "";
-        const formatted = data.turn_is_formatted;
+        const utterance = data.utterance || "";
 
-        if (formatted) {
-          clearLine();
-          console.log(transcript);
-        } else {
-          process.stdout.write(`\r${transcript}`);
+        if (!data.end_of_turn && transcript) {
+          console.log(`[PARTIAL TURN TRANSCRIPT]: ${transcript}`);
+        }
+        if (data.utterance) {
+          console.log(`[PARTIAL TURN UTTERANCE]: ${utterance}`);
+          // Display language detection info if available
+          if (data.language_code) {
+            const langConfidence = (data.language_confidence * 100).toFixed(2);
+            console.log(
+              `[UTTERANCE LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
+            );
+          }
+        }
+        if (data.end_of_turn) {
+          console.log(`[FULL TURN TRANSCRIPT]: ${transcript}`);
+          // Display language detection info if available
+          if (data.language_code) {
+            const langConfidence = (data.language_confidence * 100).toFixed(2);
+            console.log(
+              `[END OF TURN LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
+            );
+          }
         }
       } else if (msgType === "Termination") {
         const audioDuration = data.audio_duration_seconds;
@@ -419,4 +567,174 @@ run();
 
 </Tab>
 
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {11}
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 48_000,
+    speechModel: "universal-streaming-multilingual",
+    languageDetection: true,
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Connecting websocket to url`);
+    console.log(`Session opened with ID: ${id}`);
+    console.log(`Receiving SessionBegins ...`);
+    console.log(`Sending messages ...`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.end_of_turn && turn.transcript) {
+      console.log(`[PARTIAL TURN TRANSCRIPT]: ${turn.transcript}`);
+    }
+    if (turn.utterance) {
+      console.log(`[PARTIAL TURN UTTERANCE]: ${turn.utterance}`);
+      // Display language detection info if available
+      if (turn.language_code) {
+        const langConfidence = (turn.language_confidence * 100).toFixed(2);
+        console.log(
+          `[UTTERANCE LANGUAGE DETECTION]: ${turn.language_code} - ${langConfidence}%`
+        );
+      }
+    }
+    if (turn.end_of_turn) {
+      console.log(`[FULL TURN TRANSCRIPT]: ${turn.transcript}`);
+      // Display language detection info if available
+      if (turn.language_code) {
+        const langConfidence = (turn.language_confidence * 100).toFixed(2);
+        console.log(
+          `[END OF TURN LANGUAGE DETECTION]: ${turn.language_code} - ${langConfidence}%`
+        );
+      }
+    }
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 48_000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C.
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+</Tab>
+
 </Tabs>
+
+## Language detection
+
+The multilingual streaming model supports automatic language detection, allowing you to identify which language is being spoken in real-time. When enabled, the model returns the detected language code and confidence score with each complete utterance and final turn.
+
+### Configuration
+
+To enable language detection, include `language_detection=true` as a query parameter in the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=universal-streaming-multilingual&language_detection=true
+```
+
+### Output format
+
+When language detection is enabled, each Turn message (with either a **complete utterance** or `end_of_turn: true`) will include two additional fields:
+
+- `language_code`: The language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
+- `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
+
+<Note>
+  The `language_code` and `language_confidence` fields only appear when either:
+  - The `utterance` field is non-empty and contains a complete utterance - The
+  `end_of_turn` field is `true`
+</Note>
+
+### Example response
+
+Here's an example Turn message with language detection enabled, showing Spanish being detected:
+
+```json
+{
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": false,
+  "transcript": "Buenos",
+  "end_of_turn_confidence": 0.991195,
+  "words": [
+    {
+      "start": 29920,
+      "end": 30080,
+      "text": "Buenos",
+      "confidence": 0.979445,
+      "word_is_final": true
+    },
+    {
+      "start": 30320,
+      "end": 30400,
+      "text": "días",
+      "confidence": 0.774696,
+      "word_is_final": false
+    }
+  ],
+  "utterance": "Buenos días.",
+  "language_code": "es",
+  "language_confidence": 0.999997,
+  "type": "Turn"
+}
+```
+
+In this example, the model detected Spanish (`"es"`) with a confidence of `0.999997`.
+
+## Understanding formatting
+
+The multilingual model produces transcripts with punctuation and capitalization already built into the model outputs. This means you'll receive properly formatted text without requiring any additional post-processing.
+
+<Note>
+  While the API still returns the `turn_is_formatted` parameter to maintain
+  interface consistency with other streaming models, the multilingual model
+  doesn't perform additional formatting operations. All transcripts from the
+  multilingual model are already formatted as they're generated.
+</Note>
+
+In the future, this built-in formatting capability will be extended to our English-only streaming model as well.

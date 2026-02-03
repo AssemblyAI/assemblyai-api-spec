@@ -2,9 +2,11 @@
 title: "Transcribe audio files with Streaming"
 ---
 
-This guide shows you how to transcribe audio files using our Streaming API. The Streaming API is capable of transcribing WAV audio files. It can also handle audio files with different sample rates.
+This guide shows you how to transcribe **WAV audio files** with varying sample rates using our Streaming API.
 
 ## Quickstart
+
+Here is the complete AssemblyAI Python SDK script to transcribe a WAV audio file using the Streaming API.
 
 ```python
 import assemblyai as aai
@@ -19,34 +21,94 @@ from assemblyai.streaming.v3 import (
     TurnEvent
 )
 from typing import Type
+import sys
+
+YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your AssemblyAI API key
+AUDIO_FILE = "audio.wav"  # Path to your audio file
+SAMPLE_RATE = 48000  # Change to match the sample rate of your audio file
+SAVE_TRANSCRIPT_TO_FILE = True  # Set to False to disable saving transcript to file
+PLAY_AUDIO = True  # Set to False to disable audio playback
+
+# Track session data for output file
+session_data = {
+    "session_id": None,
+    "parameters": None,
+    "audio_file": AUDIO_FILE,
+    "audio_duration_seconds": None,
+    "turns": []
+}
 
 def on_begin(self: Type[StreamingClient], event: BeginEvent):
   "This function is called when the connection has been established."
 
-  print("Session ID:", event.id)
+  session_data["session_id"] = event.id
+  print("Session ID:", event.id, "\n")
 
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
   "This function is called when a new transcript has been received."
 
-  print(event.transcript, end="\r\n")
+  # Skip empty transcripts
+  if not event.transcript:
+    return
+
+  # Determine status label
+  if not event.end_of_turn:
+    status = "[Partial]"
+  elif event.turn_is_formatted:
+    status = "[Final (formatted)]"
+  else:
+    status = "[Final (unformatted)]"
+
+  print(f"{status}: {event.transcript}")
+
+  # Track final turns (formatted if formatting is enabled, otherwise just final)
+  is_final = event.end_of_turn and (not streaming_params.format_turns or event.turn_is_formatted)
+  if is_final:
+    session_data["turns"].append(event.transcript)
+    print()  # Add blank line after final formatted turn for cleaner output
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-  "This function is called when an error occurs."
+  "This function is called when the session has ended."
 
+  session_data["audio_duration_seconds"] = event.audio_duration_seconds
   print(
     f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
   )
 
 def on_error(self: Type[StreamingClient], error: StreamingError):
-  "This function is called when the connection has been closed."
+  "This function is called when an error occurs."
 
   print(f"Error occurred: {error}")
+
+def save_transcript():
+  "Save the transcript to a file in the same directory as the script."
+  from pathlib import Path
+
+  # Get the audio file name (handles both absolute and relative paths)
+  audio_name = Path(session_data["audio_file"]).stem
+
+  # Generate filename: {file_name}_{session_id}.txt in the same directory as script
+  session_id = session_data["session_id"] or "unknown"
+  output_file = f"{audio_name}_{session_id}.txt"
+
+  with open(output_file, "w") as f:
+    f.write(f"AssemblyAI Session ID: {session_data['session_id']}\n")
+    f.write(f"Audio file: {session_data['audio_file']}\n")
+    f.write(f"Audio duration: {session_data['audio_duration_seconds']} seconds\n")
+    f.write(f"Parameters used: {session_data['parameters']}\n")
+    f.write("See all available parameters and defaults at https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api#request.query\n\n")
+
+    f.write("\nTranscription Output\n")
+    for i, turn in enumerate(session_data["turns"], 1):
+      f.write(f"[Turn #{i}]: {turn}\n")
+
+  print(f"Transcript saved to {output_file}")
 
 
 # Create the streaming client
 client = StreamingClient(
   StreamingClientOptions(
-    api_key="YOUR_API_KEY"
+    api_key=YOUR_API_KEY
   )
 )
 
@@ -55,61 +117,124 @@ client.on(StreamingEvents.Turn, on_turn)
 client.on(StreamingEvents.Termination, on_terminated)
 client.on(StreamingEvents.Error, on_error)
 
-def stream_file(filepath: str, sample_rate: int):
-    """Stream audio file in 50ms chunks instead of 300ms"""
-    import time
+def validate_audio_file(filepath: str, sample_rate: int):
+    """Validate audio file before streaming"""
     import wave
+    from pathlib import Path
 
-    chunk_duration = 0.1
+    # Check file extension
+    file_ext = Path(filepath).suffix.lower()
+    if file_ext != ".wav":
+        print(f"Error: Only WAV files are supported. Got: {file_ext}", file=sys.stderr)
+        print(f"Convert your file to WAV using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+        sys.exit(1)
 
     with wave.open(filepath, 'rb') as wav_file:
         if wav_file.getnchannels() != 1:
-            raise ValueError("Only mono audio is supported")
+            print("Error: Only mono audio is supported", file=sys.stderr)
+            print(f"Convert your file to mono using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+            sys.exit(1)
 
         file_sample_rate = wav_file.getframerate()
         if file_sample_rate != sample_rate:
-            print(f"Warning: File sample rate ({file_sample_rate}) doesn't match expected rate ({sample_rate})")
+            print(f"Error: File sample rate ({file_sample_rate}) doesn't match expected rate ({sample_rate})", file=sys.stderr)
+            print(f"Either update SAMPLE_RATE to {file_sample_rate}, or convert your file using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+            sys.exit(1)
 
-        frames_per_chunk = int(file_sample_rate * chunk_duration)
+def stream_file(filepath: str, sample_rate: int, play_audio: bool = False):
+    """Stream audio file in 50ms chunks, optionally playing audio"""
+    import time
+    import wave
 
-        while True:
-            frames = wav_file.readframes(frames_per_chunk)
+    chunk_duration = 0.05
+    audio_player = None
 
-            if not frames:
-                break
+    if play_audio:
+        try:
+            import pyaudio
+            p = pyaudio.PyAudio()
+            with wave.open(filepath, 'rb') as wav_file:
+                audio_player = p.open(
+                    format=p.get_format_from_width(wav_file.getsampwidth()),
+                    channels=wav_file.getnchannels(),
+                    rate=wav_file.getframerate(),
+                    output=True
+                )
+        except ImportError:
+            print("Warning: pyaudio not installed. Audio playback disabled.", file=sys.stderr)
+            print("Install with: pip install pyaudio", file=sys.stderr)
+            play_audio = False
 
-            yield frames
+    try:
+        with wave.open(filepath, 'rb') as wav_file:
+            frames_per_chunk = int(sample_rate * chunk_duration)
 
-            time.sleep(chunk_duration)
+            while True:
+                frames = wav_file.readframes(frames_per_chunk)
+
+                if not frames:
+                    break
+
+                if audio_player:
+                    audio_player.write(frames)
+                else:
+                    time.sleep(chunk_duration)
+
+                yield frames
+    finally:
+        if audio_player:
+            audio_player.stop_stream()
+            audio_player.close()
+            p.terminate()
+
+# Validate audio file before connecting
+validate_audio_file(AUDIO_FILE, SAMPLE_RATE)
 
 file_stream = stream_file(
-  filepath="audio.wav",
-  sample_rate=44100,
+  filepath=AUDIO_FILE,
+  sample_rate=SAMPLE_RATE,
+  play_audio=PLAY_AUDIO,
 )
 
-client.connect(
-    StreamingParameters(
-        sample_rate=48000,
-        format_turns=True,
-    )
+# Configure streaming parameters
+streaming_params = StreamingParameters(
+    sample_rate=SAMPLE_RATE,
+    format_turns=True,
+    speech_model="universal-streaming-english",
 )
+
+# Store parameters for output file (dynamically capture all set parameters)
+session_data["parameters"] = ", ".join(
+    f"{k}={v}" for k, v in streaming_params.__dict__.items() if v is not None
+)
+
+# Warn if using default turn detection parameters
+turn_params = ["end_of_turn_confidence_threshold", "min_end_of_turn_silence_when_confident", "max_turn_silence"]
+if not any(getattr(streaming_params, p, None) is not None for p in turn_params):
+    print("Warning: Using default turn detection parameters. For best results, fine-tune to your use case:")
+    print("https://www.assemblyai.com/docs/universal-streaming/turn-detection#quick-start-configurations\n")
+
+client.connect(streaming_params)
 
 try:
     client.stream(file_stream)
 finally:
     client.disconnect(terminate=True)
+    if SAVE_TRANSCRIPT_TO_FILE:
+        save_transcript()
 ```
 
 ## Step-by-step guide
 
-Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) and get your API key from your dashboard.
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) and get your API key from your [dashboard](https://www.assemblyai.com/dashboard/api-keys).
 
-### Install/import packages & set API key
+### Install and import packages
 
-Install the package assemblyai.
+Install the AssemblyAI Python SDK and pyaudio for audio playback.
 
 ```bash
 pip install assemblyai
+pip install pyaudio
 ```
 
 Import packages.
@@ -127,6 +252,32 @@ from assemblyai.streaming.v3 import (
     TurnEvent
 )
 from typing import Type
+import sys
+```
+
+### Configure settings
+
+Replace `YOUR_API_KEY` with your API key.
+
+Set `AUDIO_FILE` to the relative or absolute path of your audio file, and set `SAMPLE_RATE` to match your file's sample rate.
+
+See [Connect the client](/docs/guides/streaming_transcribe_audio_file#connect-the-client) to configure all other stream parameters.
+
+```python
+YOUR_API_KEY = "YOUR_API_KEY"  # Replace with your AssemblyAI API key
+AUDIO_FILE = "audio.wav"  # Path to your audio file
+SAMPLE_RATE = 48000  # Change to match the sample rate of your audio file
+SAVE_TRANSCRIPT_TO_FILE = True  # Set to False to disable saving transcript to file
+PLAY_AUDIO = True  # Set to False to disable audio playback
+
+# Track session data for output file
+session_data = {
+    "session_id": None,
+    "parameters": None,
+    "audio_file": AUDIO_FILE,
+    "audio_duration_seconds": None,
+    "turns": []
+}
 ```
 
 ### Websocket Event Handlers
@@ -135,22 +286,42 @@ from typing import Type
 def on_begin(self: Type[StreamingClient], event: BeginEvent):
   "This function is called when the connection has been established."
 
-  print("Session ID:", event.id)
+  session_data["session_id"] = event.id
+  print("Session ID:", event.id, "\n")
 
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
   "This function is called when a new transcript has been received."
 
-  print(event.transcript, end="\r\n")
+  # Skip empty transcripts
+  if not event.transcript:
+    return
+
+  # Determine status label
+  if not event.end_of_turn:
+    status = "[Partial]"
+  elif event.turn_is_formatted:
+    status = "[Final (formatted)]"
+  else:
+    status = "[Final (unformatted)]"
+
+  print(f"{status}: {event.transcript}")
+
+  # Track final turns (formatted if formatting is enabled, otherwise just final)
+  is_final = event.end_of_turn and (not streaming_params.format_turns or event.turn_is_formatted)
+  if is_final:
+    session_data["turns"].append(event.transcript)
+    print()  # Add blank line after final formatted turn for cleaner output
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-  "This function is called when an error occurs."
+  "This function is called when the session has ended."
 
+  session_data["audio_duration_seconds"] = event.audio_duration_seconds
   print(
     f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
   )
 
 def on_error(self: Type[StreamingClient], error: StreamingError):
-  "This function is called when the connection has been closed."
+  "This function is called when an error occurs."
 
   print(f"Error occurred: {error}")
 ```
@@ -161,7 +332,7 @@ def on_error(self: Type[StreamingClient], error: StreamingError):
 # Create the streaming client
 client = StreamingClient(
   StreamingClientOptions(
-    api_key="YOUR_API_KEY"
+    api_key=YOUR_API_KEY
   )
 )
 
@@ -173,51 +344,140 @@ client.on(StreamingEvents.Error, on_error)
 
 ### Helper functions for streaming files
 
-Create a helper function to stream your file.
+The following helper functions are used to validate audio files, stream audio in chunks, and save the transcript output:
+- `validate_audio_file()` - Validates that the audio file is a mono WAV file with the expected sample rate.
+- `stream_file()` - Streams the audio file in 50ms chunks, optionally playing audio through speakers.
+- `save_transcript()` - Saves the transcript to a text file after the session ends.
 
 ```python
-def stream_file(filepath: str, sample_rate: int):
-    """Stream audio file in 50ms chunks instead of 300ms"""
-    import time
-    import wave
+def save_transcript():
+  "Save the transcript to a file in the same directory as the script."
+  from pathlib import Path
 
-    chunk_duration = 0.1
+  # Get the audio file name (handles both absolute and relative paths)
+  audio_name = Path(session_data["audio_file"]).stem
+
+  # Generate filename: {file_name}_{session_id}.txt in the same directory as script
+  session_id = session_data["session_id"] or "unknown"
+  output_file = f"{audio_name}_{session_id}.txt"
+
+  with open(output_file, "w") as f:
+    f.write(f"AssemblyAI Session ID: {session_data['session_id']}\n")
+    f.write(f"Audio file: {session_data['audio_file']}\n")
+    f.write(f"Audio duration: {session_data['audio_duration_seconds']} seconds\n")
+    f.write(f"Parameters used: {session_data['parameters']}\n")
+    f.write("See all available parameters and defaults at https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api#request.query\n\n")
+
+    f.write("\nTranscription Output\n")
+    for i, turn in enumerate(session_data["turns"], 1):
+      f.write(f"[Turn #{i}]: {turn}\n")
+
+  print(f"Transcript saved to {output_file}")
+
+def validate_audio_file(filepath: str, sample_rate: int):
+    """Validate audio file before streaming"""
+    import wave
+    from pathlib import Path
+
+    # Check file extension
+    file_ext = Path(filepath).suffix.lower()
+    if file_ext != ".wav":
+        print(f"Error: Only WAV files are supported. Got: {file_ext}", file=sys.stderr)
+        print(f"Convert your file to WAV using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+        sys.exit(1)
 
     with wave.open(filepath, 'rb') as wav_file:
         if wav_file.getnchannels() != 1:
-            raise ValueError("Only mono audio is supported")
+            print("Error: Only mono audio is supported", file=sys.stderr)
+            print(f"Convert your file to mono using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+            sys.exit(1)
 
         file_sample_rate = wav_file.getframerate()
         if file_sample_rate != sample_rate:
-            print(f"Warning: File sample rate ({file_sample_rate}) doesn't match expected rate ({sample_rate})")
+            print(f"Error: File sample rate ({file_sample_rate}) doesn't match expected rate ({sample_rate})", file=sys.stderr)
+            print(f"Either update SAMPLE_RATE to {file_sample_rate}, or convert your file using: ffmpeg -i {filepath} -ar {sample_rate} -ac 1 output.wav", file=sys.stderr)
+            sys.exit(1)
 
-        frames_per_chunk = int(file_sample_rate * chunk_duration)
+def stream_file(filepath: str, sample_rate: int, play_audio: bool = False):
+    """Stream audio file in 50ms chunks, optionally playing audio"""
+    import time
+    import wave
 
-        while True:
-            frames = wav_file.readframes(frames_per_chunk)
+    chunk_duration = 0.05
+    audio_player = None
 
-            if not frames:
-                break
+    if play_audio:
+        try:
+            import pyaudio
+            p = pyaudio.PyAudio()
+            with wave.open(filepath, 'rb') as wav_file:
+                audio_player = p.open(
+                    format=p.get_format_from_width(wav_file.getsampwidth()),
+                    channels=wav_file.getnchannels(),
+                    rate=wav_file.getframerate(),
+                    output=True
+                )
+        except ImportError:
+            print("Warning: pyaudio not installed. Audio playback disabled.", file=sys.stderr)
+            print("Install with: pip install pyaudio", file=sys.stderr)
+            play_audio = False
 
-            yield frames
+    try:
+        with wave.open(filepath, 'rb') as wav_file:
+            frames_per_chunk = int(sample_rate * chunk_duration)
 
-            time.sleep(chunk_duration)
+            while True:
+                frames = wav_file.readframes(frames_per_chunk)
+
+                if not frames:
+                    break
+
+                if audio_player:
+                    audio_player.write(frames)
+                else:
+                    time.sleep(chunk_duration)
+
+                yield frames
+    finally:
+        if audio_player:
+            audio_player.stop_stream()
+            audio_player.close()
+            p.terminate()
+
+# Validate audio file before connecting
+validate_audio_file(AUDIO_FILE, SAMPLE_RATE)
 
 file_stream = stream_file(
-  filepath="audio.wav",
-  sample_rate=44100,
+  filepath=AUDIO_FILE,
+  sample_rate=SAMPLE_RATE,
+  play_audio=PLAY_AUDIO,
 )
 ```
 
 ### Connect the client
 
+A warning is printed if default turn detection parameters are used. This is fine for testing, but for best accuracy and optimal performance, see our [recommended settings](/docs/universal-streaming/turn-detection#quick-start-configurations).
+
 ```python
-client.connect(
-    StreamingParameters(
-        sample_rate=48000,
-        format_turns=True,
-    )
+# Configure streaming parameters
+streaming_params = StreamingParameters(
+    sample_rate=SAMPLE_RATE,
+    format_turns=True,
+    speech_model="universal-streaming-english",
 )
+
+# Store parameters for output file (dynamically capture all set parameters)
+session_data["parameters"] = ", ".join(
+    f"{k}={v}" for k, v in streaming_params.__dict__.items() if v is not None
+)
+
+# Warn if using default turn detection parameters
+turn_params = ["end_of_turn_confidence_threshold", "min_end_of_turn_silence_when_confident", "max_turn_silence"]
+if not any(getattr(streaming_params, p, None) is not None for p in turn_params):
+    print("Warning: Using default turn detection parameters. For best results, fine-tune to your use case:")
+    print("https://www.assemblyai.com/docs/universal-streaming/turn-detection#quick-start-configurations\n")
+
+client.connect(streaming_params)
 ```
 
 ### Stream the file
@@ -227,6 +487,52 @@ try:
     client.stream(file_stream)
 finally:
     client.disconnect(terminate=True)
+    if SAVE_TRANSCRIPT_TO_FILE:
+        save_transcript()
 ```
 
-The session will terminate once the file is finished streaming.
+The session will terminate once the file is finished streaming. If `SAVE_TRANSCRIPT_TO_FILE` is enabled (default), the transcript will be saved to `{audio_filename}_{session_id}.txt` in the current working directory.
+
+<Note>
+The `AUDIO_FILE` path can be either relative (e.g., `audio.wav`) or absolute (e.g., `/path/to/audio.wav`).
+</Note>
+
+## Example output
+
+Here's an example of what the console output looks like when streaming an audio file:
+
+```console
+Warning: Using default turn detection parameters. For best results, fine-tune to your use case:
+https://www.assemblyai.com/docs/universal-streaming/turn-detection#quick-start-configurations
+
+Session ID: f37d7c4e-6be9-47ed-b6fc-7600fc78e34d
+
+[Partial]: the
+[Partial]: the quick
+[Partial]: the quick brown
+[Partial]: the quick brown fox
+[Partial]: the quick brown fox jumps
+[Partial]: the quick brown fox jumps over
+[Partial]: the quick brown fox jumps over the
+[Partial]: the quick brown fox jumps over the lazy
+[Partial]: the quick brown fox jumps over the lazy dog
+[Final (unformatted)]: the quick brown fox jumps over the lazy dog
+[Final (formatted)]: The quick brown fox jumps over the lazy dog.
+
+[Partial]: it
+[Partial]: it is
+[Partial]: it is a
+[Partial]: it is a common
+[Partial]: it is a common typing
+[Partial]: it is a common typing test
+[Final (unformatted)]: it is a common typing test
+[Final (formatted)]: It is a common typing test.
+
+Session terminated: 7.52 seconds of audio processed
+Transcript saved to audio_f37d7c4e-6be9-47ed-b6fc-7600fc78e34d.txt
+```
+
+The output shows:
+- **Partial transcripts**: Real-time updates as words are recognized
+- **Final (unformatted)**: The complete turn before formatting is applied
+- **Final (formatted)**: The final transcript with proper capitalization and punctuation

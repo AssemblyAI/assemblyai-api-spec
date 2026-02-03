@@ -52,7 +52,7 @@ You can create and delete API keys based on your plan:
 Get insights into your usage and spend to track and manage costs effectively with the reporting tool in the AssemblyAI dashboard. You can analyze your usage and spend data at different levels of granularity:
 
 - Account
-- Product (e.g., Speech-to-text, Streaming, LeMUR)
+- Product (e.g., Speech-to-text, Streaming, LLM Gateway)
 - Models (e.g., Best, Claude 3.5 Sonnet, etc.)
 - Project
 - API key
@@ -78,7 +78,7 @@ Our services are infinitely scalable and we offer custom concurrency limits that
 
 </Note>
 
-### Speech-to-Text usage limits
+### Pre-recorded audio Speech-to-Text usage limits
 
 AssemblyAI limits the number of transcriptions being processed at any given time.
 
@@ -95,19 +95,17 @@ If you exceed your concurrency limit, you'll receive an email stating that your 
 ![Email notifying user that their transcripts have been throttled due to exceeding the Concurrency limit](../05-guides/limit.png)
 
 ### Streaming Speech-to-Text usage limits
-Usage limits for streaming speech-to-text are distinct from asynchronous speech-to-text usage limits. There are two key metrics that define streaming usage limits:
-- **New sessions rate limit**: The number of new streaming sessions able to be opened per minute.
-- **Concurrency**: The total number of streaming sessions able to be open simultaneously.
+
+Usage limits for streaming speech-to-text are distinct from pre-recorded audio speech-to-text usage limits. Your streaming concurrency dictates the number of new streaming sessions that can be opened per minute.
 
 AssemblyAI's Universal-Streaming API features unlimited, automatic scaling concurrency limits for paid accounts that are dynamic based on usage.
 We do not limit the total number of concurrent streaming sessions. Instead, there is only a limit on the number of **new streaming sessions** that can be created per minute. These limits start at:
 
+| Account type | Starting rate limit (new sessions/min) |
+| ------------ | -------------------------------------- |
+| Free         | 5                                      |
+| Paid         | 100++                                  |
 
-| Account type  | Starting rate limit (new sessions/min) |
-| ------------- | -------------------------------------- |
-|     Free      |   5                                    |
-|     Paid      |   100++                                |     
- 
 <Tip title="How unlimited streaming session scaling works">
 Anytime you are utilizing **70% or more of your current limit**, the number of new streams able to be opened over the next minute will automatically increase by 10%.
 
@@ -122,16 +120,18 @@ Assuming you follow this pattern minute-over-minute maxing out your available ne
 Total streams: 100 + 110 + 121 + 133 + 146 = `610 streams`
 
 At the start of the 6th minute, there would be `610` **total concurrent open streams**. Over the next 60 seconds, a maximum of `161` (146 x 1.10) **new streams** would be able to be opened.
+
 </Tip>
 
 This usage pattern has no ceiling and can continue to scale up indefinitely to whatever your application requires.
 Based on the rate at which you are opening streams in comparison to your current limit, your new sessions per minute limit will adjust as follows:
+
 - **70% or more** — Scale up by 10%.
 - **Within 50-69%** — Unchanged.
 - **Less than 50%** — Begin to scale back down (to your account's starting limit).
   - **Important:** This may impact your ability to immediately open a large number of new streams if the rate at which you have been creating new streams has been low for a period of time despite having a high number of open concurrent streams.
 
-If you exceed your current limit, you'll receive an error with the message: `Unauthorized connection: Too many concurrent sessions`.
+If you exceed your current limit, you'll receive a `1008` error with the message: `Unauthorized connection: Too many concurrent sessions`.
 
 <Note title="Properly terminating sessions">
 
@@ -141,13 +141,21 @@ If you're consistently hitting rate limits when trying to open new sessions, fir
 
 </Note>
 
-### LeMUR usage limits
+### LLM Gateway usage limits
 
-LeMUR requests are rate limited within a 60-second time window. For more information, see [Rate limits](https://www.assemblyai.com/docs/api-reference/overview#rate-limits).
+Your LLM Gateway usage limit dictates the number of requests you can make within a 60-second time window. For more information, see [Rate limits](https://www.assemblyai.com/docs/api-reference/overview#rate-limits).
+
+Each [LLM Gateway model](/docs/llm-gateway/overview#available-models) has its own separate rate limit. Requests to one model will not affect the number of requests per minute that you can make to another model.
 
 | Usage limit         | Free account | Paid account |
 | ------------------- | ------------ | ------------ |
-| Requests per minute | 2            | 30+          |
+| Requests per minute | N/A          | 30+          |
+
+<Note>
+
+LLM Gateway is not available to accounts on the free tier. To use LLM Gateway, please upgrade to a paid account by adding a credit card to your account.
+
+</Note>
 
 ## Best Practices
 

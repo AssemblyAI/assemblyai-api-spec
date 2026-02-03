@@ -47,7 +47,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
                 "languages": ["en"],
             },
         }
-        
+
         # Start the live session
         response = requests.post(
             f"{GLADIA_API_URL}/v2/live",
@@ -55,28 +55,28 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
             json=config,
             timeout=3,
         )
-        
+
         if not response.ok:
             print(f"{response.status_code}: {response.text or response.reason}")
             exit(response.status_code)
-        
+
         session_data = response.json()
-        
+
         # Connect to the websocket
         async with connect(session_data["url"]) as websocket:
             print("\n################ Begin session ################\n")
-            
+
             # Handle Ctrl+C to stop recording
             loop = asyncio.get_running_loop()
             loop.add_signal_handler(
                 signal.SIGINT,
                 lambda: loop.create_task(stop_recording(websocket)),
             )
-            
+
             # Create tasks for sending audio and receiving transcripts
             send_audio_task = asyncio.create_task(send_audio(websocket))
             receive_transcript_task = asyncio.create_task(receive_transcript(websocket))
-            
+
             await asyncio.wait([send_audio_task, receive_transcript_task])
 
     async def stop_recording(websocket):
@@ -87,7 +87,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
     async def send_audio(websocket):
         # Initialize PyAudio
         p = pyaudio.PyAudio()
-        
+
         # Open audio stream
         stream = p.open(
             format=FORMAT,
@@ -96,7 +96,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
             input=True,
             frames_per_buffer=FRAMES_PER_BUFFER,
         )
-        
+
         # Send audio chunks
         while True:
             data = stream.read(FRAMES_PER_BUFFER)
@@ -112,12 +112,12 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
         # Process incoming messages
         async for message in websocket:
             content = json.loads(message)
-            
+
             # Print transcripts
             if content["type"] == "transcript" and content["data"]["is_final"]:
                 text = content["data"]["utterance"]["text"].strip()
                 print(f"Final: {text}")
-                
+
             # Print final results
             if content["type"] == "post_final_transcript":
                 print("\n################ End of session ################\n")
@@ -336,6 +336,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
     ```
 
     </Tab>
+
 </Tabs>
 
 ## Authentication
@@ -368,13 +369,14 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
         from urllib.parse import urlencode
         from datetime import datetime
 
-        YOUR_API_KEY = "YOUR-API-KEY"  
+        YOUR_API_KEY = "YOUR-API-KEY"
         ```
     </Tab>
+
 </Tabs>
 
 <Note title="Protect Your API Key">
-    For improved security, store your API key as an environment variable.
+  For improved security, store your API key as an environment variable.
 </Note>
 
 ## Connection Parameters & Microphone Setup
@@ -425,6 +427,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
         stop_event = threading.Event()  # To signal the audio thread to stop
         ```
     </Tab>
+
 </Tabs>
 
 Helpful information about our streaming model:
@@ -436,6 +439,7 @@ Helpful information about our streaming model:
 - **Partial Transcripts** - AssemblyAI streams immutable interim results automatically. There's no switch to toggle. Expect fast, token-level updates that refine until each Final is emitted.
 
 ## Open Microphone Stream & Create WebSocket
+
     <Tabs groupId="language">
         <Tab language="gladia" title="Gladia">
             ```python
@@ -447,17 +451,17 @@ Helpful information about our streaming model:
                 json=config,
                 timeout=3,
             )
-            
+
             if not response.ok:
                 print(f"{response.status_code}: {response.text or response.reason}")
                 exit(response.status_code)
-            
+
             session_data = response.json()
 
             async def send_audio(websocket):
                 # Initialize PyAudio
                 p = pyaudio.PyAudio()
-                
+
                 # Open audio stream
                 stream = p.open(
                     format=FORMAT,
@@ -466,7 +470,7 @@ Helpful information about our streaming model:
                     input=True,
                     frames_per_buffer=FRAMES_PER_BUFFER,
                 )
-                
+
                 # Send audio chunks
                 while True:
                     data = stream.read(FRAMES_PER_BUFFER)
@@ -528,6 +532,7 @@ Helpful information about our streaming model:
         ```
     </Note>
     </Tab>
+
 </Tabs>
 
 ## Open WebSocket
@@ -577,6 +582,7 @@ Helpful information about our streaming model:
         audio_thread.start()
     ```
     </Tab>
+
 </Tabs>
 
 ## Receive Messsages from WebSocket
@@ -632,6 +638,7 @@ Helpful information about our streaming model:
             print(f"Error handling message: {e}")
     ```
     </Tab>
+
 </Tabs>
 
 Helpful information about AssemblyAI’s message payloads:
@@ -643,6 +650,7 @@ Helpful information about AssemblyAI’s message payloads:
 - **Formatted vs. Raw Finals** – Each `"Turn"` object includes a boolean `turn_is_formatted`. When you set `format_turns` to `True`, punctuation/casing appears in the Final Transcript, so you can toggle display styles on the fly.
 
 ## Close the WebSocket
+
 <Tabs groupId="language">
     <Tab language="gladia" title="Gladia">
         ```python
@@ -675,6 +683,7 @@ Helpful information about AssemblyAI’s message payloads:
             audio_thread.join(timeout=1.0)
         ```
     </Tab>
+
 </Tabs>
 
 Helpful information about AssemblyAI’s WebSocket Closure:
@@ -682,6 +691,7 @@ Helpful information about AssemblyAI’s WebSocket Closure:
 - **Connection Diagnostics** - If the socket closes unexpectedly, AssemblyAI supplies both a status code and a reason message (close_status_code, close_msg), so you know immediately whether the server timed out, refused authentication, or encountered a different error.
 
 ## Session Shutdown
+
 <Tabs groupId="language">
     <Tab language="gladia" title="Gladia">
         ```python
@@ -741,6 +751,7 @@ Helpful information about AssemblyAI’s WebSocket Closure:
         print("Cleanup complete. Exiting.")
     ```
     </Tab>
+
 </Tabs>
 
 Helpful information to know about AssemblyAI’s shutdown:
@@ -752,4 +763,5 @@ Helpful information to know about AssemblyAI’s shutdown:
 ## Resources
 
 For additional information about using AssemblyAI's Streaming Speech-To-Text API you can also refer to:
-- [Streaming Guide](getting-started/transcribe-streaming-audio)
+
+- [Streaming Guide](/docs/getting-started/transcribe-streaming-audio)
