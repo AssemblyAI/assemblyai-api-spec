@@ -10,10 +10,11 @@ Key principles for effective prompts:
 What helps:
 - Authoritative language (Massive impact): Use "Mandatory:", "Non-negotiable:", "Required:"
 - 3-6 instructions maximum (Massive impact): Prevents conflicting instructions
-- Desired output examples (High impact): e.g., "Use proper medical medication names (omeprazole)"
+- Desired output format (High impact): e.g., "Pharmaceutical accuracy required across all medications and drug names"
 - Explicit disfluency examples (High impact): e.g., "(um, uh, like, you know)"
 
 What hurts:
+- Explicit examples of errors from the file (Potential Hallucinations): e.g., "Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)"
 - Negative language (Severe impact): "Don't", "never", "avoid" confuse the model
 - Conflicting instructions (Severe impact): e.g., "Include disfluencies" + "clean grammar"
 - Short, vague instructions (High impact): Lack specificity for model to learn from
