@@ -121,91 +121,14 @@ if (transcript.status === "completed") {
 
 ### Step 4: Track usage per customer
 
-Combine the customer ID from your webhook URL with the audio duration from the transcript:
+In your webhook handler, combine the customer ID from your webhook URL query parameters with the audio duration from the transcript to record usage:
 
-<Tabs>
-<Tab language="python" title="Python (Flask)">
+1. Extract the `customer_id` from the webhook URL query parameters
+2. Extract the `transcript_id` from the webhook payload
+3. If the status is `completed`, fetch the transcript using the SDK to get the `audio_duration`
+4. Store the usage record in your database with the customer ID, transcript ID, audio duration, and timestamp
 
-```python
-from flask import Flask, request, jsonify
-import assemblyai as aai
-
-app = Flask(__name__)
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-@app.route("/webhook", methods=["POST"])
-def handle_webhook():
-    # Extract customer_id from query parameters
-    customer_id = request.args.get("customer_id")
-
-    # Extract transcript_id from webhook payload
-    data = request.get_json()
-    transcript_id = data["transcript_id"]
-
-    if data["status"] == "completed":
-        # Fetch transcript details
-        transcript = aai.Transcript.get_by_id(transcript_id)
-        audio_duration = transcript.audio_duration
-
-        # Log usage for this customer
-        log_customer_usage(customer_id, audio_duration, transcript_id)
-
-    return jsonify({"status": "ok"}), 200
-
-def log_customer_usage(customer_id, audio_duration, transcript_id):
-    # Implement your billing logic here
-    print(f"Customer {customer_id}: {audio_duration}s for transcript {transcript_id}")
-
-if __name__ == "__main__":
-    app.run(port=5000)
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript (Express)">
-
-```javascript
-const express = require("express");
-const { AssemblyAI } = require("assemblyai");
-
-const app = express();
-app.use(express.json());
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-app.post("/webhook", async (req, res) => {
-  // Extract customer_id from query parameters
-  const customerId = req.query.customer_id;
-
-  // Extract transcript_id from webhook payload
-  const { transcript_id, status } = req.body;
-
-  if (status === "completed") {
-    // Fetch transcript details
-    const transcript = await client.transcripts.get(transcript_id);
-    const audioDuration = transcript.audio_duration;
-
-    // Log usage for this customer
-    logCustomerUsage(customerId, audioDuration, transcript_id);
-  }
-
-  res.json({ status: "ok" });
-});
-
-function logCustomerUsage(customerId, audioDuration, transcriptId) {
-  // Implement your billing logic here
-  console.log(`Customer ${customerId}: ${audioDuration}s for transcript ${transcriptId}`);
-}
-
-app.listen(5000, () => {
-  console.log("Webhook server running on port 5000");
-});
-```
-
-</Tab>
-</Tabs>
+This allows you to aggregate usage per customer for billing purposes.
 
 ### Key fields for usage tracking
 
