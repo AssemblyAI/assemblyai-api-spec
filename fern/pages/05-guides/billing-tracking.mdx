@@ -4,7 +4,13 @@ hide-nav-links: true
 description: "Learn how to track individual customer usage within your product using AssemblyAI's webhook system and metadata."
 ---
 
-This guide explains how to track individual customer usage within your product for billing purposes. There are two separate methods depending on which transcription approach you use:
+This guide explains how to track individual customer usage within your product for billing purposes.
+
+<Note>
+This is the recommended approach for tracking customer usage. Creating separate API keys for each of your customers is not an optimal strategy for usage tracking, as it adds unnecessary complexity and makes it harder to manage your account.
+</Note>
+
+There are two separate methods depending on which transcription approach you use:
 
 1. **Async transcription**: Use webhooks with custom query parameters to associate transcriptions with customers, then retrieve the `audio_duration` from the transcript response.
 
@@ -40,6 +46,28 @@ aai.Transcriber().submit("https://example.com/audio.mp3", config)
 ```
 
 </Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+# Add customer_id as a query parameter to your webhook URL
+webhook_url = "https://your-domain.com/webhook?customer_id=customer_123"
+
+data = {
+    "audio_url": "https://example.com/audio.mp3",
+    "webhook_url": webhook_url
+}
+
+# Submit without waiting for completion
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+```
+
+</Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
@@ -57,6 +85,28 @@ const transcript = await client.transcripts.submit({
   speech_model: "best",
   webhook_url: webhookUrl,
 });
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = { authorization: "<YOUR_API_KEY>" };
+
+// Add customer_id as a query parameter to your webhook URL
+const webhookUrl = "https://your-domain.com/webhook?customer_id=customer_123";
+
+const data = {
+  audio_url: "https://example.com/audio.mp3",
+  webhook_url: webhookUrl,
+};
+
+// Submit without waiting for completion
+const response = await axios.post(`${baseUrl}/v2/transcript`, data, { headers });
+const transcriptId = response.data.id;
 ```
 
 </Tab>
@@ -104,6 +154,24 @@ if transcript.status == aai.TranscriptStatus.completed:
 ```
 
 </Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+# Get transcript using the ID from webhook
+response = requests.get(base_url + "/v2/transcript/<TRANSCRIPT_ID>", headers=headers)
+transcript = response.json()
+
+if transcript["status"] == "completed":
+    audio_duration = transcript["audio_duration"]  # Duration in seconds
+    # Use audio_duration for billing/tracking
+```
+
+</Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
@@ -115,6 +183,25 @@ const client = new AssemblyAI({
 
 // Get transcript using the ID from webhook
 const transcript = await client.transcripts.get("<TRANSCRIPT_ID>");
+
+if (transcript.status === "completed") {
+  const audioDuration = transcript.audio_duration; // Duration in seconds
+  // Use audioDuration for billing/tracking
+}
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = { authorization: "<YOUR_API_KEY>" };
+
+// Get transcript using the ID from webhook
+const response = await axios.get(`${baseUrl}/v2/transcript/<TRANSCRIPT_ID>`, { headers });
+const transcript = response.data;
 
 if (transcript.status === "completed") {
   const audioDuration = transcript.audio_duration; // Duration in seconds
