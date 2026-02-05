@@ -4,7 +4,13 @@ hide-nav-links: true
 description: "Learn how to track individual customer usage within your product using AssemblyAI's webhook system and metadata."
 ---
 
-This guide explains how to track individual customer usage within your product using AssemblyAI's webhook system and metadata for async transcription, and session events for streaming transcription.
+This guide explains how to track individual customer usage within your product for billing purposes. There are two separate methods depending on which transcription approach you use:
+
+1. **Async transcription**: Use webhooks with custom query parameters to associate transcriptions with customers, then retrieve the `audio_duration` from the transcript response.
+
+2. **Streaming transcription**: Manage customer IDs in your application state and capture the `session_duration_seconds` from the WebSocket Termination event.
+
+This guide covers both methods in detail.
 
 ## Async transcription usage tracking
 
@@ -142,7 +148,7 @@ From the transcript response, you'll have access to:
 
 ## Streaming transcription usage tracking
 
-Unlike async transcription which uses webhooks, streaming transcription requires a different approach. You'll track usage by managing customer IDs in your own application state/session management, capturing the `audio_duration_seconds` from the Termination event, and associating the duration with the customer ID for billing/tracking.
+Unlike async transcription which uses webhooks, streaming transcription requires a different approach. You'll track usage by managing customer IDs in your own application state/session management, capturing the `session_duration_seconds` from the Termination event, and associating the duration with the customer ID for billing/tracking. AssemblyAI bills streaming based on session duration, so this is the metric you should track.
 
 ### Step 1: Set up your WebSocket connection
 
@@ -207,34 +213,13 @@ def on_message(ws, message):
 
 ### Step 3: Log customer usage
 
-Create a function to store the session duration for billing/tracking. You'll need to implement your own session management to associate the WebSocket connection with a customer ID.
+When you receive the Termination event, store the session duration for billing/tracking:
 
-```python
-def log_customer_usage(customer_id, session_duration_seconds):
-    """
-    Log streaming usage for a customer.
+1. Retrieve the customer ID from your session management system (authentication tokens, session cookies, etc.)
+2. Extract the `session_duration_seconds` from the Termination event
+3. Store the usage record in your database with the customer ID, session duration, and timestamp
 
-    Args:
-        customer_id: Your customer's unique identifier (from your session)
-        session_duration_seconds: Duration of the session (from Termination event)
-    """
-    usage_record = {
-        "customer_id": customer_id,
-        "session_duration_seconds": session_duration_seconds,
-        "session_duration_minutes": session_duration_seconds / 60.0,
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "streaming_transcription"
-    }
-
-    # Store in your database
-    # db.usage_logs.insert_one(usage_record)
-
-    # Or write to a log file
-    with open("streaming_usage.jsonl", "a") as f:
-        f.write(f"{json.dumps(usage_record)}\n")
-
-    print(f"Logged {session_duration_seconds}s of streaming for customer {customer_id}")
-```
+Since AssemblyAI bills streaming based on `session_duration_seconds`, this is the metric you should track for accurate billing.
 
 ### Session duration vs audio duration
 
