@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Migrate the AssemblyAI documentation site from Fern's hosted docs platform to a self-hosted Astro site using Starlight (Astro's official docs theme) for content pages and Scalar for the interactive API reference. Fern continues to be used solely for SDK generation.
+Migrate the AssemblyAI documentation site from Fern to a self-hosted Astro site on Vercel, using Starlight (Astro's official docs theme) for content pages and Scalar for the interactive API reference. Fern is removed entirely — the Fern SDKs are deprecated, so there are no dependencies to maintain.
 
 ---
 
@@ -12,7 +12,7 @@ Migrate the AssemblyAI documentation site from Fern's hosted docs platform to a 
 |---------|-------------|
 | Documentation site | Fern Docs (`fern docs dev`, `fern generate --docs`) |
 | API reference | Fern (auto-generated from OpenAPI specs) |
-| SDK generation (Ruby, C#, Java) | Fern generators (`generators.yml`) |
+| SDK generation (Ruby, C#, Java) | Fern generators — **deprecated** |
 | Content format | 402 MDX pages in `fern/pages/` |
 | Custom components | React TSX (AudioPlayer, LanguageTable, PromptGenerator, PromptLibrary) |
 | Styling | Custom CSS + custom fonts (ABCMonumentGrotesk, JetBrainsMono) |
@@ -24,12 +24,13 @@ Migrate the AssemblyAI documentation site from Fern's hosted docs platform to a 
 
 | Concern | New Tool |
 |---------|----------|
-| Documentation site | Astro + Starlight |
-| API reference | Scalar (embedded in Astro) |
-| SDK generation | Fern (unchanged — `generators.yml` stays) |
+| Documentation site | **Astro + Starlight** |
+| API reference | **Scalar** (embedded in Astro) |
+| SDK generation | N/A — Fern SDKs deprecated |
 | Content format | Same MDX pages (with minor adaptations) |
 | Custom components | Astro components (port from React TSX) |
-| Hosting | Self-hosted (Vercel, Netlify, Cloudflare Pages, or similar) |
+| JS integrations | **RudderStack + Pylon only** (Kapa and voice agent dropped) |
+| Hosting | **Vercel** |
 
 ---
 
@@ -47,7 +48,7 @@ Migrate the AssemblyAI documentation site from Fern's hosted docs platform to a 
 ### 0.2 — Install and configure Scalar
 
 - Install `@scalar/api-reference` package
-- Create an Astro page at `src/pages/api-reference/[...slug].astro` that renders the Scalar API reference UI
+- Create an Astro page at `src/pages/api-reference/index.astro` that renders the Scalar API reference UI
 - Point Scalar at the existing OpenAPI specs:
   - `openapi.yml` (main API)
   - `usm-streaming.yml` (Universal Streaming)
@@ -123,7 +124,7 @@ Fern uses specific MDX components that need Starlight equivalents:
 | `<Warning>` | `<Aside type="caution">` |
 | `<Tip>` | `<Aside type="tip">` |
 | `<Tab>` / `<Tabs>` | `<Tabs>` / `<TabItem>` (Starlight built-in) |
-| `<CodeBlock>` | Starlight's built-in code fences with `title` attribute |
+| `<CodeBlock>` / `<CodeBlocks>` | Starlight's built-in code fences with `title` attribute |
 | `<Accordion>` / `<AccordionGroup>` | `<Details>` or custom Astro component |
 | `<Card>` / `<CardGroup>` | Starlight `<Card>` / `<CardGrid>` |
 | `<Frame>` | Standard `<img>` or custom wrapper |
@@ -131,7 +132,7 @@ Fern uses specific MDX components that need Starlight equivalents:
 **Migration approach:**
 1. Write a codemod script (`scripts/transform-mdx.ts`) that does find-and-replace across all MDX files
 2. Handle edge cases manually where the transformation isn't 1:1
-3. Import Starlight components globally via `docs/src/content/config.ts` or per-file imports
+3. Import Starlight components at the top of each MDX file that uses them
 
 ### 1.3 — Port custom React components to Astro
 
@@ -171,10 +172,6 @@ starlight({
         { label: 'Transcribe a pre-recorded audio file', slug: 'getting-started/transcribe-an-audio-file' },
         // ...
       ],
-    },
-    {
-      label: 'Pre-recorded Speech-to-text',
-      items: [/* ... */],
     },
     // ... mirror the full docs.yml structure
   ],
@@ -231,13 +228,14 @@ Translate the Fern color config into Starlight CSS custom properties:
 
 ### 2.4 — Logo and favicon
 
-- Copy `logo-light.svg`, `AssemblyAI_White.svg`, `favicon.png` to `docs/public/`
+- Copy `logo-light.svg`, `AssemblyAI_White.svg`, `favicon.png` to `docs/src/assets/` and `docs/public/`
 - Configure in `astro.config.mjs`:
   ```js
   starlight({
     logo: {
-      light: './public/logo-light.svg',
-      dark: './public/AssemblyAI_White.svg',
+      light: './src/assets/logo-light.svg',
+      dark: './src/assets/AssemblyAI_White.svg',
+      replacesTitle: true,
     },
     favicon: '/favicon.png',
   })
@@ -247,66 +245,65 @@ Translate the Fern color config into Starlight CSS custom properties:
 
 ## Phase 3: JavaScript Integrations
 
-### 3.1 — RudderStack analytics (`rudderstack.js`)
+Only RudderStack analytics and Pylon chat widget are carried forward. Kapa AI search and the voice agent widget are dropped.
 
-- Move to Astro's `<head>` via a layout component or Starlight's `head` config:
+### 3.1 — RudderStack analytics
+
+- Inject via a custom Starlight `Head` component override:
   ```js
   starlight({
-    head: [
-      { tag: 'script', attrs: { src: '/scripts/rudderstack.js' } },
-    ],
+    components: {
+      Head: './src/components/Head.astro',
+    },
   })
   ```
+- The custom `Head.astro` extends Starlight's default Head and appends the RudderStack inline script
 
-### 3.2 — Kapa AI search (`kapa.js`)
+### 3.2 — Pylon chat widget
 
-- Integrate as a script in the head config
-- Consider replacing Starlight's built-in Pagefind search with Kapa, or running both
+- Also injected via the custom `Head.astro` component
+- Loads the Pylon widget script asynchronously on page load
+- Personalizes chat with user credentials from the dashboard API
 
-### 3.3 — Pylon chat widget (`pylon.js`)
+### 3.3 — Redirect scripts
 
-- Load as an afterInteractive script in a layout component
+- `pre-recorded-audio-redirect.js` and `universal-3-pro-redirect.js` — convert to Vercel redirect rules in `vercel.json`
 
-### 3.4 — Voice agent (`voice-agent.js`)
+### 3.4 — Dropped integrations
 
-- Load as an afterInteractive script
-- The WebSocket integration should work as-is since it's self-contained DOM manipulation
-
-### 3.5 — Redirect scripts
-
-- `pre-recorded-audio-redirect.js` and `universal-3-pro-redirect.js` — convert to Astro redirect config or Vercel/Netlify redirect rules
-
-### 3.6 — Other scripts
-
-- `scroll-highlighted-lines.js` — evaluate if Starlight's built-in code highlighting makes this unnecessary
-- `inject-legal-footer.js` — port to an Astro layout component
+The following are **not migrated**:
+- `kapa.js` — Kapa AI search widget (Starlight has built-in Pagefind search)
+- `voice-agent.js` — Voice agent button
+- `scroll-highlighted-lines.js` — Starlight has built-in code highlighting
+- `inject-legal-footer.js` — Port to an Astro layout component if still needed
 
 ---
 
 ## Phase 4: Redirects
 
-### 4.1 — Migrate 100+ redirects from `docs.yml`
+### 4.1 — Migrate 100+ redirects to Vercel
 
-Convert all redirects from the Fern `docs.yml` `redirects:` section into the hosting platform's redirect format:
+Convert all redirects from the Fern `docs.yml` `redirects:` section into `vercel.json`:
 
-**Option A — Astro redirects** (in `astro.config.mjs`):
-```js
-export default defineConfig({
-  redirects: {
-    '/docs/pre-recorded-audio/supported-languages': '/docs/pre-recorded-audio/language-detection#supported-languages',
-    // ... all 100+ redirects
-  },
-})
+```json
+{
+  "redirects": [
+    {
+      "source": "/docs/lemur/:path*",
+      "destination": "/docs/llm-gateway/:path*",
+      "permanent": true
+    }
+  ]
+}
 ```
 
-**Option B — Hosting platform redirects** (Vercel `vercel.json`, Netlify `_redirects`):
-More performant since they're handled at the edge.
-
-**Recommended:** Use hosting platform redirects for production, with Astro redirects as fallback for local dev.
+Vercel handles redirects at the edge, so they're fast and don't require the Astro runtime.
 
 ### 4.2 — Parameterized redirects
 
-Some Fern redirects use wildcard patterns (`/docs/lemur/:slug` → `/docs/llm-gateway/:slug`). Ensure the hosting platform supports these.
+Vercel supports wildcard redirects via `:path*` syntax. Convert Fern's `:slug` patterns:
+- `/docs/lemur/:slug` → `/docs/llm-gateway/:slug` becomes `/docs/lemur/:path*` → `/docs/llm-gateway/:path*`
+- `/docs/audio-intelligence/:slug` → `/docs/:slug` becomes `/docs/audio-intelligence/:path*` → `/docs/speech-understanding/:path*`
 
 ---
 
@@ -314,20 +311,20 @@ Some Fern redirects use wildcard patterns (`/docs/lemur/:slug` → `/docs/llm-ga
 
 ### 5.1 — Scalar integration approach
 
-Create dedicated Astro pages for the API reference that embed Scalar:
+Create a dedicated Astro page at `src/pages/api-reference/index.astro` that renders the Scalar API reference:
 
 ```astro
----
-// docs/src/pages/api-reference/index.astro
-import Layout from '../../layouts/DocsLayout.astro';
----
-<Layout title="API Reference">
-  <div id="api-reference" data-url="/openapi.yml"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
-</Layout>
+<div id="api-reference"></div>
+<script
+  id="api-reference-script"
+  type="application/json"
+  data-url="/docs/openapi.yml"
+  data-configuration={JSON.stringify({ spec: { url: '/docs/openapi.yml' } })}
+></script>
+<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 ```
 
-Or use the `@scalar/astro` integration if available for deeper integration.
+This page has its own navigation bar matching the docs site header, linking back to the Starlight docs.
 
 ### 5.2 — Multi-spec handling
 
@@ -344,20 +341,15 @@ The current API reference covers multiple specs:
 
 ### 5.3 — Spec overrides
 
-Currently, `fern/openapi-overrides.yml` and `fern/usm-streaming-overrides.yml` customize specs for Fern. These overrides primarily:
-- Group endpoints (transcript, lemur, realtime)
-- Add SDK-specific examples
-- Modify schema properties for SDK generation
-
-For Scalar, the overrides related to grouping/display need to be applied differently:
-- Use OpenAPI `tags` and `x-tagGroups` for endpoint organization
+The Fern-specific overrides (`openapi-overrides.yml`, `usm-streaming-overrides.yml`) are no longer needed. Instead:
+- Use OpenAPI `tags` and `x-tagGroups` directly in the spec for endpoint organization
 - Move relevant examples directly into the OpenAPI spec
-- SDK-specific overrides stay in `generators.yml` for Fern SDK generation
+- SDK-specific overrides are no longer relevant (Fern SDKs deprecated)
 
 ### 5.4 — API reference overview page
 
 The current API reference includes a custom overview page (`pages/overview.mdx`). In Scalar:
-- Use Scalar's description/introduction section
+- Use Scalar's description/introduction section (from the OpenAPI `info.description`)
 - Or place the overview as a regular Astro page above the Scalar widget
 
 ### 5.5 — Scalar theming
@@ -365,17 +357,25 @@ The current API reference includes a custom overview page (`pages/overview.mdx`)
 Configure Scalar to match AssemblyAI branding:
 ```js
 {
-  theme: 'none', // start from scratch
-  customCss: `/* brand overrides */`,
-  darkMode: true,
-  layout: 'modern',
-  showSidebar: true,
+  theme: 'none',
+  customCss: `
+    :root {
+      --scalar-color-1: #2545d3;
+      --scalar-color-accent: #2545d3;
+      --scalar-font: "MonumentGrotesk", sans-serif;
+    }
+    .dark-mode {
+      --scalar-color-1: #df9844;
+      --scalar-color-accent: #df9844;
+      --scalar-background-1: #09060f;
+    }
+  `,
 }
 ```
 
 ---
 
-## Phase 6: CI/CD & Deployment
+## Phase 6: CI/CD & Deployment on Vercel
 
 ### 6.1 — Update build scripts
 
@@ -388,43 +388,62 @@ Update `package.json`:
     "preview": "astro preview --root docs",
     "lint": "spectral lint {openapi,asyncapi}.yml --ruleset .spectral.yml",
     "format": "prettier . --write --no-error-on-unmatched-pattern",
-    "generate:fern-definition": "fern write-definition && pnpm run format",
     "to-json": "pnpm js-yaml openapi.yml > openapi.json && pnpm js-yaml asyncapi.yml > asyncapi.json",
-    "precommit": "pnpm lint && pnpm generate:fern-definition && pnpm to-json && pnpm format"
+    "precommit": "pnpm lint && pnpm to-json && pnpm format"
   }
 }
 ```
 
-### 6.2 — Update GitHub workflows
+### 6.2 — Vercel project setup
+
+1. Connect the GitHub repo to Vercel
+2. Set root directory to `docs/`
+3. Framework preset: Astro
+4. Build command: `pnpm build`
+5. Output directory: `dist`
+6. Configure `vercel.json` with redirects and cache headers
+
+### 6.3 — Update GitHub workflows
 
 **Replace `publish-docs.yml`:**
-```yaml
-- name: Build docs
-  run: pnpm build
-- name: Deploy to [hosting platform]
-  # Vercel / Netlify / Cloudflare Pages deployment step
-```
+- Vercel auto-deploys on push to `main` — no custom workflow needed
+- Alternatively, use `vercel --prod` in a workflow if more control is needed
 
 **Replace `preview-docs.yml`:**
-- Use hosting platform's PR preview feature (Vercel preview deployments, Netlify deploy previews)
+- Vercel automatically creates preview deployments for every PR
+- PR preview URLs are posted as comments by the Vercel GitHub integration
 
-**Keep unchanged:**
-- `ci.yml` — still validates OpenAPI specs with Spectral and Fern
-- SDK generation workflows (`ruby-sdk.yml`, `csharp-sdk.yml`, `java-sdk.yml`, `postman.yml`)
+**Update `ci.yml`:**
+- Remove `fern check` from the lint step (Fern is gone)
+- Keep Spectral linting for OpenAPI specs
+- Add `pnpm build` step to verify the Astro site builds cleanly
 
-### 6.3 — Fern cleanup
+**Remove SDK workflows:**
+- Delete `ruby-sdk.yml`, `csharp-sdk.yml`, `java-sdk.yml`, `postman.yml` (Fern SDKs deprecated)
 
-After migration:
-- **Keep:** `fern/fern.config.json`, `fern/generators.yml`, `fern/.definition/`, override files — needed for SDK generation
-- **Remove:** `fern/docs.yml` — no longer needed for docs rendering
-- **Archive:** `fern/pages/`, `fern/assets/` — content has moved to `docs/`
-- **Remove:** `fern/docs.yml`-specific JS files (or move to `docs/public/scripts/`)
+### 6.4 — Remove Fern entirely
 
-### 6.4 — Custom domain
+After migration is verified and live:
+1. Delete the entire `fern/` directory:
+   - `fern/fern.config.json`
+   - `fern/generators.yml`
+   - `fern/.definition/`
+   - `fern/docs.yml`
+   - `fern/pages/`
+   - `fern/assets/`
+   - `fern/*.js` (all integration scripts)
+   - `fern/*-overrides.yml`
+2. Remove `fern-api` from `package.json` devDependencies
+3. Remove `fern check` from CI workflow
+4. Remove `generate:fern-definition` script
+5. Clean up `.spectral.yml` if any Fern-specific rules exist
 
-- Point `www.assemblyai.com/docs` to the new hosting platform instead of Fern
-- Ensure DNS/proxy rules are updated
-- Set up SSL certificates if needed
+### 6.5 — Custom domain
+
+- Point `www.assemblyai.com/docs` to Vercel instead of Fern
+- Add the domain in Vercel project settings
+- Vercel handles SSL automatically
+- Verify DNS propagation and test all redirects
 
 ---
 
@@ -441,7 +460,7 @@ After migration:
 
 - Verify canonical URLs are set correctly (`assemblyai.com`)
 - Check meta tags (title, description, og:image)
-- Verify sitemap generation
+- Verify sitemap generation (`sitemap-index.xml` is auto-generated by Astro)
 - Test redirect chains — no 404s for old URLs
 
 ### 7.3 — API reference validation
@@ -462,6 +481,7 @@ After migration:
 - Run Lighthouse on key pages
 - Compare load times with Fern-hosted version
 - Verify assets are properly cached and compressed
+- Verify Vercel edge caching is working (font files should be immutable-cached)
 
 ---
 
@@ -469,41 +489,27 @@ After migration:
 
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
-| SEO ranking drop from URL changes | High | Comprehensive redirects, preserve all URLs where possible |
-| Broken internal links | Medium | Automated link checking in CI |
-| Missing content during migration | Medium | Migration script + diff comparison |
-| Scalar doesn't support AsyncAPI/WebSocket docs | Medium | Use OpenAPI representation of streaming endpoints, or add custom docs |
+| SEO ranking drop from URL changes | High | Comprehensive redirects in `vercel.json`, preserve all URLs where possible |
+| Broken internal links | Medium | Automated link checking in CI, crawl comparison |
+| Missing content during migration | Medium | Migration script + diff comparison against `docs.yml` |
+| Scalar doesn't support AsyncAPI/WebSocket docs | Medium | Use OpenAPI representation of streaming endpoints, or add custom docs page |
 | Custom component breakage | Medium | Test PromptGenerator and PromptLibrary thoroughly — they have external dependencies (Supabase, Claude API) |
-| Fern SDK generation breaks | Low | SDK generation is isolated in `generators.yml` — no docs dependency |
+| Dropping Kapa search degrades search UX | Low | Starlight's built-in Pagefind provides full-text search; evaluate and add Algolia/Kapa later if needed |
 | Custom font licensing | Low | Fonts are already self-hosted; just move files |
 
 ---
 
 ## Migration Order (Recommended)
 
-1. **Phase 0** — Set up Astro + Scalar proof of concept, validate API reference
+1. **Phase 0** — Set up Astro + Scalar proof of concept, validate API reference (**done** — see `docs/` directory)
 2. **Phase 2** — Get styling/branding right early for visual feedback
-3. **Phase 1** — Migrate content (largest effort)
-4. **Phase 3** — Port JS integrations
-5. **Phase 4** — Configure redirects
+3. **Phase 1** — Migrate content (largest effort — 402 pages)
+4. **Phase 3** — Port RudderStack + Pylon integrations
+5. **Phase 4** — Configure redirects in `vercel.json`
 6. **Phase 5** — Finalize Scalar API reference
-7. **Phase 6** — Set up CI/CD and deployment
+7. **Phase 6** — Connect to Vercel, update CI/CD, remove Fern
 8. **Phase 7** — Testing and QA
-9. **Go-live** — DNS cutover from Fern to new hosting
-
----
-
-## What Stays with Fern
-
-After migration, Fern is only used for:
-- `fern/generators.yml` — SDK generation (Ruby, C#, Java, Postman)
-- `fern/fern.config.json` — Fern project config
-- `fern/.definition/` — Fern type definitions (used by SDK generators)
-- `fern/openapi-overrides.yml` — SDK-specific spec overrides
-- `fern/usm-streaming-overrides.yml` — SDK-specific streaming overrides
-- GitHub workflows: `ruby-sdk.yml`, `csharp-sdk.yml`, `java-sdk.yml`, `postman.yml`
-
-Everything else under `fern/` (docs.yml, pages/, assets/, JS files) can be removed after migration is verified.
+9. **Go-live** — DNS cutover from Fern to Vercel
 
 ---
 
@@ -511,11 +517,11 @@ Everything else under `fern/` (docs.yml, pages/, assets/, JS files) can be remov
 
 | Phase | Effort |
 |-------|--------|
-| Phase 0: Setup & PoC | Small |
+| Phase 0: Setup & PoC | Small — **done** |
 | Phase 1: Content migration (402 pages + components) | Large |
 | Phase 2: Styling & branding | Medium |
-| Phase 3: JS integrations | Small |
-| Phase 4: Redirects (100+ rules) | Small |
+| Phase 3: JS integrations (RudderStack + Pylon only) | Small |
+| Phase 4: Redirects (100+ rules in vercel.json) | Small |
 | Phase 5: Scalar API reference | Medium |
-| Phase 6: CI/CD | Small |
+| Phase 6: CI/CD + Fern removal | Small |
 | Phase 7: Testing & QA | Medium |

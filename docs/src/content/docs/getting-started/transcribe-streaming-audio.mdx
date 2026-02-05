@@ -1,0 +1,118 @@
+---
+title: Transcribe streaming audio
+description: Learn how to transcribe streaming audio from a microphone.
+---
+
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+## Overview
+
+By the end of this tutorial, you'll be able to transcribe audio from your microphone.
+
+<Aside type="note">
+  By default, Universal-Streaming is set to transcribe English audio. If you'd
+  like to enable multilingual streaming (support for English, Spanish, French,
+  German, Italian, and Portuguese), enable [multilingual
+  transcription](/docs/universal-streaming/multilingual) instead.
+</Aside>
+
+<Aside type="note">
+  Streaming is now available in EU-West via `streaming.eu.assemblyai.com`. To
+  use the EU streaming endpoint, replace `streaming.assemblyai.com` with
+  `streaming.eu.assemblyai.com` in your connection configuration.
+</Aside>
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Python](https://www.python.org/) or [Node](https://nodejs.org).
+
+Here's the full sample code of what you'll build in this tutorial:
+
+<Tabs>
+<TabItem label="Python SDK">
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "YOUR_API_KEY"
+
+def on_open(session_opened):
+    print("Session opened:", session_opened.session_id)
+
+def on_data(transcript):
+    if not transcript.text:
+        return
+    if transcript.message_type == aai.RealtimeTranscriptType.FinalTranscript:
+        print(transcript.text, end="\r\n")
+    else:
+        print(transcript.text, end="\r")
+
+def on_error(error):
+    print("Error:", error)
+
+def on_close():
+    print("Session closed")
+
+transcriber = aai.RealtimeTranscriber(
+    sample_rate=16_000,
+    on_open=on_open,
+    on_data=on_data,
+    on_error=on_error,
+    on_close=on_close,
+)
+
+transcriber.connect()
+
+# Stream audio from microphone...
+
+transcriber.close()
+```
+
+</TabItem>
+<TabItem label="JavaScript SDK">
+
+```javascript
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({ apiKey: "YOUR_API_KEY" });
+
+const transcriber = client.realtime.transcriber({
+  sampleRate: 16_000,
+});
+
+transcriber.on("open", ({ sessionId }) => {
+  console.log("Session opened:", sessionId);
+});
+
+transcriber.on("transcript", (transcript) => {
+  if (!transcript.text) return;
+  if (transcript.message_type === "FinalTranscript") {
+    console.log(transcript.text);
+  }
+});
+
+transcriber.on("error", (error) => {
+  console.error("Error:", error);
+});
+
+transcriber.on("close", () => {
+  console.log("Session closed");
+});
+
+await transcriber.connect();
+
+// Stream audio from microphone...
+
+await transcriber.close();
+```
+
+</TabItem>
+</Tabs>
+
+## Next steps
+
+- Learn about [turn detection](/docs/universal-streaming/turn-detection) for voice agents
+- Explore [voice agent integrations](/docs/universal-streaming/voice-agents) (LiveKit, Pipecat, Vapi)
+- View the [Streaming API reference](/docs/api-reference)
