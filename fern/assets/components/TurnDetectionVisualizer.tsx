@@ -268,7 +268,7 @@ export function TurnDetectionVisualizer() {
           {eotMarkers.map((m, i) => {
             const x = toX(m.time);
             const color = m.type === "semantic" ? "#22c55e" : "#f59e0b";
-            const label = m.type === "semantic" ? "semantic" : "acoustic";
+            const label = m.type === "semantic" ? "min_silence" : "max_silence";
             return (
               <div key={"eot-" + i}>
                 <div
@@ -296,8 +296,9 @@ export function TurnDetectionVisualizer() {
                     lineHeight: 1.3,
                   }}
                 >
-                  {"EoT "}
-                  <span style={{ fontSize: "9px", fontWeight: 400, color: "var(--grayscale-9, #9ca3af)" }}>{label}</span>
+                  {"EoT"}
+                  <br />
+                  <span style={{ fontSize: "8px", fontWeight: 400, color: "var(--grayscale-9, #9ca3af)" }}>{label}</span>
                 </div>
               </div>
             );
@@ -331,11 +332,11 @@ export function TurnDetectionVisualizer() {
       <div style={{ display: "flex", gap: "16px", marginBottom: "12px", fontSize: "12px", color: "var(--grayscale-11, #6b7280)", flexWrap: "wrap" as const }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-          Semantic EoT
+          EoT (min_silence_when_confident)
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} />
-          Acoustic EoT
+          EoT (max_turn_silence)
         </span>
         {turnsNotEnded.size > 0 && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontStyle: "italic" as const }}>
@@ -364,9 +365,9 @@ export function TurnDetectionVisualizer() {
       </div>
 
       <p style={{ margin: "0", fontSize: "12px", color: "var(--grayscale-10, #6b7280)", lineHeight: 1.5 }}>
-        <strong style={{ color: "#22c55e" }}>Semantic</strong>{" = confidence \u2265 threshold + min silence elapsed. "}
-        <strong style={{ color: "#f59e0b" }}>Acoustic</strong>{" = confidence < threshold + max silence elapsed. "}
-        When the silence period extends into the next speech segment, the turn is not ended.
+        When confidence {"\u2265"} threshold, EoT triggers after <code>min_end_of_turn_silence_when_confident</code>.{" "}
+        When confidence {"<"} threshold, EoT triggers after <code>max_turn_silence</code>.{" "}
+        If the silence period extends into the next speech segment, the turn continues.
       </p>
     </div>
   );
