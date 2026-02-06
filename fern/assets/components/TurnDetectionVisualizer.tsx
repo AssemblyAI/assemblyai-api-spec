@@ -56,7 +56,6 @@ function generateWaveformBars(start: number, end: number, seed: number): number[
 }
 
 export function TurnDetectionVisualizer() {
-  const [isOpen, setIsOpen] = React.useState(false);
   const [preset, setPreset] = React.useState<string>("balanced");
 
   const config = PRESETS[preset];
@@ -70,22 +69,7 @@ export function TurnDetectionVisualizer() {
     []
   );
 
-  if (!isOpen) {
-    return (
-      <p style={{ margin: "16px 0" }}>
-        <a
-          href="#turn-detection-visualizer"
-          onClick={(e) => { e.preventDefault(); setIsOpen(true); }}
-          style={{ color: "var(--accent-9, #4f46e5)", textDecoration: "underline", cursor: "pointer", fontWeight: 500 }}
-        >
-          Open the interactive turn detection visualizer
-        </a>
-        {" "}to see how parameters affect end-of-turn detection.
-      </p>
-    );
-  }
-
-  const toX = (t: number) => (t / DURATION) * 100;
+  const toX= (t: number) => (t / DURATION) * 100;
 
   const turnsNotEnded: Set<number> = new Set();
   for (let i = 0; i < SEGMENTS.length; i++) {
@@ -113,24 +97,10 @@ export function TurnDetectionVisualizer() {
         boxSizing: "border-box" as const,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+      <div style={{ marginBottom: "16px" }}>
         <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--grayscale-12, #111827)" }}>
           Turn Detection Visualizer
         </span>
-        <button
-          onClick={() => setIsOpen(false)}
-          style={{
-            background: "none",
-            border: "1px solid var(--grayscale-a4, #d1d5db)",
-            borderRadius: "6px",
-            padding: "4px 12px",
-            cursor: "pointer",
-            fontSize: "13px",
-            color: "var(--grayscale-11, #6b7280)",
-          }}
-        >
-          Close
-        </button>
       </div>
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" as const }}>
