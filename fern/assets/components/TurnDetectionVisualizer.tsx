@@ -56,7 +56,7 @@ function SliderParam(props: {
   return (
     <div style={{ display: "flex", flexDirection: "column" as const, gap: "4px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--grayscale-11, #6b7280)", fontFamily: "monospace" }}>{props.label}</span>
+        <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--grayscale-11, #6b7280)", fontFamily: "monospace", wordBreak: "break-all" as const, lineHeight: 1.3 }}>{props.label}</span>
         <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--grayscale-12, #111827)", marginLeft: "8px", whiteSpace: "nowrap" as const }}>{props.displayValue}</span>
       </div>
       <input
@@ -138,6 +138,9 @@ export function TurnDetectionVisualizer() {
         padding: "24px",
         backgroundColor: "var(--grayscale-2, #f9fafb)",
         margin: "16px 0",
+        overflow: "hidden",
+        maxWidth: "100%",
+        boxSizing: "border-box" as const,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
@@ -336,10 +339,10 @@ export function TurnDetectionVisualizer() {
         />
       </div>
 
-      <p style={{ margin: "16px 0 0 0", fontSize: "13px", color: "var(--grayscale-11, #6b7280)", lineHeight: 1.6 }}>
+      <p style={{ margin: "16px 0 0 0", fontSize: "13px", color: "var(--grayscale-11, #6b7280)", lineHeight: 1.6, wordBreak: "break-word" as const, overflowWrap: "break-word" as const }}>
         Drag the sliders to see how end-of-turn detection changes.{" "}
-        <strong style={{ color: "#22c55e" }}>Semantic</strong> EoT triggers when confidence {"\u2265"} threshold after <code>min_end_of_turn_silence_when_confident</code>.{" "}
-        <strong style={{ color: "#f59e0b" }}>Acoustic</strong> EoT triggers when confidence {"<"} threshold after <code>max_turn_silence</code>.
+        <strong style={{ color: "#22c55e" }}>Semantic</strong> EoT triggers when confidence {"\u2265"} threshold after <code style={{ fontSize: "12px", wordBreak: "break-all" as const }}>min_end_of_turn_silence_when_confident</code>.{" "}
+        <strong style={{ color: "#f59e0b" }}>Acoustic</strong> EoT triggers when confidence {"<"} threshold after <code style={{ fontSize: "12px" }}>max_turn_silence</code>.
       </p>
     </div>
   );
