@@ -9,18 +9,11 @@ const SEGMENTS = [
 
 const DURATION = 14;
 
-const PRESETS = {
-  aggressive: { confidence: 0.4, minSilence: 160, maxSilence: 400 },
-  balanced: { confidence: 0.4, minSilence: 400, maxSilence: 1280 },
-  conservative: { confidence: 0.7, minSilence: 800, maxSilence: 3600 },
+const PRESETS: Record<string, { confidence: number; minSilence: number; maxSilence: number; label: string }> = {
+  aggressive: { confidence: 0.4, minSilence: 160, maxSilence: 400, label: "Aggressive" },
+  balanced: { confidence: 0.4, minSilence: 400, maxSilence: 1280, label: "Balanced" },
+  conservative: { confidence: 0.7, minSilence: 800, maxSilence: 3600, label: "Conservative" },
 };
-
-function getActivePreset(c: number, min: number, max: number): string | null {
-  for (const [name, p] of Object.entries(PRESETS)) {
-    if (c === p.confidence && min === p.minSilence && max === p.maxSilence) return name;
-  }
-  return null;
-}
 
 interface EotResult {
   time: number;
@@ -32,58 +25,50 @@ function computeEot(conf: number, minMs: number, maxMs: number): EotResult[] {
   const results: EotResult[] = [];
   for (let i = 0; i < SEGMENTS.length; i++) {
     const seg = SEGMENTS[i];
+    const nextSeg = i < SEGMENTS.length - 1 ? SEGMENTS[i + 1] : null;
     if (seg.confidence >= conf) {
       const t = seg.end + minMs / 1000;
-      if (t <= DURATION) results.push({ time: t, type: "semantic", segIndex: i });
+      if (t <= DURATION && (!nextSeg || t < nextSeg.start)) {
+        results.push({ time: t, type: "semantic", segIndex: i });
+      }
     } else {
       const t = seg.end + maxMs / 1000;
-      if (t <= DURATION) results.push({ time: t, type: "acoustic", segIndex: i });
+      if (t <= DURATION && (!nextSeg || t < nextSeg.start)) {
+        results.push({ time: t, type: "acoustic", segIndex: i });
+      }
     }
   }
   return results;
 }
 
-function SliderParam(props: {
-  label: string;
-  value: number;
-  displayValue: string;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  parseValue: (s: string) => number;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column" as const, gap: "4px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--grayscale-11, #6b7280)", fontFamily: "monospace", wordBreak: "break-all" as const, lineHeight: 1.3 }}>{props.label}</span>
-        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--grayscale-12, #111827)", marginLeft: "8px", whiteSpace: "nowrap" as const }}>{props.displayValue}</span>
-      </div>
-      <input
-        type="range"
-        min={props.min}
-        max={props.max}
-        step={props.step}
-        value={props.value}
-        onChange={(e) => props.onChange(props.parseValue(e.target.value))}
-        style={{ width: "100%", accentColor: "var(--accent-9, #4f46e5)", cursor: "pointer" }}
-      />
-    </div>
-  );
+function generateWaveformBars(start: number, end: number, seed: number): number[] {
+  const count = Math.max(8, Math.floor((end - start) * 12));
+  const bars: number[] = [];
+  let s = seed;
+  for (let i = 0; i < count; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const frac = i / count;
+    const envelope = Math.sin(frac * Math.PI) * 0.6 + 0.3;
+    const noise = (s % 100) / 100;
+    bars.push(Math.max(0.15, Math.min(1, envelope * (0.5 + noise * 0.5))));
+  }
+  return bars;
 }
 
 export function TurnDetectionVisualizer() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [confidence, setConfidence] = React.useState(0.4);
-  const [minSilence, setMinSilence] = React.useState(400);
-  const [maxSilence, setMaxSilence] = React.useState(1280);
+  const [preset, setPreset] = React.useState<string>("balanced");
 
+  const config = PRESETS[preset];
   const eotMarkers = React.useMemo(
-    () => computeEot(confidence, minSilence, maxSilence),
-    [confidence, minSilence, maxSilence]
+    () => computeEot(config.confidence, config.minSilence, config.maxSilence),
+    [config.confidence, config.minSilence, config.maxSilence]
   );
 
-  const activePreset = getActivePreset(confidence, minSilence, maxSilence);
+  const waveforms = React.useMemo(
+    () => SEGMENTS.map((seg, i) => generateWaveformBars(seg.start, seg.end, (i + 1) * 7919)),
+    []
+  );
 
   if (!isOpen) {
     return (
@@ -102,32 +87,17 @@ export function TurnDetectionVisualizer() {
 
   const toX = (t: number) => (t / DURATION) * 100;
 
-  const presetBtn = (name: "aggressive" | "balanced" | "conservative") => {
-    const isActive = activePreset === name;
-    return (
-      <button
-        key={name}
-        onClick={() => {
-          const v = PRESETS[name];
-          setConfidence(v.confidence);
-          setMinSilence(v.minSilence);
-          setMaxSilence(v.maxSilence);
-        }}
-        style={{
-          padding: "5px 14px",
-          border: isActive ? "2px solid var(--accent-9, #4f46e5)" : "1px solid var(--grayscale-a4, #d1d5db)",
-          borderRadius: "6px",
-          background: isActive ? "var(--accent-3, #eef2ff)" : "var(--grayscale-1, #ffffff)",
-          cursor: "pointer",
-          fontSize: "13px",
-          fontWeight: isActive ? 600 : 400,
-          color: isActive ? "var(--accent-11, #4338ca)" : "var(--grayscale-12, #111827)",
-        }}
-      >
-        {name.charAt(0).toUpperCase() + name.slice(1)}
-      </button>
-    );
-  };
+  const turnsNotEnded: Set<number> = new Set();
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const seg = SEGMENTS[i];
+    const nextSeg = i < SEGMENTS.length - 1 ? SEGMENTS[i + 1] : null;
+    const isAbove = seg.confidence >= config.confidence;
+    const silenceMs = isAbove ? config.minSilence : config.maxSilence;
+    const eotTime = seg.end + silenceMs / 1000;
+    if (nextSeg && eotTime >= nextSeg.start) {
+      turnsNotEnded.add(i);
+    }
+  }
 
   return (
     <div
@@ -143,7 +113,7 @@ export function TurnDetectionVisualizer() {
         boxSizing: "border-box" as const,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--grayscale-12, #111827)" }}>
           Turn Detection Visualizer
         </span>
@@ -163,10 +133,28 @@ export function TurnDetectionVisualizer() {
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" as const }}>
-        {presetBtn("aggressive")}
-        {presetBtn("balanced")}
-        {presetBtn("conservative")}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" as const }}>
+        {Object.entries(PRESETS).map(([key, p]) => {
+          const isActive = preset === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setPreset(key)}
+              style={{
+                padding: "6px 16px",
+                border: isActive ? "2px solid var(--accent-9, #4f46e5)" : "1px solid var(--grayscale-a4, #d1d5db)",
+                borderRadius: "6px",
+                background: isActive ? "var(--accent-3, #eef2ff)" : "var(--grayscale-1, #ffffff)",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: isActive ? 600 : 400,
+                color: isActive ? "var(--accent-11, #4338ca)" : "var(--grayscale-12, #111827)",
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
       </div>
 
       <div
@@ -176,15 +164,17 @@ export function TurnDetectionVisualizer() {
           borderRadius: "8px",
           border: "1px solid var(--grayscale-a4, #e5e7eb)",
           padding: "16px 12px",
-          marginBottom: "20px",
+          marginBottom: "16px",
           overflowX: "auto" as const,
         }}
       >
-        <div style={{ position: "relative" as const, height: "100px", minWidth: "500px" }}>
+        <div style={{ position: "relative" as const, height: "130px", minWidth: "500px" }}>
           {SEGMENTS.map((seg, i) => {
             const left = toX(seg.start);
             const width = toX(seg.end) - left;
-            const isAbove = seg.confidence >= confidence;
+            const isAbove = seg.confidence >= config.confidence;
+            const bars = waveforms[i];
+            const continued = turnsNotEnded.has(i);
             return (
               <div key={"seg-" + i}>
                 <div
@@ -192,38 +182,68 @@ export function TurnDetectionVisualizer() {
                     position: "absolute" as const,
                     left: left + "%",
                     width: width + "%",
-                    top: "30px",
-                    height: "28px",
-                    borderRadius: "6px",
-                    background: isAbove ? "var(--accent-7, #818cf8)" : "var(--accent-5, #a5b4fc)",
-                    opacity: 0.7,
+                    top: "22px",
+                    height: "48px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "1px",
+                    padding: "0 2px",
+                    boxSizing: "border-box" as const,
                   }}
-                />
+                >
+                  {bars.map((h, bi) => (
+                    <div
+                      key={bi}
+                      style={{
+                        flex: 1,
+                        height: (h * 100) + "%",
+                        borderRadius: "1px",
+                        background: isAbove ? "var(--accent-9, #4f46e5)" : "var(--accent-7, #818cf8)",
+                        opacity: 0.65,
+                        minWidth: "2px",
+                      }}
+                    />
+                  ))}
+                </div>
                 <div
                   style={{
                     position: "absolute" as const,
                     left: left + "%",
                     width: width + "%",
-                    top: "12px",
-                    fontSize: "11px",
+                    top: "6px",
+                    fontSize: "10px",
                     color: "var(--grayscale-10, #4b5563)",
                     textAlign: "center" as const,
                     whiteSpace: "nowrap" as const,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
                   }}
                 >
                   {"conf: " + seg.confidence}
                 </div>
+                {continued && (
+                  <div
+                    style={{
+                      position: "absolute" as const,
+                      left: toX(seg.end) + "%",
+                      width: toX(SEGMENTS[i + 1].start) - toX(seg.end) + "%",
+                      top: "42px",
+                      height: "4px",
+                      background: "var(--accent-5, #a5b4fc)",
+                      opacity: 0.5,
+                      borderRadius: "2px",
+                    }}
+                  />
+                )}
               </div>
             );
           })}
 
           {SEGMENTS.map((seg, i) => {
-            const isAbove = seg.confidence >= confidence;
-            const silenceMs = isAbove ? minSilence : maxSilence;
+            const isAbove = seg.confidence >= config.confidence;
+            const silenceMs = isAbove ? config.minSilence : config.maxSilence;
             const silenceEnd = seg.end + silenceMs / 1000;
+            const nextSeg = i < SEGMENTS.length - 1 ? SEGMENTS[i + 1] : null;
             if (silenceEnd > DURATION) return null;
+            if (nextSeg && silenceEnd >= nextSeg.start) return null;
             const startX = toX(seg.end);
             const endX = toX(silenceEnd);
             const color = isAbove ? "#22c55e" : "#f59e0b";
@@ -234,11 +254,11 @@ export function TurnDetectionVisualizer() {
                     position: "absolute" as const,
                     left: startX + "%",
                     width: (endX - startX) + "%",
-                    top: "40px",
+                    top: "42px",
                     height: "8px",
                     borderRadius: "4px",
                     background: color,
-                    opacity: 0.3,
+                    opacity: 0.25,
                   }}
                 />
               </div>
@@ -255,8 +275,8 @@ export function TurnDetectionVisualizer() {
                   style={{
                     position: "absolute" as const,
                     left: x + "%",
-                    top: "6px",
-                    bottom: "10px",
+                    top: "10px",
+                    bottom: "30px",
                     width: "2px",
                     background: color,
                     transform: "translateX(-1px)",
@@ -266,36 +286,49 @@ export function TurnDetectionVisualizer() {
                   style={{
                     position: "absolute" as const,
                     left: x + "%",
-                    top: "68px",
+                    top: "78px",
                     transform: "translateX(-50%)",
                     fontSize: "10px",
                     fontWeight: 600,
                     color: color,
                     whiteSpace: "nowrap" as const,
+                    textAlign: "center" as const,
+                    lineHeight: 1.3,
                   }}
                 >
-                  EoT
+                  {"EoT "}
+                  <span style={{ fontSize: "9px", fontWeight: 400, color: "var(--grayscale-9, #9ca3af)" }}>{label}</span>
                 </div>
-                <div
-                  style={{
-                    position: "absolute" as const,
-                    left: x + "%",
-                    top: "80px",
-                    transform: "translateX(-50%)",
-                    fontSize: "9px",
-                    color: "var(--grayscale-9, #9ca3af)",
-                    whiteSpace: "nowrap" as const,
-                  }}
-                >
-                  {label}
-                </div>
+              </div>
+            );
+          })}
+
+          {turnsNotEnded.size > 0 && Array.from(turnsNotEnded).map((idx) => {
+            const seg = SEGMENTS[idx];
+            const nextSeg = SEGMENTS[idx + 1];
+            const midX = toX((seg.end + nextSeg.start) / 2);
+            return (
+              <div
+                key={"cont-" + idx}
+                style={{
+                  position: "absolute" as const,
+                  left: midX + "%",
+                  top: "78px",
+                  transform: "translateX(-50%)",
+                  fontSize: "9px",
+                  color: "var(--grayscale-9, #9ca3af)",
+                  whiteSpace: "nowrap" as const,
+                  fontStyle: "italic" as const,
+                }}
+              >
+                turn continues
               </div>
             );
           })}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", fontSize: "12px", color: "var(--grayscale-11, #6b7280)" }}>
+      <div style={{ display: "flex", gap: "16px", marginBottom: "12px", fontSize: "12px", color: "var(--grayscale-11, #6b7280)", flexWrap: "wrap" as const }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
           Semantic EoT
@@ -304,45 +337,36 @@ export function TurnDetectionVisualizer() {
           <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} />
           Acoustic EoT
         </span>
+        {turnsNotEnded.size > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontStyle: "italic" as const }}>
+            <span style={{ width: "16px", height: "3px", borderRadius: "2px", background: "var(--accent-5, #a5b4fc)", opacity: 0.6, display: "inline-block" }} />
+            Turn continues
+          </span>
+        )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-        <SliderParam
-          label="end_of_turn_confidence_threshold"
-          value={confidence}
-          displayValue={confidence.toFixed(2)}
-          min={0}
-          max={1}
-          step={0.05}
-          onChange={setConfidence}
-          parseValue={parseFloat}
-        />
-        <SliderParam
-          label="min_end_of_turn_silence_when_confident"
-          value={minSilence}
-          displayValue={minSilence + " ms"}
-          min={0}
-          max={2000}
-          step={20}
-          onChange={setMinSilence}
-          parseValue={parseInt}
-        />
-        <SliderParam
-          label="max_turn_silence"
-          value={maxSilence}
-          displayValue={maxSilence + " ms"}
-          min={100}
-          max={5000}
-          step={20}
-          onChange={setMaxSilence}
-          parseValue={parseInt}
-        />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: "4px 12px",
+          fontSize: "12px",
+          color: "var(--grayscale-11, #6b7280)",
+          marginBottom: "12px",
+        }}
+      >
+        <code style={{ fontSize: "11px" }}>end_of_turn_confidence_threshold</code>
+        <span style={{ fontWeight: 600, color: "var(--grayscale-12, #111827)" }}>{config.confidence}</span>
+        <code style={{ fontSize: "11px" }}>min_end_of_turn_silence_when_confident</code>
+        <span style={{ fontWeight: 600, color: "var(--grayscale-12, #111827)" }}>{config.minSilence} ms</span>
+        <code style={{ fontSize: "11px" }}>max_turn_silence</code>
+        <span style={{ fontWeight: 600, color: "var(--grayscale-12, #111827)" }}>{config.maxSilence} ms</span>
       </div>
 
-      <p style={{ margin: "16px 0 0 0", fontSize: "13px", color: "var(--grayscale-11, #6b7280)", lineHeight: 1.6, wordBreak: "break-word" as const, overflowWrap: "break-word" as const }}>
-        Drag the sliders to see how end-of-turn detection changes.{" "}
-        <strong style={{ color: "#22c55e" }}>Semantic</strong> EoT triggers when confidence {"\u2265"} threshold after <code style={{ fontSize: "12px", wordBreak: "break-all" as const }}>min_end_of_turn_silence_when_confident</code>.{" "}
-        <strong style={{ color: "#f59e0b" }}>Acoustic</strong> EoT triggers when confidence {"<"} threshold after <code style={{ fontSize: "12px" }}>max_turn_silence</code>.
+      <p style={{ margin: "0", fontSize: "12px", color: "var(--grayscale-10, #6b7280)", lineHeight: 1.5 }}>
+        <strong style={{ color: "#22c55e" }}>Semantic</strong>{" = confidence \u2265 threshold + min silence elapsed. "}
+        <strong style={{ color: "#f59e0b" }}>Acoustic</strong>{" = confidence < threshold + max silence elapsed. "}
+        When the silence period extends into the next speech segment, the turn is not ended.
       </p>
     </div>
   );
