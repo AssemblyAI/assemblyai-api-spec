@@ -138,7 +138,7 @@ export function TurnDetectionVisualizer() {
           overflowX: "auto" as const,
         }}
       >
-        <div style={{ position: "relative" as const, height: "130px", minWidth: "500px" }}>
+        <div style={{ position: "relative" as const, height: "140px", minWidth: "500px" }}>
           {SEGMENTS.map((seg, i) => {
             const left = toX(seg.start);
             const width = toX(seg.end) - left;
@@ -152,7 +152,7 @@ export function TurnDetectionVisualizer() {
                     position: "absolute" as const,
                     left: left + "%",
                     width: width + "%",
-                    top: "22px",
+                    top: "32px",
                     height: "48px",
                     display: "flex",
                     alignItems: "center",
@@ -180,7 +180,7 @@ export function TurnDetectionVisualizer() {
                     position: "absolute" as const,
                     left: left + "%",
                     width: width + "%",
-                    top: "6px",
+                    top: "16px",
                     fontSize: "10px",
                     color: "var(--grayscale-10, #4b5563)",
                     textAlign: "center" as const,
@@ -195,7 +195,7 @@ export function TurnDetectionVisualizer() {
                       position: "absolute" as const,
                       left: toX(seg.end) + "%",
                       width: toX(SEGMENTS[i + 1].start) - toX(seg.end) + "%",
-                      top: "42px",
+                      top: "52px",
                       height: "4px",
                       background: "var(--accent-5, #a5b4fc)",
                       opacity: 0.5,
@@ -224,7 +224,7 @@ export function TurnDetectionVisualizer() {
                     position: "absolute" as const,
                     left: startX + "%",
                     width: (endX - startX) + "%",
-                    top: "42px",
+                    top: "52px",
                     height: "8px",
                     borderRadius: "4px",
                     background: color,
@@ -245,7 +245,7 @@ export function TurnDetectionVisualizer() {
                   style={{
                     position: "absolute" as const,
                     left: x + "%",
-                    top: "10px",
+                    top: "20px",
                     bottom: "30px",
                     width: "2px",
                     background: color,
@@ -256,19 +256,19 @@ export function TurnDetectionVisualizer() {
                   style={{
                     position: "absolute" as const,
                     left: x + "%",
-                    top: "78px",
+                    top: "0px",
                     transform: "translateX(-50%)",
                     fontSize: "10px",
                     fontWeight: 600,
                     color: color,
                     whiteSpace: "nowrap" as const,
                     textAlign: "center" as const,
-                    lineHeight: 1.3,
+                    lineHeight: 1.2,
                   }}
                 >
-                  {"EoT"}
-                  <br />
                   <span style={{ fontSize: "8px", fontWeight: 400, color: "var(--grayscale-9, #9ca3af)" }}>{label}</span>
+                  <br />
+                  {"EoT"}
                 </div>
               </div>
             );
@@ -284,7 +284,7 @@ export function TurnDetectionVisualizer() {
                 style={{
                   position: "absolute" as const,
                   left: midX + "%",
-                  top: "78px",
+                  top: "88px",
                   transform: "translateX(-50%)",
                   fontSize: "9px",
                   color: "var(--grayscale-9, #9ca3af)",
