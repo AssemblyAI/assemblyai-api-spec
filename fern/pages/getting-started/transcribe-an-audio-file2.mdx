@@ -1,0 +1,632 @@
+---
+title: "Transcribe a pre-recorded audio file"
+subtitle: "Learn how to transcribe and analyze an audio file."
+hide-nav-links: true
+description: "Learn how to transcribe and analyze an audio file."
+---
+
+## Overview
+
+This guide walks you through transcribing your first audio file with AssemblyAI. You will learn how to submit an audio file for transcription and retrieve the results using the AssemblyAI API.
+
+When transcribing an audio file, there are three main things you will want to specify:
+
+1. The speech models you would like to use (required).
+2. The region you would like to use (optional).
+3. Other models you would like to use like Speaker Diarization or PII Redaction (optional).
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+- An AssemblyAI API key (get one by signing up at [assemblyai.com](https://assemblyai.com))
+- Python 3.8 or later installed
+- The `assemblyai` package (`pip install assemblyai`)
+
+</Tab>
+<Tab language="python" title="Python">
+
+- An AssemblyAI API key (get one by signing up at [assemblyai.com](https://assemblyai.com))
+- Python 3.6 or later installed
+- The `requests` library (`pip install requests`)
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+- An AssemblyAI API key (get one by signing up at [assemblyai.com](https://assemblyai.com))
+- Node.js 18 or later installed
+- The `assemblyai` package (`npm install assemblyai`)
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+- An AssemblyAI API key (get one by signing up at [assemblyai.com](https://assemblyai.com))
+- Node.js 18 or later installed
+- The `axios` and `fs-extra` packages (`npm install axios fs-extra`)
+
+</Tab>
+</Tabs>
+
+## Step 1: Set up your API credentials
+
+First, configure your API endpoint and authentication:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python
+import assemblyai as aai
+
+aai.settings.base_url = "https://api.assemblyai.com"
+aai.settings.api_key = "YOUR_API_KEY"
+```
+
+Replace `YOUR_API_KEY` with your actual AssemblyAI API key.
+
+<Info title="Need EU data residency?">
+  Use our EU endpoint by changing `base_url` to
+  `"https://api.eu.assemblyai.com"`.
+</Info>
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "YOUR_API_KEY"}
+```
+
+Replace `YOUR_API_KEY` with your actual AssemblyAI API key.
+
+<Info title="Need EU data residency?">
+  Use our EU endpoint by changing `base_url` to
+  `"https://api.eu.assemblyai.com"`.
+</Info>
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { AssemblyAI } from "assemblyai";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const client = new AssemblyAI({
+  apiKey: "YOUR_API_KEY",
+  baseUrl: baseUrl,
+});
+```
+
+Replace `YOUR_API_KEY` with your actual AssemblyAI API key.
+
+<Info title="Need EU data residency?">
+  Use our EU endpoint by changing `baseUrl` to
+  `"https://api.eu.assemblyai.com"`.
+</Info>
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "YOUR_API_KEY",
+};
+```
+
+Replace `YOUR_API_KEY` with your actual AssemblyAI API key.
+
+<Info title="Need EU data residency?">
+  Use our EU endpoint by changing `baseUrl` to
+  `"https://api.eu.assemblyai.com"`.
+</Info>
+
+</Tab>
+</Tabs>
+
+## Step 2: Specify your audio source
+
+You can transcribe audio files in two ways:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+**Option A: Use a publicly accessible URL**
+
+```python
+audio_file = "https://assembly.ai/wildfires.mp3"
+```
+
+**Option B: Use a local file**
+
+```python
+audio_file = "./example.mp3"
+```
+
+The SDK handles local file uploads automatically.
+
+</Tab>
+<Tab language="python" title="Python">
+
+**Option A: Use a publicly accessible URL**
+
+```python
+audio_file = "https://assembly.ai/wildfires.mp3"
+```
+
+**Option B: Upload a local file**
+
+If your audio file is stored locally, upload it to AssemblyAI first:
+
+```python
+with open("./example.mp3", "rb") as f:
+    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code}, Response: {response.text}")
+        response.raise_for_status()
+
+    upload_json = response.json()
+    audio_file = upload_json["upload_url"]
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+**Option A: Use a publicly accessible URL**
+
+```javascript
+const audioFile = "https://assembly.ai/wildfires.mp3";
+```
+
+**Option B: Use a local file**
+
+```javascript
+const audioFile = "./example.mp3";
+```
+
+The SDK handles local file uploads automatically.
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+**Option A: Use a publicly accessible URL**
+
+```javascript
+const audioFile = "https://assembly.ai/wildfires.mp3";
+```
+
+**Option B: Upload a local file**
+
+If your audio file is stored locally, upload it to AssemblyAI first:
+
+```javascript
+const audioData = await fs.readFile("./example.mp3");
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const audioFile = uploadResponse.data.upload_url;
+```
+
+</Tab>
+</Tabs>
+
+## Step 3: Submit the transcription request
+
+Create a request with your audio URL and desired configuration options:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True,
+    speaker_labels=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config=config)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+data = {
+    "audio_url": audio_file,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_json = response.json()
+transcript_id = transcript_json["id"]
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+};
+
+const transcript = await client.transcripts.transcribe(params);
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const data = {
+  audio_url: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+};
+
+const transcriptResponse = await axios.post(`${baseUrl}/v2/transcript`, data, {
+  headers,
+});
+const transcriptId = transcriptResponse.data.id;
+```
+
+</Tab>
+</Tabs>
+
+This configuration:
+
+- Uses both the `universal-3-pro` and `universal-2` models for broad language coverage. Learn more about our different speech recognition models [here](/docs/getting-started/models).
+- Uses [our Automatic Language Detection model](/docs/pre-recorded-audio/language-detection) to detect the dominant language in the spoken audio.
+- Uses [our Speaker Diarization model](/docs/pre-recorded-audio/speaker-diarization) to create turn-by-turn utterances.
+
+<Warning title="Model Pricing">
+Pricing can vary based on the speech model used in the request.
+
+If you already have an account with us, you can find your specific pricing on [the Billing page](https://www.assemblyai.com/dashboard/account/billing) of your dashboard. If you are a new customer, you can find general pricing information [here](https://www.assemblyai.com/pricing).
+
+</Warning>
+
+## Step 4: Poll for the transcription result
+
+Transcription happens asynchronously. Poll the API until the transcription is complete:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+The SDK handles polling automatically. Check the result:
+
+```python
+if transcript.status == aai.TranscriptStatus.error:
+    raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print(f"\nFull Transcript:\n\n{transcript.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+        print(f"\nFull Transcript:\n\n{transcript['text']}")
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+The polling loop checks the transcription status every 3 seconds and prints the full transcript once processing is complete.
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+The SDK handles polling automatically. Check the result:
+
+```javascript
+if (transcript.status === "error") {
+  throw new Error(`Transcription failed: ${transcript.error}`);
+}
+
+console.log(`\nFull Transcript:\n\n${transcript.text}`);
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  const transcript = pollingResponse.data;
+
+  if (transcript.status === "completed") {
+    console.log(`\nFull Transcript:\n\n${transcript.text}`);
+    break;
+  } else if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+The polling loop checks the transcription status every 3 seconds and prints the full transcript once processing is complete.
+
+</Tab>
+</Tabs>
+
+## Step 5: Access speaker diarization (optional)
+
+If you enabled speaker labels, you can access the speaker-separated utterances:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python
+for utterance in transcript.utterances:
+    print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+for utterance in transcript['utterances']:
+    print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+for (const utterance of transcript.utterances) {
+  console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+}
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+for (const utterance of transcript.utterances) {
+  console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+}
+```
+
+</Tab>
+</Tabs>
+
+## Complete example
+
+Here is the full working code:
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python
+import assemblyai as aai
+
+aai.settings.base_url = "https://api.assemblyai.com"
+aai.settings.api_key = "YOUR_API_KEY"
+
+# Use a publicly-accessible URL
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+# Or use a local file:
+# audio_file = "./example.mp3"
+
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True,
+    speaker_labels=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config=config)
+
+if transcript.status == aai.TranscriptStatus.error:
+    raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print(f"\nFull Transcript:\n\n{transcript.text}")
+
+# Optionally print speaker diarization results
+# for utterance in transcript.utterances:
+#     print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "YOUR_API_KEY"}
+
+# Use a publicly-accessible URL
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+# Or upload a local file:
+# with open("./example.mp3", "rb") as f:
+#     response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
+#     if response.status_code != 200:
+#         print(f"Error: {response.status_code}, Response: {response.text}")
+#         response.raise_for_status()
+#     upload_json = response.json()
+#     audio_file = upload_json["upload_url"]
+
+data = {
+    "audio_url": audio_file,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_json = response.json()
+transcript_id = transcript_json["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(f"\nFull Transcript:\n\n{transcript['text']}")
+
+        # Optionally print speaker diarization results
+        # for utterance in transcript['utterances']:
+        #     print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { AssemblyAI } from "assemblyai";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const client = new AssemblyAI({
+  apiKey: "YOUR_API_KEY",
+  baseUrl: baseUrl,
+});
+
+// Use a publicly-accessible URL
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+// Or use a local file:
+// const audioFile = "./example.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  if (transcript.status === "error") {
+    throw new Error(`Transcription failed: ${transcript.error}`);
+  }
+
+  console.log(`\nFull Transcript:\n\n${transcript.text}`);
+
+  // Optionally print speaker diarization results
+  // for (const utterance of transcript.utterances) {
+  //   console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+  // }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "YOUR_API_KEY",
+};
+
+async function transcribe() {
+  // Use a publicly-accessible URL
+  const audioFile = "https://assembly.ai/wildfires.mp3";
+
+  // Or upload a local file:
+  // const audioData = await fs.readFile("./example.mp3");
+  // const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, { headers });
+  // const audioFile = uploadResponse.data.upload_url;
+
+  const data = {
+    audio_url: audioFile,
+    speech_models: ["universal-3-pro", "universal-2"],
+    language_detection: true,
+    speaker_labels: true,
+  };
+
+  const transcriptResponse = await axios.post(
+    `${baseUrl}/v2/transcript`,
+    data,
+    { headers }
+  );
+  const transcriptId = transcriptResponse.data.id;
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  while (true) {
+    const pollingResponse = await axios.get(pollingEndpoint, { headers });
+    const transcript = pollingResponse.data;
+
+    if (transcript.status === "completed") {
+      console.log(`\nFull Transcript:\n\n${transcript.text}`);
+
+      // Optionally print speaker diarization results
+      // for (const utterance of transcript.utterances) {
+      //   console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+      // }
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+}
+
+transcribe();
+```
+
+</Tab>
+</Tabs>
+
+## Next steps
+
+Now that you have transcribed your first audio file:
+
+- Learn how you can do even more with Universal-3-Pro with [prompting](https://www.assemblyai.com/docs/getting-started/universal-3-pro#prompting)
+- Explore [our Speech Understanding features](https://www.assemblyai.com/products/speech-understanding) for more ways to analyze your audio data
+- Learn more about searching, summarizing, or asking questions on your transcript with [our LLM Gateway feature](/docs/llm-gateway/overview)
+- Find out how to use [webhooks](/docs/deployment/webhooks) to get notified when your transcripts are ready
+
+For more information, check out the full [API reference documentation](https://www.assemblyai.com/docs).

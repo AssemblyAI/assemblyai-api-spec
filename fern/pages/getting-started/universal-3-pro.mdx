@@ -1,0 +1,2018 @@
+---
+title: "Introducing Universal-3 Pro"
+subtitle: "Learn how to transcribe pre-recorded audio using Universal-3 Pro."
+hide-nav-links: true
+description: "Learn how to transcribe pre-recorded audio using Universal-3 Pro."
+---
+
+import { AudioPlayer } from "../../assets/components/AudioPlayer";
+
+## Overview
+
+Universal-3 Pro is our most powerful Voice AI model yet, designed to capture the "hard stuff" that traditional ASR models struggle with.
+
+**Key Universal-3 Pro Capabilities:**
+
+- **Keyterm Prompting:** Improve recognition of domain-specific terminology, rare words, and proper nouns
+- **Prompting:** Guide transcription style, formatting, and output characteristics
+
+| What prompts can do                         | Description                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------- |
+| **Verbatim transcription and disfluencies** | Include um, uh, false starts, repetitions, stutters              |
+| **Output style and formatting**             | Control punctuation, capitalization, number formatting           |
+| **Context aware clues**                     | Help with jargon, names, and domain expectations                 |
+| **Entity accuracy and spelling**            | Improve accuracy for proper nouns, brands, technical terms       |
+| **Speaker attribution**                     | Mark speaker turns and add labels                                |
+| **Audio event tags**                        | Mark laughter, music, applause, background sounds                |
+| **Code-switching and multilingual**         | Handle multilingual audio in same transcript                     |
+| **Numbers and measurements**                | Control how numbers, percentages, and measurements are formatted |
+| **Difficult audio handling**                | Guidance for unclear audio, overlapping speech, interruptions    |
+
+The model out of the box outperforms all ASR models on the market on accuracy, especially as it pertains to entities and rare words. With prompting, you can get an entirely customized transcription output that rivals near-human-level transcription.
+
+## Example prompts and behavior
+
+Prompts let you customize how your transcriptions appear, from polished output to complete verbatim. Here are three examples:
+
+**Sample prompt 1: Simple transcription**
+
+```txt
+Transcribe this audio
+```
+
+- Human-readable output without disfluencies or speech patterns
+- Strong overall WER but higher error rate on rare words
+- Best for general transcription prioritizing readability
+
+**Sample prompt 2: Enhanced accuracy**
+
+```text
+Transcribe accurately with attention to proper nouns, technical terms,
+and natural speech patterns.
+```
+
+- Adds contextual correctness for rare words/entities
+- Includes basic disfluencies and speech patterns
+- Best for domain-specific content (medical, legal, technical)
+
+**Sample prompt 3: Full verbatim with entity accuracy**
+
+```text
+Transcribe this audio with beautiful punctuation and formatting.
+Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.
+Use standard spelling and the most contextually correct spelling of all words and names,
+brands, drug names, medical terms, person names, and all proper nouns.
+Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.
+```
+
+- Captures all speech patterns, cross-talk, and background noise
+- Maximizes contextual and multilingual accuracy
+- Best for verbatim needs across varied transcript types
+
+To fine-tune to your use case, see the [Prompting](/docs/getting-started/universal-3-pro#prompting) section.
+
+Not sure where to start? Try our [Prompt Generator](/docs/pre-recorded-audio/prompting#prompt-generator).
+
+## Quickstart
+
+This example shows how you can transcribe a pre-recorded audio file with our Universal-3 Pro model and print the transcript text to your terminal.
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assembly.ai/sports_injuries.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assembly.ai/sports_injuries.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"]
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assembly.ai/sports_injuries.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assembly.ai/sports_injuries.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+<Note title="Language support">
+
+Universal-3 Pro supports English, Spanish, Portuguese, French, German, and Italian. To access all 99 languages, use `"speech_models": ["universal-3-pro", "universal-2"]` as shown in the code example. [Read more here.](#support-for-99-languages)
+
+</Note>
+
+## Keyterms prompting
+
+Keyterms prompting allows you to provide up to 1,000 words or phrases (maximum 6 words per phrase) using the `keyterms_prompt` parameter to improve transcription accuracy for those terms and related variations or contextually similar phrases.
+
+<Note title="Prompt and Keyterms Prompt">
+
+The `prompt` and `keyterms_prompt` parameters cannot be used in the same request. Please choose either one or the other based on your use case.
+
+</Note>
+
+<AudioPlayer
+  src="https://assemblyaiassets.com/audios/keyterms_prompting.wav"
+  type="audio/wav"
+/>
+
+Here is an example showing how you can use keyterms prompting to improve transcription accuracy for a name with distinctive spelling and formatting.
+
+Without keyterms prompting:
+
+```txt
+Hi, this is Kelly Byrne Donahue
+```
+
+With keyterms prompting:
+
+```txt
+Hi, this is Kelly Byrne-Donoghue
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/keyterms_prompting.wav"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  keyterms_prompt=["Kelly Byrne-Donoghue"],
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/keyterms_prompting.wav",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "keyterms_prompt": ["Kelly Byrne-Donoghue"]
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/keyterms_prompting.wav";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  keyterms_prompt: ["Kelly Byrne-Donoghue"],
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/keyterms_prompting.wav",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  keyterms_prompt: ["Kelly Byrne-Donoghue"],
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Prompting
+
+Universal-3 Pro delivers great accuracy out of the box. To fine-tune transcription results to your use case, provide a prompt with up to 1,500 words of context in plain language. This helps the model consistently recognize domain-specific terminology, apply your preferred formatting conventions, handle code switching between languages, and better interpret ambiguous speech.
+
+<Note title="Prompt and Keyterms Prompt">
+
+The `prompt` and `keyterms_prompt` parameters cannot be used in the same request. Please choose either one or the other based on your use case.
+
+</Note>
+
+### Verbatim transcription and disfluencies
+
+Capture natural speech patterns exactly as spoken, including um, uh, false starts, repetitions, stutters. Add examples of the verbatim elements you want to transcribe in the prompt parameter to guide the model.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/verbatim.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Do you and Quentin still socialize when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we're friends. What do you do with him?
+```
+
+With prompt, the model better captures filler words like "uh" and false starts like "we, we, we're friends".
+
+```txt wordWrap
+Do you and Quentin still socialize, uh, when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we, we, we're friends. What do you do with him?
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/verbatim.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/verbatim.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/verbatim.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/verbatim.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Include spoken filler words like "um," "uh," "you know," "like," plus repetitions
+and false starts when clearly spoken.
+```
+
+```text
+Preserve all disfluencies exactly as spoken including verbal hesitations,
+restarts, and self-corrections (um, uh, I—I mean).
+```
+
+```text
+Transcribe verbatim:
+- Fillers: yes (um, uh, like, you know)
+- Repetitions: yes (I I, the the the)
+- Stutters: yes (th-that, b-but)
+- False starts: yes (I was— I went)
+- Colloquial: yes (gonna, wanna, gotta)
+```
+
+### Output style and formatting
+
+Control punctuation, capitalization, and readability without changing words.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/ouput_formatting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+You got called because you were being loud and screaming. No, that's literally what my dispatch said. I don't give a fuck what your dispatch said. They lied. Okay, well, you need to calm down. I don't. Okay, yeah, calm down please. No, I don't. Yes, I'm Jesus Christ's daughter. I'm not doing this tonight with you. I'm not. I'm not. So you need to calm down.
+```
+
+With prompt, the model accurately captures the speaker's emotional state through punctuation, adding exclamation marks during moments of yelling and emphasis.
+
+```txt wordWrap
+You got called because you were being loud and screaming. No, I wasn't. That's literally what my dispatch said. I don't give a fuck what your dispatch said! They lied! Okay, well, you need to calm down. I don't! Okay, yeah, calm down, please. No, I don't! I'm Jesus Christ's daughter! I'm not doing this tonight with you. I'm not. I'm not. So you need to calm down.
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/ouput_formatting.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Add punctuation based on the speaker's tone and expressiveness. Use exclamation marks (!) when the speaker is yelling, excited, or emphatic. Use question marks (?) for questioning intonation. Apply standard punctuation (periods, commas) based on natural speech patterns and pauses.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/ouput_formatting.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Add punctuation based on the speaker's tone and expressiveness. Use exclamation marks (!) when the speaker is yelling, excited, or emphatic. Use question marks (?) for questioning intonation. Apply standard punctuation (periods, commas) based on natural speech patterns and pauses."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/ouput_formatting.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Add punctuation based on the speaker's tone and expressiveness. Use exclamation marks (!) when the speaker is yelling, excited, or emphatic. Use question marks (?) for questioning intonation. Apply standard punctuation (periods, commas) based on natural speech patterns and pauses.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/ouput_formatting.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Add punctuation based on the speaker's tone and expressiveness. Use exclamation marks (!) when the speaker is yelling, excited, or emphatic. Use question marks (?) for questioning intonation. Apply standard punctuation (periods, commas) based on natural speech patterns and pauses.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Transcribe this audio with beautiful punctuation and formatting.
+```
+
+```text
+Use expressive punctuation to reflect emotion and prosody.
+```
+
+```text
+Use standard punctuation and sentence breaks for readability.
+```
+
+### Context aware clues
+
+Help with jargon, names, and domain expectations that are known from the audio file.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/nlp_prompting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+I just want to move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I do. I take Ramipril. Okay. And I take Metformin, and there's another one that begins with G for the diabetes. Glicoside. Excellent. Okay. And do you know the dosage of the Ramipril? I think it's 5mg. 5mg, and do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? I did have an awful cough to start with, but that's stopped now. It's settled, good. Okay, and do you know the metformin, do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
+```
+
+With prompt, adding 'clinical history evaluation' as a context clue corrects spelling of 'Glicoside' to 'Glycoside'.
+
+```txt wordWrap
+I just wanna move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I, I do. I take, um, I take Ramipril. Okay, mhm. And I take Metformin, and there's another one that begins with G for the diabetes. So glycosi— glycosi— glycoside. Excellent. Okay, and do you know the dosage of the Ramipril? Uh, I think it's 5mg. 5mg. And do you take it regularly? Oh yeah, yeah. Good. Every evening. And no side effects with it? Um, I did have an awful cough to start with, but that's, that's stopped now. It's settled, good. Okay, and do you know, erm, the metformin? Do you take it, do you know the dosage and how often? I take it 3 times a day, but I don't know what dose that is. Okay, we can check that out, we can follow that up, okay.
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/nlp_prompting.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/nlp_prompting.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Transcribe this audio. Context: a customer testimonial about contact center software.
+```
+
+```text
+Transcribe this audio. Context: a medical consultation discussing medications and symptoms.
+```
+
+```text
+Transcribe this audio. Context: a technical lecture about GPUs, CUDA, and inference.
+```
+
+### Entity accuracy and spelling
+
+Improve transcript accuracy for proper nouns, brands, technical terms, and domain vocabulary with prompting.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/entity_accuracy.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Watch again closely. This is the potential game changer. The first responder NK cell killing cancer right before your eyes. If you give yourself Entiva, even in healthy volunteers, it dries up your first responders. It dries up your protectors. And that's why I said the power is within us.
+```
+
+With prompt, the model corrects the misrecognition of "Anktiva," which would otherwise be transcribed as "Entiva".
+
+```txt wordWrap
+Watch again closely. This is the potential game changer. The first responder NK cell killing cancer right before your eyes. If you give yourself Anktiva, even in healthy volunteers, it dries up your first responders. It dries up your protectors. And that's why I said the power is within us.
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/entity_accuracy.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="The speaker is discussing the cancer drug Anktiva (spelled A-N-K-T-I-V-A). When you hear what sounds like Entiva or similar pronunciations, transcribe it as Anktiva. This is the correct pharmaceutical name.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/entity_accuracy.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "The speaker is discussing the cancer drug Anktiva (spelled A-N-K-T-I-V-A). When you hear what sounds like Entiva or similar pronunciations, transcribe it as Anktiva. This is the correct pharmaceutical name."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/entity_accuracy.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "The speaker is discussing the cancer drug Anktiva (spelled A-N-K-T-I-V-A). When you hear what sounds like Entiva or similar pronunciations, transcribe it as Anktiva. This is the correct pharmaceutical name.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/entity_accuracy.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "The speaker is discussing the cancer drug Anktiva (spelled A-N-K-T-I-V-A). When you hear what sounds like Entiva or similar pronunciations, transcribe it as Anktiva. This is the correct pharmaceutical name.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Use standard spelling and the most contextually correct spelling of all words
+including names, brands, drug names, medical terms, and proper nouns.
+```
+
+```text
+Non-negotiable: Pharmaceutical accuracy required (omeprazole over omeprizole,
+metformin over metforman).
+Preserve acronyms and capitalization (EBITDA over ebitda, API over A.P.I.).
+```
+
+<Warning>
+  Caution: Over-instructing the model to follow examples can cause
+  hallucinations when these examples are encountered.
+</Warning>
+
+### Speaker attribution
+
+Prompted speaker diarization identifies who said what in a conversation. It works especially well in cases where there are frequent interjections, such as quick acknowledgments or single-word responses, or when working with limited spoken audio, such as short-duration files.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/speaker_diarization.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Speaker A: Five milligrams. And you take it regularly? Good. Every evening. And no side effects with it.
+```
+
+With prompt:
+
+```txt wordWrap
+[Speaker:NURSE] 5mg. And do you take it regularly?
+[Speaker:PATIENT] Oh yeah, yeah.
+[Speaker:NURSE] Good.
+[Speaker:PATIENT] I take it every evening.
+[Speaker:NURSE] And no side effects with it?
+```
+
+Without prompting, it may appear that speaker B said everything. But with prompting, the model correctly identifies this as 5 separate speaker turns, capturing utterances as short as a single word, like "good".
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {11}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/speaker_diarization.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  speaker_labels=True,
+  prompt="Produce a transcript with every disfluency data. Additionally, label speakers with their respective roles. 1. Place [Speaker:role] at the start of each speaker turn. Example format: [Speaker:NURSE] Hello there. How can I help you today? [Speaker:PATIENT] I'm feeling unwell. I have a headache.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {12}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/speaker_diarization.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "speaker_labels": True,
+    "prompt": "Produce a transcript with every disfluency data. Additionally, label speakers with their respective roles. 1. Place [Speaker:role] at the start of each speaker turn. Example format: [Speaker:NURSE] Hello there. How can I help you today? [Speaker:PATIENT] I'm feeling unwell. I have a headache."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        for utterance in transcript["utterances"]:
+            print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {14}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/speaker_diarization.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  prompt: "Produce a transcript with every disfluency data. Additionally, label speakers with their respective roles. 1. Place [Speaker:role] at the start of each speaker turn. Example format: [Speaker:NURSE] Hello there. How can I help you today? [Speaker:PATIENT] I'm feeling unwell. I have a headache.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const utterance of transcript.utterances!) {
+    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {13}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/speaker_diarization.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  speaker_labels: true,
+  prompt:
+    "Produce a transcript with every disfluency data. Additionally, label speakers with their respective roles. 1. Place [Speaker:role] at the start of each speaker turn. Example format: [Speaker:NURSE] Hello there. How can I help you today? [Speaker:PATIENT] I'm feeling unwell. I have a headache.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    for (const utterance of transcriptionResult.utterances) {
+      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### Audio event tags
+
+Audio tags capture non-speech events like music, laughter, pauses, applause, background noise, and other sounds in your audio. Include examples of audio tags you want to transcribe in the prompt parameter to guide the model.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/audio_tag.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options.
+```
+
+With prompting, non-speech events like beeps are called out in the transcript.
+
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options. [beep]
+```
+
+Here are some examples of audio tags you can prompt for: [music], [laugher], [applause], [noise], [pause], [inaudible], [sigh], [gasp], [cheering], [sound], [screaming], [bell], [beep], [sound effect], [buzzer], and more.
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/audio_tag.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/audio_tag.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/audio_tag.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/audio_tag.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: Tag sounds: [beep]",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### Code-switching and multilingual
+
+Handle audio where speakers switch between languages.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/code_switching_multilingual.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+You literally lost your French? No, no, no. My French is there. Italian I've forgotten, but my French is still there and it will never leave. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. But for now, my French is there, fortunately.
+```
+
+With prompt, the model is able to preserve the speaker's natural code switching between English and French, transcribing each language as spoken.
+
+```txt wordWrap
+You literally lost your French? No, no, no. Mon français est là. L'italien, j'ai oublié, mais mon français est toujours là. Il partira jamais. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. Mais pour l'instant, le français est là, heureusement.
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile =
+  "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url:
+    "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Transcribe in the original language mix (code-switching), preserving words in the language they are spoken.
+```
+
+```text
+Preserve natural code-switching between English and Spanish. Retain spoken language as-is (correct "I was hablando con mi manager").
+```
+
+<Note>
+  Requires `language_detection: true` on your request. If a single language code
+  is specified, the model will try to transcribe only that language.
+</Note>
+
+### Numbers and measurements
+
+Control how numbers, percentages, and measurements are formatted.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/numbers_formatting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Commission has presented their communication, a hydrogen strategy for climate-neutral Europe, two weeks ago, which includes investments of between €180 billion and €400 billion.
+```
+
+With prompt:
+
+```txt wordWrap
+Commission has presented their communication, a hydrogen strategy for climate-neutral Europe, 2 weeks ago, which includes investments of between €180,000,000,000 and €400,000,000,000.
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/numbers_formatting.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Transcribe with numbers normalized to standard formats. For example, when you see $1 billion, convert to $1,000,000,000.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/numbers_formatting.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Transcribe with numbers normalized to standard formats. For example, when you see $1 billion, convert to $1,000,000,000."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/numbers_formatting.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Transcribe with numbers normalized to standard formats. For example, when you see $1 billion, convert to $1,000,000,000.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/numbers_formatting.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Transcribe with numbers normalized to standard formats. For example, when you see $1 billion, convert to $1,000,000,000.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Convert spoken numbers to digits.
+```
+
+```text
+Use digits for numbers, percentages, and measurements.
+```
+
+```text
+Format financial figures with standard notation (Q3 revenue over third quarter revenue).
+```
+
+### Difficult audio handling
+
+Provide guidance for unclear audio, overlapping speech, and interruptions.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/Difficult_audio.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+I hope you got our card. Okay, nobody talk. We'll just wait for her to talk. Well, we just wanted to— damn it!
+```
+
+With prompt:
+
+```txt wordWrap
+I hope you got our card. [CROSSTALK] Okay, nobody talk. We'll just wait for her to talk. Well, we just wanted to— [CROSSTALK] Damn it!
+```
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/Difficult_audio.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="When multiple speakers talk simultaneously, mark crosstalk segments.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/Difficult_audio.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "When multiple speakers talk simultaneously, mark crosstalk segments."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/Difficult_audio.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "When multiple speakers talk simultaneously, mark crosstalk segments.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/Difficult_audio.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "When multiple speakers talk simultaneously, mark crosstalk segments.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+If unintelligible, write (unclear).
+```
+
+```text
+Mark inaudible segments. Preserve overlapping speech and crosstalk.
+```
+
+```text
+Include pause markers where the speaker hesitates significantly.
+```
+
+## Temperature parameter
+
+Control the amount of randomness injected into the model's response using the `temperature` parameter.
+
+The `temperature` parameter accepts values from 0.0 to 1.0, with a default value of 0.0.
+
+<Tip title="Choosing the right temperature value">
+The temperature parameter controls how deterministic or exploratory the model's decoding is. Lower values (e.g., 0.0) make the model fully deterministic, which can be useful for strict reproducibility. Slightly higher values (e.g., 0.1) introduce a small amount of exploration.
+
+Low non-zero temperatures often produce better transcription accuracy (lower WER)—in some cases up to ~5% relative improvement—by allowing the model to recover from early decoding mistakes, while still remaining highly stable. Higher values (e.g., > 0.3) increase randomness and may reduce accuracy.
+
+</Tip>
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {11}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/nlp_prompting.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+  temperature=0.1,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {12}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+    "temperature": 0.1
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {15}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "https://assemblyaiassets.com/audios/nlp_prompting.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+  temperature: 0.1,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {14}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "https://assemblyaiassets.com/audios/nlp_prompting.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Produce a transcript for a clinical history evaluation. It's important to capture medication and dosage accurately. Every disfluency is meaningful data. Include: fillers (um, uh, er, erm, ah, hmm, mhm, like, you know, I mean), repetitions (I I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+  temperature: 0.1,
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Best practices for prompt engineering
+
+Check out [this guide](https://www.assemblyai.com/docs/pre-recorded-audio/prompt-engineering) to learn even more about how to craft effective prompts for Universal-3 Pro speech transcription, which includes an [AI prompt generator tool](https://www.assemblyai.com/docs/pre-recorded-audio/prompt-engineering#prompt-generator).
+
+## Support for 99 languages
+
+With the `speech_models` parameter, you can list multiple speech models in priority order, allowing our system to automatically route your audio based on language support.
+
+Model routing behavior: The system attempts to use the models in priority order falling back to the next model when needed. For example, with `["universal-3-pro", "universal-2"]`, the system will try to use universal-3-pro for languages it supports (English, Spanish, Portuguese, French, German, and Italian), and automatically fall back to Universal-2 for all other languages. This ensures you get the best performing transcription where available while maintaining the widest language coverage.
