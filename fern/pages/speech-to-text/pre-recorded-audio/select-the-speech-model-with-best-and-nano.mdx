@@ -1,0 +1,203 @@
+---
+title: "Model selection"
+---
+
+The `speech_models` parameter lets you specify which model to use for transcription. You can provide multiple models in priority order, and our system will automatically route to the best available model based on your request.
+
+**Model routing behavior:** The system attempts to use the models in priority order falling back to the next model when needed. For example, with `["universal-3-pro", "universal-2"]`, the system will try to use universal-3-pro for languages it supports (English, Spanish, Portuguese, French, German, and Italian), and automatically fall back to Universal for all other languages. This ensures you get the best performing transcription where available while maintaining the widest language coverage.
+
+<Tip title="Identifying the Model Used in Your Request">
+  The API returns a field called `speech_model_used` that tells you which
+  specific model was actually used to process your request.
+</Tip>
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK">
+
+| Name                | Parameter                           | Description                                                                          |
+| ------------------- | ----------------------------------- | ------------------------------------------------------------------------------------ |
+| **Universal-3-Pro** | `speech_models=['universal-3-pro']` | Our highest accuracy model with fine-tuning support and customization via prompting. |
+| **Universal-2**     | `speech_models=['universal-2']`     | Our highly accurate, fastest performing model with support across 99 languages.      |
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+| Name                | Parameter                            | Description                                                                          |
+| ------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
+| **Universal-3-Pro** | `speech_models: ['universal-3-pro']` | Our highest accuracy model with fine-tuning support and customization via prompting. |
+| **Universal-2**     | `speech_models: ['universal-2']`     | Our highly accurate, fastest performing model with support across 99 languages.      |
+
+</Tab>
+<Tab language="api" title="API">
+
+| Name                | API Parameter                          | Description                                                                          |
+| ------------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Universal-3-Pro** | `"speech_models": ["universal-3-pro"]` | Our highest accuracy model with fine-tuning support and customization via prompting. |
+| **Universal-2**     | `"speech_models":["universal-2"]`      | Our highly accurate, fastest performing model with support across 99 languages.      |
+
+</Tab>
+</Tabs>
+<br />
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK" default>
+
+You can change the model by setting `speech_models` in the transcription config:
+
+```python highlight={11} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+# You can use a local filepath:
+# audio_file = "./local_file.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True
+)
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+You can change the model by setting the `speech_models` in the POST request body:
+
+```python highlight={19} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(transcription_result['text'])
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK" default>
+
+You can change the model by setting the `speech_models` in the transcript parameters:
+
+```javascript highlight={15} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// You can use a local filepath:
+// const audioFile = './local_file.mp3'
+
+// Or use a publicly-accessible URL:
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+You can change the model by setting the `speech_models` in the POST request body:
+
+```javascript highlight={19} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>

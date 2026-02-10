@@ -1,0 +1,831 @@
+---
+title: "Speaker Diarization"
+description: "Add speaker labels to your transcript"
+---
+
+The Speaker Diarization model lets you detect multiple speakers in an audio file and what each speaker said.
+
+If you enable Speaker Diarization, the resulting transcript will return a list of _utterances_, where each utterance corresponds to an uninterrupted segment of speech from a single speaker.
+
+<Tip title="Want to name your speakers?">
+  Speaker Diarization assigns generic labels like "Speaker A" and "Speaker B" to
+  distinguish between speakers. If you want to replace these labels with actual
+  names or roles (e.g., "John Smith" or "Customer"), use [Speaker
+  Identification](/docs/speech-understanding/speaker-identification). Speaker
+  Identification analyzes the conversation content to infer who is speaking and
+  transforms your transcript from generic labels to meaningful identifiers.
+</Tip>
+
+## Quickstart
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+To enable Speaker Diarization, set `speaker_labels` to `True` in the transcription config.
+
+```python {16} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  speaker_labels=True,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+To enable Speaker Diarization, set `speaker_labels` to `True` in the POST request body:
+
+```python {21} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+for utterance in transcription_result['utterances']:
+  print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+To enable Speaker Diarization, set `speaker_labels` to `true` in the transcription config.
+
+```javascript {17} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// You can use a local filepath:
+// const audioFile = "./example.mp3"
+
+// Or use a publicly-accessible URL:
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const utterance of transcript.utterances!) {
+    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+To enable Speaker Diarization, set `speaker_labels` to `true` in the POST request body:
+
+```javascript {23} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./audio/audio.mp3";
+const audioData = await fs.readFile(path);
+
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    for (const utterance of transcriptionResult.utterances) {
+      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Set number of speakers expected
+
+You can set the number of speakers expected in the audio file by setting the `speakers_expected` parameter.
+
+<Warning>
+  Only use this parameter if you are certain about the number of speakers in the
+  audio file.
+</Warning>
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {17} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  speaker_labels=True,
+  speakers_expected=5,
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {22} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True,
+    "speakers_expected": 5
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+for utterance in transcription_result['utterances']:
+  print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {18} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// You can use a local filepath:
+// const audioFile = "./example.mp3"
+
+// Or use a publicly-accessible URL:
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speakers_expected: 5
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const utterance of transcript.utterances!) {
+    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {24} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./audio/audio.mp3";
+const audioData = await fs.readFile(path);
+
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speakers_expected: 5,
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    for (const utterance of transcriptionResult.utterances) {
+      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Set a range of possible speakers
+
+You can set a range of possible speakers in the audio file by setting the `speaker_options` parameter. By default, the model will return between 1 and 10 speakers.
+
+This parameter is suitable for use cases where there is a known minimum/maximum number of speakers in the audio file that is outside the bounds of the default value of 1 to 10 speakers.
+
+<Warning>
+  Setting `max_speakers_expected` too high may reduce diarization accuracy,
+  causing sentences from the same speaker to be split across multiple speaker
+  labels.
+</Warning>
+
+<Tabs groupId="language">
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python {17} maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# You can use a local filepath:
+# audio_file = "./example.mp3"
+
+# Or use a publicly-accessible URL:
+audio_file = (
+    "https://assembly.ai/wildfires.mp3"
+)
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  speaker_labels=True,
+  speaker_options=aai.SpeakerOptions(
+    min_speakers_expected=3,
+    max_speakers_expected=5
+  ),
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+for utterance in transcript.utterances:
+  print(f"Speaker {utterance.speaker}: {utterance.text}")
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python {22} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True,
+    "speaker_options": {
+      "min_speakers_expected": 3,
+      "max_speakers_expected": 5
+    }
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+for utterance in transcription_result['utterances']:
+  print(f"Speaker {utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {18} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// You can use a local filepath:
+// const audioFile = "./example.mp3"
+
+// Or use a publicly-accessible URL:
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speaker_options: {
+    min_speakers_expected: 3,
+    max_speakers_expected: 5
+  }
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  for (const utterance of transcript.utterances!) {
+    console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {24} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./audio/audio.mp3";
+const audioData = await fs.readFile(path);
+
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speaker_options: {
+    min_speakers_expected: 3,
+    max_speakers_expected: 5,
+  },
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    for (const utterance of transcriptionResult.utterances) {
+      console.log(`Speaker ${utterance.speaker}: ${utterance.text}`);
+    }
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## API reference
+
+### Request
+
+**Speakers Expected**
+
+```bash {7} maxLines=15
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "speech_model": "universal-3-pro",
+  "language_detection": true,
+  "speaker_labels": true,
+  "speakers_expected": 3
+}'
+```
+
+**Speaker Options**
+
+```bash {7-10} maxlines=15
+curl https://api.assemblyai.com/v2/transcript \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "audio_url": "YOUR_AUDIO_URL",
+  "speech_model": "universal-3-pro",
+  "language_detection": true,
+  "speaker_labels": true,
+  "speaker_options": {
+    "min_speakers_expected": 3,
+    "max_speakers_expected": 5
+  }
+}'
+```
+
+| Key                                     | Type    | Description                                                |
+| --------------------------------------- | ------- | ---------------------------------------------------------- |
+| `speaker_labels`                        | boolean | Enable Speaker Diarization.                                |
+| `speakers_expected`                     | number  | Set number of speakers.                                    |
+| `speaker_options`                       | object  | Set range of possible speakers.                            |
+| `speaker_options.min_speakers_expected` | number  | The minimum number of speakers expected in the audio file. |
+| `speaker_options.max_speakers_expected` | number  | The maximum number of speakers expected in the audio file. |
+
+### Response
+
+<Markdown src="speaker-diarization-response.mdx" />
+
+| Key                                 | Type   | Description                                                                                                                                                |
+| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `utterances`                        | array  | A turn-by-turn temporal sequence of the transcript, where the i-th element is an object containing information about the i-th utterance in the audio file. |
+| `utterances[i].confidence`          | number | A score between 0 and 1 indicating the model's confidence in the accuracy of the transcribed text for this utterance.                                      |
+| `utterances[i].end`                 | number | The ending time, in milliseconds, of the utterance in the audio file.                                                                                      |
+| `utterances[i].speaker`             | string | The speaker of this utterance, where each speaker is assigned a sequential capital letter. For example, "A" for Speaker A, "B" for Speaker B, and so on.   |
+| `utterances[i].start`               | number | The starting time, in milliseconds, of the utterance in the audio file.                                                                                    |
+| `utterances[i].text`                | string | The transcript for this utterance.                                                                                                                         |
+| `utterances[i].words`               | array  | A sequential array for the words in the transcript, where the j-th element is an object containing information about the j-th word in the utterance.       |
+| `utterances[i].words[j].text`       | string | The text of the j-th word in the i-th utterance.                                                                                                           |
+| `utterances[i].words[j].start`      | number | The starting time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                 |
+| `utterances[i].words[j].end`        | number | The ending time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                   |
+| `utterances[i].words[j].confidence` | number | The confidence score for the transcript of the j-th word in the i-th utterance.                                                                            |
+| `utterances[i].words[j].speaker`    | string | The speaker who uttered the j-th word in the i-th utterance.                                                                                               |
+
+The response also includes the request parameters used to generate the transcript.
+
+## Identify speakers by name
+
+Speaker Diarization assigns generic labels like "Speaker A" and "Speaker B" to each speaker. If you want to replace these labels with actual names or roles, you can use Speaker Identification to transform your transcript.
+
+**Before Speaker Identification:**
+
+```txt
+Speaker A: Good morning, and welcome to the show.
+Speaker B: Thanks for having me.
+```
+
+**After Speaker Identification:**
+
+```txt
+Michel Martin: Good morning, and welcome to the show.
+Peter DeCarlo: Thanks for having me.
+```
+
+The following example shows how to transcribe audio with Speaker Diarization and then apply Speaker Identification to replace the generic speaker labels with actual names.
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python maxLines=30
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+audio_url = "https://assembly.ai/wildfires.mp3"
+
+# Configure transcript with speaker diarization and speaker identification
+data = {
+    "audio_url": audio_url,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True,
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "name",
+                "known_values": ["Michel Martin", "Peter DeCarlo"]
+            }
+        }
+    }
+}
+
+# Submit the transcription request
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll for transcription results
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+
+# Print utterances with identified speaker names
+for utterance in transcript["utterances"]:
+    print(f"{utterance['speaker']}: {utterance['text']}")
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript maxLines=30
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+  "content-type": "application/json",
+};
+
+const audioUrl = "https://assembly.ai/wildfires.mp3";
+
+// Configure transcript with speaker diarization and speaker identification
+const data = {
+  audio_url: audioUrl,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speech_understanding: {
+    request: {
+      speaker_identification: {
+        speaker_type: "name",
+        known_values: ["Michel Martin", "Peter DeCarlo"],
+      },
+    },
+  },
+};
+
+async function main() {
+  // Submit the transcription request
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data),
+  });
+
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll for transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcript = await pollingResponse.json();
+
+    if (transcript.status === "completed") {
+      // Print utterances with identified speaker names
+      for (const utterance of transcript.utterances) {
+        console.log(`${utterance.speaker}: ${utterance.text}`);
+      }
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+}
+
+main().catch(console.error);
+```
+
+</Tab>
+</Tabs>
+
+For more details on Speaker Identification, including how to identify speakers by role and how to apply it to existing transcripts, see the [Speaker Identification guide](/docs/speech-understanding/speaker-identification).
+
+## Frequently asked questions & troubleshooting
+
+<AccordionGroup>
+  <Accordion title="How can I improve the performance of the Speaker Diarization model?" theme="dark" iconColor="white" >  
+  To improve the performance of the Speaker Diarization model, it's recommended to ensure that each speaker speaks for at least 30 seconds uninterrupted. Avoiding scenarios where a person only speaks a few short phrases like “Yeah”, “Right”, or “Sounds good” can also help. If possible, avoiding cross-talking can also improve performance.
+  </Accordion>
+
+{" "}
+
+<Accordion
+  title="How many speakers can the model handle?"
+  theme="dark"
+  iconColor="white"
+>
+  By default, the upper limit on the number of speakers for Speaker Diarization
+  is 10. If you expect more than 10 speakers, you can use
+  [`speaker_options`](/docs/api-reference/transcripts/submit#request.body.speaker_options)
+  to set a range of possible speakers. Please note, setting
+  `max_speakers_expected` too high may reduce diarization accuracy, causing
+  sentences from the same speaker to be split across multiple speaker labels.
+</Accordion>
+
+{" "}
+
+<Accordion
+  title="How accurate is the Speaker Diarization model?"
+  theme="dark"
+  iconColor="white"
+>
+  The accuracy of the Speaker Diarization model depends on several factors,
+  including the quality of the audio, the number of speakers, and the length of
+  the audio file. Ensuring that each speaker speaks for at least 30 seconds
+  uninterrupted and avoiding scenarios where a person only speaks a few short
+  phrases can improve accuracy. However, it's important to note that the model
+  isn't perfect and may make mistakes, especially in more challenging scenarios.
+</Accordion>
+
+<Accordion
+  title="Why is the speaker diarization not performing as expected?"
+  theme="dark"
+  iconColor="white"
+>
+  The speaker diarization may be performing poorly if a speaker only speaks once
+  or infrequently throughout the audio file. Additionally, if the speaker speaks
+  in short or single-word utterances, the model may struggle to create separate
+  clusters for each speaker. Lastly, if the speakers sound similar, there may be
+  difficulties in accurately identifying and separating them. Background noise,
+  cross-talk, or an echo may also cause issues.
+</Accordion>
+
+{" "}
+
+  <Accordion title="When should I use `speakers_expected` and when should I use `speaker_options` to set a range of speakers?" theme="dark" iconColor="white">
+  `speakers_expected` should be used only when you are confident that your audio file contains exactly the number of speakers you specify. If this number is incorrect, the diarization process, being forced to find an incorrect number of speakers, may produce random splits of single-speaker segments or merge multiple speakers into one in order to return the specified number of speakers. There are various scenarios where the audio file may include unexpected speakers, such as playback of recorded audio during a conversation or background speech from other people. To account for such cases, it is generally recommended to use `min_speakers_expected` instead of `speakers_expected` and to set `max_speakers_expected` slightly higher (e.g., `min_speakers_expected` + 2) to allow some flexibility.
+  </Accordion>
+</AccordionGroup>
