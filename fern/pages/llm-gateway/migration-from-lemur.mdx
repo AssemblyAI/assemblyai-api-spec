@@ -32,42 +32,11 @@ This guide helps you migrate from LeMUR to AssemblyAI's LLM Gateway. While LeMUR
 <Tabs>
 <Tab title="Before: LeMUR" language="python">
 
-```python
-# LeMUR automatically fetched transcript content
-result = transcript.lemur.task(
-    prompt="What was the emotional sentiment of the phone call?",
-    final_model=aai.LemurModel.claude_sonnet_4_20250514
-)
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-1.py" />
 </Tab>
 <Tab title="After: LLM Gateway" language="python">
 
-```python
-# Get transcript text first, then send to LLM Gateway
-transcript_text = transcript.text
-
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json={
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {
-                "role": "user",
-                "content": f"Analyze this transcript for emotional sentiment:\n\n{transcript_text}\n\nWhat was the emotional sentiment of the phone call?"
-            }
-        ],
-        "max_tokens": 1000
-    }
-)
-
-result = response.json()
-answer = result["choices"][0]["message"]["content"]
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-2.py" />
 </Tab>
 </Tabs>
 
@@ -111,223 +80,27 @@ Here's a complete example showing how to migrate a LeMUR sentiment analysis task
 <Tabs groupId="language">
 <Tab language="python-sdk" title="Python SDK (Before: LeMUR)" default>
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Step 1: Transcribe an audio file
-audio_file = "https://assembly.ai/call.mp4"
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe(audio_file)
-
-# Step 2: Apply LeMUR
-prompt = "What was the emotional sentiment of the phone call?"
-result = transcript.lemur.task(
-    prompt, final_model=aai.LemurModel.claude_sonnet_4_20250514
-)
-
-print(result.response)
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-sdk-1.py" />
 </Tab>
 <Tab language="python-sdk" title="Python SDK (After: LLM Gateway)">
 
-```python
-import assemblyai as aai
-import requests
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Step 1: Transcribe an audio file
-audio_file = "https://assembly.ai/call.mp4"
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe(audio_file)
-
-# Step 2: Prepare for LLM Gateway
-transcript_text = transcript.text
-prompt = "What was the emotional sentiment of the phone call?"
-
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Step 3: Send to LLM Gateway
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json={
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {
-                "role": "user",
-                "content": f"Analyze this phone call transcript for emotional sentiment:\n\n{transcript_text}\n\n{prompt}"
-            }
-        ],
-        "max_tokens": 1000
-    }
-)
-
-result = response.json()
-print(result["choices"][0]["message"]["content"])
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-sdk-2.py" />
 </Tab>
 <Tab language="python" title="Python (Before: LeMUR)">
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Step 1: Transcribe audio
-audio_data = {"audio_url": "https://assembly.ai/call.mp4"}
-transcript_response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=audio_data)
-transcript_id = transcript_response.json()["id"]
-
-# Poll for completion
-while True:
-    status_response = requests.get(f"{base_url}/v2/transcript/{transcript_id}", headers=headers)
-    status = status_response.json()["status"]
-    if status == "completed":
-        break
-    elif status == "error":
-        raise RuntimeError("Transcription failed")
-    time.sleep(3)
-
-# Step 2: Apply LeMUR
-lemur_data = {
-    "prompt": "What was the emotional sentiment of the phone call?",
-    "transcript_ids": [transcript_id],
-    "final_model": "anthropic/claude-sonnet-4-20250514"
-}
-
-result = requests.post(f"{base_url}/lemur/v3/generate/task", headers=headers, json=lemur_data)
-print(result.json()["response"])
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-3.py" />
 </Tab>
 <Tab language="python" title="Python (After: LLM Gateway)">
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Step 1: Transcribe audio
-audio_data = {"audio_url": "https://assembly.ai/call.mp4"}
-transcript_response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=audio_data)
-transcript_id = transcript_response.json()["id"]
-
-# Poll for completion
-while True:
-    status_response = requests.get(f"{base_url}/v2/transcript/{transcript_id}", headers=headers)
-    transcript_data = status_response.json()
-    if transcript_data["status"] == "completed":
-        transcript_text = transcript_data["text"]
-        break
-    elif transcript_data["status"] == "error":
-        raise RuntimeError("Transcription failed")
-    time.sleep(3)
-
-# Step 2: Send to LLM Gateway
-prompt = "What was the emotional sentiment of the phone call?"
-llm_data = {
-    "model": "claude-sonnet-4-20250514",
-    "messages": [
-        {
-            "role": "user",
-            "content": f"Analyze this phone call transcript for emotional sentiment:\n\n{transcript_text}\n\n{prompt}"
-        }
-    ],
-    "max_tokens": 1000
-}
-
-result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json=llm_data
-)
-print(result.json()["choices"][0]["message"]["content"])
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/python-4.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK (Before: LeMUR)">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-const run = async () => {
-  // Step 1: Transcribe an audio file
-  const audioFile = "https://assembly.ai/call.mp4";
-  const transcript = await client.transcripts.transcribe({ audio: audioFile });
-
-  // Step 2: Apply LeMUR
-  const prompt = "What was the emotional sentiment of the phone call?";
-  const { response } = await client.lemur.task({
-    transcript_ids: [transcript.id],
-    prompt,
-    final_model: "anthropic/claude-sonnet-4-20250514",
-  });
-
-  console.log(response);
-};
-
-run();
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/javascript-sdk-1.js" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK (After: LLM Gateway)">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-const run = async () => {
-  // Step 1: Transcribe an audio file
-  const audioFile = "https://assembly.ai/call.mp4";
-  const transcript = await client.transcripts.transcribe({ audio: audioFile });
-
-  // Step 2: Prepare for LLM Gateway
-  const prompt = "What was the emotional sentiment of the phone call?";
-
-  const response = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        authorization: "<YOUR_API_KEY>",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        messages: [
-          {
-            role: "user",
-            content: `Analyze this phone call transcript for emotional sentiment:\n\n${transcript.text}\n\n${prompt}`,
-          },
-        ],
-        max_tokens: 1000,
-      }),
-    }
-  );
-
-  const result = await response.json();
-  console.log(result.choices[0].message.content);
-};
-
-run();
-```
-
+<Code src="../../snippets/llm-gateway/migration-from-lemur/javascript-sdk-2.js" />
 </Tab>
 </Tabs>
 

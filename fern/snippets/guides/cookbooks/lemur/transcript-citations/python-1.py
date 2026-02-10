@@ -1,0 +1,178 @@
+import datetime
+import numpy as np
+import requests
+import time
+from sklearn.neighbors import NearestNeighbors
+from sentence_transformers import SentenceTransformer
+
+# Configuration
+api_key = "<YOUR_API_KEY>"
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": api_key}
+
+def upload_file(file_path):
+    """Upload a local audio file to AssemblyAI"""
+    with open(file_path, "rb") as f:
+        response = requests.post(f"{base_url}/v2/upload", headers=headers, data=f)
+        if response.status_code != 200:
+            print(f"Error uploading: {response.status_code}, {response.text}")
+            response.raise_for_status()
+        return response.json()["upload_url"]
+
+def transcribe_audio(audio_url):
+    """Submit audio for transcription with sentences enabled and poll until complete"""
+    data = {
+        "audio_url": audio_url,
+        "auto_highlights": False,
+        "sentiment_analysis": False,
+        "entity_detection": False
+    }
+
+    response = requests.post(f"{base_url}/v2/transcript", headers=headers, json=data)
+
+    if response.status_code != 200:
+        print(f"Error submitting transcription: {response.status_code}, {response.text}")
+        response.raise_for_status()
+
+    transcript_id = response.json()["id"]
+    polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+    print("Transcribing...")
+    while True:
+        transcript = requests.get(polling_endpoint, headers=headers).json()
+        if transcript["status"] == "completed":
+            print("Transcription completed!")
+            return transcript
+        elif transcript["status"] == "error":
+            raise RuntimeError(f"Transcription failed: {transcript['error']}")
+        else:
+            time.sleep(3)
+
+def get_sentences(transcript_id):
+    """Get sentences from a completed transcript"""
+    sentences_endpoint = f"{base_url}/v2/transcript/{transcript_id}/sentences"
+    response = requests.get(sentences_endpoint, headers=headers)
+
+    if response.status_code != 200:
+        print(f"Error getting sentences: {response.status_code}, {response.text}")
+        response.raise_for_status()
+
+    return response.json()["sentences"]
+
+def process_with_llm_gateway(transcript_text, question, context=""):
+    """Send transcript to LLM Gateway for question answering"""
+    prompt = f"""Based on the following transcript, please answer this question:
+            Question: {question}
+            Context: {context}
+            Transcript: {transcript_text}
+            Please provide a clear and specific answer."""
+
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_tokens": 2000
+    }
+
+    response = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+
+    result = response.json()
+
+    if "error" in result:
+        raise RuntimeError(f"LLM Gateway error: {result['error']}")
+
+    return result['choices'][0]['message']['content']
+
+def sliding_window(elements, distance, stride):
+    """Create sliding windows of elements"""
+    idx = 0
+    results = []
+    while idx + distance < len(elements):
+        results.append(elements[idx:idx + distance])
+        idx += (distance - stride)
+    return results
+
+# Main execution
+# If using a local file:
+audio_url = upload_file("<YOUR_AUDIO FILE>")
+
+# If using a public URL:
+# audio_url = "<YOUR_AUDIO_URL>"
+
+# Transcribe audio
+transcript = transcribe_audio(audio_url)
+transcript_text = transcript["text"]
+transcript_id = transcript["id"]
+
+# Get sentences
+print("Getting sentences...")
+sentences = get_sentences(transcript_id)
+
+# Initialize embedder
+embedder = SentenceTransformer("multi-qa-mpnet-base-dot-v1")
+embeddings = {}
+
+# Create sliding window of sentences and generate embeddings
+print("Creating embeddings...")
+sentence_groups = sliding_window(sentences, 5, 2)
+
+for sentence_group in sentence_groups:
+    combined_text = " ".join([sentence["text"] for sentence in sentence_group])
+    start = sentence_group[0]["start"]
+    end = sentence_group[-1]["end"]
+
+    embeddings[(start, end, transcript_id, combined_text)] = embedder.encode(combined_text)
+
+# Use LLM Gateway to find the best quotes
+print("Asking LLM Gateway for best quotes...")
+question = "What are the 3 best quotes from this video?"
+context = "Please provide exactly 3 quotes."
+
+llm_answer = process_with_llm_gateway(transcript_text, question, context)
+print(f"\nLLM Gateway Response:\n{llm_answer}\n")
+
+# Embed the LLM output
+llm_gateway_embedding = embedder.encode(llm_answer)
+
+# Vectorize transcript embeddings
+np_embeddings = np.array(list(embeddings.values()))
+metadata = list(embeddings.keys())
+
+# Find the top 3 most similar quotes
+print("Finding matching quotes in transcript...")
+knn = NearestNeighbors(n_neighbors=3, metric="cosine")
+knn.fit(np_embeddings)
+distances, indices = knn.kneighbors([llm_gateway_embedding])
+
+matches = []
+for distance, index in zip(distances[0], indices[0]):
+    result_metadata = metadata[index]
+    matches.append(
+        {
+            "start_timestamp": result_metadata[0],
+            "end_timestamp": result_metadata[1],
+            "transcript_id": result_metadata[2],
+            "text": result_metadata[3],
+            "confidence": 1 - distance,
+        }
+    )
+
+# Display results
+print("\n" + "="*80)
+print("BEST MATCHING QUOTES FROM TRANSCRIPT:")
+print("="*80 + "\n")
+
+for index, m in enumerate(matches):
+    print('QUOTE #{}: "{}"'.format(index + 1, m['text']))
+    print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['start_timestamp']/1000)))
+    print('END TIMESTAMP:', str(datetime.timedelta(seconds=m['end_timestamp']/1000)))
+    print('CONFIDENCE:', m['confidence'])
+    print()

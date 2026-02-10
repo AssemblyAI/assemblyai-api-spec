@@ -20,172 +20,15 @@ To use structured outputs, include the `response_format` parameter in your reque
 <Tabs>
 <Tab title="Python" language="python">
 
-```python
-import requests
-
-headers = {
-    "authorization": "<YOUR_API_KEY>",
-    "content-type": "application/json"
-}
-
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json={
-        "model": "gemini-2.5-flash-lite",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful math tutor. Guide the user through the solution step by step."
-            },
-            {
-                "role": "user",
-                "content": "how can I solve 8x + 7 = -23"
-            }
-        ],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "math_reasoning",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "steps": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "explanation": {"type": "string"},
-                                    "output": {"type": "string"}
-                                },
-                                "required": ["explanation", "output"],
-                                "additionalProperties": False
-                            }
-                        },
-                        "final_answer": {"type": "string"}
-                    },
-                    "required": ["steps", "final_answer"],
-                    "additionalProperties": False
-                },
-                "strict": True
-            }
-        }
-    }
-)
-
-result = response.json()
-print(result["choices"][0]["message"]["content"])
-```
-
+<Code src="../../snippets/llm-gateway/structured-outputs/python-1.py" />
 </Tab>
 <Tab title="JavaScript" language="javascript">
 
-```javascript
-const response = await fetch(
-  "https://llm-gateway.assemblyai.com/v1/chat/completions",
-  {
-    method: "POST",
-    headers: {
-      authorization: "<YOUR_API_KEY>",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gemini-2.5-flash-lite",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful math tutor. Guide the user through the solution step by step.",
-        },
-        {
-          role: "user",
-          content: "how can I solve 8x + 7 = -23",
-        },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "math_reasoning",
-          schema: {
-            type: "object",
-            properties: {
-              steps: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    explanation: { type: "string" },
-                    output: { type: "string" },
-                  },
-                  required: ["explanation", "output"],
-                  additionalProperties: false,
-                },
-              },
-              final_answer: { type: "string" },
-            },
-            required: ["steps", "final_answer"],
-            additionalProperties: false,
-          },
-          strict: true,
-        },
-      },
-    }),
-  }
-);
-
-const result = await response.json();
-console.log(result.choices[0].message.content);
-```
-
+<Code src="../../snippets/llm-gateway/structured-outputs/javascript.js" />
 </Tab>
 <Tab title="cURL" language="bash">
 
-```bash
-curl -X POST "https://llm-gateway.assemblyai.com/v1/chat/completions" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: <YOUR_API_KEY>" \
-    -d '{
-          "model": "gemini-2.5-flash-lite",
-          "messages": [
-            {
-              "role": "system",
-              "content": "You are a helpful math tutor. Guide the user through the solution step by step."
-            },
-            {
-              "role": "user",
-              "content": "how can I solve 8x + 7 = -23"
-            }
-          ],
-          "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-              "name": "math_reasoning",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "steps": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "explanation": { "type": "string" },
-                        "output": { "type": "string" }
-                      },
-                      "required": ["explanation", "output"],
-                      "additionalProperties": false
-                    }
-                  },
-                  "final_answer": { "type": "string" }
-                },
-                "required": ["steps", "final_answer"],
-                "additionalProperties": false
-              },
-              "strict": true
-            }
-          }
-        }'
-```
-
+<Code src="../../snippets/llm-gateway/structured-outputs/bash.sh" />
 </Tab>
 </Tabs>
 
@@ -215,18 +58,7 @@ When using structured outputs, the model's response will be a JSON string that c
 
 You can parse the content as JSON in your application:
 
-```python
-import json
-
-content = result["choices"][0]["message"]["content"]
-parsed = json.loads(content)
-
-for step in parsed["steps"]:
-    print(f"{step['explanation']}: {step['output']}")
-
-print(f"Final answer: {parsed['final_answer']}")
-```
-
+<Code src="../../snippets/llm-gateway/structured-outputs/python-2.py" />
 ## Supported models
 
 Structured outputs are supported by the following model families:
@@ -286,19 +118,4 @@ Include clear descriptions in your system or user messages to help the model und
 
 If the model cannot generate a valid response that matches your schema, you may receive an error or a response that doesn't fully conform to the schema. Always validate the parsed JSON against your expected structure:
 
-```python
-import json
-
-try:
-    content = result["choices"][0]["message"]["content"]
-    parsed = json.loads(content)
-
-    # Validate required fields exist
-    if "steps" not in parsed or "final_answer" not in parsed:
-        raise ValueError("Missing required fields in response")
-
-except json.JSONDecodeError as e:
-    print(f"Failed to parse response as JSON: {e}")
-except KeyError as e:
-    print(f"Unexpected response structure: {e}")
-```
+<Code src="../../snippets/llm-gateway/structured-outputs/python-3.py" />

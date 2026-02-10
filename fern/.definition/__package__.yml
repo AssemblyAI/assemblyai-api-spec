@@ -111,6 +111,25 @@ types:
       type: literal<"function">
     source:
       openapi: ../llm-gateway.yml
+  JsonSchemaConfig:
+    docs: Configuration for JSON schema-based structured outputs.
+    properties:
+      name:
+        docs: A name for the schema. Used for identification purposes.
+        type: string
+      schema:
+        docs: >-
+          A valid JSON Schema object that defines the structure of the expected
+          response.
+        type: map<string, unknown>
+      strict:
+        default: false
+        docs: >-
+          When `true`, the model will strictly adhere to the schema. Recommended
+          for reliable parsing.
+        type: optional<boolean>
+    source:
+      openapi: ../llm-gateway.yml
   LemurTaskParams:
     properties:
       final_model:
@@ -292,6 +311,19 @@ types:
         docs: The response time in nanoseconds
         type: optional<integer>
       usage: optional<Usage>
+    source:
+      openapi: ../llm-gateway.yml
+  ResponseFormat:
+    docs: >-
+      Specifies the format of the model's response. Use `json_schema` type to
+      constrain the model to output valid JSON matching a schema.
+    properties:
+      json_schema:
+        docs: The JSON schema configuration object.
+        type: JsonSchemaConfig
+      type:
+        docs: The type of response format. Use `json_schema` for structured outputs.
+        type: literal<"json_schema">
     source:
       openapi: ../llm-gateway.yml
   ResponseMessage:
@@ -730,6 +762,72 @@ service:
                 input_tokens: 1
                 output_tokens: 1
                 total_tokens: 1
+        - headers:
+            Authorization: "[object Object]"
+          name: Structured output with JSON schema
+          request:
+            messages:
+              - content: content
+                role: system
+              - content: content
+                role: user
+            model: gemini-2.5-flash-lite
+            response_format:
+              json_schema:
+                name: math_reasoning
+                schema:
+                  additionalProperties: false
+                  properties:
+                    final_answer:
+                      type: string
+                    steps:
+                      items:
+                        additionalProperties: false
+                        properties:
+                          explanation:
+                            type: string
+                          output:
+                            type: string
+                        required:
+                          - explanation
+                          - output
+                        type: object
+                      type: array
+                  required:
+                    - steps
+                    - final_answer
+                  type: object
+                strict: true
+              type: json_schema
+          response:
+            body:
+              choices:
+                - finish_reason: stop
+                  tool_calls:
+                    - function:
+                        arguments: arguments
+                        name: name
+                      id: id
+                      type: function
+              http_status_code: 200
+              llm_status_code: 200
+              request:
+                max_tokens: 1
+                model: model
+                temperature: 1.1
+                tool_choice: none
+                tools:
+                  - function:
+                      name: name
+                      parameters:
+                        key: value
+                    type: function
+              request_id: request_id
+              response_time: 275510459
+              usage:
+                input_tokens: 1
+                output_tokens: 1
+                total_tokens: 1
       method: POST
       path: /chat/completions
       request:
@@ -751,6 +849,12 @@ service:
                 A simple string prompt. The API will automatically convert this
                 into a user message.
               type: optional<string>
+            response_format:
+              docs: >-
+                Specifies the format of the model's response. Use this to
+                constrain the model to output valid JSON matching a schema.
+                Supported by OpenAI (GPT-4.1, GPT-5.x) and Gemini models only.
+              type: optional<ResponseFormat>
             temperature:
               docs: >-
                 Controls randomness. Lower values produce more deterministic

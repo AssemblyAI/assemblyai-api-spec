@@ -12,105 +12,12 @@ Tool calling allows you to define functions that the model can call to access ex
 
 Define functions the model can call to access external data or functionality:
 
-```python
-import requests
-
-headers = {
-  "authorization": "<YOUR_API_KEY>"
-}
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_employees",
-            "description": "Search employee database by name, department, or other criteria",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "first_name": {
-                        "type": "string",
-                        "description": "Employee's first name"
-                    },
-                    "department": {
-                        "type": "string",
-                        "description": "Department name"
-                    }
-                },
-                "required": []
-            }
-        }
-    }
-]
-
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers = headers,
-    json={
-        "model": "claude-sonnet-4-5-20250929",
-        "messages": [{"role": "user", "content": "Find employees in Engineering"}],
-        "tools": tools
-    }
-)
-
-result = response.json()
-print(result["choices"][0]["message"]["content"])
-```
-
+<Code src="../../snippets/llm-gateway/tool-calling/python-1.py" />
 ## Handling tool calls
 
 Execute tools and send results back to continue the conversation:
 
-```python
-import requests
-import json
-
-headers = {
-  "authorization": "<YOUR_API_KEY>"
-}
-
-choice = response.json()["choices"][0]
-
-if choice.get("tool_calls"):
-    tool_call = choice["tool_calls"][0]
-
-    # Add function call to history
-    conversation_history.append({
-        "type": "function_call",
-        "tool_call_id": tool_call["id"],
-        "name": tool_call["function"]["name"],
-        "arguments": tool_call["function"]["arguments"]
-    })
-
-    # Execute your function
-    result = execute_function(
-        tool_call["function"]["name"],
-        json.loads(tool_call["function"]["arguments"])
-    )
-
-    # Add function output to history
-    conversation_history.append({
-        "type": "function_call_output",
-        "tool_call_id": tool_call["id"],
-        "name": tool_call["function"]["name"],
-        "output": json.dumps({"result": result})
-    })
-
-    # Continue conversation with the result
-    response = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers = headers,
-        json = {
-            "model": "claude-sonnet-4-5-20250929",
-            "messages": conversation_history,
-            "tools": tools
-        }
-    )
-
-result = response.json()
-print(result["choices"][0]["message"]["content"])
-```
-
+<Code src="../../snippets/llm-gateway/tool-calling/python-2.py" />
 ## Tool call flow
 
 The complete tool calling process:
@@ -138,41 +45,7 @@ When using tools, structure your conversation history with these message types t
 
 The LLM Gateway accepts POST requests to `https://llm-gateway.assemblyai.com/v1/chat/completions` with the following parameters:
 
-```bash
-curl -X POST \
-  "https://llm-gateway.assemblyai.com/v1/chat/completions" \
-  -H "Authorization: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-5-20250929",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Find employees in Engineering"
-      }
-    ],
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "search_employees",
-          "description": "Search employee database by name, department, or other criteria",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "department": {
-                "type": "string",
-                "description": "Department name"
-              }
-            }
-          }
-        }
-      }
-    ],
-    "max_tokens": 1000
-  }'
-```
-
+<Code src="../../snippets/llm-gateway/tool-calling/bash.sh" />
 #### Request parameters
 
 | Key           | Type             | Required? | Description                                                                                                               |

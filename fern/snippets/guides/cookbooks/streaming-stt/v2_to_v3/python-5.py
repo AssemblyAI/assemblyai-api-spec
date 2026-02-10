@@ -1,0 +1,4 @@
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16

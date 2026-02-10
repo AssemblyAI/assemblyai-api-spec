@@ -6,127 +6,7 @@ In this guide, you'll learn how to check the audio duration of a file using thre
 
 ## Quickstart
 
-```python
-import assemblyai as aai
-import subprocess
-
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
-
-def get_duration_ffprobe(file_path):
-    command = [
-        'ffprobe', '-v', 'error', '-show_entries',
-        'format=duration', '-of',
-        'default=noprint_wrappers=1:nokey=1', file_path
-    ]
-    try:
-        duration = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return float(duration.stdout.strip())
-    except ValueError:
-        print("Error: Unable to parse duration from ffprobe output.")
-        return None
-
-def get_duration_sox(file_path):
-    command = ['soxi', '-D', file_path]
-    try:
-        duration = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return float(duration.stdout.strip())
-    except ValueError:
-        print("Error: Unable to parse duration from SoX output.")
-        return None
-
-def get_duration_mediainfo(file_path):
-    command = ['mediainfo', '--Output=General;%Duration%', file_path]
-    try:
-        duration_ms = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        duration_str = duration_ms.stdout.strip()
-        # Check if the output is empty or not a valid number
-        if duration_str:
-            return float(duration_str) / 1000
-        else:
-            print("Error: MediaInfo returned empty or invalid duration")
-            return None
-    except ValueError:
-        print("Error: Unable to parse duration from MediaInfo output.")
-        return None
-
-def check_audio_durations(file_path):
-    #Check if audio durations differ among the three tools.
-    ffprobe_duration = get_duration_ffprobe(file_path)
-    sox_duration = get_duration_sox(file_path)
-    mediainfo_duration = get_duration_mediainfo(file_path)
-
-    # Print all retrieved durations
-    print(f"ffprobe duration: {ffprobe_duration:.6f} seconds" if ffprobe_duration is not None else "ffprobe duration: Error retrieving duration")
-    print(f"SoX duration: {sox_duration:.6f} seconds" if sox_duration is not None else "SoX duration: Error retrieving duration")
-    print(f"MediaInfo duration: {mediainfo_duration:.6f} seconds" if mediainfo_duration is not None else "MediaInfo duration: Error retrieving duration")
-
-    # Return durations for further checks
-    return (ffprobe_duration, sox_duration, mediainfo_duration)
-
-def transcribe(file):
-    print("Executing transcription as audio durations are consistent.")
-    transcript = transcriber.transcribe(file)
-    print(transcript.text)
-
-def transcode(input_file, output_file):
-    #Transcode audio file to a 16kHz WAV file.
-    print(f"Transcoding file {input_file} to {output_file}...")
-    command = [
-        'ffmpeg', '-i', input_file, '-ar', '16000', '-ac', '1', output_file
-    ]
-    try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if os.path.exists(output_file):
-            print(f"Transcoding complete. Output file: {output_file}")
-        else:
-            print("Error: Transcoding failed.")
-    except subprocess.CalledProcessError as e:
-        print("Warnings from ffmpeg")
-        """Print errors or warnings from ffmpeg"""
-        #print(e.stderr.decode())
-
-def durations_are_consistent(durations, tolerance=0.01):
-    #Check if durations are consistent within a given tolerance of 0.01 seconds.
-    if None in durations:
-        return False
-    min_duration = min(durations)
-    max_duration = max(durations)
-    return (max_duration - min_duration) <= tolerance
-
-def main(file_path):
-    durations = check_audio_durations(file_path)
-
-    if durations:
-        if None in durations:
-            print("Error: One or more duration values could not be retrieved.")
-            transcoded_file = file_path.rsplit('.', 1)[0] + '_transcoded.wav'
-            transcode(file_path, transcoded_file)
-            new_durations = check_audio_durations(transcoded_file)
-            if new_durations and durations_are_consistent(new_durations):
-                transcribe(transcoded_file)
-            else:
-                print("Warning: The audio durations still differ or an error occurred with the transcoded file.")
-        elif not durations_are_consistent(durations):
-            print("Warning: The audio durations differ between tools.")
-            transcoded_file = file_path.rsplit('.', 1)[0] + '_transcoded.wav'
-            transcode(file_path, transcoded_file)
-            new_durations = check_audio_durations(transcoded_file)
-            if new_durations and durations_are_consistent(new_durations):
-                transcribe(transcoded_file)
-            else:
-                print("Warning: The audio durations still differ or an error occurred with the transcoded file.")
-        else:
-            print("The audio durations are consistent.")
-            transcribe(file_path)
-
-audio_file="./audio.mp4"
-
-if __name__ == "__main__":
-    file_path = f"{audio_file}"
-    main(file_path)
-```
-
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-1.py" />
 ## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
@@ -141,161 +21,57 @@ pip install assemblyai
 
 Import the `assemblyai` package along with `subprocess`, set your AssemblyAI API key, and initiate the transcriber.
 
-```python
-import assemblyai as aai
-import subprocess
-
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
-```
-
-For this cookbook you will need [`ffmpeg`](https://www.ffmpeg.org/), [`sox`](https://sourceforge.net/projects/sox/), and [`MediaInfo`](https://mediaarea.net/en/MediaInfo). We will use these tools to pull the duration from the audio. Matching audio duration is crucial because discrepancies may indicate issues with the audio file's metadata or headers. Such inconsistencies can lead to inaccurate transcription results, playback issues, or unexpected behaviour in media applications. By verifying that the duration is consistent across all three tools, we can detect potential problems early and correct any corrupted metadata or faulty headers before processing the audio further.
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-2.py" />
+For this cookbook you will need [`ffmpeg`](https://www.ffmpeg.org/),
+[`sox`](https://sourceforge.net/projects/sox/), and
+[`MediaInfo`](https://mediaarea.net/en/MediaInfo). We will use these tools to
+pull the duration from the audio. Matching audio duration is crucial because
+discrepancies may indicate issues with the audio file's metadata or headers.
+Such inconsistencies can lead to inaccurate transcription results, playback
+issues, or unexpected behaviour in media applications. By verifying that the
+duration is consistent across all three tools, we can detect potential problems
+early and correct any corrupted metadata or faulty headers before processing the
+audio further.
 
 First, we will get the audio duration using `ffprobe`.
 
-```python
-def get_duration_ffprobe(file_path):
-    command = [
-        'ffprobe', '-v', 'error', '-show_entries',
-        'format=duration', '-of',
-        'default=noprint_wrappers=1:nokey=1', file_path
-    ]
-    try:
-        duration = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return float(duration.stdout.strip())
-    except ValueError:
-        print("Error: Unable to parse duration from ffprobe output.")
-        return None
-
-```
-
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-3.py" />
 Next, we will get the audio duration for the same file using `sox`.
 
-```python
-def get_duration_sox(file_path):
-    command = ['soxi', '-D', file_path]
-    try:
-        duration = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return float(duration.stdout.strip())
-    except ValueError:
-        print("Error: Unable to parse duration from SoX output.")
-        return None
-```
-
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-4.py" />
 Finally, we will get the audio duration for the same file using `MediaInfo`.
 
-```python
-def get_duration_mediainfo(file_path):
-    command = ['mediainfo', '--Output=General;%Duration%', file_path]
-    try:
-        duration_ms = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        duration_str = duration_ms.stdout.strip()
-        # Check if the output is empty or not a valid number
-        if duration_str:
-            return float(duration_str) / 1000
-        else:
-            print("Error: MediaInfo returned empty or invalid duration")
-            return None
-    except ValueError:
-        print("Error: Unable to parse duration from MediaInfo output.")
-        return None
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-5.py" />
+The following function will return the durations from the three tools and
+convert them to the same format.
 
-```
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-6.py" />
+Define the `transcribe` function. This will run only when the duration is
+consistent among the three tools.
 
-The following function will return the durations from the three tools and convert them to the same format.
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-7.py" />
+Define the `transcode` function. We will run this if one or more durations
+differ. The output file will be a 16kHz WAV file as that is the format
+AssemblyAI models are trained on. When running the `ffmpeg` command, the
+transcode may fail or return warnings if there are issues with the input file's
+format, corrupted metadata, or unsupported codecs. These warnings tend to be
+verbose but you can print them for troubleshooting.
 
-```python
-def check_audio_durations(file_path):
-    #Check if audio durations differ among the three tools.
-    ffprobe_duration = get_duration_ffprobe(file_path)
-    sox_duration = get_duration_sox(file_path)
-    mediainfo_duration = get_duration_mediainfo(file_path)
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-8.py" />
+Define a function that will check if the durations are consistent. There may be
+small differences so it's best to allow a small tolerance. In this example the
+tolerance value will be 0.01 seconds.
 
-    # Print all retrieved durations
-    print(f"ffprobe duration: {ffprobe_duration:.6f} seconds" if ffprobe_duration is not None else "ffprobe duration: Error retrieving duration")
-    print(f"SoX duration: {sox_duration:.6f} seconds" if sox_duration is not None else "SoX duration: Error retrieving duration")
-    print(f"MediaInfo duration: {mediainfo_duration:.6f} seconds" if mediainfo_duration is not None else "MediaInfo duration: Error retrieving duration")
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-9.py" />
+Finally, here is the order of operations for this program. This program will
+first check the duration of an audio file across different tools to ensure
+consistency. If any tool fails to retrieve a duration or if the durations
+differ, it transcodes the audio to a new 16kHz WAV file and checks the duration
+of the WAV file. If the durations are consistent in the transcoded file, the
+program proceeds to transcribe it. If inconsistencies remain after transcoding,
+it logs a warning to highlight the issue and will not transcribe the file.
 
-    # Return durations for further checks
-    return (ffprobe_duration, sox_duration, mediainfo_duration)
-```
-
-Define the `transcribe` function. This will run only when the duration is consistent among the three tools.
-
-```python
-def transcribe(file):
-    print("Executing transcription as audio durations are consistent.")
-    transcript = transcriber.transcribe(file)
-    print(transcript.text)
-```
-
-Define the `transcode` function. We will run this if one or more durations differ. The output file will be a 16kHz WAV file as that is the format AssemblyAI models are trained on. When running the `ffmpeg` command, the transcode may fail or return warnings if there are issues with the input file's format, corrupted metadata, or unsupported codecs. These warnings tend to be verbose but you can print them for troubleshooting.
-
-```python
-def transcode(input_file, output_file):
-    #Transcode audio file to a 16kHz WAV file.
-    print(f"Transcoding file {input_file} to {output_file}...")
-    command = [
-        'ffmpeg', '-i', input_file, '-ar', '16000', '-ac', '1', output_file
-    ]
-    try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if os.path.exists(output_file):
-            print(f"Transcoding complete. Output file: {output_file}")
-        else:
-            print("Error: Transcoding failed.")
-    except subprocess.CalledProcessError as e:
-        print("Warnings from ffmpeg")
-        """Print errors or warnings from ffmpeg"""
-        #print(e.stderr.decode())
-```
-
-Define a function that will check if the durations are consistent. There may be small differences so it's best to allow a small tolerance. In this example the tolerance value will be 0.01 seconds.
-
-```python
-def durations_are_consistent(durations, tolerance=0.01):
-    #Check if durations are consistent within a given tolerance of 0.01 seconds.
-    if None in durations:
-        return False
-    min_duration = min(durations)
-    max_duration = max(durations)
-    return (max_duration - min_duration) <= tolerance
-```
-
-Finally, here is the order of operations for this program. This program will first check the duration of an audio file across different tools to ensure consistency. If any tool fails to retrieve a duration or if the durations differ, it transcodes the audio to a new 16kHz WAV file and checks the duration of the WAV file. If the durations are consistent in the transcoded file, the program proceeds to transcribe it. If inconsistencies remain after transcoding, it logs a warning to highlight the issue and will not transcribe the file.
-
-```python
-def main(file_path):
-    durations = check_audio_durations(file_path)
-
-    if durations:
-        if None in durations:
-            print("Error: One or more duration values could not be retrieved.")
-            transcoded_file = file_path.rsplit('.', 1)[0] + '_transcoded.wav'
-            transcode(file_path, transcoded_file)
-            new_durations = check_audio_durations(transcoded_file)
-            if new_durations and durations_are_consistent(new_durations):
-                transcribe(transcoded_file)
-            else:
-                print("Warning: The audio durations still differ or an error occurred with the transcoded file.")
-        elif not durations_are_consistent(durations):
-            print("Warning: The audio durations differ between tools.")
-            transcoded_file = file_path.rsplit('.', 1)[0] + '_transcoded.wav'
-            transcode(file_path, transcoded_file)
-            new_durations = check_audio_durations(transcoded_file)
-            if new_durations and durations_are_consistent(new_durations):
-                transcribe(transcoded_file)
-            else:
-                print("Warning: The audio durations still differ or an error occurred with the transcoded file.")
-        else:
-            print("The audio durations are consistent.")
-            transcribe(file_path)
-
-audio_file="./audio/8950.mp4"
-
-if __name__ == "__main__":
-    file_path = f"{audio_file}"
-    main(file_path)
-```
-
-If you continue to experience unexpected behaviour with your file, please contact our support team at support@assemblyai.com for assistance in diagnosing the issue.
+<Code src="../../../../snippets/guides/cookbooks/core-transcription/audio-duration-fix/python-10.py" />
+If you continue to experience unexpected behaviour with your file, please
+contact our support team at support@assemblyai.com for assistance in diagnosing
+the issue.

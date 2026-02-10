@@ -22,55 +22,13 @@ To create a webhook, use `set_webhook()` on the transcription config. The URL mu
 
 Use `submit()` instead of `transcribe()` to create a transcription without waiting for it to complete.
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# audio_file = "./local_file.mp3"
-audio_file = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig(
-    speech_models=["universal-3-pro", "universal-2"],
-    language_detection=True
-).set_webhook("https://example.com/webhook")
-
-aai.Transcriber().submit(audio_file, config)
-```
-
+<Code src="../../snippets/guides/webhooks/python-sdk-1.py" />
 </Tab>
 <Tab language="python" title="Python">
 
 To create a webhook, set the `webhook_url` parameter when you create a new transcription. The URL must be accessible from AssemblyAI's servers.
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-    "authorization": "<YOUR_API_KEY>"
-}
-
-with open("./my-audio.mp3", "rb") as f:
-  response = requests.post(base_url + "/v2/upload",
-                          headers=headers,
-                          data=f)
-
-upload_url = response.json()["upload_url"]
-
-data = {
-    "audio_url": upload_url,
-    "speech_models": ["universal-3-pro", "universal-2"],
-    "language_detection": True,
-    "webhook_url": "https://example.com/webhook"
-}
-
-url = base_url + "/v2/transcript"
-response = requests.post(url, json=data, headers=headers)
-```
-
+<Code src="../../snippets/guides/webhooks/python-1.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
@@ -78,63 +36,13 @@ To create a webhook, include the `webhook_url` parameter when you create a new t
 
 Use `submit()` instead of `transcribe()` to create a transcription without waiting for it to complete.
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// const audioFile = './local_file.mp3'
-const audioFile = "https://assembly.ai/wildfires.mp3";
-
-const params = {
-  audio: audioFile,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  webhook_url: "https://example.com/webhook",
-};
-
-const run = async () => {
-  const transcript = await client.transcripts.submit(params);
-};
-
-run();
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-sdk-1.js" />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
 To create a webhook, set the `webhook_url` parameter when you create a new transcription. The URL must be accessible from AssemblyAI's servers.
 
-```javascript
-import axios from "axios";
-import fs from "fs-extra";
-
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-};
-
-const path = "./my-audio.mp3";
-const audioData = await fs.readFile(path);
-const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers,
-});
-const uploadUrl = uploadResponse.data.upload_url;
-
-const data = {
-  audio_url: uploadUrl,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  webhook_url: "https://example.com/webhook",
-};
-
-const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-1.js" />
 </Tab>
 </Tabs>
 
@@ -174,93 +82,19 @@ The webhook delivery payload contains a JSON object with the following propertie
 <Tabs>
 <Tab language="python-sdk" title="Python SDK" default>
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-transcript = aai.Transcript.get_by_id("<TRANSCRIPT_ID>")
-
-if transcript.status == "error":
-  raise RuntimeError(f"Transcription failed: {transcript.error}")
-
-print(transcript.text)
-
-```
-
+<Code src="../../snippets/guides/webhooks/python-sdk-2.py" />
 </Tab>
 <Tab language="python" title="Python">
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-    "authorization": "<YOUR_API_KEY>"
-}
-
-transcript_id = "<TRANSCRIPT_ID>"
-
-polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
-
-transcription_result = requests.get(polling_endpoint, headers=headers).json()
-
-if transcription_result['status'] == 'completed':
-  print(f"Transcript ID:", transcript_id)
-elif transcription_result['status'] == 'error':
-  raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-
-```
-
+<Code src="../../snippets/guides/webhooks/python-2.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK" default>
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-const transcript = await client.transcripts.get("<TRANSCRIPT_ID>");
-
-if (transcript.status === "error") {
-  throw new Error(`Transcription failed: ${transcript.error}`);
-}
-
-console.log(transcript.text);
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-sdk-2.js" />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-import axios from "axios";
-import fs from "fs-extra";
-
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-};
-
-const transcriptId = "<TRANSCRIPT_ID>";
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-const pollingResponse = await axios.get(pollingEndpoint, {
-  headers: headers,
-});
-const transcriptionResult = pollingResponse.data;
-
-if (transcriptionResult.status === "completed") {
-  console.log(transcriptionResult.text);
-} else if (transcriptionResult.status === "error") {
-  throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-}
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-2.js" />
 </Tab>
 </Tabs>
 
@@ -273,55 +107,25 @@ You can authenticate webhook deliveries from AssemblyAI by including a custom HT
 
 To add an authentication header, include the auth header name and value in `set_webhook()`.
 
-```python {2}
-config = aai.TranscriptionConfig().set_webhook(
-    "https://example.com/webhook", "X-My-Webhook-Secret", "secret-value"
-)
-
-aai.Transcriber().submit(audio_url, config)
-```
-
+<Code src="../../snippets/guides/webhooks/python-3.py" highlight={[2]} />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
 To add an authentication header, include the `webhook_auth_header_name` and `webhook_auth_header_value` parameters.
 
-```javascript {5-6}
-client.transcripts.submit({
-  audio:
-    'https://assembly.ai/wildfires.mp3',
-  webhook_url: 'https://example.com/webhook'
-  webhook_auth_header_name: "X-My-Webhook-Secret",
-  webhook_auth_header_value: "secret-value"
-})
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-3.js" highlight={[5-6]} />
 </Tab>
 <Tab language="golang" title="Go">
 
 To add an authentication header, include the `WebhookAuthHeaderName` and `WebhookAuthHeaderValue` parameters.
 
-```go {3-4}
-client.Transcripts.SubmitFromURL(ctx, audioURL, &aai.TranscriptOptionalParams{
-    WebhookURL:             aai.String("https://example.com/webhook"),
-    WebhookAuthHeaderName:  aai.String("X-My-Webhook-Secret"),
-    WebhookAuthHeaderValue: aai.String("secret-value"),
-})
-```
-
+<Code src="../../snippets/guides/webhooks/go.go" highlight={[3-4]} />
 </Tab>
 <Tab language="java" title="Java">
 
 To add an authentication header, include the `webhookAuthHeaderName` and `webhookAuthHeaderValue` parameters.
 
-```java {3-4}
-var params = TranscriptOptionalParams.builder()
-        .webhookUrl("https://example.com/webhook")
-        .webhookAuthHeaderName("X-My-Webhook-Secret")
-        .webhookAuthHeaderValue("secret-value")
-        .build();
-```
-
+<Code src="../../snippets/guides/webhooks/java.java" highlight={[3-4]} />
 </Tab>
 </Tabs>
 <Tabs>
@@ -329,114 +133,25 @@ var params = TranscriptOptionalParams.builder()
 
 To add an authentication header, include the auth header name and value in `set_webhook()`.
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# audio_file = "./local_file.mp3"
-audio_file = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig().set_webhook("https://example.com/webhook", "X-My-Webhook-Secret", "secret-value")
-
-aai.Transcriber().submit(audio_file, config)
-```
-
+<Code src="../../snippets/guides/webhooks/python-sdk-3.py" />
 </Tab>
 <Tab language="python" title="Python">
 
 To add an authentication header, include the auth header name and value in `set_webhook()`.
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-    "authorization": "<YOUR_API_KEY>"
-}
-
-with open("./my-audio.mp3", "rb") as f:
-  response = requests.post(base_url + "/v2/upload",
-                          headers=headers,
-                          data=f)
-
-upload_url = response.json()["upload_url"]
-
-data = {
-    "audio_url": upload_url,
-    "webhook_url": "https://example.com/webhook",
-    "webhook_auth_header_name": "X-My-Webhook-Secret",
-    "webhook_auth_header_value": "secret-value"
-}
-
-url = base_url + "/v2/transcript"
-response = requests.post(url, json=data, headers=headers)
-```
-
+<Code src="../../snippets/guides/webhooks/python-4.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 To add an authentication header, include the `webhook_auth_header_name` and `webhook_auth_header_value` parameters.
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// const audioFile = './local_file.mp3'
-const audioFile = "https://assembly.ai/wildfires.mp3";
-
-const params = {
-  audio: audioFile,
-  webhook_url: "https://example.com/webhook",
-  webhook_auth_header_name: "X-My-Webhook-Secret",
-  webhook_auth_header_value: "secret-value",
-};
-
-const run = async () => {
-  const transcript = await client.transcripts.submit(params);
-};
-
-run();
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-sdk-3.js" />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
 To add an authentication header, include the `webhook_auth_header_name` and `webhook_auth_header_value` parameters.
 
-```javascript
-import axios from "axios";
-import fs from "fs-extra";
-
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-};
-
-const path = "./my-audio.mp3";
-const audioData = await fs.readFile(path);
-const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers,
-});
-const uploadUrl = uploadResponse.data.upload_url;
-
-const data = {
-  audio_url: uploadUrl,
-  webhook_url: "https://example.com/webhook",
-  webhook_auth_header_name: "X-My-Webhook-Secret",
-  webhook_auth_header_value: "secret-value",
-};
-
-const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
-```
-
+<Code src="../../snippets/guides/webhooks/javascript-4.js" />
 </Tab>
 </Tabs>
 

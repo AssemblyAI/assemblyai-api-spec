@@ -132,136 +132,7 @@ This script will:
 - Show when utterances are complete and ready for LLM processing
 - Show when turns are predicted to have ended so your voice agent can respond
 
-```python
-import asyncio
-import json
-import websockets
-from urllib.parse import urlencode
-import pyaudio
-import threading
-from queue import Queue
-
-# Configuration
-API_KEY = "YOUR_API_KEY_HERE"  # Replace with your AssemblyAI API key
-SAMPLE_RATE = 16000
-CHUNK_SIZE = 1024
-
-# WebSocket connection parameters
-CONNECTION_PARAMS = {
-    "sample_rate": SAMPLE_RATE,
-    "format_turns": False,  # CRITICAL: Unformatted for fastest response (~200ms savings)
-    "end_of_turn_confidence_threshold": 0.4,  # Balanced turn detection
-    "min_end_of_turn_silence_when_confident": 160,  # ms after confident EOT
-    "max_turn_silence": 1280  # Acoustic fallback threshold
-}
-
-# Build WebSocket URL
-API_ENDPOINT_BASE = "wss://streaming.assemblyai.com/v3/ws"
-API_ENDPOINT = f"{API_ENDPOINT_BASE}?{urlencode(CONNECTION_PARAMS)}"
-
-# Audio queue for thread-safe audio handling
-audio_queue = Queue()
-
-def audio_callback(in_data, frame_count, time_info, status):
-    """Callback for audio stream - adds audio to queue"""
-    audio_queue.put(in_data)
-    return (None, pyaudio.paContinue)
-
-async def send_audio(websocket):
-    """Send audio data to WebSocket"""
-    print("📤 Starting audio sender...")
-    while True:
-        if not audio_queue.empty():
-            audio_data = audio_queue.get()
-            await websocket.send(audio_data)
-        else:
-            await asyncio.sleep(0.01)
-
-async def receive_transcripts(websocket):
-    """Receive and log all transcripts"""
-    print("📥 Starting transcript receiver...")
-    while True:
-        try:
-            message = await websocket.recv()
-            data = json.loads(message)
-
-            # Log complete JSON response
-            print("\n" + "="*50)
-            print("📝 RECEIVED MESSAGE:")
-            print(json.dumps(data, indent=2))
-
-            # Highlight important fields
-            if data.get("type") == "Turn":
-                print("\n🔍 KEY FIELDS:")
-                print(f"  Turn Order: {data.get('turn_order')}")
-                print(f"  Transcript: '{data.get('transcript')}'")
-                print(f"  End of Turn: {data.get('end_of_turn')}")
-                print(f"  EOT Confidence: {data.get('end_of_turn_confidence', 0):.3f}")
-                print(f"  Utterance: {data.get('utterance')}")
-
-                # KEY INSIGHT: Utterance field enables pre-emptive generation
-                if data.get("utterance"):
-                    print("\n✅ UTTERANCE AVAILABLE - Ready for LLM processing!")
-                    print("   💡 Start generating LLM response now, don't wait for end_of_turn")
-
-                # KEY INSIGHT: end_of_turn signals when to respond
-                if data.get("end_of_turn"):
-                    print("\n🎯 END OF TURN - User finished speaking, agent can respond")
-
-        except websockets.exceptions.ConnectionClosed:
-            print("❌ Connection closed")
-            break
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-async def main():
-    """Main function to coordinate streaming"""
-    print("🚀 Universal-Streaming Terminal Logger")
-    print(f"📡 Connecting to: {API_ENDPOINT_BASE}")
-    print(f"🔧 Configuration: {json.dumps(CONNECTION_PARAMS, indent=2)}")
-    print("-" * 50)
-
-    # Set up audio stream
-    p = pyaudio.PyAudio()
-    stream = p.open(
-        format=pyaudio.paInt16,
-        channels=1,
-        rate=SAMPLE_RATE,
-        input=True,
-        frames_per_buffer=CHUNK_SIZE,
-        stream_callback=audio_callback
-    )
-
-    # Connect to WebSocket with auth header
-    headers = {"Authorization": API_KEY}
-
-    try:
-        # If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
-        async with websockets.connect(API_ENDPOINT, additional_headers=headers) as websocket:
-            print("✅ Connected to Universal-Streaming!")
-            print("🎤 Start speaking... (Press Ctrl+C to stop)\n")
-
-            # Start audio stream
-            stream.start_stream()
-
-            # Run send and receive concurrently
-            await asyncio.gather(
-                send_audio(websocket),
-                receive_transcripts(websocket)
-            )
-
-    except KeyboardInterrupt:
-        print("\n👋 Stopping...")
-    finally:
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-        print("✅ Cleaned up resources")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-1.py" />
 ### Installation Requirements
 
 ```bash
@@ -284,61 +155,13 @@ AssemblyAI provides **speech-to-text only** today - you'll need additional provi
 **LiveKit Agents (Recommended Quick Start)**
 LiveKit provides the fastest path to a working voice agent with AssemblyAI:
 
-```python
-# LiveKit + AssemblyAI Quick Start
-from livekit import agents
-from livekit.plugins import assemblyai, openai, rime
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-2.py" />
+**Pipecat by Daily** Pipecat is an open-source framework for conversational AI
+which allows for maximum customizability in your voice agent:
 
-async def create_voice_agent():
-    # Initialize AssemblyAI STT
-    stt = assemblyai.STT(
-        api_key="your_assemblyai_key",
-        end_of_turn_confidence_threshold=0.4,
-        min_end_of_turn_silence_when_confident=160,
-        format_turns=False  # CRITICAL: Faster without formatting
-    )
-
-    # Add LLM
-    llm = openai.LLM(api_key="your_openai_key")
-
-    # Add TTS
-    tts = rime.TTS(api_key="your_rime_key")
-
-    # Create agent
-    agent = agents.VoiceAssistant(
-        stt=stt,
-        llm=llm,
-        tts=tts,
-        turn_detection="stt"  # Use AssemblyAI's turn detection
-    )
-
-    return agent
-```
-
-**Pipecat by Daily**
-Pipecat is an open-source framework for conversational AI which allows for maximum customizability in your voice agent:
-
-```python
-from pipecat.services.assemblyai import AssemblyAISTTService
-from pipecat.services.openai import OpenAILLMService
-from pipecat.services.rime import RimeTTSService
-
-# Configure services
-stt = AssemblyAISTTService(
-    api_key="your_key",
-    connection_params=AssemblyAIConnectionParams(
-        end_of_turn_confidence_threshold=0.4,
-        min_end_of_turn_silence_when_confident=160,  # ms after confident EOT
-        format_turns=False  # CRITICAL: Faster without formatting
-    ),
-    vad_force_turn_endpoint=False,  # Rely on AssemblyAI's EOT, not VAD
-)
-llm = OpenAILLMService(api_key="your_key")
-tts = RimeTTSService(api_key="your_key")
-```
-
-**Vapi**
-Vapi is a developer platform that handles voice agent backend infrastructure:
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-3.py" />
+**Vapi** Vapi is a developer platform that handles voice agent backend
+infrastructure:
 
 1. Go to Assistants tab in Vapi dashboard
 2. Select your assistant → Transcriber tab
@@ -357,25 +180,7 @@ See our [Vapi integration guide](https://www.assemblyai.com/docs/integrations/va
 
 ### Fastest Latency Configuration
 
-```python
-# Maximum speed configuration
-latency_optimized_params = {
-    "sample_rate": 16000,
-    "encoding": "pcm_s16le",
-
-    # CRITICAL latency optimizations
-    "format_turns": False,  # NEVER use for voice agents - saves ~200ms
-
-    # Aggressive turn detection for quick responses
-    "end_of_turn_confidence_threshold": 0.4,  # Lower = faster detection
-    "min_end_of_turn_silence_when_confident": 160,  # Minimal silence required
-    "max_turn_silence": 800,  # Faster fallback
-
-    # Audio optimization
-    "chunk_size": 512  # Smaller chunks = lower latency
-}
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-4.py" />
 ### Latency Optimization Best Practices
 
 **1. Never use Text Formatting for Voice Agents**
@@ -406,15 +211,10 @@ This is especially powerful when using external turn detection models. By defaul
 
 **3. Use Aggressive Turn Detection**
 
-```python
-# For rapid back-and-forth (customer service, quick confirmations)
-latency_optimized_params = {
-    "end_of_turn_confidence_threshold": 0.4,
-    "min_end_of_turn_silence_when_confident": 160
-}
-```
-
-Note that we recommend testing the end of turn confidence for your use case. You can find our [guide on turn detection here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection).
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-5.py" />
+Note that we recommend testing the end of turn confidence for your use case. You
+can find our [guide on turn detection
+here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection).
 
 **4. Optimize Audio Pipeline**
 
@@ -467,32 +267,7 @@ When either method detects an end-of-turn, the model returns `end_of_turn=True` 
 
 ### Configuration Examples
 
-```python
-# Aggressive - Fast customer service
-# Best for: IVR, order confirmations, yes/no questions
-aggressive_params = {
-    "end_of_turn_confidence_threshold": 0.3,  # Lower threshold = faster detection
-    "min_end_of_turn_silence_when_confident": 160,  # Less silence needed
-    "max_turn_silence": 800  # Quick acoustic fallback
-}
-
-# Balanced - Natural conversations (DEFAULT)
-# Best for: Customer support, tech support, general conversations
-balanced_params = {
-    "end_of_turn_confidence_threshold": 0.4,
-    "min_end_of_turn_silence_when_confident": 400,
-    "max_turn_silence": 1280
-}
-
-# Conservative - Medical dictation, complex instructions
-# Best for: Healthcare, legal, detailed technical support
-conservative_params = {
-    "end_of_turn_confidence_threshold": 0.5,  # Higher threshold = more patient
-    "min_end_of_turn_silence_when_confident": 560,  # More silence before confirming
-    "max_turn_silence": 2000  # Longer acoustic fallback
-}
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-6.py" />
 **Parameter Explanations:**
 
 - `end_of_turn_confidence_threshold`: Raise to wait for higher confidence before ending turn; lower for faster responses
@@ -503,37 +278,13 @@ conservative_params = {
 
 **Disable Model-Based Detection**
 
-```python
-# Use VAD-only mode (silence-based only)
-params = {"end_of_turn_confidence_threshold": 1.0}
-
-# Use an external turn detection model (fastest possible)
-params = {"end_of_turn_confidence_threshold": 0.01}
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-7.py" />
 **Force Manual Turn Ending**
 
-```python
-# Send ForceEndpoint event to immediately end current turn
-await websocket.send(json.dumps({
-    "type": "ForceEndpoint"
-}))
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-8.py" />
 ### Monitoring Turn Detection
 
-```python
-def analyze_turn_detection(data):
-    eot_confidence = data.get("end_of_turn_confidence", 0)
-
-    if eot_confidence > 0.7:
-        print("High confidence turn end - user definitely finished")
-    elif eot_confidence > 0.4:
-        print("Moderate confidence - may continue speaking")
-    else:
-        print("Low confidence - likely mid-sentence or thinking")
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-9.py" />
 ## How Can I Use Immutable Partials for Pre-emptive Generation?
 
 ### Understanding the Utterance Field
@@ -559,50 +310,7 @@ The `utterance` field in Universal-Streaming provides the **complete finalized t
 
 When you receive a non-empty `utterance` field, you can immediately start LLM processing:
 
-```python
-async def handle_streaming_message(data):
-    utterance_text = data.get("utterance")
-    transcript = data.get("transcript")
-    is_final = data.get("end_of_turn")
-    turn_order = data.get("turn_order")
-
-    # Check for utterance completion (pre-emptive opportunity)
-    if utterance_text:
-        # FASTEST: Start LLM processing on complete utterance
-        # even though turn hasn't ended
-        print(f"🚀 Pre-emptive generation for: '{utterance_text}'")
-
-        # Start async LLM call immediately
-        llm_task = asyncio.create_task(
-            generate_llm_response(utterance_text, turn_order)
-        )
-
-        # Cache for later use
-        utterance_cache[turn_order] = {
-            "utterance": utterance_text,
-            "llm_task": llm_task
-        }
-
-    elif is_final:
-        # Turn has ended - use pre-computed response if available
-        if turn_order in utterance_cache:
-            # Response already computing or ready!
-            llm_response = await utterance_cache[turn_order]["llm_task"]
-            print(f"✅ Using pre-computed response (saved 200-500ms!)")
-            return llm_response
-        else:
-            # Fallback: generate response now
-            return await generate_llm_response(transcript, turn_order)
-
-async def generate_llm_response(text, turn_order):
-    """Generate LLM response for utterance"""
-    response = await llm.complete(
-        prompt=f"Respond to: {text}",
-        metadata={"turn_order": turn_order}
-    )
-    return response
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-10.py" />
 ### When Utterance Field Appears
 
 The `utterance` field appears in these scenarios:
@@ -646,38 +354,7 @@ The `utterance` field appears in these scenarios:
 
 ### Real-World Example
 
-```python
-# Voice agent with pre-emptive generation
-class FastVoiceAgent:
-    def __init__(self):
-        self.utterance_cache = {}
-
-    async def process_stream(self, data):
-        turn_order = data.get("turn_order")
-        utterance = data.get("utterance")
-
-        # Log for debugging
-        print(f"Turn {turn_order}: utterance='{utterance}' eot={data.get('end_of_turn')}")
-
-        if utterance and not data.get("end_of_turn"):
-            # Pre-emptive path: ~300ms head start!
-            print(f"⚡ Starting pre-emptive generation for turn {turn_order}")
-            self.utterance_cache[turn_order] = asyncio.create_task(
-                self.generate_response(utterance)
-            )
-
-        if data.get("end_of_turn"):
-            # Turn ended - use cached or generate now
-            if turn_order in self.utterance_cache:
-                response = await self.utterance_cache[turn_order]
-                print(f"🎯 Pre-computed response ready instantly!")
-            else:
-                response = await self.generate_response(data.get("transcript"))
-                print(f"⏱️ Generated response on-demand")
-
-            return response
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-11.py" />
 <Note>
   Voice agent platforms like LiveKit and Pipecat automatically use the utterance
   field for pre-emptive generation with optimal settings configured. If you're
@@ -805,67 +482,7 @@ Sometimes the turn ends but the user keeps speaking:
 
 ### Processing Strategy
 
-```python
-class TranscriptProcessor:
-    def __init__(self):
-        self.current_turn = 0
-        self.pre_computed_responses = {}
-
-    async def process_message(self, data):
-        msg_type = data.get("type")
-
-        if msg_type == "Begin":
-            print(f"Session started: {data.get('id')}")
-
-        elif msg_type == "Turn":
-            return await self.process_turn(data)
-
-        elif msg_type == "Termination":
-            print(f"Session ended: {data.get('message')}")
-
-    async def process_turn(self, data):
-        turn_order = data.get("turn_order")
-        transcript = data.get("transcript")
-        utterance = data.get("utterance")
-        is_final = data.get("end_of_turn")
-        eot_confidence = data.get("end_of_turn_confidence", 0)
-
-        # Track turn changes
-        if turn_order != self.current_turn:
-            self.current_turn = turn_order
-            print(f"\n🔄 New turn #{turn_order}")
-
-        # Monitor progress
-        print(f"  Confidence: {eot_confidence:.3f} | Transcript: '{transcript}'")
-
-        # KEY: Check for utterance completion (pre-emptive opportunity)
-        if utterance:
-            print(f"  ⚡ UTTERANCE COMPLETE: '{utterance}' - Starting pre-generation!")
-
-            # Start LLM processing immediately
-            self.pre_computed_responses[turn_order] = asyncio.create_task(
-                self.generate_response(utterance)
-            )
-
-        # Handle turn completion
-        if is_final:
-            print(f"  ✅ TURN COMPLETE: '{transcript}'")
-
-            # Use pre-computed response if available
-            if turn_order in self.pre_computed_responses:
-                response = await self.pre_computed_responses[turn_order]
-                print(f"  🎯 Using pre-computed response (instant!)")
-            else:
-                response = await self.generate_response(transcript)
-                print(f"  ⏱️ Generating response now")
-
-            return response
-
-    async def generate_response(self, text):
-        # Your LLM call
-        return f"Response to: {text}"
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-12.py" />
 ### Key Fields to Watch
 
 | Field                    | Purpose                 | When to Act                      |
@@ -898,26 +515,7 @@ class TranscriptProcessor:
 
 [Keyterms Prompting](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting) boosts accuracy for domain-specific vocabulary—product names, people, technical terms:
 
-```python
-# Include keyterms in connection parameters
-keyterms = [
-    "AssemblyAI",
-    "Universal-Streaming",
-    "Baconator",
-    "Dr. Rodriguez",
-    "iPhone 15 Pro",
-    "NASDAQ",
-    "PostgreSQL"
-]
-
-CONNECTION_PARAMS = {
-    "keyterms_prompt": json.dumps(keyterms)  # Up to 100 terms
-}
-
-# Build URL with keyterms
-API_ENDPOINT = f"{API_ENDPOINT_BASE}?{urlencode(CONNECTION_PARAMS)}"
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-13.py" />
 ### Keyterms Best Practices
 
 **DO Include:**
@@ -964,86 +562,17 @@ With Keyterms Prompting enabled:
 
 ### Example: Restaurant Ordering Bot
 
-```python
-# Restaurant-specific keyterms
-restaurant_terms = [
-    # Menu items
-    "Baconator",
-    "Frosty",
-    "Dave's Single",
-    "Biggie Bag",
-    "Spicy Chicken Sandwich",
-
-    # Customizations
-    "Extra pickles",
-    "No mayo",
-    "Light ice",
-    "Well done",
-    "On the side",
-
-    # Sizes
-    "Venti",
-    "Grande",
-    "Tall",
-    "Large combo",
-
-    # Brands/Products
-    "Coca-Cola",
-    "Dr Pepper"
-]
-
-params = {
-    "keyterms_prompt": json.dumps(restaurant_terms)
-}
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-14.py" />
 ### Example: Healthcare Application
 
-```python
-# Medical terminology
-medical_terms = [
-    # Medications
-    "Lisinopril",
-    "Metformin",
-    "Atorvastatin",
-    "Levothyroxine",
-
-    # Conditions
-    "Hypertension",
-    "Type 2 Diabetes",
-    "Hyperlipidemia",
-    "Chronic Obstructive Pulmonary Disease",
-
-    # Procedures
-    "Colonoscopy",
-    "Echocardiogram",
-    "MRI scan",
-
-    # Staff names
-    "Dr. Rodriguez",
-    "Nurse Patel",
-    "Dr. Sarah Chen"
-]
-
-params = {
-    "keyterms_prompt": json.dumps(medical_terms)
-}
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-15.py" />
 ### Dynamic Keyterms Prompting
 
 Dynamic keyterms prompting allows you to update keyterms during an active streaming session using the `UpdateConfiguration` message. This is particularly valuable for voice agents that need to adapt recognition context based on conversation flow.
 
 **Updating keyterms during a session:**
 
-```python
-# Replace or establish new set of keyterms
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Universal-3"]}')
-
-# Remove keyterms and reset context biasing
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}')
-```
-
+<Code src="../../snippets/use-cases/voice-agent-best-practices/python-16.py" />
 **How it works:**
 
 - **Replacing keyterms**: Providing a new array completely replaces the existing set. New keyterms take effect immediately.
