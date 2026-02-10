@@ -5,7 +5,6 @@ title: "Prompting"
 import { PromptGenerator } from "../../../assets/components/PromptGenerator";
 import { PromptLibrary } from "../../../assets/components/PromptLibrary";
 
-
 Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription.
 
 ## How prompting works
@@ -16,26 +15,26 @@ SpeechLLM prompting works more like **selecting modes and knobs** than open-ende
 
 ### What prompts can do
 
-| Capability | Description | Reliability |
-|------------|-------------|-------------|
-| **Verbatim transcription and disfluencies** | Include um, uh, false starts, repetitions, stutters | High |
-| **Output style and formatting** | Control punctuation, capitalization, number formatting | High |
-| **Context aware clues** | Help with jargon, names, and domain expectations | Medium |
-| **Entity accuracy and spelling** | Improve accuracy for proper nouns, brands, technical terms | Medium |
-| **Speaker attribution** | Mark speaker turns and add labels | High |
-| **Audio event tags** | Mark laughter, music, applause, background sounds | Medium |
-| **Code-switching and multilingual** | Handle multilingual audio in same transcript | Medium |
-| **Numbers and measurements** | Control how numbers, percentages, and measurements are formatted | Medium |
-| **Difficult audio handling** | Guidance for unclear audio, overlapping speech, interruptions | Medium |
+| Capability                                  | Description                                                      | Reliability |
+| ------------------------------------------- | ---------------------------------------------------------------- | ----------- |
+| **Verbatim transcription and disfluencies** | Include um, uh, false starts, repetitions, stutters              | High        |
+| **Output style and formatting**             | Control punctuation, capitalization, number formatting           | High        |
+| **Context aware clues**                     | Help with jargon, names, and domain expectations                 | Medium      |
+| **Entity accuracy and spelling**            | Improve accuracy for proper nouns, brands, technical terms       | Medium      |
+| **Speaker attribution**                     | Mark speaker turns and add labels                                | High        |
+| **Audio event tags**                        | Mark laughter, music, applause, background sounds                | Medium      |
+| **Code-switching and multilingual**         | Handle multilingual audio in same transcript                     | Medium      |
+| **Numbers and measurements**                | Control how numbers, percentages, and measurements are formatted | Medium      |
+| **Difficult audio handling**                | Guidance for unclear audio, overlapping speech, interruptions    | Medium      |
 
 ### What prompts cannot reliably do
 
-| Limitation | Why |
-|------------|-----|
-| **Invent correct spellings** | Unknown rare words need hotwords or context injection |
-| **Resolve ambiguous audio** | The model transcribes what it hears, not what it infers |
-| **Perfect proper nouns** | Rare names and entities may need a post-processing LLM correction step |
-| **Code-switch and Translate** | Code-switching preserves language or translates, not both |
+| Limitation                    | Why                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| **Invent correct spellings**  | Unknown rare words need hotwords or context injection                  |
+| **Resolve ambiguous audio**   | The model transcribes what it hears, not what it infers                |
+| **Perfect proper nouns**      | Rare names and entities may need a post-processing LLM correction step |
+| **Code-switch and Translate** | Code-switching preserves language or translates, not both              |
 
 For consistent proper-noun accuracy or domain vocabulary, you'll usually need **context injection into the prompt**, use [keyterms prompt](/docs/pre-recorded-audio/improving-transcript-results-with-keyterms-prompting) to highlight known keyterms, or a **post-processing LLM correction step**.
 
@@ -48,11 +47,13 @@ Transcribe this audio
 ```
 
 Characteristics of prompt output:
+
 - Without much instruction, the model follows its training data to transcribe a human readable transcript
 - Audio is transcribed as a human would read it, not including disfluencies, false starts, hesitations, and other speech patterns
 - No extra weight is given to contextual accuracy of keyterms or in-domain data (i.e. medical), resulting in strong overall WER but higher error rate on rare words
 
 Useful for:
+
 - General transcription
 - Readability and sentence structure
 - Balanced WER vs contextual accuracy
@@ -65,11 +66,13 @@ and natural speech patterns.
 ```
 
 Characteristics of prompt output:
+
 - With more instruction, the model attempts to add contextual correctness to rare words and entities
 - Audio is transcribed with more natural speech patterns, including basic disfluencies, false starts, hesitations, and other speech patterns
 - Extra weight is given to contextual accuracy of keyterms or in-domain data (i.e. medical), resulting in small degradation of WER for lower error rate on rare words
 
 Useful for:
+
 - In-domain transcription where you know the general context (i.e. medical, legal, finance, technical)
 - Basic capture of speech patterns
 - Higher WER in exchange for contextual accuracy
@@ -85,12 +88,14 @@ Transcribe in the original language mix (code-switching), preserving the words i
 ```
 
 Characteristics of prompt output:
+
 - With many instructions, the model attempts to become as verbatim as possible across a number of different domains - punctuation, formatting, speech patterns, contextual correctness, entity accuracy, and code-switching/multilingual transcription
 - Audio is transcribed with as many natural speech patterns as possible, including all potential disfluencies, false starts, hesitations, and other speech patterns
 - Because the model is searching for all audio patterns, prompts like this are more likely to also pick up things like cross talk or background noise
 - Extra weight is given to contextual accuracy across not just rare words and entities but also mixed languages in the audio
 
 Useful for:
+
 - Maximum capture of speech patterns - will generate the most words transcribed
 - Higher WER in exchange for contextual accuracy and multilingual accuracy
 - Across a variety of transcripts where you think these different patterns will be encountered
@@ -314,22 +319,22 @@ Include pause markers where the speaker hesitates significantly.
 
 ### What helps
 
-| Practice | Impact | Example | Why it helps |
-|----------|--------|---------|--------------|
-| **Authoritative language** | Massive | `Mandatory:`, `Non-negotiable:`, `Required:` | Model understands to pay excess attention to desired instruction |
-| **3-6 instructions maximum** | Massive | `Transcribe verbatim. Include all disfluencies. Pay attention to rare words and entities. Preserve natural speech patterns.` | Prevents conflicting instructions |
-| **Desired output format** | High | `Pharmaceutical accuracy required across all medications and drug names` | Model learns the domain context and entities to pay closer attention to transcribing |
-| **Explicit disfluency examples** | High | `Include all disfluencies (um, uh, like, you know)` | Model sees the speech patterns and linguistic cues to pay extra attention to |
+| Practice                         | Impact  | Example                                                                                                                      | Why it helps                                                                         |
+| -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Authoritative language**       | Massive | `Mandatory:`, `Non-negotiable:`, `Required:`                                                                                 | Model understands to pay excess attention to desired instruction                     |
+| **3-6 instructions maximum**     | Massive | `Transcribe verbatim. Include all disfluencies. Pay attention to rare words and entities. Preserve natural speech patterns.` | Prevents conflicting instructions                                                    |
+| **Desired output format**        | High    | `Pharmaceutical accuracy required across all medications and drug names`                                                     | Model learns the domain context and entities to pay closer attention to transcribing |
+| **Explicit disfluency examples** | High    | `Include all disfluencies (um, uh, like, you know)`                                                                          | Model sees the speech patterns and linguistic cues to pay extra attention to         |
 
 ### What hurts
 
-| Anti-pattern | Impact | Example | Why it hurts |
-|--------------|--------|---------|--------------|
-| **Explicit examples of errors from the file** | Potential Hallucinations | `Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)` | Model is over eager to correct exact phrases in the transcript |
-| **Negative language** | Severe | `Don't`, `Avoid`, `Never`, `Not` | Model does not process negative instructions and gets confused |
-| **Conflicting instructions** | Severe | `Include disfluencies. Maximum readability` | Model has to make a decision which instruction to process leading to less determinate results |
-| **Short, vague instructions** | High | `Be accurate`, `Best transcript ever`, `Superhero human transcriptionist` | Model doesn't understand the instruction pattern to identify, pay attention to, and correct |
-| **Missing disfluency instructions** | Medium | `Transcribe verbatim`, `Transcribe this audio` | Not necessarily a failure but the model by default will not be expressive with disfluencies unless instructed |
+| Anti-pattern                                  | Impact                   | Example                                                                                   | Why it hurts                                                                                                  |
+| --------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Explicit examples of errors from the file** | Potential Hallucinations | `Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)` | Model is over eager to correct exact phrases in the transcript                                                |
+| **Negative language**                         | Severe                   | `Don't`, `Avoid`, `Never`, `Not`                                                          | Model does not process negative instructions and gets confused                                                |
+| **Conflicting instructions**                  | Severe                   | `Include disfluencies. Maximum readability`                                               | Model has to make a decision which instruction to process leading to less determinate results                 |
+| **Short, vague instructions**                 | High                     | `Be accurate`, `Best transcript ever`, `Superhero human transcriptionist`                 | Model doesn't understand the instruction pattern to identify, pay attention to, and correct                   |
+| **Missing disfluency instructions**           | Medium                   | `Transcribe verbatim`, `Transcribe this audio`                                            | Not necessarily a failure but the model by default will not be expressive with disfluencies unless instructed |
 
 ---
 
@@ -477,21 +482,22 @@ hesitations, restarts, and self-corrections (um, uh, I—I mean).
 
 Choose your primary transcription goal:
 
-| Goal | Base instruction |
-|------|------------------|
-| **Verbatim/disfluencies** | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` |
-| **Output style/formatting** | `Transcribe this audio with beautiful punctuation and formatting.` |
-| **Context aware clues** | `Transcribe this audio. Context: [describe the audio content and domain].` |
-| **Entity accuracy** | `Use standard spelling and contextually correct spelling of all proper nouns.` |
-| **Speaker attribution** | `Mark speaker turns clearly. Tag speaker changes with context like name, role, or gender.` |
-| **Audio event tags** | `Preserve non-speech audio in tags to indicate when the audio occurred.` |
-| **Code-switching** | `Transcribe in the original language mix, preserving words in the language spoken.` |
-| **Numbers/measurements** | `Use digits for numbers, percentages, and measurements.` |
-| **Difficult audio** | `If unintelligible, write (unclear). Mark inaudible segments.` |
+| Goal                        | Base instruction                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Verbatim/disfluencies**   | `Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.` |
+| **Output style/formatting** | `Transcribe this audio with beautiful punctuation and formatting.`                                 |
+| **Context aware clues**     | `Transcribe this audio. Context: [describe the audio content and domain].`                         |
+| **Entity accuracy**         | `Use standard spelling and contextually correct spelling of all proper nouns.`                     |
+| **Speaker attribution**     | `Mark speaker turns clearly. Tag speaker changes with context like name, role, or gender.`         |
+| **Audio event tags**        | `Preserve non-speech audio in tags to indicate when the audio occurred.`                           |
+| **Code-switching**          | `Transcribe in the original language mix, preserving words in the language spoken.`                |
+| **Numbers/measurements**    | `Use digits for numbers, percentages, and measurements.`                                           |
+| **Difficult audio**         | `If unintelligible, write (unclear). Mark inaudible segments.`                                     |
 
 ### Step 2: Add authoritative language
 
 Prefix each instruction with:
+
 - `Non-negotiable:`
 - `Mandatory:`
 - `Required:`
