@@ -1,0 +1,4 @@
+TELNYX_API_KEY=your_telnyx_api_key
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key
+OPENAI_API_KEY=your_openai_api_key
+DEEPGRAM_API_KEY=your_deepgram_api_key  # or other TTS provider

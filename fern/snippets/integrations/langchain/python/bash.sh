@@ -1,0 +1,5 @@
+# Mac/Linux:
+export ASSEMBLYAI_API_KEY=<YOUR_API_KEY>
+
+# Windows:
+set ASSEMBLYAI_API_KEY=<YOUR_API_KEY>

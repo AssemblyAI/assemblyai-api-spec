@@ -147,58 +147,12 @@ python agent.py download-files
 
 Here's a minimal agent using AssemblyAI STT:
 
-```python
-import asyncio
-from dotenv import load_dotenv
-from livekit import rtc
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, llm
-from livekit.agents.voice_assistant import VoiceAssistant
-from livekit.plugins import assemblyai, openai, silero, rime
-
-load_dotenv()
-
-async def entrypoint(ctx: JobContext):
-    initial_ctx = llm.ChatContext().append(
-        role="system",
-        text=(
-            "You are a helpful voice assistant. Your interface with users will be voice. "
-            "Use short and concise responses, avoiding unpronounceable punctuation."
-        ),
-    )
-
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-
-    assistant = VoiceAssistant(
-        vad=silero.VAD.load(),
-        stt=assemblyai.STT(),
-        llm=openai.LLM(),
-        tts=rime.TTS(),
-        chat_ctx=initial_ctx,
-    )
-
-    assistant.start(ctx.room)
-
-    await asyncio.sleep(1)
-    await assistant.say("Hello! How can I help you today?", allow_interruptions=True)
-
-
-if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
-```
-
+<Code src="snippets/integrations/telnyx/python-1.py" />
 #### Environment variables
 
 Set the following environment variables:
 
-```bash
-export LIVEKIT_URL=<your LiveKit server URL>
-export LIVEKIT_API_KEY=<your API Key>
-export LIVEKIT_API_SECRET=<your API Secret>
-export ASSEMBLYAI_API_KEY=<your AssemblyAI API key>
-export OPENAI_API_KEY=<your OpenAI API key>
-export RIME_API_KEY=<your Rime API key>
-```
-
+<Code src="snippets/integrations/telnyx/bash-1.sh" />
 #### Run the agent
 
 Start your agent:
@@ -255,13 +209,7 @@ pip install pipecat-ai python-dotenv loguru
 
 Set up your environment variables:
 
-```bash
-TELNYX_API_KEY=your_telnyx_api_key
-ASSEMBLYAI_API_KEY=your_assemblyai_api_key
-OPENAI_API_KEY=your_openai_api_key
-DEEPGRAM_API_KEY=your_deepgram_api_key  # or other TTS provider
-```
-
+<Code src="snippets/integrations/telnyx/bash-2.sh" />
 ### How it works
 
 **Dial-in flow**:
@@ -323,110 +271,10 @@ The `bidirectionalMode="rtp"` parameter enables real-time audio streaming in bot
 
 Here's a complete dial-in bot using AssemblyAI for speech recognition:
 
-```python
-import os
-from dotenv import load_dotenv
-from loguru import logger
-
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import EndFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.runner.utils import parse_telephony_websocket
-from pipecat.serializers.telnyx import TelnyxFrameSerializer
-from pipecat.services.assemblyai.stt import AssemblyAISTTService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.deepgram.tts import DeepgramTTSService
-from pipecat.transports.websocket.fastapi import (
-    FastAPIWebsocketTransport,
-    FastAPIWebsocketParams,
-)
-
-load_dotenv()
-
-async def run_bot(websocket):
-    """Run the voice agent bot with AssemblyAI STT."""
-
-    # Parse Telnyx WebSocket data - automatically extracts call information
-    transport_type, call_data = await parse_telephony_websocket(websocket)
-
-    # Extract call information (automatically provided by Telnyx)
-    stream_id = call_data["stream_id"]
-    call_control_id = call_data["call_control_id"]
-    outbound_encoding = call_data["outbound_encoding"]
-    from_number = call_data["from"]  # Caller's number
-    to_number = call_data["to"]      # Your Telnyx number
-
-    logger.info(f"Incoming call from {from_number} to {to_number}")
-
-    # Create Telnyx serializer with call details
-    serializer = TelnyxFrameSerializer(
-        stream_id=stream_id,
-        call_control_id=call_control_id,
-        api_key=os.getenv("TELNYX_API_KEY"),
-    )
-
-    # Configure WebSocket transport
-    transport = FastAPIWebsocketTransport(
-        websocket=websocket,
-        params=FastAPIWebsocketParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-            add_wav_header=False,
-            vad_analyzer=SileroVADAnalyzer(),
-            serializer=serializer,
-        ),
-    )
-
-    # Configure AI services
-    stt = AssemblyAISTTService(api_key=os.getenv("ASSEMBLYAI_API_KEY"))
-    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), model="gpt-4o-mini")
-    tts = DeepgramTTSService(api_key=os.getenv("DEEPGRAM_API_KEY"))
-
-    # Customize bot behavior based on call information
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a helpful voice assistant. The caller is calling from {from_number}. Keep responses concise and conversational."
-        }
-    ]
-
-    context = OpenAILLMContext(messages)
-    context_aggregator = llm.create_context_aggregator(context)
-
-    # Build pipeline
-    pipeline = Pipeline([
-        transport.input(),
-        stt,
-        context_aggregator.user(),
-        llm,
-        tts,
-        transport.output(),
-        context_aggregator.assistant(),
-    ])
-
-    task = PipelineTask(
-        pipeline,
-        params=PipelineParams(
-            allow_interruptions=True,
-            audio_in_sample_rate=8000,
-            audio_out_sample_rate=8000,
-        ),
-    )
-
-    @transport.event_handler("on_client_disconnected")
-    async def on_client_disconnected(transport, client):
-        logger.info("Call ended")
-        await task.queue_frame(EndFrame())
-
-    # Run the pipeline
-    runner = PipelineRunner()
-    await runner.run(task)
-```
-
-See the [complete dial-in example](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot/inbound) for full implementation details including server setup.
+<Code src="snippets/integrations/telnyx/python-2.py" />
+See the [complete dial-in
+example](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot/inbound)
+for full implementation details including server setup.
 
 ### Dial-out Setup
 
@@ -445,72 +293,32 @@ Dial-out allows your bot to initiate calls to phone numbers using Telnyx's outbo
 
 The dial-out bot configuration is similar to dial-in. Telnyx automatically provides call information in the WebSocket messages:
 
-```python
-# Parse WebSocket data (same as dial-in)
-transport_type, call_data = await parse_telephony_websocket(websocket)
-
-# Extract call information
-stream_id = call_data["stream_id"]
-call_control_id = call_data["call_control_id"]
-from_number = call_data["from"]  # Your Telnyx number
-to_number = call_data["to"]      # Target number you're calling
-
-# Customize bot behavior for outbound calls
-greeting = f"Hi! This is an automated call from {from_number}. How are you today?"
-```
-
-The transport and pipeline configuration are identical to dial-in. See the [complete dial-out example](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot/outbound) for full server implementation with outbound call creation.
+<Code src="snippets/integrations/telnyx/python-3.py" />
+The transport and pipeline configuration are identical to dial-in. See the
+[complete dial-out
+example](https://github.com/pipecat-ai/pipecat-examples/tree/main/telnyx-chatbot/outbound)
+for full server implementation with outbound call creation.
 
 ### Key Features
 
 **Audio format**: Telnyx Media Streaming uses 8kHz mono audio with 16-bit PCM encoding. Configure your pipeline accordingly:
 
-```python
-task = PipelineTask(
-    pipeline,
-    params=PipelineParams(
-        audio_in_sample_rate=8000,
-        audio_out_sample_rate=8000,
-        allow_interruptions=True,
-    ),
-)
-```
+<Code src="snippets/integrations/telnyx/python-4.py" />
+**Automatic call termination**: When you provide Telnyx API credentials to the
+`TelnyxFrameSerializer`, it automatically ends calls when your pipeline ends:
 
-**Automatic call termination**: When you provide Telnyx API credentials to the `TelnyxFrameSerializer`, it automatically ends calls when your pipeline ends:
-
-```python
-serializer = TelnyxFrameSerializer(
-    stream_id=stream_id,
-    call_control_id=call_control_id,
-    api_key=os.getenv("TELNYX_API_KEY"),  # Enables auto-termination
-)
-```
-
-**Built-in call information**: Unlike other providers, Telnyx automatically includes caller information (to/from numbers) in the WebSocket messages, eliminating the need for custom webhook servers in basic dial-in scenarios.
+<Code src="snippets/integrations/telnyx/python-5.py" />
+**Built-in call information**: Unlike other providers, Telnyx automatically
+includes caller information (to/from numbers) in the WebSocket messages,
+eliminating the need for custom webhook servers in basic dial-in scenarios.
 
 ### Advanced Configuration
 
 For production use cases, you can customize AssemblyAI's turn detection and add keyterms for improved accuracy:
 
-```python
-from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAIConnectionParams
-
-# Configure AssemblyAI with custom parameters
-stt_params = AssemblyAIConnectionParams(
-    sample_rate=8000,
-    end_of_turn_confidence_threshold=0.4,
-    min_end_of_turn_silence_when_confident=400,
-    max_turn_silence=1280,
-    keyterms_prompt=["NPI", "TIN", "CMS", "PTAN", "CPT", "CDT", "DOB", "SSN"]
-)
-
-stt = AssemblyAISTTService(
-    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
-    connection_params=stt_params,
-)
-```
-
-**Turn detection options**: AssemblyAI has built-in VAD and turn detection. You can either:
+<Code src="snippets/integrations/telnyx/python-6.py" />
+**Turn detection options**: AssemblyAI has built-in VAD and turn detection. You
+can either:
 
 - Use AssemblyAI's turn detection (recommended for best accuracy)
 - Use Silero VAD by including `vad_analyzer=SileroVADAnalyzer()` in the transport params
