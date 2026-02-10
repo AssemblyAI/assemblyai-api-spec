@@ -6,60 +6,7 @@ This guide will show you how to use AssemblyAI's API to calculate the talk/liste
 
 ## Quickstart
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "YOUR_API_KEY"
-
-def calculate_talk_listen_ratios(transcript):
-    """
-    :param transcript: AssemblyAI Transcript object
-    :return: Dictionary with talk time, percentage, and talk-listen ratios for each speaker
-    """
-    # Ensure speaker labels were enabled
-    if not transcript.utterances:
-        raise ValueError("Speaker labels were not enabled for this transcript.")
-
-    speaker_talk_time = {}
-    total_time = 0
-
-    for utterance in transcript.utterances:
-        speaker = f"Speaker {utterance.speaker}"
-        duration = utterance.end - utterance.start
-
-        speaker_talk_time[speaker] = speaker_talk_time.get(speaker, 0) + duration
-        total_time += duration
-
-    # Calculate percentages and ratios
-    result = {}
-    for speaker, talk_time in speaker_talk_time.items():
-        percentage = (talk_time / total_time) * 100
-        result[speaker] = {
-            "talk_time_ms": talk_time,
-            "percentage": round(percentage, 2)
-        }
-
-    # Calculate talk-listen ratios for each speaker against all others
-    for speaker in result.keys():
-        other_speakers_time = sum(talk_time for spk, talk_time in speaker_talk_time.items() if spk != speaker)
-        if other_speakers_time > 0:
-            ratio = speaker_talk_time[speaker] / other_speakers_time
-            result[speaker]["talk_listen_ratio"] = round(ratio, 2)
-        else:
-            result[speaker]["talk_listen_ratio"] = None  # Handle cases with only one speaker
-
-    return result
-
-transcriber = aai.Transcriber()
-audio_url = ("YOUR_AUDIO_URL")
-config = aai.TranscriptionConfig(speaker_labels=True)
-transcript = transcriber.transcribe(audio_url, config)
-
-talk_listen_stats = calculate_talk_listen_ratios(transcript)
-print(talk_listen_stats)
-
-```
-
+<Code src="snippets/guides/cookbooks/core-transcription/talk-listen-ratio/python-1.py" />
 ## Get started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
@@ -82,59 +29,13 @@ aai.settings.api_key = "YOUR_API_KEY"
 
 Define a function called `calculate_talk_listen_ratios`, which will calculate the talk-listen ratios for all speakers from a transcript with speaker labels. Speaker labels must be enabled for the ratios to be calculated.
 
-```python
-def calculate_talk_listen_ratios(transcript):
-    """
-    :param transcript: AssemblyAI Transcript object
-    :return: Dictionary with talk time, percentage, and talk-listen ratios for each speaker
-    """
-    # Ensure speaker labels were enabled
-    if not transcript.utterances:
-        raise ValueError("Speaker labels were not enabled for this transcript.")
+<Code src="snippets/guides/cookbooks/core-transcription/talk-listen-ratio/python-2.py" />
+Define a `transcriber`, an `audio_url` set to a link to the audio file (replace
+the example link that is provided with your own), and a `TranscriptionConfig`
+with `speaker_labels=True`. Then create a transcript which will be sent to the
+function `calculate_talk_listen_ratios` and print out the results.
 
-    speaker_talk_time = {}
-    total_time = 0
-
-    for utterance in transcript.utterances:
-        speaker = f"Speaker {utterance.speaker}"
-        duration = utterance.end - utterance.start
-
-        speaker_talk_time[speaker] = speaker_talk_time.get(speaker, 0) + duration
-        total_time += duration
-
-    # Calculate percentages and ratios
-    result = {}
-    for speaker, talk_time in speaker_talk_time.items():
-        percentage = (talk_time / total_time) * 100
-        result[speaker] = {
-            "talk_time_ms": talk_time,
-            "percentage": round(percentage, 2)
-        }
-
-    # Calculate talk-listen ratios for each speaker against all others
-    for speaker in result.keys():
-        other_speakers_time = sum(talk_time for spk, talk_time in speaker_talk_time.items() if spk != speaker)
-        if other_speakers_time > 0:
-            ratio = speaker_talk_time[speaker] / other_speakers_time
-            result[speaker]["talk_listen_ratio"] = round(ratio, 2)
-        else:
-            result[speaker]["talk_listen_ratio"] = None  # Handle cases with only one speaker
-
-    return result
-```
-
-Define a `transcriber`, an `audio_url` set to a link to the audio file (replace the example link that is provided with your own), and a `TranscriptionConfig` with `speaker_labels=True`. Then create a transcript which will be sent to the function `calculate_talk_listen_ratios` and print out the results.
-
-```python
-transcriber = aai.Transcriber()
-audio_url = ("https://api.assemblyai-solutions.com/storage/v1/object/public/dual-channel-phone-data/Fisher_Call_Centre/audio05851.wav")
-config = aai.TranscriptionConfig(speaker_labels=True)
-transcript = transcriber.transcribe(audio_url, config)
-
-talk_listen_stats = calculate_talk_listen_ratios(transcript)
-print(talk_listen_stats)
-```
-
+<Code src="snippets/guides/cookbooks/core-transcription/talk-listen-ratio/python-3.py" />
 Example output when using the above sample audio file:
 
 ```

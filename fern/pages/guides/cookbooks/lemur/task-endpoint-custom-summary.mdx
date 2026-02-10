@@ -6,64 +6,7 @@ This tutorial will demonstrate how to use AssemblyAI's LLM Gateway to get a cust
 
 ## Quickstart
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Step 1: Transcribe the audio
-audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
-data = {"audio_url": audio_url}
-
-response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
-transcript_id = response.json()['id']
-polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-
-while True:
-    transcription_result = requests.get(polling_endpoint, headers=headers).json()
-    if transcription_result['status'] == 'completed':
-        break
-    elif transcription_result['status'] == 'error':
-        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-    else:
-        time.sleep(3)
-
-# Step 2: Generate custom summary with LLM Gateway
-prompt = """
-- You are an expert at writing factual, useful summaries.
-- You focus on key details, leave out irrelevant information, and do not add in information that is not already present in the transcript.
-- Your summaries accurately represent the information in the transcript.
-- You are useful to the reader, are true and concise, and are written in perfect English.
-- Use multiple parts of the transcript to form your summary.
-- Make your summary follow the sequential order of events in the transcript.
-- Your summaries do not describe the context of the transcript - they only summarize the events in the text.
-- Your summaries do not describe what type of text they summarize.
-- You do not dumb down specific language nor make big generalizations.
-- Respond with just the summary and don't include a preamble or introduction.
-
-Your summary should use the following format: Bullet points
-"""
-
-llm_gateway_data = {
-    "model": "claude-sonnet-4-5-20250929",
-    "messages": [
-        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
-    ],
-    "max_tokens": 1500
-}
-
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json=llm_gateway_data
-)
-
-result = response.json()["choices"][0]["message"]["content"]
-print(result)
-```
-
+<Code src="snippets/guides/cookbooks/lemur/task-endpoint-custom-summary/python-1.py" />
 ## Getting Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up for an AssemblyAI account](https://www.assemblyai.com/app) and get your API key from your dashboard.
@@ -80,48 +23,10 @@ pip install requests
 
 Set up your API client and transcribe the audio file:
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Transcribe the audio
-audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
-data = {"audio_url": audio_url}
-
-response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
-transcript_id = response.json()['id']
-polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-
-while True:
-    transcription_result = requests.get(polling_endpoint, headers=headers).json()
-    if transcription_result['status'] == 'completed':
-        break
-    elif transcription_result['status'] == 'error':
-        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-    else:
-        time.sleep(3)
-```
-
+<Code src="snippets/guides/cookbooks/lemur/task-endpoint-custom-summary/python-2.py" />
 Define your detailed prompt instructions for generating a custom summary:
 
-```python
-prompt = """
-- You are an expert at writing factual, useful summaries.
-- You focus on key details, leave out irrelevant information, and do not add in information that is not already present in the transcript.
-- Your summaries accurately represent the information in the transcript.
-- You are useful to the reader, are true and concise, and are written in perfect English.
-- Use multiple parts of the transcript to form your summary.
-- Make your summary follow the sequential order of events in the transcript.
-- Your summaries do not describe the context of the transcript - they only summarize the events in the text.
-- Your summaries do not describe what type of text they summarize.
-- You do not dumb down specific language nor make big generalizations.
-- Respond with just the summary and don't include a preamble or introduction.
-"""
-```
-
+<Code src="snippets/guides/cookbooks/lemur/task-endpoint-custom-summary/python-3.py" />
 Optionally specify a summary format and append it to the prompt:
 
 ```python
@@ -133,21 +38,4 @@ if answer_format:
 
 Generate the custom summary using LLM Gateway:
 
-```python
-llm_gateway_data = {
-    "model": "claude-sonnet-4-5-20250929",
-    "messages": [
-        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
-    ],
-    "max_tokens": 1500
-}
-
-response = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    headers=headers,
-    json=llm_gateway_data
-)
-
-result = response.json()["choices"][0]["message"]["content"]
-print(result)
-```
+<Code src="snippets/guides/cookbooks/lemur/task-endpoint-custom-summary/python-4.py" />

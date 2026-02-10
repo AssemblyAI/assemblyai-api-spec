@@ -32,88 +32,19 @@ When submitting a transcription request, include your webhook URL with the custo
 <Tabs>
 <Tab language="python-sdk" title="Python SDK">
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Add customer_id as a query parameter to your webhook URL
-webhook_url = "https://your-domain.com/webhook?customer_id=customer_123"
-
-config = aai.TranscriptionConfig(
-    speech_model=aai.SpeechModel.best
-).set_webhook(webhook_url)
-
-# Submit without waiting for completion
-aai.Transcriber().submit("https://example.com/audio.mp3", config)
-```
-
+<Code src="snippets/guides/billing-tracking/python-sdk-1.py" />
 </Tab>
 <Tab language="python" title="Python">
 
-```python
-import requests
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Add customer_id as a query parameter to your webhook URL
-webhook_url = "https://your-domain.com/webhook?customer_id=customer_123"
-
-data = {
-    "audio_url": "https://example.com/audio.mp3",
-    "webhook_url": webhook_url
-}
-
-# Submit without waiting for completion
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-transcript_id = response.json()["id"]
-```
-
+<Code src="snippets/guides/billing-tracking/python-1.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// Add customer_id as a query parameter to your webhook URL
-const webhookUrl = "https://your-domain.com/webhook?customer_id=customer_123";
-
-const transcript = await client.transcripts.submit({
-  audio: "https://example.com/audio.mp3",
-  speech_model: "best",
-  webhook_url: webhookUrl,
-});
-```
-
+<Code src="snippets/guides/billing-tracking/javascript-sdk-1.js" />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-import axios from "axios";
-
-const baseUrl = "https://api.assemblyai.com";
-const headers = { authorization: "<YOUR_API_KEY>" };
-
-// Add customer_id as a query parameter to your webhook URL
-const webhookUrl = "https://your-domain.com/webhook?customer_id=customer_123";
-
-const data = {
-  audio_url: "https://example.com/audio.mp3",
-  webhook_url: webhookUrl,
-};
-
-// Submit without waiting for completion
-const response = await axios.post(`${baseUrl}/v2/transcript`, data, {
-  headers,
-});
-const transcriptId = response.data.id;
-```
-
+<Code src="snippets/guides/billing-tracking/javascript-1.js" />
 </Tab>
 </Tabs>
 
@@ -145,77 +76,19 @@ Use the transcript ID to fetch the complete transcript details, which includes t
 <Tabs>
 <Tab language="python-sdk" title="Python SDK">
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Get transcript using the ID from webhook
-transcript = aai.Transcript.get_by_id("<TRANSCRIPT_ID>")
-
-if transcript.status == aai.TranscriptStatus.completed:
-    audio_duration = transcript.audio_duration  # Duration in seconds
-    # Use audio_duration for billing/tracking
-```
-
+<Code src="snippets/guides/billing-tracking/python-sdk-2.py" />
 </Tab>
 <Tab language="python" title="Python">
 
-```python
-import requests
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Get transcript using the ID from webhook
-response = requests.get(base_url + "/v2/transcript/<TRANSCRIPT_ID>", headers=headers)
-transcript = response.json()
-
-if transcript["status"] == "completed":
-    audio_duration = transcript["audio_duration"]  # Duration in seconds
-    # Use audio_duration for billing/tracking
-```
-
+<Code src="snippets/guides/billing-tracking/python-2.py" />
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// Get transcript using the ID from webhook
-const transcript = await client.transcripts.get("<TRANSCRIPT_ID>");
-
-if (transcript.status === "completed") {
-  const audioDuration = transcript.audio_duration; // Duration in seconds
-  // Use audioDuration for billing/tracking
-}
-```
-
+<Code src="snippets/guides/billing-tracking/javascript-sdk-2.js" />
 </Tab>
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-import axios from "axios";
-
-const baseUrl = "https://api.assemblyai.com";
-const headers = { authorization: "<YOUR_API_KEY>" };
-
-// Get transcript using the ID from webhook
-const response = await axios.get(`${baseUrl}/v2/transcript/<TRANSCRIPT_ID>`, {
-  headers,
-});
-const transcript = response.data;
-
-if (transcript.status === "completed") {
-  const audioDuration = transcript.audio_duration; // Duration in seconds
-  // Use audioDuration for billing/tracking
-}
-```
-
+<Code src="snippets/guides/billing-tracking/javascript-2.js" />
 </Tab>
 </Tabs>
 
@@ -238,63 +111,12 @@ Unlike async transcription which uses webhooks, streaming transcription requires
 
 Connect to AssemblyAI's streaming service. The customer ID is managed entirely in your application and is never sent to AssemblyAI.
 
-```python
-import websocket
-import json
-from urllib.parse import urlencode
-from datetime import datetime
-
-# Configuration
-YOUR_API_KEY = "<YOUR_API_KEY>"
-
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "format_turns": True,
-}
-
-API_ENDPOINT = f"wss://streaming.assemblyai.com/v3/ws?{urlencode(CONNECTION_PARAMS)}"
-```
-
+<Code src="snippets/guides/billing-tracking/python-3.py" />
 ### Step 2: Capture audio duration from the Termination event
 
 The key to tracking usage is capturing the `audio_duration_seconds` field from the Termination message. This is sent when the streaming session ends.
 
-```python
-def on_message(ws, message):
-    """Handle WebSocket messages"""
-    try:
-        data = json.loads(message)
-        msg_type = data.get("type")
-
-        if msg_type == "Begin":
-            session_id = data.get("id")
-            print(f"Session started: {session_id}")
-
-        elif msg_type == "Turn":
-            transcript = data.get("transcript", "")
-            if data.get("turn_is_formatted"):
-                print(f"Transcript: {transcript}")
-
-        elif msg_type == "Termination":
-            # Extract audio duration - this is what you need for billing
-            audio_duration_seconds = data.get("audio_duration_seconds", 0)
-            session_duration_seconds = data.get("session_duration_seconds", 0)
-
-            print(f"\nSession terminated:")
-            print(f"  Audio Duration: {audio_duration_seconds} seconds")
-            print(f"  Session Duration: {session_duration_seconds} seconds")
-
-            # Here you would associate audio_duration_seconds with your customer
-            # using whatever session management system you have in place
-            customer_id = get_customer_id_from_session()  # Your implementation
-            log_customer_usage(customer_id, session_duration_seconds)
-
-    except json.JSONDecodeError as e:
-        print(f"Error decoding message: {e}")
-    except Exception as e:
-        print(f"Error handling message: {e}")
-```
-
+<Code src="snippets/guides/billing-tracking/python-4.py" />
 ### Step 3: Log customer usage
 
 When you receive the Termination event, store the session duration for billing/tracking:

@@ -12,77 +12,7 @@ In this guide, we'll show you how to use AssemblyAI's LLM Gateway to process an 
 
 ## Quickstart
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-# Step 1: Transcribe and get paragraphs
-with open("./my-audio.mp3", "rb") as f:
-    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-
-upload_url = response.json()["upload_url"]
-data = {"audio_url": upload_url}
-
-response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
-transcript_id = response.json()['id']
-polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-
-while True:
-    transcription_result = requests.get(polling_endpoint, headers=headers).json()
-    if transcription_result['status'] == 'completed':
-        break
-    elif transcription_result['status'] == 'error':
-        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-    else:
-        time.sleep(3)
-
-# Get paragraphs
-paragraphs = requests.get(polling_endpoint + '/paragraphs', headers=headers).json()['paragraphs']
-
-# Step 2: Combine paragraphs and create chapter summaries
-combined_paragraphs = []
-step = 2  # Adjust as needed if you want combined paragraphs to be shorter or longer in length.
-
-# Combine paragraphs into groups, finding the appropriate timestamps and combining all their text into one string.
-for i in range(0, len(paragraphs), step):
-    paragraph_group = paragraphs[i : i + step]
-    start = paragraph_group[0]['start']
-    end = paragraph_group[-1]['end']
-    text = ""
-    for paragraph in paragraph_group:
-        text += f"{paragraph['text']} "
-    combined_paragraphs.append(f"Paragraph: {text} Start: {start} End: {end}")
-
-results = []
-
-# Step 3: Generate summaries with LLM Gateway
-for paragraph in combined_paragraphs:
-    prompt = "Summarize this text as a whole and provide start and end timestamps."
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-5-20250929",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\n{paragraph}"}
-        ],
-        "max_tokens": 1000
-    }
-
-    response = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-
-    result = response.json()["choices"][0]["message"]["content"]
-    results.append(result)
-
-for result in results:
-    print(f"{result}\n")
-```
-
+<Code src="snippets/guides/cookbooks/lemur/input-text-chapters/python-1.py" />
 ## Get Started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for an account and get your API key from your dashboard.
@@ -97,85 +27,20 @@ pip install requests
 
 Set up your API client and transcribe the audio file:
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-with open("./my-audio.mp3", "rb") as f:
-    response = requests.post(base_url + "/v2/upload", headers=headers, data=f)
-
-upload_url = response.json()["upload_url"]
-data = {"audio_url": upload_url}  # You can also use a URL to an audio or video file on the web
-
-response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
-transcript_id = response.json()['id']
-polling_endpoint = base_url + "/v2/transcript/" + transcript_id
-
-while True:
-    transcription_result = requests.get(polling_endpoint, headers=headers).json()
-    if transcription_result['status'] == 'completed':
-        print(f"Transcript ID:", transcript_id)
-        break
-    elif transcription_result['status'] == 'error':
-        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-    else:
-        time.sleep(3)
-```
-
-Fetch all paragraphs from the transcript and combine them into groups. We set a `step` variable that controls how many paragraphs we combine into one overall paragraph to provide LLM Gateway with more context to create better summaries.
+<Code src="snippets/guides/cookbooks/lemur/input-text-chapters/python-2.py" />
+Fetch all paragraphs from the transcript and combine them into groups. We set a
+`step` variable that controls how many paragraphs we combine into one overall
+paragraph to provide LLM Gateway with more context to create better summaries.
 
 We also extract the appropriate `start` and `end` timestamps, and save all of our combined paragraphs in string form to send to LLM Gateway in a later step.
 
-```python
-paragraphs = requests.get(polling_endpoint + '/paragraphs', headers=headers).json()['paragraphs']
-combined_paragraphs = []
-step = 2  # Adjust as needed if you want combined paragraphs to be shorter or longer in length.
-
-# Combine paragraphs into groups, finding the appropriate timestamps and combining all their text into one string.
-for i in range(0, len(paragraphs), step):
-    paragraph_group = paragraphs[i : i + step]
-    start = paragraph_group[0]['start']
-    end = paragraph_group[-1]['end']
-    text = ""
-    for paragraph in paragraph_group:
-        text += f"{paragraph['text']} "
-    combined_paragraphs.append(f"Paragraph: {text} Start: {start} End: {end}")
-```
-
-Now we'll use LLM Gateway to process all of our `combined_paragraphs` and create summaries for each one.
+<Code src="snippets/guides/cookbooks/lemur/input-text-chapters/python-3.py" />
+Now we'll use LLM Gateway to process all of our `combined_paragraphs` and create
+summaries for each one.
 
 The summary for each paragraph then gets saved to a `results` array so we can output all of them at the same time.
 
-```python
-results = []
-
-for paragraph in combined_paragraphs:
-    prompt = "Summarize this text as a whole and provide start and end timestamps."
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-5-20250929",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\n{paragraph}"}
-        ],
-        "max_tokens": 1000
-    }
-
-    response = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-
-    result = response.json()["choices"][0]["message"]["content"]
-    results.append(result)
-
-for result in results:
-    print(f"{result}\n")
-```
-
+<Code src="snippets/guides/cookbooks/lemur/input-text-chapters/python-4.py" />
 The output will look similar to the example below.
 
 ```

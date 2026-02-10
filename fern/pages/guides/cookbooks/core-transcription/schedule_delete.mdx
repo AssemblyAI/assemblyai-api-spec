@@ -6,62 +6,7 @@ This tutorial guides you through the process of scheduling a DELETE request for 
 
 ## Quickstart
 
-```python
-import assemblyai as aai
-import requests
-from datetime import datetime, timedelta, timezone
-
-# Set up AssemblyAI API key
-# In production, store this in an environment variable
-aai.settings.api_key = "YOUR_ASSEMBLYAI_API_KEY"
-
-# Get an EasyCron API key here: https://www.easycron.com/user/token
-# Set up EasyCron API key
-# In production, store this in an environment variable
-EASYCRON_API_TOKEN = "YOUR_EASYCRON_API_KEY"
-
-# Create transcriber instance and transcribe audio
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe('https://assembly.ai/sports_injuries.mp3')
-
-# Get the transcript ID
-transcript_id = transcript.id
-
-# Construct the URL for the DELETE request
-url_to_call = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
-
-# Calculate the time 24 hours from now for the cron expression
-time_24_hours_from_now = datetime.now(timezone.utc) + timedelta(hours=24)
-cron_minute = time_24_hours_from_now.minute
-cron_hour = time_24_hours_from_now.hour
-cron_day = time_24_hours_from_now.day
-cron_month = time_24_hours_from_now.month
-cron_year = time_24_hours_from_now.year
-
-# Create the cron expression
-cron_expression = f'{cron_minute} {cron_hour} {cron_day} {cron_month} * {cron_year}'
-
-# EasyCron API endpoint for creating a new cron job
-api_endpoint = 'https://www.easycron.com/rest/add'
-
-# Data payload for EasyCron API
-data = {
-    'token': EASYCRON_API_TOKEN,
-    'url': url_to_call,
-    'cron_expression': cron_expression,
-    'http_method': "DELETE",
-    'http_headers': f'Authorization: {aai.settings.api_key}',
-    'timezone': 'UTC'
-}
-
-# Make the request to EasyCron's API
-response = requests.post(api_endpoint, data=data)
-
-# Print the response from EasyCron
-print("EasyCron API Response:")
-print(response.text)
-```
-
+<Code src="snippets/guides/cookbooks/core-transcription/schedule_delete/python-1.py" />
 ## Step-by-step guide
 
 To get started, install the AssemblyAI Python SDK.
@@ -106,50 +51,11 @@ Then, insert your EasyCron API key into your code.
 
 Next, we will use the datetime module to generate a `cron` expression for 24 hours from now (although you can configure the `timedelta` argument to be whatever you want)
 
-```python
-# In production, you should store your API keys in environment variables
-EASYCRON_API_TOKEN = "YOUR_EASYCRON_API_KEY"
+<Code src="snippets/guides/cookbooks/core-transcription/schedule_delete/python-2.py" />
+Now, we will schedule a `cron` job 24 hours from now with EasyCron to send a
+delete request to AssemblyAI for the transcript that we just generated.
 
-from datetime import datetime, timedelta, timezone
-
-# Calculate the time 24 hours from now in EasyCron's expected format
-# EasyCron uses a slightly different format, but for simplicity, we'll use the standard UTC format
-# and convert this into a cron expression
-time_24_hours_from_now = datetime.now(timezone.utc) + timedelta(hours=24)
-cron_minute = time_24_hours_from_now.minute
-cron_hour = time_24_hours_from_now.hour
-cron_day = time_24_hours_from_now.day
-cron_month = time_24_hours_from_now.month
-cron_year = time_24_hours_from_now.year
-
-cron_expression = f'{cron_minute} {cron_hour} {cron_day} {cron_month} * {cron_year}'
-```
-
-Now, we will schedule a `cron` job 24 hours from now with EasyCron to send a delete request to AssemblyAI for the transcript that we just generated.
-
-```python
-import requests
-
-# EasyCron API endpoint for creating a new cron job
-api_endpoint = 'https://www.easycron.com/rest/add'
-
-# The data to be sent to EasyCron's API
-data = {
-    'token': EASYCRON_API_TOKEN,
-    'url': url_to_call,
-    'cron_expression': cron_expression,
-    'http_method': "DELETE",
-    'http_headers': f'Authorization: {AAI_API_TOKEN}',
-    'timezone': 'UTC'
-}
-
-# Make the request to EasyCron's API
-response = requests.post(api_endpoint, data=data)
-
-# Print the response from EasyCron's API
-print(response.text)
-```
-
+<Code src="snippets/guides/cookbooks/core-transcription/schedule_delete/python-3.py" />
 ## Troubleshooting:
 
 `Error 3: The cron expression you entered is invalid or it cannot be matched in a realitic future.`: Check that your [EasyCron account settings](https://www.easycron.com/user/edit) has UTC configured as the default timezone.

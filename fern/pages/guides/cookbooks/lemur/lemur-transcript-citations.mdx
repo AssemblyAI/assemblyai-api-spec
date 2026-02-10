@@ -31,109 +31,16 @@ pip install numpy sklearn openai assemblyai tiktoken
 
 ### Submitting a File for Transcription
 
-```python
-import assemblyai as aai
-aai.settings.api_key = "YOUR_API_KEY"
-transcriber = aai.Transcriber()
-
-def transcribe(urls):
-    return transcriber.transcribe_group(urls)
-```
-
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-1.py" />
 ### Create Transcript Embeddings
 
 We are using the text-embedding-ada-002 model to generate our embeddings.
 
 The pricing for this model is $0.0001 / 1k tokens which equates to roughly 0.0015 to embed one hour of audio.
 
-```python
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-import openai
-
-# Set up OpenAI API key
-openai.api_key = "YOUR_OPENAI_TOKEN"
-
-def embed_block(block_text):
-    # Embed the block of text using OpenAI embeddings
-    embedding = openai.Embedding.create(
-        input=block_text,
-        model='text-embedding-ada-002',
-    ).to_dict()['data'][0]['embedding']
-
-    # Store the embedding with the timestamp in the dictionary
-    return embedding
-
-def find_relevant_matches(embedded_blocks, new_block_text, k=3):
-    matches = []
-    # Embed the new block of text using OpenAI embeddings
-    new_embedding = embed_block(new_block_text)
-
-    # Prepare the embeddings for the KNN search
-    embeddings = np.array(list(embedded_blocks.values()))
-    metadata = list(embedded_blocks.keys())
-
-    # Perform KNN search to find the most relevant matches
-    knn = NearestNeighbors(n_neighbors=k)
-    knn.fit(embeddings)
-    distances, indices = knn.kneighbors([new_embedding])
-
-    # Print the relevant matches
-    # print(f"Relevant Matches for '{new_block_text}':")
-    for distance, index in zip(distances[0], indices[0]):
-        result_metadata = metadata[index]
-        # print(f"Timestamp: {timestamp}, Similarity: {1-distance:.4f}")
-        # print(f"Block Text: {embedded_blocks[timestamp]}")
-        # print()
-        matches.append({
-            'timestamp': result_metadata[0],
-            'transcript_id': result_metadata[1],
-            'text': result_metadata[2],
-            'confidence': 1-distance
-        })
-    return matches
-```
-
-```python
-def create_transcripts_embeddings(transcripts, granularity='paragraph'):
-    # Dictionary to store embeddings with timestamps
-    embeddings = {}
-    total_tokens_embedded = 0
-
-    for transcript in transcripts:
-        if granularity == 'sentence':
-            sentences = transcript.get_sentences()
-            for sentence in sentences:
-                # print(sentence.start, sentence.end)
-                # print(sentence.text)
-                total_tokens_embedded += num_tokens_from_string(sentence.text, 'r50k_base')
-
-                embeddings[(sentence.start, transcript.id, sentence.text)] = embed_block(sentence.text)
-        else:
-            paragraphs = transcript.get_paragraphs()
-            for paragraph in paragraphs:
-                # print(paragraph.start, paragraph.end)
-                # print(paragraph.text, '\n')
-                total_tokens_embedded += num_tokens_from_string(paragraph.text, 'r50k_base')
-
-                embeddings[(paragraph.start, transcript.id, paragraph.text)] = embed_block(paragraph.text)
-
-    print(total_tokens_embedded, 'TOKENS EMBEDDED')
-    print('COST OF EMBEDDINGS: $', (total_tokens_embedded / 1000)*0.0001)
-    print()
-    return embeddings
-```
-
-```python
-import tiktoken
-
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-```
-
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-2.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-3.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-4.py" />
 ## Examples
 
 ### Cite Answers to Specific Questions
@@ -146,37 +53,8 @@ questions = [
 ]
 ```
 
-```python
-import json, datetime
-
-def get_citations(lemur_output):
-    matches = find_relevant_matches(embeddings, lemur_output)
-
-    print('CITATIONS:')
-    for index, m in enumerate(matches):
-        print('#{}'.format(index+1))
-        print('QUOTE: "{}"'.format(m['text']))
-        print('TRANSCRIPT ID:', m['transcript_id'])
-        print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['timestamp']/1000)))
-        print('CONFIDENCE SCORE:', m['confidence'])
-        print()
-```
-
-```python
-transcripts = transcribe([
-    '', # TODO ADD URLS
-])
-
-embeddings = create_transcripts_embeddings(transcripts)
-
-qa_results = transcripts.lemur.question(questions).response
-
-print(f"Question: {qa_results[0].question}")
-print(f"Answer: {qa_results[0].answer}")
-print()
-get_citations(qa_results[0].question + ' ' + qa_results[0].answer)
-```
-
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-5.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-6.py" />
 Example output:
 
 ```
@@ -207,54 +85,9 @@ CONFIDENCE SCORE: 0.4293010412511604
 
 When analyzing multiple transcripts, it can be helpful to have references to know which transcript the answer came from.
 
-```python
-questions = [
-    aai.LemurQuestion(question="Identify pain points discussed across all user interviews", context='', answer_format="""
-    [
-        "pain point 1",
-        "pain point 2",
-        "pain point 3"
-    ]
-    """)
-]
-```
-
-```python
-import json, datetime
-
-def get_examples(lemur_output):
-    matches = find_relevant_matches(embeddings, lemur_output, k=5)
-
-    print('EXAMPLES:')
-    for index, m in enumerate(matches):
-        print('#{}'.format(index+1))
-        print('QUOTE: "{}"'.format(m['text']))
-        print('TRANSCRIPT ID:', m['transcript_id'])
-        print('START TIMESTAMP:', str(datetime.timedelta(seconds=m['timestamp']/1000)))
-        print('CONFIDENCE SCORE:', m['confidence'])
-        print()
-    return matches
-```
-
-```python
-transcripts = transcribe([
-    '', # TODO ADD URLS
-])
-
-embeddings = create_transcripts_embeddings(transcripts, granularity='sentence')
-
-qa_results = transcripts.lemur.question(questions).response
-
-print(f"Question: {qa_results[0].question}")
-print(f"Answer: {qa_results[0].answer}")
-print()
-
-pain_point_array = json.loads(qa_results[0].answer.strip())
-for pp in pain_point_array:
-    print('Pain Point:', pp)
-    get_examples(pp)
-```
-
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-7.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-8.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-9.py" />
 Example output:
 
 ```
@@ -334,51 +167,9 @@ CONFIDENCE SCORE: 0.3631327779909689
 
 Quickly jump to the part of the meeting where the action item was discussed.
 
-```python
-action_item_answer_format="""[{
-    "action_item":<action item>,
-    "assignee":<assignee>,
-    "quote":"<leave blank>",
-    "timestamp":"<leave blank>"
-    }]
-"""
-
-action_item_context = ''
-```
-
-```python
-import json, datetime
-
-def timestamp_action_items(action_items_array):
-
-    for action_item in action_items_array:
-        matches = find_relevant_matches(embeddings, action_item['action_item'], k=1)
-        for index, m in enumerate(matches):
-            action_item['quote'] = m['text']
-            action_item['timestamp'] = m['timestamp']
-    return action_items_array
-```
-
-```python
-transcripts = transcribe([
-    '', # TODO add file URLs here
-])
-
-# TODO: choose granularity either sentence or paragraph
-embeddings = create_transcripts_embeddings(transcripts, 'paragraph')
-
-action_item_results = transcripts.lemur.action_items(
-    context=action_item_context,
-    answer_format=action_item_answer_format).response
-
-# Replace preamble in LeMUR response
-action_item_results = action_item_results.replace('Here are action items based on the transcript:', '')
-
-action_item_json_array = json.loads(action_item_results.strip())
-action_item_json_array = timestamp_action_items(action_item_json_array)
-print(json.dumps(action_item_json_array, indent=4))
-```
-
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-10.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-11.py" />
+<Code src="snippets/guides/cookbooks/lemur/lemur-transcript-citations/python-12.py" />
 Example output:
 
 ```

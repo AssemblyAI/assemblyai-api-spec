@@ -1,0 +1,4 @@
+FRAMES_PER_BUFFER = 3200  # 200ms of audio
+SAMPLE_RATE = 16000
+CHANNELS = 1
+FORMAT = pyaudio.paInt16

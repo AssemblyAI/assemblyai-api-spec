@@ -1,0 +1,147 @@
+import requests
+import time
+import xml.etree.ElementTree as ET
+
+API_KEY = "YOUR_API_KEY"
+audio_url = "https://storage.googleapis.com/aai-web-samples/meeting.mp4"
+
+# -------------------------------
+# Step 1: Transcribe the audio
+# -------------------------------
+transcript_request = requests.post(
+    "https://api.assemblyai.com/v2/transcript",
+    headers={"authorization": API_KEY, "content-type": "application/json"},
+    json={"audio_url": audio_url},
+)
+
+transcript_id = transcript_request.json()["id"]
+
+# Poll for completion
+while True:
+    polling_response = requests.get(
+        f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+        headers={"authorization": API_KEY},
+    )
+    status = polling_response.json()["status"]
+
+    if status == "completed":
+        transcript_text = polling_response.json()["text"]
+        break
+    elif status == "error":
+        raise RuntimeError(f"Transcription failed: {polling_response.json()['error']}")
+    else:
+        print(f"Transcription status: {status}")
+        time.sleep(3)
+
+# -------------------------------
+# Step 2: Build question helper functions
+# -------------------------------
+def construct_question(question):
+    question_str = f"Question: {question['question']}"
+
+    if question.get("context"):
+        question_str += f"\nContext: {question['context']}"
+
+    # Default answer_format
+    if not question.get("answer_format"):
+        question["answer_format"] = "short sentence"
+
+    question_str += f"\nAnswer Format: {question['answer_format']}"
+
+    if question.get("answer_options"):
+        options_str = ", ".join(question["answer_options"])
+        question_str += f"\nOptions: {options_str}"
+
+    return question_str + "\n"
+
+
+def escape_xml_characters(xml_string):
+    return xml_string.replace("&", "&amp;")
+
+
+# -------------------------------
+# Step 3: Define questions
+# -------------------------------
+questions = [
+    {
+        "question": "What are the top level KPIs for engineering?",
+        "context": "KPI stands for key performance indicator",
+        "answer_format": "short sentence",
+    },
+    {
+        "question": "How many days has it been since the data team has gotten updated metrics?",
+        "answer_options": ["1", "2", "3", "4", "5", "6", "7", "more than 7"],
+    },
+    {"question": "What are the future plans for the project?"},
+]
+
+question_str = "\n".join(construct_question(q) for q in questions)
+
+# -------------------------------
+# Step 4: Build the LLM prompt
+# -------------------------------
+prompt = f"""You are an expert at giving accurate answers to questions about texts.
+No preamble.
+Given the series of questions, answer the questions.
+Each question may follow up with answer format, answer options, and context for each question.
+It is critical that you follow the answer format and answer options for each question.
+When context is provided with a question, refer to it when answering the question.
+You are useful, true and concise, and write in perfect English.
+Only the question is allowed between the <question> tag. Do not include the answer format, options, or question context in your response.
+Only text is allowed between the <question> and <answer> tags.
+XML tags are not allowed between the <question> and <answer> tags.
+End your response with a closing </responses> tag.
+For each question-answer pair, format your response according to the template provided below:
+
+Template for response:
+<responses>
+  <response>
+    <question>The question</question>
+    <answer>Your answer</answer>
+  </response>
+  <response>
+    ...
+  </response>
+  ...
+</responses>
+
+These are the questions:
+{question_str}
+
+Transcript:
+{transcript_text}
+"""
+
+# -------------------------------
+# Step 5: Query LLM Gateway
+# -------------------------------
+headers = {"authorization": API_KEY}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json={
+        "model": "claude-sonnet-4-5-20250929",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2000,
+    },
+)
+
+response_json = response.json()
+llm_output = response_json["choices"][0]["message"]["content"]
+
+# -------------------------------
+# Step 6: Parse and print XML response
+# -------------------------------
+clean_response = escape_xml_characters(llm_output).strip()
+
+try:
+    root = ET.fromstring(clean_response)
+    for resp in root.findall("response"):
+        question = resp.find("question").text
+        answer = resp.find("answer").text
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+except ET.ParseError as e:
+    print("Could not parse XML response.")
+    print("Raw model output:\n", llm_output)

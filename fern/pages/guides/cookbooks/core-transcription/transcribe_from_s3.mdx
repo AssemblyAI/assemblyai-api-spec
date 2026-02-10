@@ -65,74 +65,17 @@ Then we can import them and set our relevant variable values. You'll need to edi
 4. `iam_secret_key` - The secret key of the IAM user.
 5. `assembly_key` - Your AssemblyAI API key.
 
-```python
-import boto3
-from botocore.exceptions import ClientError
-import logging
-import requests
-import time
-
-bucket_name = "<BUCKET_NAME>"
-object_name = "<AUDIO_FILE_NAME>"
-
-iam_access_id = "<IAM_ACCESS_ID>"
-iam_secret_key = "<IAM_SECRET_KEY>"
-
-assembly_key = "<ASSEMBLYAI_API_KEY>"
-```
-
-From here, we simply follow the sequence outlined in the introduction of this Colab:
+<Code src="snippets/guides/cookbooks/core-transcription/transcribe_from_s3/python-1.py" />
+From here, we simply follow the sequence outlined in the introduction of this
+Colab:
 
 1. Generate a presigned URL for the S3 audio file with [boto](http://boto.cloudhackers.com/en/latest).
 
-```python
-# Create a low-level service client with the IAM credentials.
-s3_client = boto3.client(
-    "s3", aws_access_key_id=iam_access_id, aws_secret_access_key=iam_secret_key
-)
-
-# Generate a pre-signed URL for the audio file that expires after 30 minutes.
-try:
-    p_url = s3_client.generate_presigned_url(
-        ClientMethod="get_object",
-        Params={"Bucket": bucket_name, "Key": object_name},
-        ExpiresIn=1800,
-    )
-
-except ClientError as e:
-    logging.error(e)
-```
-
+<Code src="snippets/guides/cookbooks/core-transcription/transcribe_from_s3/python-2.py" />
 2. Pass the presigned URL through to AssemblyAI's API with a POST request.
 
-```python
-# Use your AssemblyAI API Key for authorization.
-headers = {"authorization": assembly_key, "content-type": "application/json"}
+<Code src="snippets/guides/cookbooks/core-transcription/transcribe_from_s3/python-3.py" />
+3. Wait until the transcription is complete, and then fetch it with a GET
+request.
 
-# Specify AssemblyAI's transcription API endpoint.
-transcript_endpoint = "https://api.assemblyai.com/v2/transcript"
-
-# Use the presigned URL as the `audio_url` in the POST request.
-json = {"audio_url": p_url}
-
-# Queue the audio file for transcription with a POST request.
-post_response = requests.post(transcript_endpoint, json=json, headers=headers)
-```
-
-3. Wait until the transcription is complete, and then fetch it with a GET request.
-
-```python
-# Specify the endpoint of the transaction.
-get_endpoint = transcript_endpoint + "/" + post_response.json()["id"]
-
-# GET request the transcription.
-get_response = requests.get(get_endpoint, headers=headers)
-
-# If the transcription has not finished, wait util it has.
-while get_response.json()["status"] != "completed":
-    get_response = requests.get(get_endpoint, headers=headers)
-    time.sleep(5)
-
-# Once the transcription is complete, print it out.
-print(get_response.json()["text"])
-```
+<Code src="snippets/guides/cookbooks/core-transcription/transcribe_from_s3/python-4.py" />
