@@ -134,411 +134,12 @@ For live meeting transcription:
 
 Here's a complete example implementing async transcription with all essential features:
 
-```python
-import assemblyai as aai
-import asyncio
-from typing import Dict, List
-from assemblyai.types import (
-    SpeakerOptions,
-    LanguageDetectionOptions,
-    PIIRedactionPolicy,
-    PIISubstitutionPolicy,
-)
-
-# Configure API key
-aai.settings.api_key = "your_api_key_here"
-
-async def transcribe_meeting_async(audio_source: str) -> Dict:
-    """
-    Asynchronously transcribe a meeting recording with full features
-
-    Args:
-        audio_source: Either a local file path or publicly accessible URL
-    """
-    # Configure comprehensive meeting analysis
-    config = aai.TranscriptionConfig(
-        # Speaker diarization
-        speaker_labels=True,
-        speakers_expected=None,  # Use if you know exact number from Zoom/Meet/Teams
-        speaker_options=SpeakerOptions(
-            min_speakers_expected=2,
-            max_speakers_expected=20
-        ),  # Use if you know the min/max range
-        multichannel=False,  # Set to True if audio has separate channel per speaker
-
-        # Language detection
-        language_detection=True,  # Auto-detect the most used language
-        language_detection_options=LanguageDetectionOptions(
-            code_switching=True,  # Preserve language switches
-            code_switching_confidence_threshold=0.5,
-        ),
-
-        # Punctuation and formatting
-        punctuate=True,
-        format_text=True,
-
-        # Boost accuracy of meeting-specific vocabulary
-        keyterms_prompt=["quarterly", "KPI", "roadmap", "deliverables"],
-
-        # Speech Understanding - commonly used models
-        summarization=True,
-        sentiment_analysis=True,
-        entity_detection=True,
-        redact_pii=True,
-        redact_pii_policies=[
-            PIIRedactionPolicy.person_name,
-            PIIRedactionPolicy.organization,
-            PIIRedactionPolicy.occupation,
-        ],
-        redact_pii_sub=PIISubstitutionPolicy.hash,
-        redact_pii_audio=True
-    )
-
-    # Create transcriber
-    transcriber = aai.Transcriber()
-
-    try:
-        # Submit transcription job
-        transcript = await asyncio.to_thread(
-            transcriber.transcribe,
-            audio_source,
-            config=config
-        )
-
-        # Check status
-        if transcript.status == aai.TranscriptStatus.error:
-            raise Exception(f"Transcription failed: {transcript.error}")
-
-        # Process speaker-labeled utterances
-        print("\n=== SPEAKER-LABELED TRANSCRIPT ===\n")
-
-        for utterance in transcript.utterances:
-            # Format timestamp
-            start_time = utterance.start / 1000  # Convert to seconds
-            end_time = utterance.end / 1000
-
-            # Print formatted utterance
-            print(f"[{start_time:.1f}s - {end_time:.1f}s] Speaker {utterance.speaker}:")
-            print(f"  {utterance.text}")
-            print(f"  Confidence: {utterance.confidence:.2%}\n")
-
-        # Print summary data
-        print("\n=== MEETING SUMMARY ===\n")
-        print({
-            "id": transcript.id,
-            "status": transcript.status,
-            "duration": transcript.audio_duration,
-            "speaker_count": len(set(u.speaker for u in transcript.utterances)),
-            "word_count": len(transcript.words) if transcript.words else 0,
-            "detected_language": transcript.language_code if hasattr(transcript, 'language_code') else None,
-            "summary": transcript.summary,
-        })
-
-        return {
-            "transcript": transcript,
-            "utterances": transcript.utterances,
-            "summary": transcript.summary,
-        }
-
-    except Exception as e:
-        print(f"Error during transcription: {e}")
-        raise
-
-async def main():
-    """
-    Example usage with error handling
-    """
-    # Use either local file OR URL (not both)
-    audio_source = "https://assembly.ai/wildfires.mp3"  # Or "path/to/recording.mp3"
-
-    try:
-        result = await transcribe_meeting_async(audio_source)
-
-        # Additional processing
-        print(f"\nTotal speakers identified: {len(set(u.speaker for u in result['utterances']))}")
-        print(f"Meeting duration: {result['transcript'].audio_duration} seconds")
-
-    except Exception as e:
-        print(f"Failed to process meeting: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-1.py" />
 ## How Can I Get Started Building a During-Call Live Meeting Notetaker?
 
 Here's a complete example for real-time streaming transcription with meeting-optimized settings:
 
-```python
-# pip install pyaudio websocket-client
-import pyaudio
-import websocket
-import json
-import threading
-import time
-from urllib.parse import urlencode
-from datetime import datetime
-
-# --- Configuration ---
-YOUR_API_KEY = "your_api_key"
-
-# Keyterms to improve recognition accuracy
-KEYTERMS = [
-    "Alice Johnson",
-    "Bob Smith",
-    "Carol Davis",
-    "quarterly review",
-    "action items",
-    "follow up",
-    "deadline",
-    "budget"
-]
-
-# MEETING NOTETAKER CONFIGURATION (different from voice agents!)
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "format_turns": True,  # ALWAYS TRUE for meetings - users need readable text
-
-    # Meeting-optimized turn detection (wait longer than voice agents)
-    "end_of_turn_confidence_threshold": 0.6,  # Higher than voice agents (0.4)
-    "min_end_of_turn_silence_when_confident": 560,  # Wait longer for natural pauses (voice agents use 160ms)
-    "max_turn_silence": 2000,  # Allow thinking pauses (voice agents use 1280ms)
-
-    # Keyterms for accuracy
-    "keyterms_prompt": json.dumps(KEYTERMS)
-}
-
-API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-
-# Audio Configuration
-FRAMES_PER_BUFFER = 800  # 50ms of audio
-SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
-CHANNELS = 1
-FORMAT = pyaudio.paInt16
-
-# Global variables
-audio = None
-stream = None
-ws_app = None
-audio_thread = None
-stop_event = threading.Event()
-transcript_buffer = []
-
-
-def on_open(ws):
-    """Called when the WebSocket connection is established."""
-    print("=" * 80)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Meeting transcription started")
-    print(f"Connected to: {API_ENDPOINT_BASE_URL}")
-    print(f"Keyterms configured: {', '.join(KEYTERMS)}")
-    print("=" * 80)
-    print("\nSpeak into your microphone. Press Ctrl+C to stop.\n")
-
-    def stream_audio():
-        """Stream audio from microphone to WebSocket"""
-        global stream
-        while not stop_event.is_set():
-            try:
-                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
-            except Exception as e:
-                if not stop_event.is_set():
-                    print(f"Error streaming audio: {e}")
-                break
-
-    global audio_thread
-    audio_thread = threading.Thread(target=stream_audio)
-    audio_thread.daemon = True
-    audio_thread.start()
-
-
-def on_message(ws, message):
-    """Handle incoming messages from AssemblyAI"""
-    try:
-        data = json.loads(message)
-        msg_type = data.get("type")
-
-        # Uncomment to see full JSON for debugging:
-        # print("=" * 80)
-        # print(json.dumps(data, indent=2, ensure_ascii=False))
-        # print("=" * 80)
-        # print()
-
-        if msg_type == "Begin":
-            session_id = data.get("id", "N/A")
-            print(f"[SESSION] Started - ID: {session_id}\n")
-
-        elif msg_type == "Turn":
-            end_of_turn = data.get("end_of_turn", False)
-            turn_is_formatted = data.get("turn_is_formatted", False)
-            transcript = data.get("transcript", "")
-            turn_order = data.get("turn_order", 0)
-            end_of_turn_confidence = data.get("end_of_turn_confidence", 0.0)
-
-            # FOR MEETING NOTETAKERS: Show partials for responsive UI
-            if not end_of_turn and transcript:
-                print(f"\r[LIVE] {transcript}", end="", flush=True)
-
-            # FOR MEETING NOTETAKERS: Use formatted finals for readable display
-            # (Unlike voice agents which should use utterance for speed)
-            if end_of_turn and turn_is_formatted and transcript:
-                timestamp = datetime.now().strftime('%H:%M:%S')
-                print(f"\n[{timestamp}] {transcript}")
-                print(f"           Turn: {turn_order} | Confidence: {end_of_turn_confidence:.2%}")
-
-                # Detect action items
-                transcript_lower = transcript.lower()
-                if any(term in transcript_lower for term in ["action item", "follow up", "deadline", "assigned to", "todo"]):
-                    print("           ⚠️  ACTION ITEM DETECTED!")
-
-                # Store final transcript
-                transcript_buffer.append({
-                    "timestamp": timestamp,
-                    "text": transcript,
-                    "turn_order": turn_order,
-                    "confidence": end_of_turn_confidence,
-                    "type": "final"
-                })
-                print()
-
-        elif msg_type == "Termination":
-            audio_duration = data.get("audio_duration_seconds", 0)
-            print(f"\n[SESSION] Terminated - Duration: {audio_duration}s")
-            save_transcript()
-
-        elif msg_type == "Error":
-            error_msg = data.get("error", "Unknown error")
-            print(f"\n[ERROR] {error_msg}")
-
-    except json.JSONDecodeError as e:
-        print(f"Error decoding message: {e}")
-    except Exception as e:
-        print(f"Error handling message: {e}")
-
-
-def on_error(ws, error):
-    """Called when a WebSocket error occurs."""
-    print(f"\n[WEBSOCKET ERROR] {error}")
-    stop_event.set()
-
-
-def on_close(ws, close_status_code, close_msg):
-    """Called when the WebSocket connection is closed."""
-    print(f"\n[WEBSOCKET] Disconnected - Status: {close_status_code}, Message: {close_msg}")
-
-    global stream, audio
-    stop_event.set()
-
-    # Clean up audio stream
-    if stream:
-        if stream.is_active():
-            stream.stop_stream()
-        stream.close()
-        stream = None
-    if audio:
-        audio.terminate()
-        audio = None
-    if audio_thread and audio_thread.is_alive():
-        audio_thread.join(timeout=1.0)
-
-
-def save_transcript():
-    """Save the transcript to a file"""
-    if not transcript_buffer:
-        print("No transcript to save.")
-        return
-
-    filename = f"meeting_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write("Meeting Transcript\n")
-        f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Keyterms: {', '.join(KEYTERMS)}\n")
-        f.write("=" * 80 + "\n\n")
-
-        for entry in transcript_buffer:
-            f.write(f"[{entry['timestamp']}] {entry['text']}\n")
-            f.write(f"Confidence: {entry['confidence']:.2%}\n\n")
-
-    print(f"Transcript saved to: {filename}")
-
-
-def run():
-    """Main function to run the streaming transcription"""
-    global audio, stream, ws_app
-
-    # Initialize PyAudio
-    audio = pyaudio.PyAudio()
-
-    # Open microphone stream
-    try:
-        stream = audio.open(
-            input=True,
-            frames_per_buffer=FRAMES_PER_BUFFER,
-            channels=CHANNELS,
-            format=FORMAT,
-            rate=SAMPLE_RATE,
-        )
-        print("Microphone stream opened successfully.")
-    except Exception as e:
-        print(f"Error opening microphone stream: {e}")
-        if audio:
-            audio.terminate()
-        return
-
-    # Create WebSocketApp
-    ws_app = websocket.WebSocketApp(
-        API_ENDPOINT,
-        header={"Authorization": YOUR_API_KEY},
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close,
-    )
-
-    # Run WebSocketApp in a separate thread
-    ws_thread = threading.Thread(target=ws_app.run_forever)
-    ws_thread.daemon = True
-    ws_thread.start()
-
-    try:
-        # Keep main thread alive until interrupted
-        while ws_thread.is_alive():
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\n\nCtrl+C received. Stopping transcription...")
-        stop_event.set()
-
-        # Send termination message to the server
-        if ws_app and ws_app.sock and ws_app.sock.connected:
-            try:
-                terminate_message = {"type": "Terminate"}
-                ws_app.send(json.dumps(terminate_message))
-                time.sleep(1)
-            except Exception as e:
-                print(f"Error sending termination message: {e}")
-
-        if ws_app:
-            ws_app.close()
-
-        ws_thread.join(timeout=2.0)
-
-    finally:
-        # Final cleanup
-        if stream and stream.is_active():
-            stream.stop_stream()
-        if stream:
-            stream.close()
-        if audio:
-            audio.terminate()
-        print("Cleanup complete. Exiting.")
-
-
-if __name__ == "__main__":
-    run()
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-2.py" />
 <Note>
   These settings wait longer before ending turns to accommodate natural
   conversation pauses and ensure readable formatted text for display. You can
@@ -553,22 +154,7 @@ Many meeting platforms (Zoom, Teams, Google Meet) can record each participant on
 
 ### For Pre-recorded Meetings
 
-```python
-config = aai.TranscriptionConfig(
-    multichannel=True,  # Enable when each speaker is on different channel
-    speaker_labels=False,  # Disable - channels already separate speakers
-    # Other settings...
-)
-
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe(audio_file, config=config)
-
-# Access per-channel transcripts
-for channel, channel_transcript in enumerate(transcript.channels):
-    print(f"\n=== Channel {channel} ===")
-    print(channel_transcript.text)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-3.py" />
 **When to use multichannel:**
 
 - Zoom local recordings with "Record separate audio file for each participant" enabled
@@ -593,50 +179,10 @@ for channel, channel_transcript in enumerate(transcript.channels):
 
 For real-time multichannel audio, create separate streaming sessions per channel:
 
-```python
-import asyncio
-import websockets
-
-class ChannelTranscriber:
-    def __init__(self, channel_id: int, speaker_name: str):
-        self.channel_id = channel_id
-        self.speaker_name = speaker_name
-        self.connection_params = {
-            "sample_rate": 16000,
-            "format_turns": True,
-        }
-
-    async def transcribe_channel(self, audio_stream):
-        """Transcribe a single audio channel"""
-        url = f"wss://streaming.assemblyai.com/v3/ws?{urlencode(self.connection_params)}"
-
-        # If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
-        async with websockets.connect(url, additional_headers={"Authorization": API_KEY}) as ws:
-            # Send audio from this channel only
-            async for audio_chunk in audio_stream:
-                await ws.send(audio_chunk)
-
-            # Receive transcripts
-            async for message in ws:
-                data = json.loads(message)
-                if data.get("type") == "Turn" and data.get("turn_is_formatted"):
-                    print(f"{self.speaker_name}: {data['transcript']}")
-
-# Create transcriber for each channel
-async def transcribe_multichannel_meeting(channel_audio_streams):
-    transcribers = [
-        ChannelTranscriber(0, "Alice"),
-        ChannelTranscriber(1, "Bob"),
-    ]
-
-    # Run all channels concurrently
-    await asyncio.gather(*[
-        t.transcribe_channel(stream)
-        for t, stream in zip(transcribers, channel_audio_streams)
-    ])
-```
-
-See our [multichannel streaming guide](https://www.assemblyai.com/docs/universal-streaming/multichannel-streams) for complete implementation details.
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-4.py" />
+See our [multichannel streaming
+guide](https://www.assemblyai.com/docs/universal-streaming/multichannel-streams)
+for complete implementation details.
 
 ## How Should I Handle Pre-recorded Transcription in Production?
 
@@ -665,63 +211,10 @@ transcript = await asyncio.to_thread(transcriber.transcribe, audio_url, config=c
 
 ### Option 2: Webhook Callbacks (Production Recommended)
 
-```python
-config = aai.TranscriptionConfig(
-    webhook_url="https://your-app.com/webhooks/assemblyai",
-    webhook_auth_header_name="X-Webhook-Secret",
-    webhook_auth_header_value="your_secret_here",
-    speaker_labels=True,
-    summarization=True,
-    # ... other config
-)
-
-# Submit job and return immediately (non-blocking)
-transcript = transcriber.submit(audio_url, config=config)
-print(f"Job submitted: {transcript.id}")
-# Your app can continue processing other requests
-
-# Your webhook receives results when ready (typically 15-30% of audio duration)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-5.py" />
 **Webhook handler example:**
 
-```python
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route("/webhooks/assemblyai", methods=["POST"])
-def assemblyai_webhook():
-    # Verify webhook authenticity
-    if request.headers.get("X-Webhook-Secret") != "your_secret_here":
-        return jsonify({"error": "Unauthorized"}), 401
-
-    data = request.json
-    transcript_id = data["transcript_id"]
-    status = data["status"]
-
-    if status == "completed":
-        # Process completed transcript
-        process_completed_meeting(data)
-    elif status == "error":
-        # Handle error
-        log_transcription_error(transcript_id, data["error"])
-
-    return jsonify({"received": True}), 200
-
-def process_completed_meeting(transcript_data):
-    """Process completed meeting transcript"""
-    # Extract data
-    utterances = transcript_data["utterances"]
-    summary = transcript_data["summary"]
-
-    # Store in database
-    save_to_database(transcript_data)
-
-    # Notify user
-    send_notification(transcript_data["id"])
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-6.py" />
 **Pros:**
 
 - Non-blocking - submit and forget
@@ -734,25 +227,7 @@ def process_completed_meeting(transcript_data):
 
 ### Option 3: Polling (Custom Workflows)
 
-```python
-# Submit job
-transcript = transcriber.submit(audio_url, config=config)
-print(f"Submitted: {transcript.id}")
-
-# Poll for completion with progress tracking
-while transcript.status not in [aai.TranscriptStatus.completed, aai.TranscriptStatus.error]:
-    await asyncio.sleep(5)
-    transcript = transcriber.get_transcript(transcript.id)
-
-    # Optional: Show progress
-    print(f"Status: {transcript.status}...")
-
-if transcript.status == aai.TranscriptStatus.completed:
-    process_transcript(transcript)
-else:
-    print(f"Error: {transcript.error}")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-7.py" />
 **Pros:**
 
 - Full control over retry logic
@@ -802,50 +277,12 @@ Sarah Chen: Excellent work on that launch.
 
 Speaker Identification uses AssemblyAI's Speech Understanding API to map generic speaker labels to actual names or roles that you provide:
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "your_api_key"
-
-# Step 1: Transcribe with speaker diarization
-config = aai.TranscriptionConfig(
-    speaker_labels=True,  # Must enable speaker diarization first
-    speech_understanding={
-        "request": {
-            "speaker_identification": {
-                "speaker_type": "name",  # or "role"
-                "known_values": ["Sarah Chen", "Michael Rodriguez", "Alex Kim"]
-            }
-        }
-    }
-)
-
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe("meeting_recording.mp3", config=config)
-
-# Access results with identified speakers
-for utterance in transcript.utterances:
-    print(f"{utterance.speaker}: {utterance.text}")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-8.py" />
 ### Identifying by Role Instead of Name
 
 For customer service, sales calls, or scenarios where you don't know names:
 
-```python
-config = aai.TranscriptionConfig(
-    speaker_labels=True,
-    speech_understanding={
-        "request": {
-            "speaker_identification": {
-                "speaker_type": "role",
-                "known_values": ["Agent", "Customer"]  # or ["Interviewer", "Interviewee"]
-            }
-        }
-    }
-)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-9.py" />
 **Common role combinations:**
 
 - `["Agent", "Customer"]` - Customer service calls
@@ -864,26 +301,7 @@ config = aai.TranscriptionConfig(
 
 **Example with Zoom:**
 
-```python
-# Get participant names from Zoom meeting
-zoom_participants = get_zoom_meeting_participants(meeting_id)
-speaker_names = [p["name"] for p in zoom_participants]
-
-# Use in speaker identification
-config = aai.TranscriptionConfig(
-    speaker_labels=True,
-    speakers_expected=len(speaker_names),  # Hint: exact number of speakers
-    speech_understanding={
-        "request": {
-            "speaker_identification": {
-                "speaker_type": "name",
-                "known_values": speaker_names
-            }
-        }
-    }
-)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-10.py" />
 ### How Speaker Identification Works
 
 **Speaker Identification Requirements:**
@@ -905,36 +323,7 @@ config = aai.TranscriptionConfig(
 
 You can also add speaker identification to an existing transcript:
 
-```python
-# First, transcribe with speaker diarization
-transcript = transcriber.transcribe(audio_url, config=aai.TranscriptionConfig(speaker_labels=True))
-
-# Later, add speaker identification
-transcript_dict = transcript.json_response
-
-# Add speaker identification
-transcript_dict["speech_understanding"] = {
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "name",
-            "known_values": ["Sarah Chen", "Michael Rodriguez"]
-        }
-    }
-}
-
-# Send to Speech Understanding API
-import requests
-result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    headers={"Authorization": aai.settings.api_key},
-    json=transcript_dict
-).json()
-
-# Access identified speakers
-for utterance in result["utterances"]:
-    print(f"{utterance['speaker']}: {utterance['text']}")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-11.py" />
 This approach is useful when:
 
 - You get speaker names after the transcription completes
@@ -958,54 +347,12 @@ AssemblyAI supports translation between 99+ languages, enabling you to transcrib
 
 ### Basic Translation
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "your_api_key"
-
-config = aai.TranscriptionConfig(
-    language_code="es",  # Spanish audio
-    translation_language_code="en",  # Translate to English
-    speaker_labels=True,  # Maintain speaker labels
-)
-
-transcriber = aai.Transcriber()
-transcript = transcriber.transcribe("spanish_meeting.mp3", config=config)
-
-# Access original Spanish transcript
-print("Original (Spanish):")
-print(transcript.text)
-
-# Access English translation
-print("\nTranslation (English):")
-print(transcript.translation)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-12.py" />
 ### Translation with Code Switching
 
 For meetings where participants switch between languages:
 
-```python
-config = aai.TranscriptionConfig(
-    language_detection=True,  # Auto-detect languages
-    language_detection_options=aai.LanguageDetectionOptions(
-        code_switching=True,  # Preserve language switches
-        code_switching_confidence_threshold=0.5
-    ),
-    translation_language_code="en",  # Translate everything to English
-)
-
-transcript = transcriber.transcribe("multilingual_meeting.mp3", config=config)
-
-# Original transcript preserves language switches
-for utterance in transcript.utterances:
-    detected_lang = utterance.language_code if hasattr(utterance, 'language_code') else "unknown"
-    print(f"[{detected_lang}] {utterance.speaker}: {utterance.text}")
-
-# Translation combines everything in English
-print(f"\nEnglish translation:\n{transcript.translation}")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-13.py" />
 ### Supported Language Pairs
 
 AssemblyAI supports translation between **99+ languages**, including:
@@ -1022,68 +369,12 @@ AssemblyAI supports translation between **99+ languages**, including:
 
 ### Translation Response Format
 
-```python
-{
-    "text": "Original transcript in source language",
-    "translation": "Translated transcript in target language",
-    "language_code": "es",  # Detected/specified source language
-    "utterances": [
-        {
-            "speaker": "A",
-            "text": "Hola, ¿cómo estás?",  # Original
-            "translation": "Hello, how are you?",  # Translated
-            "start": 0,
-            "end": 1500
-        }
-    ]
-}
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-14.py" />
 ### Real-World Example: International Team Meeting
 
-```python
-async def process_international_meeting(audio_url: str, target_language: str = "en"):
-    """
-    Process multilingual meeting with translation and identification
-    """
-    config = aai.TranscriptionConfig(
-        # Handle multiple languages
-        language_detection=True,
-        language_detection_options=aai.LanguageDetectionOptions(
-            code_switching=True,
-            code_switching_confidence_threshold=0.5
-        ),
-
-        # Translate to common language
-        translation_language_code=target_language,
-
-        # Speaker identification
-        speaker_labels=True,
-
-        # Generate summary in target language
-        summarization=True,
-    )
-
-    transcriber = aai.Transcriber()
-    transcript = await asyncio.to_thread(
-        transcriber.transcribe,
-        audio_url,
-        config=config
-    )
-
-    return {
-        "original_transcript": transcript.text,
-        "translated_transcript": transcript.translation,
-        "summary": transcript.summary,  # Already in target language
-        "speakers": list(set(u.speaker for u in transcript.utterances)),
-        "languages_detected": list(set(
-            u.language_code for u in transcript.utterances
-            if hasattr(u, 'language_code')
-        ))
-    }
-```
-
-For complete language support and translation details, see our [Translation documentation](https://www.assemblyai.com/docs/speech-understanding/translation).
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-15.py" />
+For complete language support and translation details, see our [Translation
+documentation](https://www.assemblyai.com/docs/speech-understanding/translation).
 
 ## What Workflows Can I Build for My AI Meeting Notetaker?
 
@@ -1100,14 +391,7 @@ Use these Speech Understanding and Guardrails features to transform raw transcri
 
 **Example:**
 
-```python
-config = aai.TranscriptionConfig(
-    summarization=True,
-    summary_type="bullets",  # or "paragraph"
-    summary_model="informative",  # or "conversational"
-)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-16.py" />
 ### Sentiment Analysis
 
 `sentiment_analysis: true`
@@ -1136,15 +420,7 @@ for utterance in transcript.sentiment_analysis_results:
 
 **Example:**
 
-```python
-# Extract all organizations mentioned
-organizations = [
-    entity.text for entity in transcript.entities
-    if entity.entity_type == "organization"
-]
-print(f"Companies mentioned: {', '.join(organizations)}")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-17.py" />
 ### Redact PII Text
 
 `redact_pii: true`
@@ -1156,19 +432,7 @@ print(f"Companies mentioned: {', '.join(organizations)}")
 
 **Recommended policies for meetings:**
 
-```python
-config = aai.TranscriptionConfig(
-    redact_pii=True,
-    redact_pii_policies=[
-        PIIRedactionPolicy.person_name,      # Remove names
-        PIIRedactionPolicy.email_address,    # Remove emails
-        PIIRedactionPolicy.phone_number,     # Remove phone numbers
-        PIIRedactionPolicy.organization,     # Remove company names
-    ],
-    redact_pii_sub=PIISubstitutionPolicy.hash,  # Stable hash tokens
-)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-18.py" />
 **Why hash substitution?**
 
 - Stable across the file (same value → same token)
@@ -1186,39 +450,7 @@ config = aai.TranscriptionConfig(
 
 ### Complete Example
 
-```python
-config = aai.TranscriptionConfig(
-    # Core transcription
-    speaker_labels=True,
-
-    # Speech Understanding
-    summarization=True,
-    sentiment_analysis=True,
-    entity_detection=True,
-
-    # PII protection
-    redact_pii=True,
-    redact_pii_policies=[
-        PIIRedactionPolicy.person_name,
-        PIIRedactionPolicy.email_address,
-        PIIRedactionPolicy.phone_number,
-    ],
-    redact_pii_sub=PIISubstitutionPolicy.hash,
-    redact_pii_audio=True,
-)
-
-transcript = transcriber.transcribe(audio_url, config=config)
-
-# Access all features
-meeting_insights = {
-    "summary": transcript.summary,
-    "sentiment_trend": analyze_sentiment_trend(transcript.sentiment_analysis_results),
-    "entities": extract_entities(transcript.entities),
-    "safe_transcript": transcript.text,  # PII redacted
-    "safe_audio": transcript.redacted_audio_url,  # PII bleeped
-}
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-19.py" />
 ## How Do I Improve the Accuracy of My Notetaker?
 
 **Best practices:**
@@ -1233,231 +465,18 @@ meeting_insights = {
 
 Keyterms prompting improves recognition accuracy for domain-specific vocabulary by up to 21%:
 
-```python
-# Define domain-specific vocabulary
-company_terms = [
-    "AssemblyAI",
-    "Universal-Streaming",
-    "Speech Understanding",
-    "diarization"
-]
-
-participant_names = [
-    "Dylan Fox",
-    "Sarah Chen",
-    "Michael Rodriguez"
-]
-
-technical_terms = [
-    "API endpoint",
-    "WebSocket",
-    "latency metrics",
-    "TTFT"
-]
-
-# Configure with keyterms prompt
-config = aai.TranscriptionConfig(
-    keyterms_prompt=company_terms + participant_names + technical_terms,
-    speaker_labels=True,
-    # ... other settings
-)
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-20.py" />
 ### Using Keyterms Prompt for Streaming
 
-```python
-# Streaming with contextual keyterms
-keyterms = [
-    # Participant names
-    "Alice Johnson",
-    "Bob Smith",
-
-    # Meeting-specific vocabulary
-    "Q4 objectives",
-    "revenue targets",
-    "customer acquisition",
-
-    # Technical terms
-    "API integration",
-    "cloud migration"
-]
-
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "format_turns": True,
-    "keyterms_prompt": json.dumps(keyterms),  # JSON-encode for URL params
-}
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-21.py" />
 ## How Do I Process the Response from the API?
 
 ### Processing Async Responses
 
-```python
-def process_async_transcript(transcript):
-    """
-    Extract and process all relevant data from async transcript
-    """
-    # Basic transcript data
-    meeting_data = {
-        "id": transcript.id,
-        "duration": transcript.audio_duration,
-        "confidence": transcript.confidence,
-        "full_text": transcript.text
-    }
-
-    # Process speaker utterances
-    speakers = {}
-    for utterance in transcript.utterances:
-        speaker = utterance.speaker
-
-        if speaker not in speakers:
-            speakers[speaker] = {
-                "utterances": [],
-                "total_speaking_time": 0,
-                "word_count": 0
-            }
-
-        speakers[speaker]["utterances"].append({
-            "text": utterance.text,
-            "start": utterance.start,
-            "end": utterance.end,
-            "confidence": utterance.confidence
-        })
-
-        # Calculate speaking time
-        speakers[speaker]["total_speaking_time"] += (utterance.end - utterance.start) / 1000
-        speakers[speaker]["word_count"] += len(utterance.text.split())
-
-    meeting_data["speakers"] = speakers
-
-    # Extract summary
-    if transcript.summary:
-        meeting_data["summary"] = transcript.summary
-
-    # Calculate meeting statistics
-    total_duration = transcript.audio_duration / 1000  # Convert to seconds
-    meeting_data["statistics"] = {
-        "total_speakers": len(speakers),
-        "total_words": sum(s["word_count"] for s in speakers.values()),
-        "average_confidence": transcript.confidence,
-        "speaking_distribution": {
-            speaker: {
-                "percentage": (data["total_speaking_time"] / total_duration) * 100,
-                "minutes": data["total_speaking_time"] / 60
-            }
-            for speaker, data in speakers.items()
-        }
-    }
-
-    return meeting_data
-
-# Example usage
-result = process_async_transcript(transcript)
-print(f"Meeting had {result['statistics']['total_speakers']} speakers")
-print(f"Speaker A spoke for {result['statistics']['speaking_distribution']['A']['minutes']:.1f} minutes")
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-22.py" />
 ### Processing Streaming Responses
 
-```python
-class StreamingResponseProcessor:
-    def __init__(self):
-        self.partial_buffer = ""
-        self.final_transcripts = []
-        self.turn_metadata = []
-
-    def process_message(self, message: dict):
-        """
-        Process real-time streaming messages
-        """
-        msg_type = message.get("type")
-
-        if msg_type == "Begin":
-            return {
-                "event": "session_started",
-                "session_id": message.get("id"),
-                "expires_at": message.get("expires_at")
-            }
-
-        elif msg_type == "Turn":
-            return self.process_turn(message)
-
-        elif msg_type == "Termination":
-            return {
-                "event": "session_ended",
-                "audio_duration": message.get("audio_duration_seconds"),
-                "session_duration": message.get("session_duration_seconds")
-            }
-
-    def process_turn(self, data: dict):
-        """Process turn messages"""
-        is_final = data.get("end_of_turn")
-        is_formatted = data.get("turn_is_formatted")
-        transcript = data.get("transcript", "")
-        turn_order = data.get("turn_order")
-
-        response = {
-            "turn_order": turn_order,
-            "is_final": is_final,
-            "is_formatted": is_formatted,
-            "confidence": data.get("end_of_turn_confidence", 0)
-        }
-
-        # Handle partials (for live display)
-        if not is_final and transcript:
-            self.partial_buffer = transcript
-            response["event"] = "partial"
-            response["text"] = transcript
-
-        # Handle finals (for storage)
-        elif is_final and is_formatted:
-            final_transcript = {
-                "turn_order": turn_order,
-                "text": transcript,
-                "confidence": data.get("end_of_turn_confidence"),
-                "timestamp": datetime.now().isoformat()
-            }
-            self.final_transcripts.append(final_transcript)
-            response["event"] = "final"
-            response["text"] = transcript
-
-            # Clear partial buffer
-            self.partial_buffer = ""
-
-        return response
-
-    def get_full_transcript(self):
-        """
-        Combine all final transcripts into complete meeting transcript
-        """
-        return {
-            "full_text": " ".join(t["text"] for t in self.final_transcripts),
-            "transcripts": self.final_transcripts,
-            "total_turns": len(self.final_transcripts)
-        }
-
-# Example usage
-processor = StreamingResponseProcessor()
-
-# If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
-async with websockets.connect(API_ENDPOINT, additional_headers=headers) as ws:
-    async for message in ws:
-        data = json.loads(message)
-        result = processor.process_message(data)
-
-        if result["event"] == "partial":
-            # Update UI with live transcript
-            update_live_caption(result["text"])
-
-        elif result["event"] == "final":
-            # Save final transcript
-            save_transcript_segment(result)
-
-# Get complete transcript when done
-full_transcript = processor.get_full_transcript()
-```
-
+<Code src="snippets/use-cases/meeting-notetaker-best-practices/python-23.py" />
 ## Additional Resources
 
 - [Universal Pre-recorded Documentation](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio)
