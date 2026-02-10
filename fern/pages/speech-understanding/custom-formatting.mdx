@@ -167,211 +167,22 @@ This method is ideal when you're starting fresh and want both transcription and 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-  "authorization": "<YOUR_API_KEY>"
-}
-
-# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-audio_url = "https://assembly.ai/phone-msg.m4a"
-
-# Configure transcription with custom formatting
-data = {
-  "audio_url": audio_url,
-  "speech_models": ["universal-3-pro", "universal-2"],
-  "language_detection": True,
-  "speaker_labels": True,
-  "speech_understanding": {
-    "request": {
-      "custom_formatting": {
-        "date": "mm/dd/yyyy",
-        "phone_number": "(xxx)xxx-xxxx",
-        "email": "username@domain.com",
-        "format_utterances": True
-      }
-    }
-  }
-}
-
-# Submit transcription request
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-transcript_id = response.json()["id"]
-polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
-
-# Poll for transcription results
-while True:
-  transcript = requests.get(polling_endpoint, headers=headers).json()
-
-  if transcript["status"] == "completed":
-    break
-
-  elif transcript["status"] == "error":
-    raise RuntimeError(f"Transcription failed: {transcript['error']}")
-
-  else:
-    time.sleep(3)
-
-# Access and display results
-print("\n--- Formatting Details ---")
-mapping = transcript['speech_understanding']['response']['custom_formatting']['mapping']
-for original, formatted in mapping.items():
-  print(f"Original: {original}")
-  print(f"Formatted: {formatted}\n")
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/python-1.py" />
 </Tab>
 
-{/* <Tab language="python" title="Python SDK">
+{/\* <Tab language="python" title="Python SDK">
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-audio_url = "https://assembly.ai/phone-msg.m4a"
-
-# Configure transcription with custom formatting
-config = aai.TranscriptionConfig(
-  speaker_labels=True,
-  speech_understanding=aai.SpeechUnderstandingConfig(
-    request=aai.SpeechUnderstandingRequest(
-      custom_formatting=aai.CustomFormatting(
-        date="mm/dd/yyyy",
-        phone_number="(xxx)xxx-xxxx",
-        email="username@domain.com",
-        format_utterances=True
-      )
-    )
-  )
-)
-
-# Submit transcription and wait for results
-transcriber = aai.Transcriber(config=config)
-transcript = transcriber.transcribe(audio_url)
-
-# Access and display results
-print("\n--- Formatting Details ---")
-mapping = transcript.speech_understanding.response.custom_formatting.mapping
-for original, formatted in mapping.items():
-  print(f"Original: {original}")
-  print(f"Formatted: {formatted}\n")
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/python-2.py" />
 </Tab> */}
 
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-  "content-type": "application/json",
-};
-
-// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-const audioUrl = "https://assembly.ai/phone-msg.m4a";
-
-// Configure transcription with custom formatting
-const data = {
-  audio_url: audioUrl,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  speaker_labels: true,
-  speech_understanding: {
-    request: {
-      custom_formatting: {
-        date: "mm/dd/yyyy",
-        phone_number: "(xxx)xxx-xxxx",
-        email: "username@domain.com",
-        format_utterances: true,
-      },
-    },
-  },
-};
-
-// Submit transcription request
-const response = await fetch(`${baseUrl}/v2/transcript`, {
-  method: "POST",
-  headers: headers,
-  body: JSON.stringify(data),
-});
-
-const { id: transcriptId } = await response.json();
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-// Poll for transcription results
-while (true) {
-  const pollingResponse = await fetch(pollingEndpoint, { headers });
-  const transcript = await pollingResponse.json();
-
-  if (transcript.status === "completed") {
-    // Access and display results
-    console.log("\n--- Formatting Details ---");
-    const mapping =
-      transcript.speech_understanding.response.custom_formatting.mapping;
-    for (const [original, formatted] of Object.entries(mapping)) {
-      console.log(`Original: ${original}`);
-      console.log(`Formatted: ${formatted}\n`);
-    }
-    break;
-  } else if (transcript.status === "error") {
-    throw new Error(`Transcription failed: ${transcript.error}`);
-  } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-}
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/javascript-1.js" />
 </Tab>
 
-{/* <Tab language="javascript" title="JavaScript SDK">
+{/\* <Tab language="javascript" title="JavaScript SDK">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-const audioUrl = "https://assembly.ai/phone-msg.m4a";
-
-// Configure transcription with custom formatting
-const config = {
-  audio_url: audioUrl,
-  speaker_labels: true,
-  speech_understanding: {
-    request: {
-      custom_formatting: {
-        date: "mm/dd/yyyy",
-        phone_number: "(xxx)xxx-xxxx",
-        email: "username@domain.com",
-        format_utterances: true,
-      },
-    },
-  },
-};
-
-// Submit transcription and wait for results
-const transcript = await client.transcripts.transcribe(config);
-
-// Access and display results
-console.log("\n--- Formatting Details ---");
-const mapping =
-  transcript.speech_understanding.response.custom_formatting.mapping;
-for (const [original, formatted] of Object.entries(mapping)) {
-  console.log(`Original: ${original}`);
-  console.log(`Formatted: ${formatted}\n`);
-}
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/javascript-2.js" />
 </Tab> */}
 </Tabs>
 
@@ -382,254 +193,19 @@ This method is useful when you already have text that you would like to format o
 <Tabs groupId="language">
 <Tab language="python" title="Python">
 
-```python
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-
-headers = {
-  "authorization": "<YOUR_API_KEY>"
-}
-
-# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-audio_url = "https://assembly.ai/phone-msg.m4a"
-
-# Submit transcription request (without formatting)
-data = {
-  "audio_url": audio_url,
-  "speech_models": ["universal-3-pro", "universal-2"],
-  "language_detection": True,
-  "speaker_labels": True
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-transcript_id = response.json()["id"]
-polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
-
-# Poll for transcription completion
-while True:
-  transcript = requests.get(polling_endpoint, headers=headers).json()
-
-  if transcript["status"] == "completed":
-    print("Transcription completed!")
-    break
-
-  elif transcript["status"] == "error":
-    raise RuntimeError(f"Transcription failed: {transcript['error']}")
-
-  else:
-    time.sleep(3)
-
-# Add custom formatting configuration to the completed transcript
-understanding_body = {
-  "transcript_id": transcript_id,
-  "speech_understanding": {
-    "request": {
-      "custom_formatting": {
-      "date": "mm/dd/yyyy",
-      "phone_number": "(xxx)xxx-xxxx",
-      "email": "username@domain.com",
-      "format_utterances": True
-      }
-    }
-  }
-}
-
-# Send to Speech Understanding API for formatting
-result = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers=headers,
-  json=understanding_body
-).json()
-
-print("Formatting completed!")
-
-# Access and display results
-print("\n--- Formatting Details ---")
-mapping = result['speech_understanding']['response']['custom_formatting']['mapping']
-for original, formatted in mapping.items():
-  print(f"Original: {original}")
-  print(f"Formatted: {formatted}\n")
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/python-3.py" />
 </Tab>
 {/* <Tab language="python" title="Python SDK">
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-audio_url = "https://assembly.ai/phone-msg.m4a"
-
-config = aai.TranscriptionConfig(
-  speaker_labels=True,
-)
-
-# Submit transcription request (without formatting)
-transcript = aai.Transcriber().transcribe(audio_file, config)
-
-print(f"Transcription completed! ID: {transcript.id}")
-
-# Add custom formatting configuration to the completed transcript
-understanding_config = aai.UnderstandingConfig(
-  custom_formatting=aai.CustomFormattingConfig(
-    date="mm/dd/yyyy",
-    phone_number="(xxx)xxx-xxxx",
-    email="username@domain.com",
-    format_utterances=True
-  )
-)
-
-# Send to Speech Understanding API for formatting
-result = transcript.understanding(understanding_config)
-
-# Access and display results
-print("\n--- Formatting Details ---")
-for original, formatted in result.custom_formatting.mapping.items():
-  print(f"Original: {original}")
-  print(f"Formatted: {formatted}\n")
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/python-4.py" />
 </Tab> */}
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-const baseUrl = "https://api.assemblyai.com";
-
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-  "content-type": "application/json",
-};
-
-// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-const audioUrl = "https://assembly.ai/phone-msg.m4a";
-
-// Submit transcription request (without formatting)
-const data = {
-  audio_url: audioUrl,
-  speaker_labels: true,
-};
-
-async function transcribeAndFormat() {
-  // Start transcription
-  const response = await fetch(`${baseUrl}/v2/transcript`, {
-    method: "POST",
-    headers: headers,
-    body: JSON.stringify(data),
-  });
-
-  const { id: transcriptId } = await response.json();
-  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-  // Poll for transcription completion
-  while (true) {
-    const pollingResponse = await fetch(pollingEndpoint, { headers });
-    const transcript = await pollingResponse.json();
-
-    if (transcript.status === "completed") {
-      console.log("Transcription completed!");
-      break;
-    } else if (transcript.status === "error") {
-      throw new Error(`Transcription failed: ${transcript.error}`);
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
-  }
-
-  // Add custom formatting configuration to the completed transcript
-  const understandingBody = {
-    transcript_id: transcriptId,
-    speech_understanding: {
-      request: {
-        custom_formatting: {
-          date: "mm/dd/yyyy",
-          phone_number: "(xxx)xxx-xxxx",
-          email: "username@domain.com",
-          format_utterances: true,
-        },
-      },
-    },
-  };
-
-  // Send to Speech Understanding API for formatting
-  const understandingResponse = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify(understandingBody),
-    }
-  );
-
-  const result = await understandingResponse.json();
-
-  // Access and display results
-  console.log("\n--- Formatting Details ---");
-  const mapping =
-    result.speech_understanding.response.custom_formatting.mapping;
-  for (const [original, formatted] of Object.entries(mapping)) {
-    console.log(`Original: ${original}`);
-    console.log(`Formatted: ${formatted}\n`);
-  }
-}
-
-transcribeAndFormat();
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/javascript-3.js" />
 </Tab>
 {/* <Tab language="javascript" title="JavaScript SDK">
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-const audioUrl = "https://assembly.ai/phone-msg.m4a";
-
-async function transcribeAndFormat() {
-  // Submit transcription request (without formatting)
-  const transcript = await client.transcripts.transcribe({
-    audio: audioUrl,
-    speaker_labels: true,
-  });
-
-  console.log(`Transcription completed! ID: ${transcript.id}`);
-
-  // Add custom formatting configuration to the completed transcript
-  const understandingConfig = {
-    custom_formatting: {
-      date: "mm/dd/yyyy",
-      phone_number: "(xxx)xxx-xxxx",
-      email: "username@domain.com",
-      format_utterances: true,
-    },
-  };
-
-  // Send to Speech Understanding API for formatting
-  const result = await client.transcripts.understanding(
-    transcript.id,
-    understandingConfig
-  );
-
-  // Access and display results
-  console.log("\n--- Formatting Details ---");
-  const mapping =
-    result.speech_understanding.response.custom_formatting.mapping;
-  for (const [original, formatted] of Object.entries(mapping)) {
-    console.log(`Original: ${original}`);
-    console.log(`Formatted: ${formatted}\n`);
-  }
-}
-
-transcribeAndFormat();
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/javascript-4.js" />
 </Tab> */}
 </Tabs>
 
@@ -779,66 +355,27 @@ When you include this configuration in your transcription request, the API will 
 
 When creating a new transcription, include the `speech_understanding` parameter directly in your transcription request:
 
-```bash
-curl -X POST \
-  "https://api.assemblyai.com/v2/transcript" \
-  -H "Authorization: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "audio_url": "https://assembly.ai/phone-msg.m4a",
-    "speaker_labels": true,
-    "speech_understanding": {
-      "request": {
-        "custom_formatting": {
-          "date": "mm/dd/yyyy",
-          "phone_number": "(xxx)xxx-xxxx",
-          "email": "username@domain.com",
-          "format_utterances": true
-        }
-      }
-    }
-  }'
-```
-
+<Code src="snippets/speech-understanding/custom-formatting/bash-1.sh" />
 #### Method 2: Add formatting to existing transcripts
 
 For existing transcripts, retrieve the completed transcript and send it to the Speech Understanding API:
 
-```bash
-# Step 1: Get the completed transcript
-transcript=$(curl -s -X GET \
-  "https://api.assemblyai.com/v2/transcript/YOUR_TRANSCRIPT_ID" \
-  -H "Authorization: YOUR_API_KEY")
-
-# Step 2: Add custom formatting and send to Speech Understanding API
-curl -X POST \
-  "https://llm-gateway.assemblyai.com/v1/understanding" \
-  -H "Authorization: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "transcript_id": "{transcript_id}",
-    "speech_understanding": {
-      "request": {
-        "custom_formatting": {
-          "date": "mm/dd/yyyy",
-          "phone_number": "(xxx)xxx-xxxx",
-          "email": "username@domain.com",
-          "format_utterances": true
-        }
-      }
-    }
-  }'
-```
-
-| Key                                              | Type    | Required? | Description                                                                                                                            |
-| ------------------------------------------------ | ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `speech_understanding`                           | object  | Yes       | Container for speech understanding requests.                                                                                           |
-| `speech_understanding.request`                   | object  | Yes       | The understanding request configuration.                                                                                               |
-| `speech_understanding.request.custom_formatting` | object  | Yes       | Custom formatting configuration.                                                                                                       |
-| `custom_formatting.date`                         | string  | No        | Date format pattern. Common patterns: `mm/dd/yyyy` (US), `dd/mm/yyyy` (European), `yyyy-mm-dd` (ISO).                                  |
-| `custom_formatting.phone_number`                 | string  | No        | Phone number format pattern. Examples: `(xxx)xxx-xxxx`, `xxx-xxx-xxxx`, `xxx.xxx.xxxx`.                                                |
-| `custom_formatting.email`                        | string  | No        | Email format pattern. Example: `username@domain.com`.                                                                                  |
-| `custom_formatting.format_utterances`            | boolean | No        | When `true`, applies formatting to speaker utterances in addition to the main text. Preserves word-level timestamps. Default: `false`. |
+<Code src="snippets/speech-understanding/custom-formatting/bash-2.sh" />| Key |
+Type | Required? | Description | |
+------------------------------------------------ | ------- | --------- |
+--------------------------------------------------------------------------------------------------------------------------------------
+| | `speech_understanding` | object | Yes | Container for speech understanding
+requests. | | `speech_understanding.request` | object | Yes | The understanding
+request configuration. | | `speech_understanding.request.custom_formatting` |
+object | Yes | Custom formatting configuration. | | `custom_formatting.date` |
+string | No | Date format pattern. Common patterns: `mm/dd/yyyy` (US),
+`dd/mm/yyyy` (European), `yyyy-mm-dd` (ISO). | |
+`custom_formatting.phone_number` | string | No | Phone number format pattern.
+Examples: `(xxx)xxx-xxxx`, `xxx-xxx-xxxx`, `xxx.xxx.xxxx`. | |
+`custom_formatting.email` | string | No | Email format pattern. Example:
+`username@domain.com`. | | `custom_formatting.format_utterances` | boolean | No
+| When `true`, applies formatting to speaker utterances in addition to the main
+text. Preserves word-level timestamps. Default: `false`. |
 
 ### Response
 
