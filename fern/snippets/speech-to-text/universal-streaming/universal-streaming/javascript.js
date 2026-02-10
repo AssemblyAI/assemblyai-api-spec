@@ -1,102 +1,3 @@
----
-title: "Multilingual streaming"
-description: "Transcribe audio in multiple languages"
----
-
-<Accordion title="Supported languages">
-  English, Spanish, French, German, Italian, and Portuguese
-</Accordion>
-
-Multilingual streaming allows you to transcribe audio streams in multiple languages.
-
-## Configuration
-
-To utilize multilingual streaming, you need to include `"speech_model":"universal-streaming-multilingual"` as a query parameter in the WebSocket URL.
-
-## Supported languages
-
-Multilingual currently supports: English, Spanish, French, German, Italian, and Portuguese.
-
-## Quickstart
-
-<Tabs>
-
-Firstly, install the required dependencies.
-
-<Tab language="python-sdk" title="Python SDK">
-
-```bash
-pip install assemblyai
-```
-
-</Tab>
-
-<Tab language="python" title="Python">
-
-```bash
-pip install websockets pyaudio
-```
-
-<Note>
-  The Python example uses the `websockets` library. If you're using `websockets` version 13.0 or later, use `additional_headers` parameter. For older versions (< 13.0), use `extra_headers` instead.
-</Note>
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```bash
-npm install assemblyai node-record-lpcm16
-```
-
-<Note>
-  The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
-
-For Mac OS:
-
-```bash
-brew install sox
-```
-
-For most linux disto's:
-
-```bash
-sudo apt-get install sox libsox-fmt-all
-```
-
-For Windows:
-
-[download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
-
-</Note>
-
-</Tab>
-
-<Tab language="javascript" title="Javascript">
-
-```bash
-npm install ws mic
-```
-
-</Tab>
-
-</Tabs>
-
-<Tabs>
-
-<Tab language="python-sdk" title="Python SDK">
-
-<Code src="snippets/speech-to-text/universal-streaming/multilingual/python-sdk.py" highlight={[27]} />
-</Tab>
-
-<Tab language="python" title="Python">
-
-<Code src="snippets/speech-to-text/universal-streaming/multilingual/python.py" highlight={[26]} />
-</Tab>
-
-<Tab language="javascript" title="Javascript">
-
-```js {11}
 const WebSocket = require("ws");
 const mic = require("mic");
 const querystring = require("querystring");
@@ -105,9 +6,8 @@ const fs = require("fs");
 // --- Configuration ---
 const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
 const CONNECTION_PARAMS = {
-  sample_rate: 48000,
-  speech_model: "universal-streaming-multilingual",
-  language_detection: true,
+  sample_rate: 16000,
+  format_turns: true, // Request formatted final transcripts
 };
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
@@ -195,8 +95,6 @@ async function run() {
   console.log("Starting AssemblyAI real-time transcription...");
   console.log("Audio will be saved to a WAV file when the session ends.");
 
-  console.log(`Connecting websocket to url ${API_ENDPOINT}`);
-
   // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
@@ -207,7 +105,7 @@ async function run() {
   // Setup WebSocket event handlers
   ws.on("open", () => {
     console.log("WebSocket connection opened.");
-    console.log("Receiving SessionBegins ...");
+    console.log(`Connected to: ${API_ENDPOINT}`);
     // Start the microphone
     startMicrophone();
   });
@@ -218,34 +116,20 @@ async function run() {
       const msgType = data.type;
 
       if (msgType === "Begin") {
-        console.log(JSON.stringify(data));
-        console.log("Sending messages ...");
+        const sessionId = data.id;
+        const expiresAt = data.expires_at;
+        console.log(
+          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
+        );
       } else if (msgType === "Turn") {
         const transcript = data.transcript || "";
-        const utterance = data.utterance || "";
+        const formatted = data.turn_is_formatted;
 
-        if (!data.end_of_turn && transcript) {
-          console.log(`[PARTIAL TURN TRANSCRIPT]: ${transcript}`);
-        }
-        if (data.utterance) {
-          console.log(`[PARTIAL TURN UTTERANCE]: ${utterance}`);
-          // Display language detection info if available
-          if (data.language_code) {
-            const langConfidence = (data.language_confidence * 100).toFixed(2);
-            console.log(
-              `[UTTERANCE LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
-            );
-          }
-        }
-        if (data.end_of_turn) {
-          console.log(`[FULL TURN TRANSCRIPT]: ${transcript}`);
-          // Display language detection info if available
-          if (data.language_code) {
-            const langConfidence = (data.language_confidence * 100).toFixed(2);
-            console.log(
-              `[END OF TURN LANGUAGE DETECTION]: ${data.language_code} - ${langConfidence}%`
-            );
-          }
+        if (formatted) {
+          clearLine();
+          console.log(transcript);
+        } else {
+          process.stdout.write(`\r${transcript}`);
         }
       } else if (msgType === "Termination") {
         const audioDuration = data.audio_duration_seconds;
@@ -373,87 +257,3 @@ function setupTerminationHandlers() {
 
 // Start the application
 run();
-```
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-<Code src="snippets/speech-to-text/universal-streaming/multilingual/javascript-sdk.js" highlight={[11]} />
-</Tab>
-
-</Tabs>
-
-## Language detection
-
-The multilingual streaming model supports automatic language detection, allowing you to identify which language is being spoken in real-time. When enabled, the model returns the detected language code and confidence score with each complete utterance and final turn.
-
-### Configuration
-
-To enable language detection, include `language_detection=true` as a query parameter in the WebSocket URL:
-
-```
-wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=universal-streaming-multilingual&language_detection=true
-```
-
-### Output format
-
-When language detection is enabled, each Turn message (with either a **complete utterance** or `end_of_turn: true`) will include two additional fields:
-
-- `language_code`: The language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
-- `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
-
-<Note>
-  The `language_code` and `language_confidence` fields only appear when either:
-  - The `utterance` field is non-empty and contains a complete utterance - The
-  `end_of_turn` field is `true`
-</Note>
-
-### Example response
-
-Here's an example Turn message with language detection enabled, showing Spanish being detected:
-
-```json
-{
-  "turn_order": 1,
-  "turn_is_formatted": false,
-  "end_of_turn": false,
-  "transcript": "Buenos",
-  "end_of_turn_confidence": 0.991195,
-  "words": [
-    {
-      "start": 29920,
-      "end": 30080,
-      "text": "Buenos",
-      "confidence": 0.979445,
-      "word_is_final": true
-    },
-    {
-      "start": 30320,
-      "end": 30400,
-      "text": "días",
-      "confidence": 0.774696,
-      "word_is_final": false
-    }
-  ],
-  "utterance": "Buenos días.",
-  "language_code": "es",
-  "language_confidence": 0.999997,
-  "type": "Turn"
-}
-```
-
-In this example, the model detected Spanish (`"es"`) with a confidence of `0.999997`.
-
-## Understanding formatting
-
-The multilingual model produces transcripts with punctuation and capitalization already built into the model outputs. This means you'll receive properly formatted text without requiring any additional post-processing.
-
-<Note>
-  While the API still returns the `turn_is_formatted` parameter to maintain
-  interface consistency with other streaming models, the multilingual model
-  doesn't perform additional formatting operations. All transcripts from the
-  multilingual model are already formatted as they're generated.
-</Note>
-
-In the future, this built-in formatting capability will be extended to our English-only streaming model as well.
