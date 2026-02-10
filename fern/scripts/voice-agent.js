@@ -540,8 +540,9 @@
   function playAudio(arrayBuffer) {
     try {
       if (!playbackContext) {
-        playbackContext = new (window.AudioContext ||
-          window.webkitAudioContext)({
+        playbackContext = new (
+          window.AudioContext || window.webkitAudioContext
+        )({
           sampleRate: 16000,
         });
         nextPlayTime = playbackContext.currentTime;
