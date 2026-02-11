@@ -1,0 +1,77 @@
+---
+title: "Model selection"
+---
+
+The `speech_model` connection parameter lets you specify which model to use for streaming transcription. Universal-3-Pro for streaming is available for **testing only** and is not yet ready for production scale.
+
+<Warning title="Testing only">
+The Universal-3-Pro streaming model is currently available for testing purposes only. It is not yet recommended for production workloads.
+</Warning>
+
+## Available models
+
+| Name                       | Parameter              | Description                                                                                          |
+| -------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Universal-Streaming** (default) | _No parameter needed_  | Our low-latency streaming model optimized for real-time transcription.                               |
+| **Universal-3-Pro** (testing)     | `"speech_model": "u3-pro"` | Our highest accuracy model with entity accuracy, performance across varying audio, and prompting support. |
+
+## Strengths and caveats
+
+**Universal-3-Pro streaming strengths:**
+
+- Super high accuracy
+- Strong entity accuracy (names, phone numbers, emails, etc.)
+- Excellent performance across varying audio conditions
+- Promptable transcription for customized output
+
+**Caveats:**
+
+- Could be a bit slower than Universal-Streaming
+- Does not send back Partial Transcripts. The turnaround on Final Transcripts is super fast. Use your internal VAD or an external turn detection model like LiveKit or Pipecat to decide when to end the turn. You should get transcript responses back before you detect a VAD end of turn.
+
+## Quickstart
+
+To use Universal-3-Pro for streaming, add `"speech_model": "u3-pro"` to your connection parameters:
+
+```json
+{
+  "speech_model": "u3-pro"
+}
+```
+
+## Configuring end-of-turn silence
+
+The `min_end_of_turn_silence_when_confident` parameter sets the VAD silence threshold that determines when audio is sent for transcription. It defaults to `400` ms, but you can modify this.
+
+For example, to set it to 200 ms:
+
+```json
+{
+  "speech_model": "u3-pro",
+  "min_end_of_turn_silence_when_confident": 200
+}
+```
+
+<Warning title="Entity splitting">
+Setting `min_end_of_turn_silence_when_confident` too low can split entities like phone numbers and emails in half. Test carefully with your use case.
+</Warning>
+
+<Note>
+Due to the way speculative transcription works, the effective change to latency is `min_end_of_turn_silence_when_confident / 2`. For example, setting the value to 200 ms saves approximately 100 ms of latency compared to the default 400 ms.
+</Note>
+
+## Using prompts
+
+You can set a `prompt` parameter and use all of the features available with the Universal-3-Pro model. See the [Universal-3-Pro prompting documentation](/docs/getting-started/universal-3-pro#prompting) for details.
+
+Here is an example prompt optimized for voice agent turn detection:
+
+```json
+{
+  "speech_model": "u3-pro",
+  "min_end_of_turn_silence_when_confident": 200,
+  "prompt": "Transcribe this audio: AI voice agent talking to a human to complete a customer service task. Mandatory: Transcribe verbatim with all spoken filler words, hesitations, repetitions, and false starts exactly as spoken. Non-negotiable: Use complete punctuation — periods and question marks for complete sentences, commas for mid-sentence pauses, and standard capitalization throughout"
+}
+```
+
+This prompt is designed for turn detection use cases. It ensures the model captures disfluencies and uses complete punctuation, which improves turn detection accuracy for plugins like LiveKit and Pipecat. Early results show 88% turn detection accuracy using punctuation alone with this prompt.
