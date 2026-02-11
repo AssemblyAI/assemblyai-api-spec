@@ -1,7 +1,7 @@
-const { AssemblyAI } = require('assemblyai');
+const { AssemblyAI } = require("assemblyai");
 
 const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>"
+  apiKey: "<YOUR_API_KEY>",
 });
 
 // Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
@@ -10,7 +10,7 @@ const audioUrl = "https://assembly.ai/wildfires.mp3";
 async function transcribeAndIdentifySpeakers() {
   const transcript = await client.transcripts.transcribe({
     audio_url: audioUrl,
-    speaker_labels: true
+    speaker_labels: true,
   });
 
   // Enable speaker identification
@@ -20,10 +20,10 @@ async function transcribeAndIdentifySpeakers() {
       request: {
         speaker_identification: {
           speaker_type: "name",
-          known_values: ["Michel Martin", "Peter DeCarlo"]  // Change these values to match the names of the speakers in your file
-        }
-      }
-    }
+          known_values: ["Michel Martin", "Peter DeCarlo"], // Change these values to match the names of the speakers in your file
+        },
+      },
+    },
   });
 
   // Access the results and print utterances to the terminal

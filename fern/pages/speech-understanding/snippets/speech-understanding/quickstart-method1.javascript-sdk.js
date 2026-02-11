@@ -1,7 +1,7 @@
 import { AssemblyAI } from "assemblyai";
 
 const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>"
+  apiKey: "<YOUR_API_KEY>",
 });
 
 // Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
@@ -14,9 +14,9 @@ const config = {
   speech_understanding: {
     speaker_identification: {
       speaker_type: "name",
-      known_values: ["Michel Martin", "Peter DeCarlo"]  // Change these values to match the names of the speakers in your file
-    }
-  }
+      known_values: ["Michel Martin", "Peter DeCarlo"], // Change these values to match the names of the speakers in your file
+    },
+  },
 };
 
 const transcript = await client.transcripts.transcribe(config);
