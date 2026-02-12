@@ -2,7 +2,7 @@
 title: "Model selection"
 ---
 
-The `speech_model` connection parameter lets you specify which model to use for streaming transcription. Universal-3-Pro for streaming is available for **testing only** and is not yet ready for production scale.
+The `speech_model` connection parameter lets you specify which model to use for streaming transcription.
 
 <Warning title="Testing only">
 The Universal-3-Pro streaming model is currently available for testing purposes only. It is not yet recommended for production workloads.
@@ -10,26 +10,24 @@ The Universal-3-Pro streaming model is currently available for testing purposes 
 
 ## Available models
 
-| Name                       | Parameter              | Description                                                                                          |
-| -------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Universal-Streaming** (default) | _No parameter needed_  | Our low-latency streaming model optimized for real-time transcription.                               |
-| **Universal-3-Pro** (testing)     | `"speech_model": "u3-pro"` | Our highest accuracy model with entity accuracy, performance across varying audio, and prompting support. |
+| Name                                  | Parameter                                            | Description                                                                                                              |
+| ------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Universal-Streaming** (default)     | `"speech_model": "universal-streaming"`              | Our low-latency streaming model optimized for real-time English transcription.                                           |
+| **Universal-Streaming Multilingual**  | `"speech_model": "universal-streaming-multilingual"` | Our low-latency streaming model optimized for real-time multilingual transcription in English, Spanish, French, German, Italian, and Portuguese. |
+| **Universal-3-Pro** (testing)         | `"speech_model": "u3-pro"`                           | Our highest accuracy model with entity accuracy, performance across varying audio, and prompting support.                |
 
-## Strengths and caveats
+## Choosing a model
 
-**Universal-3-Pro streaming strengths:**
+| Feature                        | Universal-Streaming English | Universal-Streaming Multilingual | Universal-3-Pro Streaming |
+| ------------------------------ | --------------------------- | -------------------------------- | ------------------------- |
+| **Latency**                    | Fastest                     | Fast                             | Fast                      |
+| **Partial transcripts**        | Yes                         | Yes                              | No (only on turn end)     |
+| **Multilingual**               | No                          | Per Turn                         | Native Code Switching     |
+| **Entity accuracy**            | Okay                        | Okay                             | Best                      |
+| **Disfluencies & filler words** | No                          | No                               | Yes                       |
+| **Customization**              | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Native prompting](/docs/getting-started/universal-3-pro#prompting) (unknown context) |
 
-- Super high accuracy
-- Strong entity accuracy (names, phone numbers, emails, etc.)
-- Excellent performance across varying audio conditions
-- Promptable transcription for customized output
-
-**Caveats:**
-
-- Could be a bit slower than Universal-Streaming
-- Does not send back Partial Transcripts. The turnaround on Final Transcripts is super fast. Use your internal VAD or an external turn detection model like LiveKit or Pipecat to decide when to end the turn. You should get transcript responses back before you detect a VAD end of turn.
-
-## Quickstart
+## Universal-3-Pro quickstart
 
 To use Universal-3-Pro for streaming, add `"speech_model": "u3-pro"` to your connection parameters:
 
@@ -39,16 +37,16 @@ To use Universal-3-Pro for streaming, add `"speech_model": "u3-pro"` to your con
 }
 ```
 
-## Configuring end-of-turn silence
+### Configuring end-of-turn silence
 
-The `min_end_of_turn_silence_when_confident` parameter sets the VAD silence threshold that determines when audio is sent for transcription. It defaults to `400` ms, but you can modify this.
+The `min_end_of_turn_silence_when_confident` parameter sets the VAD silence threshold that determines when audio is sent for transcription. It defaults to `200` ms, but you can modify this.
 
-For example, to set it to 200 ms:
+For example, to set it to 100 ms:
 
 ```json
 {
   "speech_model": "u3-pro",
-  "min_end_of_turn_silence_when_confident": 200
+  "min_end_of_turn_silence_when_confident": 100
 }
 ```
 
@@ -56,11 +54,7 @@ For example, to set it to 200 ms:
 Setting `min_end_of_turn_silence_when_confident` too low can split entities like phone numbers and emails in half. Test carefully with your use case.
 </Warning>
 
-<Note>
-Due to the way speculative transcription works, the effective change to latency is `min_end_of_turn_silence_when_confident / 2`. For example, setting the value to 200 ms saves approximately 100 ms of latency compared to the default 400 ms.
-</Note>
-
-## Using prompts
+### Using prompts
 
 You can set a `prompt` parameter and use all of the features available with the Universal-3-Pro model. See the [Universal-3-Pro prompting documentation](/docs/getting-started/universal-3-pro#prompting) for details.
 
@@ -69,9 +63,388 @@ Here is an example prompt optimized for voice agent turn detection:
 ```json
 {
   "speech_model": "u3-pro",
-  "min_end_of_turn_silence_when_confident": 200,
+  "min_end_of_turn_silence_when_confident": 100,
   "prompt": "Transcribe this audio: AI voice agent talking to a human to complete a customer service task. Mandatory: Transcribe verbatim with all spoken filler words, hesitations, repetitions, and false starts exactly as spoken. Non-negotiable: Use complete punctuation — periods and question marks for complete sentences, commas for mid-sentence pauses, and standard capitalization throughout"
 }
 ```
 
 This prompt is designed for turn detection use cases. It ensures the model captures disfluencies and uses complete punctuation, which improves turn detection accuracy for plugins like LiveKit and Pipecat. Early results show 88% turn detection accuracy using punctuation alone with this prompt.
+
+## End-to-end example
+
+You can select a model by setting the `speech_model` connection parameter when connecting to the streaming API:
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK" default>
+
+```python maxLines=15
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TurnEvent,
+    TerminationEvent,
+)
+
+api_key = "<YOUR_API_KEY>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+            speech_model="u3-pro",
+            # To use Universal-Streaming English instead, comment out the line above
+            # To use Universal-Streaming Multilingual, use:
+            # speech_model="universal-streaming-multilingual",
+        )
+    )
+
+    try:
+        client.stream(
+            aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python maxLines=15
+import pyaudio
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    "speech_model": "u3-pro",
+    # To use Universal-Streaming English instead, remove the speech_model parameter
+    # To use Universal-Streaming Multilingual, use:
+    # "speech_model": "universal-streaming-multilingual",
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+FRAMES_PER_BUFFER = 800
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+
+def on_open(ws):
+    print("WebSocket connection opened.")
+    def stream_audio():
+        global stream
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get("type")
+
+        if msg_type == "Begin":
+            print(f"Session began: ID={data.get('id')}")
+        elif msg_type == "Turn":
+            transcript = data.get("transcript", "")
+            formatted = data.get("turn_is_formatted", False)
+            if formatted:
+                print(f"\r{' ' * 80}\r{transcript}")
+            else:
+                print(f"\r{transcript}", end="")
+        elif msg_type == "Termination":
+            print(f"\nSession terminated: {data.get('audio_duration_seconds', 0)}s of audio")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    print(f"\nWebSocket Disconnected: Status={close_status_code}")
+    global stream, audio
+    stop_event.set()
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+    if audio:
+        audio.terminate()
+
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+    stream = audio.open(
+        input=True,
+        frames_per_buffer=FRAMES_PER_BUFFER,
+        channels=CHANNELS,
+        format=FORMAT,
+        rate=SAMPLE_RATE,
+    )
+    print("Speak into your microphone. Press Ctrl+C to stop.")
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+        stop_event.set()
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            ws_app.send(json.dumps({"type": "Terminate"}))
+            time.sleep(2)
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+if __name__ == "__main__":
+    run()
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript maxLines=15
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    formatTurns: true,
+    speechModel: "u3-pro",
+    // To use Universal-Streaming English instead, remove the speechModel parameter
+    // To use Universal-Streaming Multilingual, use:
+    // speechModel: "universal-streaming-multilingual",
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+
+    console.log("Turn:", turn.transcript);
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+    await transcriber.connect();
+
+    console.log("Starting recording");
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav",
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript maxLines=15
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+
+const YOUR_API_KEY = "<YOUR_API_KEY>";
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  format_turns: true,
+  speech_model: "u3-pro",
+  // To use Universal-Streaming English instead, remove the speech_model parameter
+  // To use Universal-Streaming Multilingual, use:
+  // speech_model: "universal-streaming-multilingual",
+};
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+
+let micInstance = null;
+let ws = null;
+
+function run() {
+  console.log("Starting AssemblyAI streaming transcription...");
+
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: { Authorization: YOUR_API_KEY },
+  });
+
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+
+    micInstance = mic({
+      rate: String(SAMPLE_RATE),
+      channels: "1",
+      bitwidth: "16",
+      encoding: "signed-integer",
+      endian: "little",
+    });
+
+    const micInputStream = micInstance.getAudioStream();
+    micInputStream.on("data", (data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+
+    micInstance.start();
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  });
+
+  ws.on("message", (data) => {
+    try {
+      const msg = JSON.parse(data);
+      if (msg.type === "Begin") {
+        console.log(`Session began: ID=${msg.id}`);
+      } else if (msg.type === "Turn") {
+        const transcript = msg.transcript || "";
+        if (msg.turn_is_formatted) {
+          process.stdout.write("\r" + " ".repeat(80) + "\r");
+          console.log(transcript);
+        } else {
+          process.stdout.write(`\r${transcript}`);
+        }
+      } else if (msg.type === "Termination") {
+        console.log(`\nSession terminated: ${msg.audio_duration_seconds}s of audio`);
+      }
+    } catch (e) {
+      console.error("Error parsing message:", e);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`WebSocket closed: ${code}`);
+    if (micInstance) micInstance.stop();
+  });
+
+  process.on("SIGINT", () => {
+    console.log("\nStopping...");
+    if (micInstance) micInstance.stop();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "Terminate" }));
+      setTimeout(() => ws.close(), 2000);
+    }
+  });
+}
+
+run();
+```
+
+</Tab>
+</Tabs>
