@@ -1,0 +1,391 @@
+---
+title: "Universal-3 Pro on LiveKit"
+description: "Integrate AssemblyAI's Universal-3 Pro streaming speech-to-text model into a LiveKit voice agent"
+---
+
+<Note>
+U3-Pro is currently in **Alpha**. It is not yet officially enabled for production workloads. A limited number of customers are testing it with light usage. [Contact AssemblyAI](https://www.assemblyai.com/contact/sales) to discuss enabling it for your use case.
+</Note>
+
+## Overview
+
+This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-pro)** streaming speech-to-text model into a LiveKit voice agent using the Agents framework. U3-Pro is AssemblyAI's next-generation model built specifically for voice agent use cases, featuring advanced turn detection, prompt engineering capabilities, and optimized latency.
+
+<Card
+  title="LiveKit"
+  icon={
+    <img
+      src="https://assemblyaiassets.com/images/Livekit.svg"
+      alt="LiveKit logo"
+    />
+  }
+  href="https://docs.livekit.io/agents/integrations/stt/assemblyai/"
+>
+  View LiveKit's AssemblyAI STT plugin documentation.
+</Card>
+
+## Installation
+
+U3-Pro currently requires a **forked version** of the LiveKit AssemblyAI plugin while the model is in alpha and actively being iterated on.
+
+```bash
+pip install "livekit-plugins-assemblyai @ git+https://github.com/gsharp-aai/agents.git@feat/assemblyai-u3-pro-streaming#subdirectory=livekit-plugins/livekit-plugins-assemblyai"
+```
+
+You also need the following packages:
+
+```bash
+pip install "livekit-agents[codecs]~=1.0" \
+    "livekit-plugins-openai~=1.0" \
+    "livekit-plugins-cartesia~=1.0" \
+    "livekit-plugins-noise-cancellation~=1.0" \
+    "livekit-plugins-silero~=1.0" \
+    "livekit-plugins-turn-detector~=1.0"
+```
+
+## Authentication
+
+Set your API keys in a `.env` file:
+
+```env
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+OPENAI_API_KEY=your_openai_key
+CARTESIA_API_KEY=your_cartesia_key
+```
+
+<Tip>
+You can obtain an AssemblyAI API key by signing up [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
+
+## Recommended configuration
+
+Based on extensive testing (including telephony/SIP environments, UK-accented English, and short utterance scenarios), the following is the recommended configuration for U3-Pro on LiveKit:
+
+```python
+from dotenv import load_dotenv
+from livekit import agents
+from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.plugins import (
+    openai,
+    cartesia,
+    assemblyai,
+    noise_cancellation,
+    silero,
+)
+from livekit.plugins.turn_detector.english import EnglishModel
+
+load_dotenv()
+
+
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(instructions="You are a helpful voice AI assistant.")
+
+
+async def entrypoint(ctx: agents.JobContext):
+    await ctx.connect()
+
+    session = AgentSession(
+        stt=assemblyai.STT(
+            model="u3-pro",
+            format_turns=True,
+            min_end_of_turn_silence_when_confident=100,
+        ),
+        llm=openai.LLM(
+            model="gpt-4o",
+            temperature=0.8,
+        ),
+        tts=cartesia.TTS(),
+        vad=silero.VAD.load(),
+        turn_detection=EnglishModel(),
+    )
+
+    await session.start(
+        room=ctx.room,
+        agent=Assistant(),
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVC(),
+        ),
+    )
+
+    await session.generate_reply(
+        instructions="Greet the user and offer your assistance."
+    )
+
+
+if __name__ == "__main__":
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+## Key configuration details
+
+### Model selection
+
+```python
+model="u3-pro"
+```
+
+U3-Pro is AssemblyAI's latest streaming model. Unlike previous models, **U3-Pro only returns final transcripts** (no partial transcripts). This has important implications for interruption handling (see [VAD for interruption handling](#vad-for-interruption-handling) below).
+
+### Format turns
+
+```python
+format_turns=True
+```
+
+Enables formatted final transcripts. Since U3-Pro only returns final transcripts, **formatting does not add latency**. Keep this enabled.
+
+### Turn detection
+
+```python
+turn_detection=EnglishModel()
+```
+
+<Warning>
+Do **not** use `turn_detection="stt"` with U3-Pro. AssemblyAI's built-in STT turn detection has not yet been optimized for the U3-Pro model. Using it may result in poor performance.
+</Warning>
+
+Use LiveKit's built-in **English turn detection model**, which has shown the best performance with U3-Pro in testing.
+
+| Option | Import | Recommendation |
+|--------|--------|----------------|
+| `EnglishModel()` | `from livekit.plugins.turn_detector.english import EnglishModel` | **Recommended for English** |
+| `MultilingualModel()` | `from livekit.plugins.turn_detector.multilingual import MultilingualModel` | Use for non-English languages |
+| `"stt"` | N/A | **Not recommended with U3-Pro** |
+| `"vad"` | N/A | Not recommended |
+
+### VAD for interruption handling
+
+```python
+vad=silero.VAD.load()
+```
+
+<Warning>
+This is critical. Because U3-Pro does not provide partial transcripts, interruptions **must** be handled locally via Silero VAD rather than through streaming transcription updates. Always keep VAD enabled.
+</Warning>
+
+### End-of-turn silence
+
+```python
+min_end_of_turn_silence_when_confident=100
+```
+
+This is the **only endpointing parameter** that impacts U3-Pro at the moment. It controls how long (in milliseconds) the system waits to trigger end-of-turn when confident the user has finished speaking.
+
+| Value | Behavior |
+|-------|----------|
+| `100` (recommended) | Fast, responsive — minimizes "are you there?" moments |
+| `400` (default for non-pro) | Slower — adds 300ms of unnecessary latency with U3-Pro |
+
+<Warning>
+Setting this too low may cause over-segmentation of turns (cutting off the user mid-sentence).
+</Warning>
+
+## Prompt engineering
+
+U3-Pro supports a `prompt` parameter for custom transcription instructions. This allows you to guide the model's transcription behavior for your specific use case.
+
+### Basic prompt usage
+
+```python
+stt=assemblyai.STT(
+    model="u3-pro",
+    format_turns=True,
+    min_end_of_turn_silence_when_confident=100,
+    prompt="Your custom transcription instruction",
+)
+```
+
+### Example prompt
+
+The following prompt has been tested and optimized for short utterance scenarios:
+
+```python
+stt=assemblyai.STT(
+    model="u3-pro",
+    format_turns=True,
+    min_end_of_turn_silence_when_confident=100,
+    prompt="""Short utterance. Context: Transcribe short utterances such as yes or no answers.
+Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Transcribe silence as [silence] and unclear speech as [unclear]
+Punctuation rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete trailing speech.""",
+)
+```
+
+### Prompt engineering tips
+
+- **Specify the audio context**: accent, domain, expected utterance length
+- **Call out known problem words**: if specific short utterances (e.g., "tonight") are being misrecognized, mention them explicitly
+- **Define punctuation rules**: helps downstream LLM processing
+- **Preserve speech patterns**: instruct the model to keep disfluencies and filler words for more natural agent interactions
+- **Key terms boosting**: append boosted words to the end of your prompt:
+
+```python
+word_boost = ["tonight", "tomorrow", "Hilton", "Marriott"]
+prompt = f"""...your prompt...
+Make sure to boost the words {', '.join(word_boost)} in the audio."""
+```
+
+<Note>
+The `keyterms_prompt` parameter was not properly configured in the initial LiveKit fork. Use the prompt-based approach above for key term boosting instead.
+</Note>
+
+### Dynamic prompt injection
+
+Dynamic prompt updates (e.g., changing the prompt mid-conversation via tool calls) are planned but require additional updates to the LiveKit SDK. This capability is under active development.
+
+## Full recommended configuration (with prompt)
+
+```python
+from dotenv import load_dotenv
+from livekit import agents
+from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.plugins import (
+    openai,
+    cartesia,
+    assemblyai,
+    noise_cancellation,
+    silero,
+)
+from livekit.plugins.turn_detector.english import EnglishModel
+
+load_dotenv()
+
+
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(instructions="You are a helpful voice AI assistant.")
+
+
+async def entrypoint(ctx: agents.JobContext):
+    await ctx.connect()
+
+    session = AgentSession(
+        stt=assemblyai.STT(
+            model="u3-pro",
+            format_turns=True,
+            min_end_of_turn_silence_when_confident=100,
+            prompt="""Short utterance. Context: Transcribe short utterances such as yes or no answers.
+Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Transcribe silence as [silence] and unclear speech as [unclear]
+Punctuation rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete trailing speech.""",
+        ),
+        llm=openai.LLM(
+            model="gpt-4o",
+            temperature=0.8,
+        ),
+        tts=cartesia.TTS(),
+        vad=silero.VAD.load(),
+        turn_detection=EnglishModel(),
+    )
+
+    await session.start(
+        room=ctx.room,
+        agent=Assistant(),
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVC(),
+        ),
+    )
+
+    await session.generate_reply(
+        instructions="Greet the user and offer your assistance."
+    )
+
+
+if __name__ == "__main__":
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+## Parameters reference
+
+### U3-Pro specific parameters
+
+<ParamField path="model" type="str">
+Set to `"u3-pro"` for Universal-3 Pro.
+</ParamField>
+
+<ParamField path="prompt" type="str">
+Custom transcription instructions for the model.
+</ParamField>
+
+<ParamField path="format_turns" type="bool" default="True">
+Return formatted final transcripts. No added latency with U3-Pro.
+</ParamField>
+
+<ParamField path="min_end_of_turn_silence_when_confident" type="int" default="100">
+Milliseconds of silence before triggering end-of-turn when confident. This is the **only endpointing parameter that affects U3-Pro**.
+</ParamField>
+
+### General STT parameters
+
+<ParamField path="api_key" type="str">
+Your AssemblyAI API key.
+</ParamField>
+
+<ParamField path="sample_rate" type="int" default="16000">
+The sample rate of the audio stream.
+</ParamField>
+
+<ParamField path="encoding" type="str" default="pcm_s16le">
+The encoding of the audio stream. Allowed values: `pcm_s16le`, `pcm_mulaw`.
+</ParamField>
+
+### Legacy parameters (non-U3-Pro)
+
+These parameters apply to the standard AssemblyAI streaming model but **do not currently affect U3-Pro**:
+
+<ParamField path="end_of_turn_confidence_threshold" type="float" default="0.4">
+Confidence threshold for end-of-turn detection. **Not applicable to U3-Pro.**
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default="1280">
+Maximum silence (ms) before triggering end-of-turn. **Not applicable to U3-Pro.**
+</ParamField>
+
+## Running your agent
+
+### Start in development mode
+
+```bash
+python your_agent_file.py dev
+```
+
+### Test in the LiveKit Playground
+
+1. Go to [agents-playground.livekit.io](https://agents-playground.livekit.io)
+2. Connect to your LiveKit Cloud project (same credentials as your `.env`)
+3. Click **Connect** — a room will be created, your agent will join, and you can start talking
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Hello, are you there?" from users | High end-of-turn latency | Set `min_end_of_turn_silence_when_confident=100` |
+| Poor transcription quality | Using `turn_detection="stt"` with U3-Pro | Switch to `turn_detection=EnglishModel()` |
+| Short words misrecognized | Missing prompt context | Add explicit short utterance examples to `prompt` |
+| No interruption handling | Missing VAD | Ensure `vad=silero.VAD.load()` is set (U3-Pro has no partial transcripts) |
+| Key terms not being applied | `keyterms_prompt` not configured in fork | Use prompt-based boosting instead |
+| Turn over-segmentation | `min_end_of_turn_silence_when_confident` too low | Increase from `100` to `200`-`300` and test |
+
+### Known limitations (Alpha)
+
+- **No partial transcripts**: U3-Pro only returns final transcripts. Interruptions must be handled via VAD.
+- **Built-in STT turn detection not optimized**: Do not use `turn_detection="stt"` with U3-Pro. Use LiveKit's turn detection models.
+- **Dynamic prompt updates not yet supported**: Requires additional LiveKit SDK updates (in progress).
+- **Not yet production-grade**: Alpha status — contact AssemblyAI before deploying to production. Have a fallback plan in place.
+
+## Migration from standard AssemblyAI STT
+
+If you are migrating from the standard AssemblyAI streaming model:
+
+| Change | From | To |
+|--------|------|----|
+| Model | `assemblyai.STT()` | `assemblyai.STT(model="u3-pro")` |
+| Installation | `pip install "livekit-agents[assemblyai]"` | Install from GitHub fork (see [Installation](#installation)) |
+| Turn detection | `turn_detection="stt"` | `turn_detection=EnglishModel()` |
+| VAD | Optional | **Required** (no partial transcripts) |
+| `min_end_of_turn_silence_when_confident` | `400` | `100` |
+| Prompting | Not available | Available via `prompt` parameter |
+| `end_of_turn_confidence_threshold` | Configurable | **Not applicable** to U3-Pro |
+| `max_turn_silence` | Configurable | **Not applicable** to U3-Pro |
