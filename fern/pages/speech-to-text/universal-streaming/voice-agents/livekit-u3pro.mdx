@@ -11,18 +11,9 @@ U3-Pro is currently in **Alpha**. It is not yet officially enabled for productio
 
 This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-pro)** streaming speech-to-text model into a LiveKit voice agent using the Agents framework. U3-Pro is AssemblyAI's next-generation model built specifically for voice agent use cases, featuring advanced turn detection, prompt engineering capabilities, and optimized latency.
 
-<Card
-  title="LiveKit"
-  icon={
-    <img
-      src="https://assemblyaiassets.com/images/Livekit.svg"
-      alt="LiveKit logo"
-    />
-  }
-  href="https://docs.livekit.io/agents/integrations/stt/assemblyai/"
->
-  View LiveKit's AssemblyAI STT plugin documentation.
-</Card>
+<Note>
+U3-Pro support is not yet live within LiveKit's official plugin. You need to install directly from the forked repository below.
+</Note>
 
 ## Installation
 
@@ -36,12 +27,12 @@ You also need the following packages:
 
 ```bash
 pip install "livekit-agents[codecs]~=1.0" \
-    "livekit-plugins-openai~=1.0" \
-    "livekit-plugins-cartesia~=1.0" \
     "livekit-plugins-noise-cancellation~=1.0" \
     "livekit-plugins-silero~=1.0" \
     "livekit-plugins-turn-detector~=1.0"
 ```
+
+You will also need to install LLM and TTS plugins for your chosen providers. See the [LiveKit plugins documentation](https://docs.livekit.io/agents/plugins/) for available options.
 
 ## Authentication
 
@@ -52,8 +43,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 ASSEMBLYAI_API_KEY=your_assemblyai_key
-OPENAI_API_KEY=your_openai_key
-CARTESIA_API_KEY=your_cartesia_key
+# Add API keys for your chosen LLM and TTS providers
 ```
 
 <Tip>
@@ -69,8 +59,6 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
 from livekit.plugins import (
-    openai,
-    cartesia,
     assemblyai,
     noise_cancellation,
     silero,
@@ -94,11 +82,8 @@ async def entrypoint(ctx: agents.JobContext):
             format_turns=True,
             min_end_of_turn_silence_when_confident=100,
         ),
-        llm=openai.LLM(
-            model="gpt-4o",
-            temperature=0.8,
-        ),
-        tts=cartesia.TTS(),
+        # llm=your_llm_plugin(),  # Add your LLM provider here
+        # tts=your_tts_plugin(),  # Add your TTS provider here
         vad=silero.VAD.load(),
         turn_detection=EnglishModel(),
     )
@@ -220,17 +205,13 @@ Punctuation rules: 1) Always include punctuation in output. 2) Use period/questi
 - **Call out known problem words**: if specific short utterances (e.g., "tonight") are being misrecognized, mention them explicitly
 - **Define punctuation rules**: helps downstream LLM processing
 - **Preserve speech patterns**: instruct the model to keep disfluencies and filler words for more natural agent interactions
-- **Key terms boosting**: append boosted words to the end of your prompt:
+- **Key terms boosting**: to apply key terms correctly, append the following to the end of your prompt:
 
 ```python
 word_boost = ["tonight", "tomorrow", "Hilton", "Marriott"]
 prompt = f"""...your prompt...
 Make sure to boost the words {', '.join(word_boost)} in the audio."""
 ```
-
-<Note>
-The `keyterms_prompt` parameter was not properly configured in the initial LiveKit fork. Use the prompt-based approach above for key term boosting instead.
-</Note>
 
 ### Dynamic prompt injection
 
@@ -243,8 +224,6 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
 from livekit.plugins import (
-    openai,
-    cartesia,
     assemblyai,
     noise_cancellation,
     silero,
@@ -271,11 +250,8 @@ async def entrypoint(ctx: agents.JobContext):
 Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Transcribe silence as [silence] and unclear speech as [unclear]
 Punctuation rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete trailing speech.""",
         ),
-        llm=openai.LLM(
-            model="gpt-4o",
-            temperature=0.8,
-        ),
-        tts=cartesia.TTS(),
+        # llm=your_llm_plugin(),  # Add your LLM provider here
+        # tts=your_tts_plugin(),  # Add your TTS provider here
         vad=silero.VAD.load(),
         turn_detection=EnglishModel(),
     )
@@ -365,7 +341,7 @@ python your_agent_file.py dev
 | Poor transcription quality | Using `turn_detection="stt"` with U3-Pro | Switch to `turn_detection=EnglishModel()` |
 | Short words misrecognized | Missing prompt context | Add explicit short utterance examples to `prompt` |
 | No interruption handling | Missing VAD | Ensure `vad=silero.VAD.load()` is set (U3-Pro has no partial transcripts) |
-| Key terms not being applied | `keyterms_prompt` not configured in fork | Use prompt-based boosting instead |
+| Key terms not being applied | Key terms not in prompt | Append boosted words to the end of your prompt |
 | Turn over-segmentation | `min_end_of_turn_silence_when_confident` too low | Increase from `100` to `200`-`300` and test |
 
 ### Known limitations (Alpha)
