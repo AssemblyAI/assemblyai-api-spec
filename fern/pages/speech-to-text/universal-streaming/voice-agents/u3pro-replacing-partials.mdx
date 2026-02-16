@@ -1,0 +1,88 @@
+---
+title: "Replacing partials with U3 Pro"
+description: "How U3 Pro replaces traditional streaming partial transcripts with stable, finalized segments for voice agent pipelines"
+---
+
+<Note>
+U3 Pro's built-in turn detection currently uses VAD, so every new transcript is labeled as end-of-turn. We are updating our turn detection model to work better with U3 Pro. In the meantime, we've seen great success using external turn detection models from frameworks like [LiveKit](/docs/voice-agents/u3pro-livekit) and [Pipecat](/docs/voice-agents/pipecat-intro-guide).
+</Note>
+
+## Overview
+
+Traditional streaming speech-to-text models emit partial transcripts that update and revise as more audio is processed. Many voice agent pipelines use these partials for speculative or preemptive generation — warming up LLM inference or preparing TTS output before a turn is fully complete.
+
+U3 Pro can support those same speculative and preemptive generation workflows, often with higher stability and accuracy.
+
+## How U3 Pro enables speculative and preemptive generation
+
+U3 Pro does *not* wait for a full end-of-turn to emit transcripts.
+
+When a speaker introduces small silences mid-utterance (for example, between clauses or phrases), the system emits finalized transcript segments during the turn. These effectively replace traditional partials, but with a key difference: they are already fully processed and stable.
+
+From testing, mid-turn emission looks like this:
+
+```
+"Yeah my credit card number is--"
+"One moment---"
+"Its 8888-8888-8888-8888"
+<end of turn>
+```
+
+Because the model applies punctuation and formatting intelligently, this works well with LiveKit's formatting-based turn detection.
+
+For example, based purely on vocal tone:
+
+- `"Pizza."` — Statement
+- `"Pizza?"` — Questioning tone
+- `"Pizza---"` — Trailing off
+
+The punctuation quality has been excellent when paired with custom turn detection models.
+
+## Latency performance
+
+After VAD endpoint detection:
+
+| Metric | Latency |
+|--------|---------|
+| P50 inference latency | ~121ms |
+| P90 inference latency | ~212ms |
+
+This makes U3 Pro competitive with — or faster than — many traditional streaming-partial pipelines. The speech-end to transcript-available window remains extremely tight.
+
+## Practical pattern for voice agent developers
+
+When receiving a U3 Pro transcript segment, use the punctuation to determine how to handle it:
+
+**If the segment does NOT end with terminal punctuation (`.` `?` `!`):**
+- Treat it as a finalized partial
+- Begin speculative or preemptive LLM inference
+- Warm TTS or prepare context
+
+**If the segment ENDS with terminal punctuation:**
+- Treat it as end-of-turn (EoT)
+- Commit to full LLM + TTS generation
+
+This preserves the speculative generation pattern you may already be using, but without unstable partial revisions.
+
+## Why this can be better than traditional streaming partials
+
+### No flickering or word revisions
+
+Traditional streaming partials frequently revise previous words. That means speculative LLM work may be built on text that changes. U3 Pro segments are stable once emitted.
+
+### Higher accuracy per segment
+
+Each chunk is processed by a full speech LLM rather than a lightweight RNN-T. Even short segments benefit from stronger language modeling.
+
+### The last word matters
+
+Speculative inference based on noisy partials can be counterproductive. The final word of a turn often carries critical semantic weight:
+
+- "I want to **cancel**."
+- "I want to **continue**."
+
+Getting a high-accuracy segment quickly is often more valuable than getting a lower-accuracy partial slightly earlier.
+
+## What we're actively working on
+
+We recognize that some customers have built pipelines around continuous partial transcript streams. We're actively exploring additional capabilities to better serve those workflows.
