@@ -1,0 +1,866 @@
+---
+title: "Apply LLM Gateway to Streaming"
+subtitle: "Learn how to analyze streaming audio transcripts using LLM Gateway."
+hide-nav-links: true
+description: "Learn how to analyze streaming audio transcripts using LLM Gateway."
+---
+
+## Overview
+
+A Large Language Model (LLM) is a machine learning model that uses natural language processing (NLP) to generate text. [LLM Gateway](https://assemblyai.com/docs/llm-gateway/overview) is a unified API that provides access to 15+ models from Claude, GPT, and Gemini through a single interface. You can use LLM Gateway to analyze streaming audio transcripts in real time, for example to summarize a live conversation or extract action items as they happen.
+
+By the end of this tutorial, you'll be able to use LLM Gateway to analyze a streaming audio transcript from your microphone.
+
+Here's the full sample code for what you'll build in this tutorial:
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python
+import pyaudio
+import websocket
+import json
+import threading
+import time
+import requests
+from urllib.parse import urlencode
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+
+prompt = "Provide a brief summary of the transcript."
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    "llm_gateway": json.dumps({
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 4000
+    })
+}
+
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+FRAMES_PER_BUFFER = 800
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+conversation_data = ""
+
+def on_open(ws):
+    print("WebSocket connection opened.")
+
+    def stream_audio():
+        global stream
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            print(f"Session started: {data.get('id')}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                global conversation_data
+                print(f"\nTranscript: {transcript}")
+                conversation_data += f"{transcript}\n"
+        elif msg_type == "Termination":
+            print(f"\nSession terminated: {data.get('audio_duration_seconds')}s of audio processed")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    print(f"Error: {error}")
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    print(f"\nDisconnected: {close_status_code}")
+    global stream, audio
+    stop_event.set()
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+
+def analyze_with_llm_gateway(text):
+    headers = {
+        "authorization": YOUR_API_KEY,
+        "content-type": "application/json"
+    }
+
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
+        ],
+        "max_tokens": 4000
+    }
+
+    result = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    return result.json()["choices"][0]["message"]["content"]
+
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+        stop_event.set()
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                ws_app.send(json.dumps({"type": "Terminate"}))
+                time.sleep(2)
+            except Exception:
+                pass
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+        if conversation_data.strip():
+            print("\nAnalyzing conversation with LLM Gateway...")
+            print(analyze_with_llm_gateway(conversation_data))
+        else:
+            print("No conversation data to analyze.")
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+
+if __name__ == "__main__":
+    run()
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+
+const YOUR_API_KEY = "<YOUR_API_KEY>";
+
+const prompt = "Provide a brief summary of the transcript.";
+
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  format_turns: true,
+  llm_gateway: JSON.stringify({
+    model: "claude-sonnet-4-20250514",
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 4000,
+  }),
+};
+
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+let conversationData = "";
+
+async function analyzeWithLlmGateway(text) {
+  const response = await fetch(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        authorization: YOUR_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        messages: [
+          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
+        ],
+        max_tokens: 4000,
+      }),
+    }
+  );
+  const result = await response.json();
+  return result.choices[0].message.content;
+}
+
+async function run() {
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      Authorization: YOUR_API_KEY,
+    },
+  });
+
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+    startMicrophone();
+  });
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === "Begin") {
+        console.log(`Session started: ${data.id}`);
+      } else if (msgType === "Turn") {
+        const transcript = data.transcript || "";
+        const formatted = data.turn_is_formatted;
+
+        if (formatted) {
+          console.log(`\nTranscript: ${transcript}`);
+          conversationData += `${transcript}\n`;
+        }
+      } else if (msgType === "Termination") {
+        console.log(
+          `\nSession terminated: ${data.audio_duration_seconds}s of audio processed`
+        );
+      }
+    } catch (error) {
+      console.error(`Error handling message: ${error}`);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`\nDisconnected: ${code}`);
+    cleanup();
+  });
+
+  process.on("SIGINT", async () => {
+    console.log("\nStopping...");
+    stopRequested = true;
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "Terminate" }));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    cleanup();
+
+    if (conversationData.trim()) {
+      console.log("\nAnalyzing conversation with LLM Gateway...");
+      const analysis = await analyzeWithLlmGateway(conversationData);
+      console.log(analysis);
+    } else {
+      console.log("No conversation data to analyze.");
+    }
+
+    process.exit(0);
+  });
+}
+
+function startMicrophone() {
+  micInstance = mic({
+    rate: SAMPLE_RATE.toString(),
+    channels: CHANNELS.toString(),
+    debug: false,
+  });
+
+  micInputStream = micInstance.getAudioStream();
+
+  micInputStream.on("data", (data) => {
+    if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+      ws.send(data);
+    }
+  });
+
+  micInstance.start();
+  console.log("Speak into your microphone. Press Ctrl+C to stop.");
+}
+
+function cleanup() {
+  stopRequested = true;
+  if (micInstance) {
+    micInstance.stop();
+    micInstance = null;
+  }
+  if (ws) {
+    ws.close();
+  }
+}
+
+run();
+```
+
+</Tab>
+</Tabs>
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Python](https://www.python.org/) or [Node](https://nodejs.org/en) installed.
+- An <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">AssemblyAI account with a credit card set up</a>.
+- A microphone connected to your computer.
+- Basic understanding of how to [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio).
+
+## Step 1: Install prerequisites
+
+<Tabs groupId="language">
+
+<Tab language="python" title="Python" default>
+Install the required packages via pip:
+
+```bash
+pip install pyaudio websocket-client requests
+```
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+Install the required packages via NPM:
+
+```bash
+npm install ws mic
+```
+
+</Tab>
+
+</Tabs>
+
+## Step 2: Connect to Universal Streaming
+
+In this step, you'll set up a WebSocket connection to the Universal Streaming API with the `llm_gateway` parameter. This parameter configures LLM Gateway to process your streaming transcripts.
+
+For more information about streaming transcription, see [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio).
+
+<Tabs groupId="language">
+
+<Tab language="python" title="Python" default>
+
+```python
+import pyaudio
+import websocket
+import json
+import threading
+import time
+import requests
+from urllib.parse import urlencode
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+
+prompt = "Provide a brief summary of the transcript."
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    "llm_gateway": json.dumps({
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 4000
+    })
+}
+
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+FRAMES_PER_BUFFER = 800
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+conversation_data = ""
+```
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+
+const YOUR_API_KEY = "<YOUR_API_KEY>";
+
+const prompt = "Provide a brief summary of the transcript.";
+
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  format_turns: true,
+  llm_gateway: JSON.stringify({
+    model: "claude-sonnet-4-20250514",
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 4000,
+  }),
+};
+
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+let conversationData = "";
+```
+
+</Tab>
+
+</Tabs>
+
+The `llm_gateway` parameter is a JSON-stringified object that follows the same interface as the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions). It accepts the following fields:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `model` | string | The model to use. See [Available models](/docs/llm-gateway/overview#available-models). |
+| `messages` | array | An array of message objects. The `content` field contains your prompt. |
+| `max_tokens` | number | The maximum number of tokens to generate. |
+
+## Step 3: Stream audio and analyze with LLM Gateway
+
+In this step, you'll stream audio from your microphone, collect the transcribed text from completed turns, and then send the accumulated transcript to LLM Gateway for analysis when the session ends.
+
+<Steps>
+
+<Step>
+
+Set up the WebSocket event handlers to stream audio and collect transcripts from completed turns.
+
+<Tabs groupId="language">
+
+<Tab language="python" title="Python" default>
+
+```python
+def on_open(ws):
+    print("WebSocket connection opened.")
+
+    def stream_audio():
+        global stream
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            print(f"Session started: {data.get('id')}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                global conversation_data
+                print(f"\nTranscript: {transcript}")
+                conversation_data += f"{transcript}\n"
+        elif msg_type == "Termination":
+            print(f"\nSession terminated: {data.get('audio_duration_seconds')}s of audio processed")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    print(f"Error: {error}")
+    stop_event.set()
+
+def on_close(ws, close_status_code, close_msg):
+    print(f"\nDisconnected: {close_status_code}")
+    global stream, audio
+    stop_event.set()
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+```
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+ws.on("open", () => {
+  console.log("WebSocket connection opened.");
+  startMicrophone();
+});
+
+ws.on("message", (message) => {
+  try {
+    const data = JSON.parse(message);
+    const msgType = data.type;
+
+    if (msgType === "Begin") {
+      console.log(`Session started: ${data.id}`);
+    } else if (msgType === "Turn") {
+      const transcript = data.transcript || "";
+      const formatted = data.turn_is_formatted;
+
+      if (formatted) {
+        console.log(`\nTranscript: ${transcript}`);
+        conversationData += `${transcript}\n`;
+      }
+    } else if (msgType === "Termination") {
+      console.log(
+        `\nSession terminated: ${data.audio_duration_seconds}s of audio processed`
+      );
+    }
+  } catch (error) {
+    console.error(`Error handling message: ${error}`);
+  }
+});
+
+ws.on("error", (error) => {
+  console.error(`Error: ${error}`);
+  cleanup();
+});
+
+ws.on("close", (code, reason) => {
+  console.log(`\nDisconnected: ${code}`);
+  cleanup();
+});
+
+function startMicrophone() {
+  micInstance = mic({
+    rate: SAMPLE_RATE.toString(),
+    channels: CHANNELS.toString(),
+    debug: false,
+  });
+
+  micInputStream = micInstance.getAudioStream();
+
+  micInputStream.on("data", (data) => {
+    if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+      ws.send(data);
+    }
+  });
+
+  micInstance.start();
+  console.log("Speak into your microphone. Press Ctrl+C to stop.");
+}
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+Define a function to send the accumulated transcript to LLM Gateway for analysis. This function uses the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions) to process the transcript with your prompt.
+
+<Tabs groupId="language">
+
+<Tab language="python" title="Python" default>
+
+```python
+def analyze_with_llm_gateway(text):
+    headers = {
+        "authorization": YOUR_API_KEY,
+        "content-type": "application/json"
+    }
+
+    llm_gateway_data = {
+        "model": "claude-sonnet-4-20250514",
+        "messages": [
+            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
+        ],
+        "max_tokens": 4000
+    }
+
+    result = requests.post(
+        "https://llm-gateway.assemblyai.com/v1/chat/completions",
+        headers=headers,
+        json=llm_gateway_data
+    )
+    return result.json()["choices"][0]["message"]["content"]
+```
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+async function analyzeWithLlmGateway(text) {
+  const response = await fetch(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        authorization: YOUR_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        messages: [
+          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
+        ],
+        max_tokens: 4000,
+      }),
+    }
+  );
+  const result = await response.json();
+  return result.choices[0].message.content;
+}
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+<Step>
+
+Run the streaming session and analyze the transcript with LLM Gateway when the session ends.
+
+<Tabs groupId="language">
+
+<Tab language="python" title="Python" default>
+
+```python
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+        stop_event.set()
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                ws_app.send(json.dumps({"type": "Terminate"}))
+                time.sleep(2)
+            except Exception:
+                pass
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+        if conversation_data.strip():
+            print("\nAnalyzing conversation with LLM Gateway...")
+            print(analyze_with_llm_gateway(conversation_data))
+        else:
+            print("No conversation data to analyze.")
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+
+if __name__ == "__main__":
+    run()
+```
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+async function run() {
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      Authorization: YOUR_API_KEY,
+    },
+  });
+
+  // ... (event handlers from Step 1)
+
+  process.on("SIGINT", async () => {
+    console.log("\nStopping...");
+    stopRequested = true;
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "Terminate" }));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    cleanup();
+
+    if (conversationData.trim()) {
+      console.log("\nAnalyzing conversation with LLM Gateway...");
+      const analysis = await analyzeWithLlmGateway(conversationData);
+      console.log(analysis);
+    } else {
+      console.log("No conversation data to analyze.");
+    }
+
+    process.exit(0);
+  });
+}
+
+function cleanup() {
+  stopRequested = true;
+  if (micInstance) {
+    micInstance.stop();
+    micInstance = null;
+  }
+  if (ws) {
+    ws.close();
+  }
+}
+
+run();
+```
+
+</Tab>
+
+</Tabs>
+
+The output will look something like this:
+
+```
+Session started: de5d9927-73a6-4be8-b52d-b4c07be37e6b
+
+Transcript: Hi, my name is Sonny.
+
+Transcript: I am a voice agent.
+
+Stopping...
+
+Session terminated: 12s of audio processed
+
+Analyzing conversation with LLM Gateway...
+The speaker introduces themselves as Sonny and identifies as a voice agent.
+```
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+In this tutorial, you've learned how to analyze streaming audio transcripts using LLM Gateway. The type of output depends on your prompt, so try exploring different prompts to see how they affect the output. Here are a few more prompts to try:
+
+- "Provide an analysis of the transcript and offer areas to improve with exact quotes."
+- "What's the main take-away from the transcript?"
+- "Generate a set of action items from this transcript."
+
+To learn more about LLM Gateway and streaming, see the following resources:
+
+- [LLM Gateway Overview](/docs/llm-gateway/overview)
+- [Basic Chat Completions](/docs/llm-gateway/chat-completions)
+- [Universal Streaming](/docs/speech-to-text/universal-streaming)
+- [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio)
+
+## Need some help?
+
+If you get stuck, or have any other questions, we'd love to help you out. Contact our support team at support@assemblyai.com or create a [support ticket](https://www.assemblyai.com/contact/support).
