@@ -7,10 +7,6 @@ import { PromptLibrary } from "../../../assets/components/PromptLibrary";
 
 Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription.
 
-<Note>
-Prompting is also available for [Universal-3-Pro Streaming](/docs/universal-streaming). The same principles and capabilities described here apply to streaming transcription, enabling dynamic prompting for voice agents and real-time applications.
-</Note>
-
 ## How prompting works
 
 Universal-3-Pro is a Speech-augmented Large Language Model (SpeechLLM). The architecture is a multi-modal LLM with an audio encoder and LLM decoder designed to understand and process speech, audio, and text inputs in the same workflow.
@@ -85,25 +81,38 @@ Useful for:
 **Sample prompt 3: Maximum speech patterns, context, and multilingual accuracy**
 
 ```text
-Transcribe this audio with beautiful punctuation and formatting.
-Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.
-Use standard spelling and the most contextually correct spelling of all words and names,
-brands, drug names, medical terms, person names, and all proper nouns.
-Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.
+Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
 ```
 
 Characteristics of prompt output:
 
-- With many instructions, the model attempts to become as verbatim as possible across a number of different domains - punctuation, formatting, speech patterns, contextual correctness, entity accuracy, and code-switching/multilingual transcription
-- Audio is transcribed with as many natural speech patterns as possible, including all potential disfluencies, false starts, hesitations, and other speech patterns
-- Because the model is searching for all audio patterns, prompts like this are more likely to also pick up things like cross talk or background noise
-- Extra weight is given to contextual accuracy across not just rare words and entities but also mixed languages in the audio
+- With many instructions, the model attempts to become as verbatim as possible across a number of different domains - speech patterns, contextual correctness, entity accuracy, and code-switching/multilingual transcription
+- Languages are described as spoken without translation, preserving the meaning of natural code-switching and mixed-language phrases.
+- Audio is transcribed with as many natural speech patterns as possible, including all potential disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the original language.
+- Because the model is searching for all speech patterns, prompts like this are more likely to also pick up things like cross talk or background noise or low volume audio
+- Extra weight is given to contextual accuracy by telling the model to guess at different words based on the context surrounding that word.
 
 Useful for:
 
 - Maximum capture of speech patterns - will generate the most words transcribed
 - Higher WER in exchange for contextual accuracy and multilingual accuracy
 - Across a variety of transcripts where you think these different patterns will be encountered
+
+<Note>
+Sample prompt 3 is the current system prompt as of February 20, 2026. If you are iterating on prompts and trying different styles, this is the prompt you can start experimenting with and removing/adding instructions to compare to production results.
+
+To be explicit, the system prompt is:
+```text
+Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
+```
 
 ---
 
@@ -136,8 +145,6 @@ Transcribe verbatim:
 - False starts: yes
 - Colloquial: yes
 ```
-
-**Note on colloquialisms:** The "Colloquial" setting preserves informal spoken forms exactly as said, such as "gonna" instead of "going to", "wanna" instead of "want to", or "kinda" instead of "kind of". Without this instruction, the model may normalize these to their formal written equivalents.
 
 ---
 
@@ -186,7 +193,7 @@ Transcribe this audio. Context: a technical lecture about GPUs, CUDA, and infere
 <Warning>
 Context alone does not tell the model *how* to transcribe. Providing domain context is most effective when paired with specific instructions.
 
-For example, `This is a doctor-patient visit` gives the model background but no actionable guidance. A more effective prompt would be: `This is a doctor-patient visit. Prioritize accurately transcribing medications and diseases wherever possible.`
+For example, `This is a doctor-patient visit` gives the model background but no actionable guidance. A more effective prompt would be: `This is a doctor-patient visit, prioritize accurately transcribing medications and diseases wherever possible.`
 
 The instruction tells the model what to pay attention to, while the context tells it what domain to expect.
 </Warning>
@@ -227,7 +234,7 @@ Preserve acronyms and capitalization of company names and legal entities
 **Example prompts:**
 
 ```text
-Mark speaker turns clearly.
+Transcribe the audio verbatim, include speaker change markers.
 ```
 
 ```text
@@ -238,16 +245,14 @@ Tag speaker changes with context like name, role, or gender based on speech cont
 Label speakers by role when identifiable (Justice Roberts:, Petitioner's Counsel:).
 ```
 
-```text
-Transcribe the audio verbatim, include speaker change markers.
-```
-
 Speaker labels can be tagged with names, roles, genders, and more from the audio file. Simply add the desired category for the labels into your prompt.
 
 <Warning>
-Speaker attribution generated by the model is in addition to the [speaker diarization](/docs/pre-recorded-audio/speaker-diarization) feature. We recommend using one or the other. Speaker diarization is a stable, consistent model whereas speaker attribution via prompting is experimental and may produce inconsistent results, especially across longer files where the model processes audio in chunks. Using the word `speaker` anywhere in your prompt will generate labels, so avoid this word to ensure this capability is not activated.
+Speaker attribution generated by the model is in addition to the [speaker diarization](/docs/pre-recorded-audio/speaker-diarization) and [speaker identification](/docs/speech-understanding/speaker-identification) feature. We recommend using one or the other. 
 
-For production use cases requiring consistent speaker labels, use the speaker diarization feature.
+Speaker diarization and Speaker identification are stable, consistent models whereas speaker attribution via prompting is experimental and may produce inconsistent results, especially across longer files where the model processes audio in chunks. Using the word `speaker` anywhere in your prompt will generate labels, so avoid this word to ensure this capability is not activated.
+
+For production use cases requiring consistent speaker labels, use the speaker diarization and speaker identification features. In the future we will be natively building the model's capabilities here into these features.
 </Warning>
 
 ---
@@ -338,7 +343,7 @@ This is useful when you want the most complete transcript possible and plan to v
 Tell the model to mark segments it is unsure about instead of guessing:
 
 ```text
-Transcribe speech with your best guess when speech is heard. Mark [unclear] when audio segments are unknown.
+Transcribe speech with your best guess when speech is heard, mark [unclear] when audio segments are unknown.
 ```
 
 ```text
@@ -346,10 +351,6 @@ If unintelligible, write [unclear]. Mark inaudible segments.
 ```
 
 This is useful for quality-sensitive workflows where incorrect guesses are worse than gaps.
-
-**Choosing between `[unclear]` and `[masked]`:**
-
-We recommend `[unclear]` for most use cases. The `[masked]` tag can flag more areas of uncertain audio, but it is also commonly used to tag profanity, which means it may remove curse words from your transcript as a side effect. If profanity in the transcript is not a concern for your use case, `[masked]` may catch more uncertain audio.
 
 **Combining both strategies:**
 
@@ -403,7 +404,7 @@ Universal-3-Pro supports two methods for improving transcription accuracy: open-
 | **Example** | `Prioritize accurately transcribing medications and diseases` | `["omeprazole", "metformin", "hypertension"]` |
 
 <Note>
-The `prompt` and `keyterms_prompt` parameters are mutually exclusive at the API level. However, you can include key terms directly within your open prompt as a workaround. For example: `Mandatory: Pay close attention to the following terms: omeprazole, metformin, hypertension.`
+The `prompt` and `keyterms_prompt` parameters are mutually exclusive at the API level. However, you can include key terms directly within your open prompt as a workaround using the `Context:` prefix. For example: `Mandatory: Pay close attention to medications and diseases and be obsessively accurate. Context: omeprazole, metformin, hypertension.`
 </Note>
 
 ---
@@ -609,15 +610,7 @@ We recommend you layer on each instruction one by one to see the impact on the t
 4. **Test and verify** - Listen to the audio to confirm correctness
 5. **Measure success rate** - Test variations on sample files
 
-**Prompt Repair Wizard:** If you need help iterating on your prompts, try the [Prompt Repair Wizard](https://www.assemblyai.com/dashboard) on the dashboard. Paste your current prompt, describe the issues you're seeing in the output, and it will suggest improvements based on prompting best practices.
-
-### Final prompt structure
-
-```text
-[Authoritative language]: [Specific instruction] + [Explicit examples]
-[Authoritative language]: [Specific instruction] + [Explicit examples]
-[Authoritative language]: [Specific instruction] + [Explicit examples]
-```
+**Prompt Repair Wizard:** If you need help iterating on your prompts, try the [Prompt Repair Wizard](https://www.assemblyai.com/dashboard/tools/prompt-repair) on the dashboard. Paste your current prompt, describe the issues you're seeing in the output, and it will suggest improvements based on prompting best practices.
 
 ---
 
@@ -629,7 +622,7 @@ Tips for accurate evaluation:
 
 - **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
 - **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
-- **Consider Semantic WER** over traditional normalized WER for a more nuanced evaluation that accounts for these differences.
+- **Consider Semantic WER** or other evaluation metrics over traditional normalized WER for a more nuanced evaluation that accounts for these differences.
 
 ---
 
