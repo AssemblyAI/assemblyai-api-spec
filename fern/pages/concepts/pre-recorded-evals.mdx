@@ -6,16 +6,18 @@ title: "Evaluating Pre-recorded STT models"
 
 The high level objective of a pre-recorded STT model evaluation is to answer the question: _Which Speech-to-text model is the best for my product?_
 
-This guide will provide a step-by-step framework for evaluating and benchmarking pre-recorded Speech-to-text models to help you select the best fit for you.
+This guide provides a step-by-step framework for evaluating and benchmarking pre-recorded Speech-to-text models, with specific guidance for evaluating Universal-3-Pro and its prompting capabilities.
 
 <Note>
   Need help evaluating our Speech-to-text products? [Contact our Sales
   team](https://www.assemblyai.com/contact/sales) to request for an evaluation.
 </Note>
 
-## Common evaluation metrics
+## Evaluation metrics
 
-### Word Error Rate (WER)
+### Traditional metrics
+
+#### Word Error Rate (WER)
 
 $$
 WER = \frac{S + D + I}{N}
@@ -26,13 +28,13 @@ This formula takes the number of Substitutions (S), Deletions (D), and Insertion
 <Note>
   While WER calculation may seem simple, it requires a methodical granular
   approach and reliable reference data. Word Error Rate can tell you how
-  “different” the automatic transcription was compared to the human
+  "different" the automatic transcription was compared to the human
   transcription, and *generally*, this is a reliable metric to determine how
-  “good” a transcription is. For more info on WER as a metric, read Dylan Fox's
+  "good" a transcription is. For more info on WER as a metric, read Dylan Fox's
   blog post [here](https://www.assemblyai.com/blog/word-error-rate).
 </Note>
 
-### Concatenated minimum-Permutation Word Error Rate (cpWER)
+#### Concatenated minimum-Permutation Word Error Rate (cpWER)
 
 $$
 \text{cpWER} = \frac{S_{\text{spk}} + D + I}{N}
@@ -40,11 +42,11 @@ $$
 
 cpWER is similar to WER, but it also measures the number of errors a speech recognition model makes where words with incorrectly-ascribed speakers are considered to be incorrect. The primary difference from standard WER is how _S_ is calculated. A correct word with an incorrect speaker label counts as a substitution error, thereby penalizing both transcription and speaker diarization mistakes.
 
-### Formatted WER (F-WER)
+#### Formatted WER (F-WER)
 
 F-WER is similar to WER but F-WER does not apply text normalization, so all formatting differences are accounted for, in addition to word differences when computing the WER. Therefore, F-WER is always higher than or equal to WER.
 
-### Sentence Error Rate (SER)
+#### Sentence Error Rate (SER)
 
 $$
 \text{SER} = \frac{N_{\text{err}}}{N_{\text{sent}}}
@@ -52,7 +54,7 @@ $$
 
 The Sentence Error Rate (SER) is the ratio of the number of sentences with one or more errors to the total number of sentences.
 
-### Diarization Error Rate (DER)
+#### Diarization Error Rate (DER)
 
 $$
 DER = \frac{false alarm + missed detection + confusion}{total}
@@ -60,7 +62,7 @@ $$
 
 This formula takes the duration of non-speech incorrectly classified as speech (false alarm), the duration of speech incorrectly classified as non-speech (missed detection), the duration of speaker confusion (confusion), and divides the sum over the total speech duration.
 
-### Missed Entity Rate (MER)
+#### Missed Entity Rate (MER)
 
 $$
 \text{MER} = 1 - \frac{N_{\text{rec}}}{N_{\text{total}}}
@@ -68,38 +70,196 @@ $$
 
 Fundamentally, MER is a negative recall rate computed for specified target entities. It is defined as the number of correctly transcribed entities relative to their total occurrence count. It accounts for multiple occurrences of the same entity and their positions within the hypothesis transcription. Our Research team proposes this as the best metric to measure the effectiveness of word boost.
 
+### Metrics for Universal-3-Pro
+
+Universal-3-Pro is significantly more capable than prior models, and traditional WER alone may not fully capture its performance. The following metrics provide a more complete picture.
+
+#### Semantic WER
+
+Semantic WER uses an LLM (such as Claude) to perform word-level alignment and scoring, applying nuanced rules that traditional WER ignores. Instead of treating every difference as an error, Semantic WER classifies differences into categories:
+
+- **No penalty**: Variant spellings of the same name, number format differences (`1300` vs `thirteen hundred`), contractions (`going to` vs `gonna`), singular/plural of the same word, filler words added or removed
+- **Minor penalty (0.5)**: Single-character spelling errors, minor grammatical markers, small proper noun misspellings
+- **Major penalty (1.0)**: Incorrect word substitutions, meaning-altering errors, significant omissions or additions of content words
+
+This approach is particularly valuable for Universal-3-Pro because the model often transcribes audio more accurately than human transcribers, producing differences that are correct but would be penalized by traditional WER.
+
+#### LASER Score (LLM-based ASR Evaluation Rubric)
+
+The LASER score is a complementary LLM-based metric that provides structured feedback alongside a numeric score:
+
+$$
+\text{LASER} = 1 - \frac{\text{Total Penalty}}{\text{Reference Word Count}}
+$$
+
+LASER categorizes each error with structured feedback, making it useful for prompt optimization workflows where you need to understand _why_ a prompt performed poorly, not just _how much_ error there was.
+
+### Why new metrics matter
+
+Universal-3-Pro's contextual awareness means it will often transcribe words that human transcribers missed entirely. In traditional WER, these show up as **insertions** (penalized errors), even though the model is correct.
+
+<Warning>
+When evaluating Universal-3-Pro, pay close attention to insertions. If WER appears higher than expected, go back and listen to the audio for each insertion. In our testing, approximately 95% of insertions were cases where Universal-3-Pro transcribed audio correctly that the human transcriber missed.
+</Warning>
+
+This is why organizations like [Artificial Analysis](https://artificialanalysis.ai/) have had to create proprietary evaluation datasets with manually corrected ground truths, because existing public datasets contain systematic human transcription errors.
+
 ## The evaluation process
 
-This section will be the core of the documentation, providing a step-by-step guide on how to run an evaluation.
+This section provides a step-by-step guide on how to run an evaluation. The evaluation process should closely match your production environment, including the files you intend to transcribe, the model you intend to use, and the settings applied to those models.
 
-For that reason, the evaluation process should closely match your production environment - including the files you intend to transcribe, the model you intend to use, and the settings applied to those models.
-
-### Step 1: Get files to benchmark
+### Step 1: Prepare your evaluation dataset
 
 Ensure that the files you use to benchmark are representative of the files you plan to use in production. For example, if you plan to transcribe meetings, gather a set of meeting recordings. If you plan to transcribe phone calls, focus on finding phone calls that match your customer base's language and region.
 
 Then, gather human-labeled data to act as your source of ground truth. Ground truth is accurately transcribed audio data that will serve as the "correct answer" for our benchmark. Human-labeled data can be purchased from an external vendor or created manually.
 
-### Step 2: Transcribe your files
+#### Ground truth quality
 
-Next, transcribe your files using [AssemblyAI's API](/docs/getting-started/transcribe-an-audio-file).
+The quality of your ground truth data directly affects the reliability of your evaluation. With Universal-3-Pro, this is more important than ever because the model frequently outperforms human transcribers.
 
-### Step 3: Text normalization
+Common issues with ground truth data:
+- **Missing filler words**: Human transcribers often omit `um`, `uh`, `like`, and other disfluencies
+- **Incorrect proper nouns**: Rare names, technical terms, and domain vocabulary are often misspelled
+- **Simplified speech patterns**: Human transcribers tend to "clean up" speech, missing repetitions, false starts, and self-corrections
+- **Code-switching errors**: Multilingual segments are frequently translated to English rather than transcribed as spoken
 
-Before calculating any metrics, both reference (ground truth) and hypothesis (model generated) texts need to be normalized to ensure a fair comparison.
+Before running evaluations, audit a sample of your ground truth files by listening to the audio and comparing. If your ground truth contains systematic errors, your WER numbers will be misleading.
+
+#### Dataset diversity
+
+A prompt that performs well overall may underperform on specific audio types. Include a diverse mix of audio in your evaluation set and track per-dataset breakdowns:
+
+| Audio type | Characteristics | Typical WER range |
+|---|---|---|
+| Earnings calls | Clean English, formal vocabulary | Low |
+| Meeting recordings | Multi-speaker, informal | Moderate |
+| Code-switching audio | Mixed languages (e.g., English/Spanish) | Higher (normalization affects scoring) |
+| Medical consultations | Clinical vocabulary, accented speech | Moderate |
+| Phone calls | Compression artifacts, background noise | Moderate to high |
+
+### Step 2: Establish a baseline
+
+Before optimizing prompts, measure your baseline performance:
+
+1. **No prompt**: Transcribe your evaluation set with Universal-3-Pro and no custom prompt. This gives you the model's out-of-the-box performance.
+2. **Default system prompt**: Transcribe with the current system prompt (see the [prompting guide](/docs/pre-recorded-audio/prompting#system-prompts)) to understand the default behavior.
+
+Record both WER and Semantic WER for each baseline so you can track improvements.
+
+### Step 3: Transcribe and evaluate with prompts
+
+Transcribe your files using [AssemblyAI's API](/docs/getting-started/transcribe-an-audio-file) with Universal-3-Pro and your candidate prompts.
+
+When crafting evaluation prompts, use the [prompting guide](/docs/pre-recorded-audio/prompting) as a reference. Key principles:
+
+- **Use authoritative language**: The model responds better to `Mandatory:`, `Required:`, and `Always:` than soft language like `try to` or `please`
+- **Be specific about speech patterns**: Enumerate what you want preserved (disfluencies, filler words, hesitations, repetitions, stutters, false starts, colloquialisms)
+- **Give instructions, not just context**: `This is a doctor-patient visit. Prioritize accurately transcribing medications and diseases wherever possible.` is far more effective than `This is a doctor-patient visit.`
+- **Use 3-6 instructions**: Fewer than 3 leaves important categories uncovered; more than 7 causes diminishing returns
+
+### Step 4: Text normalization
+
+Before calculating WER metrics, both reference (ground truth) and hypothesis (model generated) texts need to be normalized to ensure a fair comparison.
 
 This accounts for differences in:
 
 - Punctuation and capitalization
-- Number formatting (e.g., “twenty-one” vs. “21”)
+- Number formatting (e.g., "twenty-one" vs. "21")
 - Contractions and abbreviations
-- Other stylistic variations that don’t affect meaning
+- Other stylistic variations that don't affect meaning
 
-Normalisation can be done with a library like [Whisper Normalizer](https://pypi.org/project/whisper-normalizer/).
+Normalization can be done with a library like [Whisper Normalizer](https://pypi.org/project/whisper-normalizer/).
 
-### Step 4: Compare and calculate
+<Note>
+If you are prompting Universal-3-Pro to include `[unclear]` or `[masked]` tags for uncertain audio, ensure your normalizer strips these tags before computing WER. Otherwise, they will be counted as insertions.
+</Note>
 
-Calculate the error rates using the formula above or consider using a library like [pyannote.metrics](https://github.com/pyannote/pyannote-metrics).
+### Step 5: Compare and calculate
+
+Calculate the error rates using the formulas above or consider using a library like [jiwer](https://github.com/jitsi/jiwer). For Semantic WER or LASER scoring, use an LLM-based evaluator (see [Open-source tools](#open-source-tools) below).
+
+When reviewing results:
+- Check per-dataset breakdowns, not just aggregate WER
+- Audit insertions manually by listening to the audio
+- Compare both traditional WER and Semantic WER to get a full picture
+- Track which prompt components improve which audio types
+
+## Iterating on prompts
+
+Finding the optimal prompt for your use case is an iterative process. There are two main approaches:
+
+### Manual iteration
+
+1. Start with the [default system prompt](/docs/pre-recorded-audio/prompting#system-prompts) or one of the reference prompts below
+2. Transcribe a representative sample of your audio
+3. Review the output against your ground truth, focusing on the types of errors that matter most for your use case
+4. Adjust the prompt to address specific error patterns
+5. Re-evaluate and compare
+
+### Automated optimization
+
+For large-scale prompt optimization, consider using one of the open-source tools described below. These tools systematically test prompt component combinations and score them against your evaluation data, converging on the best prompt for your specific audio.
+
+### Reference prompts for evaluation
+
+#### Verbatim accuracy (4 rules)
+
+```text
+Transcribe verbatim. Prioritize maximum transcription accuracy.
+Rules:
+1) Transcribe everything spoken despite background noise, phone compression, or audio quality issues.
+2) Preserve disfluencies, filler words, hesitations, repetitions, stutters, false starts, incomplete words, and colloquialisms.
+3) Transcribe names, emails, addresses, phone numbers, and identification codes precisely.
+4) Never correct, clean up, or improve the transcription.
+```
+
+#### Language-aware (for multilingual/code-switching data)
+
+```text
+Transcribe this audio with beautiful punctuation and formatting.
+Rules:
+1) Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.
+2) Use standard spelling and the most contextually correct spelling of all words and names, brands, drug names, medical terms, person names, and all proper nouns.
+3) Transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.
+4) If unclear, transcribe your best guess. Never leave gaps in the transcript.
+```
+
+#### Uncertainty-aware (for quality-sensitive workflows)
+
+```text
+Transcribe verbatim. Prioritize maximum transcription accuracy.
+Rules:
+1) Transcribe everything spoken despite background noise, phone compression, or audio quality issues.
+2) Preserve disfluencies, filler words, hesitations, repetitions, stutters, false starts, incomplete words, and colloquialisms.
+3) Transcribe speech with your best guess when speech is heard. Mark [unclear] when audio segments are unknown.
+4) Never correct, clean up, or improve the transcription.
+```
+
+Using `[unclear]` tags is particularly useful for evaluation because it reveals where the model is least confident, which often correlates with the hardest segments of audio. This can also improve WER by preventing the model from guessing on truly inaudible segments.
+
+### What works and what doesn't
+
+#### High-value prompt components
+
+| Component | Description | When to use |
+|---|---|---|
+| **Disfluency preservation** | Enumerate specific patterns (filler words, hesitations, repetitions, stutters, false starts, colloquialisms) | Meeting, interview, and conversational audio |
+| **Language preservation** | Preserve original languages as spoken, including code-switching | Multilingual audio datasets |
+| **Proper noun precision** | Standard spelling for names, brands, medical terms, and entities | Technical, medical, or domain-specific content |
+| **Anti-hallucination** | "Never correct, clean up, or improve the transcription" or "Be literal and precise" | All evaluations |
+| **Completeness / best guess** | "If unclear, transcribe your best guess. Never leave gaps." | Audio with variable quality |
+| **Audio context** | "Transcribe everything spoken despite background noise or audio quality issues" | Noisy or compressed audio |
+
+#### What to avoid in evaluation prompts
+
+| Anti-pattern | Impact |
+|---|---|
+| **Domain labels without instructions** (e.g., `Context: Medical`) | Helps on domain-specific data but hurts on mixed datasets |
+| **Examples in prompts** (e.g., listing specific words) | Triggers hallucinations where the model inserts those exact words |
+| **Review/correction instructions** (e.g., `Review and correct`, `Edit for accuracy`) | Consistently hurts accuracy |
+| **Over-instruction** (more than 7 rules) | Causes diminishing returns and confusion |
+| **Soft language** (e.g., `try to`, `please`, `if possible`) | Model responds poorly compared to authoritative instructions |
 
 ## Vibes vs metrics
 
@@ -107,22 +267,62 @@ While metrics provide a useful quantitative evaluation of a Speech-to-text model
 
 ### Why do a vibe-eval?
 
-Vibe-evals are useful to determine the qualitative difference between STT providers that metrics might not capture. For example, how certain keyterms can are transcribed make or break a transcript, even if the rest of the transcript is more accurate for other terms.
+Vibe-evals are useful to determine the qualitative difference between STT providers that metrics might not capture. For example, how certain keyterms are transcribed can make or break a transcript, even if the rest of the transcript is more accurate for other terms.
 
 Vibe-evals are also good for tie-breaking instances where the benchmarking metrics don't lean in favour of one model over the other.
 
-Another benefit of doing a vibe-evals is that truth files don't have to be sourced for them since Speech-to-text models are being compared against each other.
+Another benefit of doing vibe-evals is that truth files don't have to be sourced for them since Speech-to-text models are being compared against each other.
 
 ### How to do a vibe-eval?
 
 To do a vibe-eval, have users compare and pick their favourite between two **formatted** transcripts from different STT providers. This can be done with something like a [Diffchecker](https://www.diffchecker.com/), or any other side-by-side interface.
 
+Using an LLM as a judge can supplement vibe-evals by automatically identifying differences between two transcriptions and picking a winner. However, be cautious: an LLM judge can be misled by outputs that _look_ correct but contain subtle errors (such as translated code-switching segments that read well in English but don't reflect what was actually spoken). Always pair LLM-based judgments with spot-checking against the actual audio.
+
 Another option is to do A/B testing with your current Speech-to-text provider in production and ask users to give the transcript a score. We've also seen users in the past compare the number of support ticket complaints about transcription based on the models served to the user.
 
-Vibe-evals are a great way to see how our models perform in a production setting while also letting your users determine their preferred Speech-to-text provider.
+## Open-source tools
+
+### aai-cli
+
+[aai-cli](https://github.com/alexkroman/aai-cli) is a command-line tool for evaluating and optimizing transcription prompts. It supports:
+
+- **Prompt evaluation**: Score a prompt against datasets from Hugging Face or your own audio files using WER and LASER metrics
+- **Prompt optimization**: Automatically iterate on prompts using DSPy GEPA with LASER feedback, where an LLM reflects on transcription errors and proposes improved prompts
+- **Dataset discovery**: Search and load audio datasets from Hugging Face for benchmarking
+
+```bash
+# Evaluate a prompt
+aai eval --prompt "Transcribe verbatim." --max-samples 50
+
+# Optimize a prompt
+aai optimize --starting-prompt "Transcribe verbatim." --iterations 5 --samples 50
+```
+
+### prompt-seeker
+
+[prompt-seeker](https://github.com/AssemblyAI-Solutions/prompt-seeker) uses Bayesian optimization (Optuna TPE) to systematically find the best transcription prompt by testing component combinations across diverse audio datasets and scoring with Semantic WER. It supports:
+
+- **Component-based optimization**: Modular prompt pieces (language, disfluency, punctuation, etc.) are tested in combinations
+- **Meta-optimization**: An LLM designs new component spaces between optimization rounds based on accumulated findings
+- **Per-dataset analysis**: Breakdown of what works for each audio type in your evaluation set
+
+```bash
+# Run optimization (50 trials across your data)
+uv run python -m prompt_seeker.cli optimize \
+  --datasets "my_calls:50" \
+  --trials 50 -c 20
+
+# Run the meta-optimizer (Claude designs rounds autonomously)
+uv run python -m prompt_seeker.cli meta-optimize \
+  --datasets "my_calls:50" \
+  --rounds 3 --trials 50 -c 10
+```
+
+Both tools require ground truth transcriptions for scoring. If you don't have ground truth yet, transcribe a sample of your audio manually and use that as your starting point.
 
 ## Conclusion
 
-We hope that this short guide was helpful in shaping your evaluation methodology.
+Evaluating Universal-3-Pro requires going beyond traditional WER. The model's contextual awareness and prompting capabilities mean that evaluation is as much about finding the right prompt as it is about measuring accuracy. Use Semantic WER or LASER alongside traditional WER, audit your ground truth data carefully, and iterate on prompts systematically to find the best configuration for your audio.
 
 Have more questions about evaluating our Speech-to-text models? [Contact our sales team](https://www.assemblyai.com/contact/sales) and we can help.
