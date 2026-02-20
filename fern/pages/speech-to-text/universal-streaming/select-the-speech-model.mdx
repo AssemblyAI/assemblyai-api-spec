@@ -21,11 +21,11 @@ The Universal-3-Pro streaming model is currently available for testing purposes 
 | Feature                        | Universal-Streaming English | Universal-Streaming Multilingual | Universal-3-Pro Streaming |
 | ------------------------------ | --------------------------- | -------------------------------- | ------------------------- |
 | **Latency**                    | Fastest                     | Fast                             | Fast                      |
-| **Partial transcripts**        | Yes                         | Yes                              | No (only on turn end)     |
+| **Partial transcripts**        | Yes                         | Yes                              | Yes                       |
 | **Multilingual**               | No                          | Per Turn                         | Native Code Switching     |
 | **Entity accuracy**            | Okay                        | Okay                             | Best                      |
 | **Disfluencies & filler words** | No                          | No                               | Yes                       |
-| **Customization**              | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Native prompting](/docs/getting-started/universal-3-pro#prompting) (unknown context) |
+| **Customization**              | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) (known context) + [Native prompting](/docs/getting-started/universal-3-pro#prompting) (unknown context) |
 
 ## Universal-3-Pro quickstart
 
@@ -37,26 +37,68 @@ To use Universal-3-Pro for streaming, add `"speech_model": "u3-pro"` to your con
 }
 ```
 
-### Configuring end-of-turn silence
+### Configuring turn detection
 
-The `min_end_of_turn_silence_when_confident` parameter sets the VAD silence threshold that determines when audio is sent for transcription. It defaults to `200` ms, but you can modify this.
+Universal-3-Pro uses a punctuation-based turn detection system controlled by two parameters:
 
-For example, to set it to 100 ms:
+| Parameter | Default | Description |
+| --------- | ------- | ----------- |
+| `min_end_of_turn_silence_when_confident` | `100` ms | Silence duration before a speculative end-of-turn (EOT) check fires. |
+| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end. |
+
+When silence reaches `min_end_of_turn_silence_when_confident`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
+
+- **Terminal punctuation found** — the turn ends and is emitted as a final transcript (`end_of_turn: true`).
+- **No terminal punctuation** — a partial transcript is emitted (`end_of_turn: false`) and the turn continues waiting.
+  - If silence continues to `max_turn_silence`, the turn is forced to end as a final transcript (`end_of_turn: true`) regardless of punctuation.
+
+<Note>
+This differs from Universal-Streaming English and Multilingual, which use a confidence-based end-of-turn system controlled by `end_of_turn_confidence_threshold`.
+
+Instead, Universal-3-Pro makes turn decisions based on ending punctuation after `min_end_of_turn_silence_when_confident` has elapsed. Because of this, `end_of_turn_confidence_threshold` has no impact.
+</Note>
+
+For example, to configure both parameters:
 
 ```json
 {
   "speech_model": "u3-pro",
-  "min_end_of_turn_silence_when_confident": 100
+  "min_end_of_turn_silence_when_confident": 100,
+  "max_turn_silence": 1000
 }
 ```
 
+#### Partials behavior
+
+Partials are `Turn` events where `end_of_turn` is `false`. They are produced whenever `min_end_of_turn_silence_when_confident` is met, but the ending punctuation doesn't signal the end of a turn.
+
+There can be multiple partial transcripts per turn, but each period of silence can produce at most one partial. If silence exceeds `min_end_of_turn_silence_when_confident`, but speech resumes before `max_turn_silence`, the partial is emitted and the EOT check resets until the next period of silence.
+
+If you're running eager LLM inference on partial transcripts, we recommend setting `min_end_of_turn_silence_when_confident` to `100`.
+
 <Warning title="Entity splitting (accuracy) vs Model Latency trade-off">
-Setting `min_end_of_turn_silence_when_confident` too low can split entities like phone numbers and emails in half. We have found LLM steps fix this for voice agents, but we recommend testing carefully with your use case.
+Setting `min_end_of_turn_silence_when_confident` too low can split entities like phone numbers and emails. We have found LLM steps fix this for voice agents, but we recommend testing carefully with your use case.
 </Warning>
+
+#### Forcing a turn endpoint
+
+You can force the current turn to end immediately by sending a `ForceEndpoint` message:
+
+```json
+{
+  "type": "ForceEndpoint"
+}
+```
+
+This is useful when your application knows the user has finished speaking based on external signals (e.g., a button press).
 
 ### Using prompts
 
 You can set a `prompt` parameter and use all of the features available with the Universal-3-Pro model. See the [Universal-3-Pro prompting documentation](/docs/pre-recorded-audio/prompting) for details.
+
+<Tip>
+Universal-3-Pro also supports `keyterms_prompt` for boosting specific terms. You can use `keyterms_prompt` alongside `prompt`, or on its own. See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for details.
+</Tip>
 
 Here is an example prompt optimized for voice agent turn detection:
 
@@ -70,15 +112,41 @@ Here is an example prompt optimized for voice agent turn detection:
 
 This prompt is designed for turn detection use cases. It ensures the model captures disfluencies and uses complete punctuation, which improves turn detection accuracy for plugins like LiveKit and Pipecat.
 
-### Updating prompts mid-stream
+<Note>
+Turn detection relies on terminal punctuation (`.` `?` `!`), so custom prompts that reduce or remove punctuation from the transcription output may negatively impact turn detection. The default prompt is optimized for this, so we recommend trying it first before any customization.
+</Note>
 
-You can update the prompt during an active streaming session using `UpdateConfiguration`. This replaces the current prompt without needing to reconnect:
+### Updating configuration mid-stream
+
+You can update configuration during an active streaming session using `UpdateConfiguration`. This applies changes without needing to reconnect. You can update `prompt`, `max_turn_silence`, `min_end_of_turn_silence_when_confident`, or any combination at the same time:
 
 ```json
-{"type": "UpdateConfiguration", "prompt": "This is the new prompt"}
+{
+  "type": "UpdateConfiguration",
+  "prompt": "New prompt",
+  "max_turn_silence": 5000,
+  "min_end_of_turn_silence_when_confident": 200
+}
 ```
 
-Updating prompts can be useful to pass updated context from the agent session into the STT stream via the `prompt` parameter to improve accuracy of the overall transcription.
+Common reasons to update configuration mid-stream:
+
+- **`prompt`** — Pass updated context from the agent session (e.g., the agent's responses) into the STT stream to directly influence how the model transcribes the user's next utterance.
+- **`max_turn_silence`** — Increase for moments where you'd expect a longer pause, such as when a caller is reading out a credit card number, ID number, or address. Decrease it again afterward to resume snappier turn detection.
+- **`min_end_of_turn_silence_when_confident`** — Tune how quickly speculative EOT checks fire. Lower values produce faster partials for eager LLM inference, while higher values reduce entity splitting for utterances with numbers or proper nouns.
+
+<Tip title="Default prompt">
+When no `prompt` is provided in the connection parameters, the following default prompt is used. If you prefer the out-of-the-box performance but want to slightly tweak or add instructions and context, you can use it as a starting point:
+
+```
+Transcribe verbatim. Rules:
+1) Always include punctuation in output.
+2) Use period/question mark ONLY for complete sentences.
+3) Use comma for mid-sentence pauses.
+4) Use no punctuation for incomplete trailing speech.
+5) Filler words (um, uh, so, like) indicate speaker will continue.
+```
+</Tip>
 
 ## End-to-end example
 
@@ -138,12 +206,10 @@ def main():
     client.connect(
         StreamingParameters(
             sample_rate=16000,
-            format_turns=True,
-            speech_model="u3-pro",
-            # To use Universal-Streaming English instead, use:
-            # speech_model="universal-streaming-english",
-            # To use Universal-Streaming Multilingual, use:
-            # speech_model="universal-streaming-multilingual",
+            speech_model="u3-pro",  # or "universal-streaming-english", "universal-streaming-multilingual"
+            min_end_of_turn_silence_when_confident=100,
+            max_turn_silence=1000,
+            # format_turns=True,  # Whether to return formatted final transcripts (not applicable to u3-pro)
         )
     )
 
@@ -173,12 +239,10 @@ YOUR_API_KEY = "<YOUR_API_KEY>"
 
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
-    "format_turns": True,
-    "speech_model": "u3-pro",
-    # To use Universal-Streaming English instead, use:
-    # "speech_model": "universal-streaming-english",
-    # To use Universal-Streaming Multilingual, use:
-    # "speech_model": "universal-streaming-multilingual",
+    "speech_model": "u3-pro",  # or "universal-streaming-english", "universal-streaming-multilingual"
+    "min_end_of_turn_silence_when_confident": 100,
+    "max_turn_silence": 1000,
+    # "format_turns": True,  # Whether to return formatted final transcripts (not applicable to u3-pro)
 }
 API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
@@ -303,12 +367,10 @@ const run = async () => {
 
   const transcriber = client.streaming.transcriber({
     sampleRate: 16_000,
-    formatTurns: true,
-    speechModel: "u3-pro",
-    // To use Universal-Streaming English instead, use:
-    // speechModel: "universal-streaming-english",
-    // To use Universal-Streaming Multilingual, use:
-    // speechModel: "universal-streaming-multilingual",
+    speechModel: "u3-pro", // or "universal-streaming-english", "universal-streaming-multilingual"
+    minEndOfTurnSilenceWhenConfident: 100,
+    maxTurnSilence: 1000,
+    // formatTurns: true, // Whether to return formatted final transcripts (not applicable to u3-pro)
   });
 
   transcriber.on("open", ({ id }) => {
@@ -373,12 +435,10 @@ const querystring = require("querystring");
 const YOUR_API_KEY = "<YOUR_API_KEY>";
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
-  format_turns: true,
-  speech_model: "u3-pro",
-  // To use Universal-Streaming English instead, use:
-  // speech_model: "universal-streaming-english",
-  // To use Universal-Streaming Multilingual, use:
-  // speech_model: "universal-streaming-multilingual",
+  speech_model: "u3-pro", // or "universal-streaming-english", "universal-streaming-multilingual"
+  min_end_of_turn_silence_when_confident: 100,
+  max_turn_silence: 1000,
+  // format_turns: true, // Whether to return formatted final transcripts (not applicable to u3-pro)
 };
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
