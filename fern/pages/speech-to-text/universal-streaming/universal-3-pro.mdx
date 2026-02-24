@@ -469,6 +469,21 @@ We strongly recommend testing with no `prompt` first. When you omit the `prompt`
 
 Universal-3-Pro also supports `keyterms_prompt` for boosting specific terms. You can use `keyterms_prompt` alongside `prompt`, or on its own. See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for details.
 
+## Default prompt
+
+When no `prompt` is provided in the connection parameters, the following default prompt is used. If you prefer the out-of-the-box performance but want to slightly tweak or add instructions and context, you can use it as a starting point:
+
+```
+Transcribe verbatim. Rules:
+1) Always include punctuation in output.
+2) Use period/question mark ONLY for complete sentences.
+3) Use comma for mid-sentence pauses.
+4) Use no punctuation for incomplete trailing speech.
+5) Filler words (um, uh, so, like) indicate speaker will continue.
+```
+
+You can override the default prompt by providing your own `prompt` value. For detailed guidance on crafting effective prompts for streaming, see the [Prompting Guide (Streaming)](/docs/universal-streaming/prompting).
+
 ## Configuring turn detection
 
 Universal-3-Pro uses a punctuation-based turn detection system controlled by two parameters:
@@ -526,12 +541,36 @@ This is useful when your application knows the user has finished speaking based 
 
 ## Updating configuration mid-stream
 
-You can update configuration during an active streaming session using `UpdateConfiguration`. This applies changes without needing to reconnect. You can update `prompt`, `max_turn_silence`, `min_end_of_turn_silence_when_confident`, or any combination at the same time:
+You can update configuration during an active streaming session using `UpdateConfiguration`. This applies changes without needing to reconnect. **The recommended approach is to dynamically update `keyterms_prompt`** based on the current stage of your voice agent flow — if you expect certain answers or terminology at a specific stage, proactively add those as keyterms so the model recognizes them accurately.
+
+```python
+# Replace or establish new set of keyterms
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Universal-3"]}')
+
+# Remove keyterms and reset context biasing
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}')
+```
+
+For example, if your voice agent is currently asking for the caller's name and date of birth, send the expected terms for that stage:
+
+```python
+# Caller identification stage
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Kelly Byrne-Donoghue", "date of birth", "January", "February"]}')
+```
+
+Then, when the conversation moves to a different stage (e.g., medical intake), update with the relevant terms:
+
+```python
+# Medical intake stage
+websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel", "metoprolol"]}')
+```
+
+You can also update `prompt`, `max_turn_silence`, `min_end_of_turn_silence_when_confident`, or any combination at the same time:
 
 ```json
 {
   "type": "UpdateConfiguration",
-  "prompt": "New prompt",
+  "keyterms_prompt": ["account number", "routing number"],
   "max_turn_silence": 5000,
   "min_end_of_turn_silence_when_confident": 200
 }
@@ -539,21 +578,7 @@ You can update configuration during an active streaming session using `UpdateCon
 
 Common reasons to update configuration mid-stream:
 
-- **`prompt`** — Pass updated context from the agent session (e.g., the agent's responses) into the STT stream to directly influence how the model transcribes the user's next utterance.
+- **`keyterms_prompt`** — Dynamically add terms relevant to the current stage of your voice agent flow. This is the most effective way to improve recognition accuracy mid-stream. See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for details.
+- **`prompt`** — Pass updated behavioral or formatting instructions into the STT stream.
 - **`max_turn_silence`** — Increase for moments where you'd expect a longer pause, such as when a caller is reading out a credit card number, ID number, or address. Decrease it again afterward to resume snappier turn detection.
 - **`min_end_of_turn_silence_when_confident`** — Tune how quickly speculative EOT checks fire. Lower values produce faster partials for eager LLM inference, while higher values reduce entity splitting for utterances with numbers or proper nouns.
-
-## Default prompt
-
-When no `prompt` is provided in the connection parameters, the following default prompt is used. If you prefer the out-of-the-box performance but want to slightly tweak or add instructions and context, you can use it as a starting point:
-
-```
-Transcribe verbatim. Rules:
-1) Always include punctuation in output.
-2) Use period/question mark ONLY for complete sentences.
-3) Use comma for mid-sentence pauses.
-4) Use no punctuation for incomplete trailing speech.
-5) Filler words (um, uh, so, like) indicate speaker will continue.
-```
-
-You can override the default prompt by providing your own `prompt` value. See the [Prompting guide](/docs/universal-streaming/prompting) for details and examples.
