@@ -996,113 +996,46 @@ Create `CLAUDE.md` at the root of your project with the context below. Claude Co
 ```markdown CLAUDE.md
 # AssemblyAI Speech-to-Speech API
 
-## Connection sequence (critical — order matters)
-1. Connect WebSocket to `wss://speech-to-speech.assemblyai.com/v1`
-2. Send `session.update` IMMEDIATELY — do NOT wait for `session.created`
-3. Start streaming mic audio right away (server needs audio to warm up)
-4. When `session.created` arrives: call `input_audio_buffer.clear()`, drain mic queue
-5. From here, fresh audio flows with config applied
+## Connection sequence (order matters)
+1. Connect to wss://speech-to-speech.assemblyai.com/v1
+2. Send session.update IMMEDIATELY — do NOT wait for session.created
+3. Start streaming mic audio right away (server warms up on this audio)
+4. On session.created: call input_audio_buffer.clear(), drain mic queue
+5. Fresh audio flows from here with config applied
 
-## OpenAI SDK (Python) session config
-```python
-await connection.session.update(session={
-    "type": "realtime",            # required for nested format
-    "instructions": "...",
-    "output_modalities": ["audio", "text"],
-    "audio": {
-        "input": {
-            "format": {"type": "audio/pcm", "rate": 24000},
-            "transcription": {"model": "universal-streaming"},
-            "turn_detection": {
-                "type": "server_vad",
-                "threshold": 0.5,      # raise to 0.6-0.7 if triggering on noise
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 200,  # raise to 400-500 if interrupting too early
-            },
-        },
-        "output": {"format": {"type": "audio/pcm", "rate": 24000}, "voice": "sage"},
-    },
-    "tools": [...],
-    "tool_choice": "auto",
-})
-```
+## Session config (OpenAI SDK nested format)
+Include "type": "realtime" in the session object.
+turn_detection threshold: raise to 0.6-0.7 if triggering on noise.
+silence_duration_ms: raise to 400-500 if agent interrupts too early.
 
-## Tool calling (capture → wait → inject)
-```python
-pending_calls = []
-
-# Capture on response.output_item.done (not response.function_call_arguments.done)
-if et == "response.output_item.done":
-    item = e.get("item", {})
-    if item.get("type") == "function_call":
-        pending_calls.append({"name": item["name"], "call_id": item["call_id"],
-                               "arguments": json.loads(item.get("arguments", "{}"))})
-
-# Inject on response.done — server auto-generates follow-up, no response.create needed
-elif et == "response.done":
-    for call in pending_calls:
-        result = run_tool(call["name"], call["arguments"])
-        await connection.conversation.item.create(item={
-            "id": f"item_{uuid.uuid4().hex[:24]}",  # id field is REQUIRED
-            "type": "function_call_output",
-            "call_id": call["call_id"],
-            "output": json.dumps(result),
-        })
-    pending_calls.clear()
-```
+## Tool calling pattern
+- Capture calls via response.output_item.done (item.type == "function_call")
+- Send results on response.done — server auto-generates follow-up, no response.create needed
+- Always include "id": f"item_{uuid.uuid4().hex[:24]}" in function_call_output items
+- Process all pending calls from one response together on response.done
 
 ## Stage-based prompting
-Update instructions mid-session to keep the agent focused at each phase:
-```python
-await connection.session.update(session={
-    "type": "realtime",
-    "instructions": new_stage_instructions,
-})
-```
-Do this:
-- After the opening exchange (greeting → main task)
-- Before injecting a tool result (so post-tool speech uses focused instructions)
-- When recovering from an error (reset back to earlier stage)
+Update instructions mid-session: await connection.session.update(session={"type": "realtime", "instructions": new_instructions})
+Do this: after greeting, before injecting tool results, when recovering from errors.
+Switch stage BEFORE injecting tool result — agent responds using instructions active at that moment.
 
 ## AudioPlayer — must be callback-based
-Never use blocking `write()` on the event loop — it starves mic sending and delays everything:
-```python
-class AudioPlayer:
-    def _callback(self, outdata, frames, *_):  # runs in audio thread — non-blocking
-        n = frames * 2
-        with self._lock:
-            chunk = bytes(self._buf[:n]); del self._buf[:n]
-        outdata[:] = chunk + b'\x00' * (n - len(chunk))
-
-    def play(self, pcm: bytes):  # returns instantly — just appends
-        with self._lock: self._buf.extend(pcm)
-
-    def clear(self):  # call on speech_started to stop agent audio immediately
-        with self._lock: self._buf.clear()
-```
+Use sd.RawOutputStream with callback= parameter. Never call blocking write() on the event loop.
+play() just appends to a buffer. clear() empties it (call on speech_started for interruption).
 
 ## Mic streaming
-Use `queue.Queue` (thread-safe) + `run_in_executor` to bridge mic to async:
-```python
-q = queue.Queue()
-# mic callback: q.put_nowait(bytes(data))
-
-async def stream_mic():
-    while True:
-        pcm = await loop.run_in_executor(None, q.get)  # non-blocking wait
-        await raw_ws.send(json.dumps({...}))
-```
-
-Use `raw_ws = connection._connection` and send via `raw_ws.send()` directly for audio
+Use queue.Queue (thread-safe, not asyncio.Queue).
+Use loop.run_in_executor(None, q.get) to await queue in async context without blocking.
+Use raw_ws = connection._connection and raw_ws.send() directly for audio sends
 — bypasses SDK Pydantic overhead on every 20ms chunk.
 
 ## Common pitfalls
-- ❌ Sending config on `session.created` — send it BEFORE, immediately after connect
-- ❌ Using `asyncio.Queue` in threads — it's not thread-safe, use `queue.Queue`
-- ❌ Blocking `write()` for audio playback — starves the event loop
-- ❌ Chaining tool calls across multiple responses — process all at once in `response.done`
-- ❌ Missing `id` field in `function_call_output` — breaks tool result association
-- ❌ Large chunks (100ms+) — adds VAD latency. Keep to ~20ms (480 samples at 24kHz)
+- Send config BEFORE session.created — not on it, not after
+- asyncio.Queue is not thread-safe — always use queue.Queue for mic
+- Blocking write() for audio starves the event loop — use callback-based RawOutputStream
+- Chain tool calls in one response.done batch, not across separate responses
+- Missing "id" field in function_call_output breaks tool result association
+- Chunks >20ms add VAD latency — use 480 samples (20ms) at 24kHz
 ```
 </Step>
 
