@@ -77,15 +77,26 @@ The default prompt—used when no `prompt` is provided—dropped the false posit
 3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
 4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
 
-## Updating prompts mid-stream
+## Updating configuration mid-stream
 
-You can update the prompt during an active streaming session using `UpdateConfiguration`:
+You can update prompting parameters during an active streaming session using `UpdateConfiguration`. The recommended approach is to update `keyterms_prompt` with domain-specific terms as they become relevant during the conversation:
 
 ```json
 {
   "type": "UpdateConfiguration",
-  "prompt": "New prompt with updated context"
+  "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel"]
 }
 ```
 
-This is particularly useful for passing updated context from the agent session (e.g., the agent's responses) into the STT stream to directly influence how the model transcribes the user's next utterance.
+This is the most effective way to improve recognition accuracy mid-stream, because `keyterms_prompt` directly boosts the specified terms. See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for details.
+
+You can also update the `prompt` parameter mid-stream to adjust formatting or behavioral instructions:
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "prompt": "Transcribe verbatim. Rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete trailing speech. 5) Filler words (um, uh, so, like) indicate speaker will continue. Additional: This is a cardiology appointment."
+}
+```
+
+Updating `prompt` or `keyterms_prompt` mid-stream is particularly useful for passing updated context from the agent session (e.g., the agent's responses or newly mentioned terms) into the STT stream to directly influence how the model transcribes the user's next utterance.
