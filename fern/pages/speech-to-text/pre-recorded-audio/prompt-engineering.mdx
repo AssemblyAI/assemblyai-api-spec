@@ -151,6 +151,72 @@ Transcribe this audio
 
 ---
 
+## Recommended prompts
+
+The following prompts are our top recommendations for different use cases. Start here before exploring the detailed [prompt capabilities](#prompt-capabilities) below.
+
+### Best all around (default)
+
+This is the current default prompt, providing the best balance of verbatim accuracy, multilingual support, and performance on challenging audio:
+
+```text
+Required: Preserve the original language(s) and script as spoken,
+including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies,
+filler words, hesitations, repetitions, stutters, false starts, and
+colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all
+possible scenarios where speech is present in the audio.
+```
+
+This prompt maximizes speech pattern capture, preserves code-switching, and tells the model to always attempt transcription even on difficult audio. The trade-off is that the model may occasionally hallucinate disfluencies or language switches that don't exist in the audio.
+
+### Best simple
+
+If you want strong accuracy without the verbatim and multilingual instructions, use this single-line prompt:
+
+```text
+Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
+```
+
+This gives the model clear guidance to always attempt transcription while keeping instructions minimal. It's a great starting point if you don't need multilingual code-switching or maximum disfluency capture.
+
+### Handling unclear audio with [masked]
+
+<Tip title="Recommended for reducing hallucinations">
+This prompt is one of the most effective strategies for avoiding hallucinations on unclear or difficult audio. Instead of forcing the model to guess, it explicitly flags uncertain segments, giving you visibility into areas of uncertainty in the transcript.
+</Tip>
+
+```text
+Always: Transcribe speech exactly as heard. If uncertain or audio is
+unclear, mark as [masked]. After the first output, review the transcript
+again. Pay close attention to hallucinations, misspellings, or errors,
+and revise them like a computer performing spell and grammar checks.
+Ensure words and phrases make grammatical sense in sentences.
+```
+
+You can also use `[unclear]` instead of `[masked]`:
+
+```text
+Always: Transcribe speech exactly as heard. If uncertain or audio is
+unclear, mark as [unclear]. After the first output, review the transcript
+again. Pay close attention to hallucinations, misspellings, or errors,
+and revise them like a computer performing spell and grammar checks.
+Ensure words and phrases make grammatical sense in sentences.
+```
+
+This prompt tells the model to never guess on unclear or difficult audio and instead label it explicitly. The result is a transcript where:
+
+- **Hallucinations are materially reduced** — the model doesn't force potentially incorrect guesses on uncertain audio segments.
+- **Uncertain sections are explicitly flagged** as `[masked]` or `[unclear]`, giving you transparency into exactly where audio quality was insufficient for confident transcription.
+- **Genuine but difficult speech is still preserved** — the model transcribes what it can hear clearly while honestly marking what it cannot.
+
+This is especially useful for quality-sensitive workflows where incorrect guesses are worse than gaps, and for building review pipelines where human reviewers can focus on flagged segments.
+
+---
+
 ## Prompt capabilities
 
 Each capability below acts as a "knob" you can turn. Combine 3-6 capabilities maximum for best results.
@@ -662,7 +728,8 @@ Tips for accurate evaluation:
 
 - **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
 - **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
-- **Consider Semantic WER** or other evaluation metrics over traditional normalized WER for a more nuanced evaluation that accounts for these differences.
+- **Watch for semantic substitutions** — some substitutions are purely semantic or formatting differences (e.g., "offsite" vs. "off site," "alright" vs. "all right") that inflate WER without representing meaningful errors.
+- **Consider Semantic WER** over traditional normalized WER for a more accurate evaluation. Semantic WER won't penalize formatting-level substitutions or insertions that are actually correct transcription, giving you a more realistic measure of true transcription quality.
 
 ---
 
