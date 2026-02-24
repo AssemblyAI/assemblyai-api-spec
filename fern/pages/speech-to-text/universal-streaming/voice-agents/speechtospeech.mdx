@@ -12,79 +12,121 @@ Build voice agents with a single WebSocket connection. Stream audio in, get inte
 Install dependencies and talk to your agent in under a minute.
 
 ```bash
-pip install websockets sounddevice
+pip install openai sounddevice
 ```
 
 ```python
-import asyncio, base64, json, threading
+import asyncio, base64, json, queue, threading
 import sounddevice as sd
-import websockets
+from openai import AsyncOpenAI
 
 API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
-WS_URL = "wss://speech-to-speech.assemblyai.com/v1/realtime"
 SAMPLE_RATE = 24000
+
+client = AsyncOpenAI(
+    api_key=API_KEY,
+    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
+)
 
 
 class AudioPlayer:
-    """Buffers and plays PCM16 audio in real time."""
+    """Callback-based player — never blocks the event loop."""
     def __init__(self):
         self._buf = bytearray()
         self._lock = threading.Lock()
         self._out = sd.RawOutputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480, latency="low",
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback,
         )
         self._out.start()
+
+    def _callback(self, outdata, frames, time_info, status):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n])
+            del self._buf[:n]
+        if len(chunk) < n:
+            chunk += b'\x00' * (n - len(chunk))
+        outdata[:] = chunk
 
     def play(self, pcm: bytes):
         with self._lock:
             self._buf.extend(pcm)
-            while len(self._buf) >= 960:
-                self._out.write(bytes(self._buf[:960]))
-                del self._buf[:960]
+
+    def clear(self):
+        with self._lock:
+            self._buf.clear()
 
     def close(self):
-        self._out.stop()
-        self._out.close()
+        self._out.stop(); self._out.close()
 
 
 async def main():
     player = AudioPlayer()
-    q = asyncio.Queue()
+    q = queue.Queue()
 
     def mic_cb(data, frames, ti, status):
         q.put_nowait(bytes(data))
 
     mic = sd.RawInputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480,
-        callback=mic_cb, latency="low",
+        samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+        blocksize=480, callback=mic_cb, latency="low",
     )
     mic.start()
 
-    ws = await websockets.connect(WS_URL, additional_headers={"Authorization": f"Bearer {API_KEY}"})
+    connection = await client.realtime.connect(
+        model="universal-streaming",
+        websocket_connection_options={"compression": None},
+    ).enter()
 
-    await ws.send(json.dumps({"type": "session.update", "session": {
-        "input_audio_format": "pcm16", "input_audio_sample_rate": SAMPLE_RATE,
-        "output_audio_format": "pcm16", "output_audio_sample_rate": SAMPLE_RATE,
-        "input_audio_transcription": {"model": "universal-streaming"},
-        "turn_detection": {"type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 300, "silence_duration_ms": 200},
-        "output_modalities": ["audio", "text"],
+    # Send config immediately after connecting
+    await connection.session.update(session={
+        "type": "realtime",
         "instructions": "You are a helpful voice assistant. Keep responses brief.",
-        "voice": "sage",
-    }}))
+        "output_modalities": ["audio", "text"],
+        "audio": {
+            "input": {
+                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                "transcription": {"model": "universal-streaming"},
+                "turn_detection": {
+                    "type": "server_vad", "threshold": 0.5,
+                    "prefix_padding_ms": 300, "silence_duration_ms": 200,
+                },
+            },
+            "output": {
+                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
+                "voice": "sage",
+            },
+        },
+    })
+
+    raw_ws = connection._connection
+    loop = asyncio.get_running_loop()
+
+    # Drain any mic audio that accumulated during connection setup
+    while not q.empty():
+        q.get_nowait()
 
     async def stream_mic():
         while True:
-            try:
-                pcm = await asyncio.wait_for(q.get(), timeout=0.1)
-                await ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()}))
-            except asyncio.TimeoutError:
-                pass
+            pcm = await loop.run_in_executor(None, q.get)
+            await raw_ws.send(json.dumps({
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(pcm).decode(),
+            }))
 
     async def handle_events():
-        async for raw in ws:
-            e = json.loads(raw)
+        while True:
+            data = await connection.recv_bytes()
+            e = json.loads(data.decode("utf-8"))
             et = e.get("type", "")
-            if et == "response.output_audio.delta":
+
+            if et == "session.created":
+                print(f"Connected — session {e['session']['id']}")
+                await connection.input_audio_buffer.clear()
+            elif et == "input_audio_buffer.speech_started":
+                player.clear()  # stop agent audio when user interrupts
+            elif et == "response.output_audio.delta":
                 player.play(base64.b64decode(e["delta"]))
             elif et == "response.output_audio_transcript.done":
                 print(f"Agent: {e.get('transcript', '')}")
@@ -97,7 +139,8 @@ async def main():
     except KeyboardInterrupt:
         pass
     finally:
-        mic.stop(); mic.close(); player.close(); await ws.close()
+        mic.stop(); mic.close(); player.close()
+        await connection.close()
 
 
 if __name__ == "__main__":
@@ -114,10 +157,10 @@ Replace `YOUR_ASSEMBLYAI_API_KEY` with your key from the [AssemblyAI dashboard](
 Client                                     Server
   |                                           |
   |--- WebSocket connect -------------------->|
-  |--- session.update (config) -------------->|
-  |--- input_audio_buffer.append ------------>|  stream mic audio
+  |--- session.update (config) -------------->|  send immediately after connect
+  |--- input_audio_buffer.append ------------>|  stream mic audio (start right away)
   |                                           |
-  |<------------ session.created -------------|
+  |<------------ session.created -------------|  clear buffer here
   |<------------ speech_started --------------|  user is talking
   |<------------ speech_stopped --------------|  user finished
   |<------------ transcription.completed -----|  what the user said
@@ -127,9 +170,10 @@ Client                                     Server
 ```
 
 1. **Connect** — Open a WebSocket to `wss://speech-to-speech.assemblyai.com/v1/realtime` with your API key in the `Authorization: Bearer` header.
-2. **Configure** — Send a `session.update` with your voice, instructions, turn detection settings, and any tools.
-3. **Stream audio** — Send base64-encoded PCM16 audio chunks. The server detects when the user starts and stops speaking.
-4. **Receive responses** — The server transcribes the user's speech, generates a response, and streams back audio and text in real time.
+2. **Configure** — Send `session.update` **immediately** after connecting (before `session.created` arrives). Don't wait.
+3. **Stream audio** — Start streaming mic audio right away. The server warms up on this audio before the session is fully ready.
+4. **Clear on `session.created`** — When `session.created` arrives, call `input_audio_buffer.clear()` to discard the warmup audio. From this point, fresh audio flows with your config applied.
+5. **Receive responses** — The server transcribes user speech, generates a response, and streams audio and text in real time.
 
 The API is fully compatible with the OpenAI Realtime protocol, so the [OpenAI Python SDK](https://github.com/openai/openai-python), [LiveKit Agents](https://docs.livekit.io/agents/), and any OpenAI-compatible client work out of the box — just point them at `wss://speech-to-speech.assemblyai.com/v1`.
 
@@ -145,7 +189,7 @@ Describe your agent and we'll generate the complete code — system prompt, tool
 
 ## Configuration
 
-Configure your session by sending a `session.update` event after connecting. The API accepts two session formats depending on your integration approach.
+Configure your session by sending a `session.update` event immediately after connecting. The API accepts two session formats depending on your integration approach.
 
 ### Flat format (Raw WebSocket)
 
@@ -176,12 +220,13 @@ Configure your session by sending a `session.update` event after connecting. The
 
 ### Nested format (OpenAI SDK / LiveKit)
 
-The OpenAI GA SDK and LiveKit plugin use a nested session format.
+The OpenAI GA SDK and LiveKit plugin use a nested session format. Include `"type": "realtime"` in the session object.
 
 ```json
 {
   "type": "session.update",
   "session": {
+    "type": "realtime",
     "instructions": "You are a helpful voice assistant.",
     "output_modalities": ["audio", "text"],
     "audio": {
@@ -285,7 +330,7 @@ The server automatically detects when the user starts and stops speaking using v
 </ParamField>
 
 <ParamField path="threshold" type="float" default="0.5">
-  Speech detection sensitivity (0.0 to 1.0). Lower values detect quieter speech.
+  Speech detection sensitivity (0.0 to 1.0). Lower values detect quieter speech. If the agent is triggering on background noise, raise this to `0.6`–`0.7`.
 </ParamField>
 
 <ParamField path="prefix_padding_ms" type="integer" default="300">
@@ -293,7 +338,7 @@ The server automatically detects when the user starts and stops speaking using v
 </ParamField>
 
 <ParamField path="silence_duration_ms" type="integer" default="200">
-  How long the user must pause before the server considers them done speaking, in milliseconds.
+  How long the user must pause before the server considers them done speaking, in milliseconds. Raise to `400`–`500` if the agent interrupts too eagerly.
 </ParamField>
 
 <ParamField path="create_response" type="boolean" default="true">
@@ -326,39 +371,50 @@ Give your agent the ability to call functions in your application — look up da
 
 ### Handle tool calls
 
-When the agent decides to call a function, the server sends `response.function_call_arguments.done` while the response is still in progress. Start executing the function immediately — you don't need to wait. When `response.done` arrives, send the result back.
+When the agent decides to call a function, it emits `response.output_item.done` with the complete call (name, arguments, call ID). Capture it there, then execute and return the result when `response.done` arrives.
 
 ```python
-pending_tasks = {}
+import uuid
 
-async for raw in ws:
-    e = json.loads(raw)
+pending_calls = []  # tool calls from the current response
+
+async for data in event_stream:
+    e = json.loads(data)
     et = e.get("type", "")
 
-    if et == "response.function_call_arguments.done":
-        # Start executing immediately — don't wait for response.done
-        args = json.loads(e["arguments"])
-        pending_tasks[e["call_id"]] = asyncio.create_task(run_tool(e["name"], args))
+    # Capture tool calls when the output item is fully done
+    if et == "response.output_item.done":
+        item = e.get("item", {})
+        if item.get("type") == "function_call":
+            pending_calls.append({
+                "name": item["name"],
+                "call_id": item["call_id"],
+                "arguments": json.loads(item.get("arguments", "{}")),
+            })
 
-    elif et == "response.done" and pending_tasks:
-        # Response is complete — send back the results
-        for call_id, task in pending_tasks.items():
-            result = await task
-            await ws.send(json.dumps({
-                "type": "conversation.item.create",
-                "item": {
+    # Execute and return results when the response is complete
+    elif et == "response.done":
+        if pending_calls:
+            calls = pending_calls[:]
+            pending_calls.clear()
+            for call in calls:
+                result = run_tool(call["name"], call["arguments"])
+                await connection.conversation.item.create(item={
+                    "id": f"item_{uuid.uuid4().hex[:24]}",  # required
                     "type": "function_call_output",
-                    "call_id": call_id,
+                    "call_id": call["call_id"],
                     "output": json.dumps(result),
-                },
-            }))
-        pending_tasks.clear()
+                })
 
     elif et == "response.output_audio.delta":
         player.play(base64.b64decode(e["delta"]))
 ```
 
-The pattern is: **receive the call** → **start executing immediately** → **send the result when `response.done` arrives**. Your function runs concurrently while the response completes, so there's no wasted time.
+The pattern is: **capture the call** via `response.output_item.done` → **wait for `response.done`** → **send all results**. The server auto-generates the follow-up response after receiving the tool output — no need to call `response.create`.
+
+<Tip>
+Include an `"id"` field in every `function_call_output` item. Without it, the server may not properly associate the result with the function call.
+</Tip>
 
 ---
 
@@ -381,17 +437,18 @@ The pattern is: **receive the call** → **start executing immediately** → **s
 | Event | Description | Key fields |
 |-------|-------------|------------|
 | `session.created` | Session initialized | `session.id` |
+| `session.updated` | Session config applied | `session` |
 | `input_audio_buffer.speech_started` | User started speaking | `audio_start_ms` |
 | `input_audio_buffer.speech_stopped` | User stopped speaking | `audio_end_ms` |
 | `input_audio_buffer.committed` | Audio committed as a turn | — |
 | `conversation.item.created` | New conversation item added | `item` |
 | `conversation.item.input_audio_transcription.completed` | User speech transcribed | `transcript` |
 | `response.created` | Agent started generating a response | — |
+| `response.output_item.done` | Output item complete (incl. function calls) | `item` |
 | `response.output_audio.delta` | Agent audio chunk | `delta`: base64 PCM16 |
 | `response.output_audio.done` | Agent audio complete | — |
 | `response.output_audio_transcript.delta` | Agent text (streaming) | `delta` |
 | `response.output_audio_transcript.done` | Agent text (final) | `transcript` |
-| `response.function_call_arguments.done` | Agent requesting a tool call | `call_id`, `name`, `arguments` |
 | `response.done` | Response complete | `response.status`: `completed` or `cancelled` |
 | `error` | Error occurred | `error.message` |
 
@@ -399,18 +456,262 @@ The pattern is: **receive the call** → **start executing immediately** → **s
 
 ## Complete examples
 
-Production-ready examples for three integration approaches. Each handles microphone input, speaker output, turn detection, transcription, and tool calling.
+Production-ready examples for three integration approaches. Each handles microphone input, speaker output, turn detection, transcription, interruptions, and tool calling.
+
+### OpenAI Python SDK
+
+The recommended approach. Uses the OpenAI GA Realtime API with `client.realtime.connect()` and the nested session format.
+
+```bash
+pip install openai sounddevice
+```
+
+```python
+import asyncio, base64, json, queue, struct, threading, time, uuid
+import sounddevice as sd
+from openai import AsyncOpenAI
+
+API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
+TARGET_RATE = 24000
+
+client = AsyncOpenAI(
+    api_key=API_KEY,
+    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
+)
+
+TOOLS = [{
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current weather for a location",
+    "parameters": {
+        "type": "object",
+        "properties": {"location": {"type": "string", "description": "City name"}},
+        "required": ["location"],
+    },
+}]
+
+
+def run_tool(name, args):
+    if name == "get_weather":
+        return {"temperature": 72, "condition": "sunny", "location": args["location"]}
+    return {"error": f"Unknown tool: {name}"}
+
+
+class AudioPlayer:
+    """Callback-based player — the audio thread pulls from the buffer,
+    so play() returns instantly and never blocks the event loop."""
+    def __init__(self):
+        self._buf = bytearray()
+        self._lock = threading.Lock()
+        self._out = sd.RawOutputStream(
+            samplerate=TARGET_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback,
+        )
+        self._out.start()
+
+    def _callback(self, outdata, frames, time_info, status):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n])
+            del self._buf[:n]
+        if len(chunk) < n:
+            chunk += b'\x00' * (n - len(chunk))
+        outdata[:] = chunk
+
+    def play(self, pcm: bytes):
+        with self._lock:
+            self._buf.extend(pcm)
+
+    def clear(self):
+        """Stop agent audio immediately (call on user interruption)."""
+        with self._lock:
+            self._buf.clear()
+
+    def close(self):
+        self._out.stop(); self._out.close()
+
+
+async def main():
+    player = AudioPlayer()
+    q = queue.Queue()
+
+    # Capture at the device's native sample rate to avoid hidden driver
+    # resampling buffers. We resample to 24kHz ourselves before sending.
+    device_info = sd.query_devices(kind="input")
+    native_rate = int(device_info["default_samplerate"])
+
+    def mic_cb(data, frames, ti, status):
+        q.put_nowait(bytes(data))
+
+    mic = sd.RawInputStream(
+        samplerate=native_rate, channels=1, dtype="int16",
+        blocksize=int(native_rate * 0.02),  # ~20ms chunks
+        callback=mic_cb, latency="low",
+    )
+    mic.start()
+
+    connection = await client.realtime.connect(
+        model="universal-streaming",
+        websocket_connection_options={"compression": None},
+    ).enter()
+
+    # Send config IMMEDIATELY — don't wait for session.created
+    await connection.session.update(session={
+        "type": "realtime",
+        "instructions": "You are a helpful voice assistant. Keep responses brief.",
+        "output_modalities": ["audio", "text"],
+        "audio": {
+            "input": {
+                "format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                "transcription": {"model": "universal-streaming"},
+                "turn_detection": {
+                    "type": "server_vad", "threshold": 0.5,
+                    "prefix_padding_ms": 300, "silence_duration_ms": 200,
+                },
+            },
+            "output": {
+                "format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                "voice": "sage",
+            },
+        },
+        "tools": TOOLS,
+        "tool_choice": "auto",
+    })
+
+    # Use the underlying websocket for audio sends — bypasses SDK
+    # serialization overhead on every chunk
+    raw_ws = connection._connection
+    loop = asyncio.get_running_loop()
+
+    # Drain mic audio that accumulated during the connection handshake
+    while not q.empty():
+        q.get_nowait()
+
+    def resample(pcm: bytes, src_rate: int) -> bytes:
+        """Linear interpolation resample to TARGET_RATE."""
+        if src_rate == TARGET_RATE:
+            return pcm
+        n = len(pcm) // 2
+        samples = struct.unpack(f"<{n}h", pcm)
+        ratio = src_rate / TARGET_RATE
+        out_len = int(n / ratio)
+        out = []
+        for i in range(out_len):
+            si = i * ratio
+            idx = int(si)
+            frac = si - idx
+            s1 = samples[min(idx, n - 1)]
+            s2 = samples[min(idx + 1, n - 1)]
+            out.append(int(s1 + frac * (s2 - s1)))
+        return struct.pack(f"<{out_len}h", *out)
+
+    async def stream_mic():
+        while True:
+            # run_in_executor waits on the thread-safe queue without
+            # blocking the event loop
+            pcm = await loop.run_in_executor(None, q.get)
+            buf = bytearray(pcm)
+            while not q.empty():
+                try:
+                    buf.extend(q.get_nowait())
+                except Exception:
+                    break
+            await raw_ws.send(json.dumps({
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode(),
+            }))
+
+    async def handle_events():
+        pending_calls = []
+        while True:
+            data = await connection.recv_bytes()
+            e = json.loads(data.decode("utf-8"))
+            et = e.get("type", "")
+
+            # Fast path: audio deltas — decode and play with minimal overhead
+            if et == "response.output_audio.delta":
+                player.play(base64.b64decode(e["delta"]))
+                continue
+
+            t = time.strftime("%H:%M:%S")
+
+            if et == "session.created":
+                print(f"[{t}] Connected — session {e['session']['id']}")
+                # Clear warmup audio — fresh audio flows from here
+                await connection.input_audio_buffer.clear()
+
+            elif et == "input_audio_buffer.speech_started":
+                print(f"[{t}] You started speaking")
+                player.clear()  # stop agent audio immediately on interruption
+
+            elif et == "input_audio_buffer.speech_stopped":
+                print(f"[{t}] You stopped speaking")
+
+            elif et == "conversation.item.input_audio_transcription.completed":
+                txt = e.get("transcript", "")
+                if txt:
+                    print(f"[{t}] You:   {txt}")
+
+            elif et == "response.output_audio_transcript.done":
+                print(f"[{t}] Agent: {e.get('transcript', '')}")
+
+            # Capture tool calls when the output item is fully formed
+            elif et == "response.output_item.done":
+                item = e.get("item", {})
+                if item.get("type") == "function_call":
+                    call_id = item.get("call_id", "")
+                    if not any(c["call_id"] == call_id for c in pending_calls):
+                        pending_calls.append({
+                            "name": item.get("name", ""),
+                            "call_id": call_id,
+                            "arguments": json.loads(item.get("arguments", "{}")),
+                        })
+                        print(f"[{t}] Tool:  {item['name']}({item.get('arguments', '{}')})")
+
+            elif et == "response.done":
+                s = e.get("response", {}).get("status", "?")
+                print(f"[{t}] Done ({s})")
+                # Send all tool results — server auto-generates the follow-up response
+                if pending_calls:
+                    calls = pending_calls[:]
+                    pending_calls.clear()
+                    for call in calls:
+                        result = run_tool(call["name"], call["arguments"])
+                        print(f"[{t}]   → {call['name']}: {json.dumps(result)[:80]}")
+                        await connection.conversation.item.create(item={
+                            "id": f"item_{uuid.uuid4().hex[:24]}",
+                            "type": "function_call_output",
+                            "call_id": call["call_id"],
+                            "output": json.dumps(result),
+                        })
+
+            elif et == "error":
+                print(f"[{t}] Error: {e.get('error', {})}")
+
+    print(f"Listening — start talking.\n")
+    try:
+        await asyncio.gather(stream_mic(), handle_events())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        mic.stop(); mic.close(); player.close()
+        await connection.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
 ### Raw WebSocket
 
-Direct WebSocket control using the `websockets` library.
+Direct WebSocket control — useful if you can't use the OpenAI SDK or need the flat session format.
 
 ```bash
 pip install websockets sounddevice
 ```
 
 ```python
-import asyncio, base64, json, threading, time
+import asyncio, base64, json, queue, threading, time, uuid
 import sounddevice as sd
 import websockets
 
@@ -430,8 +731,7 @@ TOOLS = [{
 }]
 
 
-async def run_tool(name, args):
-    """Replace with your own tool implementations."""
+def run_tool(name, args):
     if name == "get_weather":
         return {"temperature": 72, "condition": "sunny", "location": args["location"]}
     return {"error": f"Unknown tool: {name}"}
@@ -442,45 +742,58 @@ class AudioPlayer:
         self._buf = bytearray()
         self._lock = threading.Lock()
         self._out = sd.RawOutputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480, latency="low",
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback,
         )
         self._out.start()
+
+    def _callback(self, outdata, frames, time_info, status):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n])
+            del self._buf[:n]
+        if len(chunk) < n:
+            chunk += b'\x00' * (n - len(chunk))
+        outdata[:] = chunk
 
     def play(self, pcm: bytes):
         with self._lock:
             self._buf.extend(pcm)
-            while len(self._buf) >= 960:
-                self._out.write(bytes(self._buf[:960]))
-                del self._buf[:960]
+
+    def clear(self):
+        with self._lock:
+            self._buf.clear()
 
     def close(self):
-        self._out.stop()
-        self._out.close()
+        self._out.stop(); self._out.close()
 
 
 async def main():
     player = AudioPlayer()
-    q = asyncio.Queue()
+    q = queue.Queue()
 
     def mic_cb(data, frames, ti, status):
         q.put_nowait(bytes(data))
 
     mic = sd.RawInputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480,
-        callback=mic_cb, latency="low",
+        samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+        blocksize=480, callback=mic_cb, latency="low",
     )
     mic.start()
 
+    # websockets 13.x uses extra_headers, 14.x+ uses additional_headers
     try:
         ws = await websockets.connect(WS_URL, extra_headers={"Authorization": f"Bearer {API_KEY}"})
     except TypeError:
         ws = await websockets.connect(WS_URL, additional_headers={"Authorization": f"Bearer {API_KEY}"})
 
+    # Send config immediately
     await ws.send(json.dumps({"type": "session.update", "session": {
         "input_audio_format": "pcm16", "input_audio_sample_rate": SAMPLE_RATE,
         "output_audio_format": "pcm16", "output_audio_sample_rate": SAMPLE_RATE,
         "input_audio_transcription": {"model": "universal-streaming"},
-        "turn_detection": {"type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 300, "silence_duration_ms": 200},
+        "turn_detection": {"type": "server_vad", "threshold": 0.5,
+                           "prefix_padding_ms": 300, "silence_duration_ms": 200},
         "output_modalities": ["audio", "text"],
         "instructions": "You are a helpful voice assistant. Keep responses brief.",
         "voice": "sage",
@@ -488,17 +801,27 @@ async def main():
         "tool_choice": "auto",
     }}))
 
-    pending_tasks = {}
+    loop = asyncio.get_running_loop()
+
+    while not q.empty():
+        q.get_nowait()
 
     async def stream_mic():
         while True:
-            try:
-                pcm = await asyncio.wait_for(q.get(), timeout=0.1)
-                await ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()}))
-            except asyncio.TimeoutError:
-                pass
+            pcm = await loop.run_in_executor(None, q.get)
+            buf = bytearray(pcm)
+            while not q.empty():
+                try:
+                    buf.extend(q.get_nowait())
+                except Exception:
+                    break
+            await ws.send(json.dumps({
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(bytes(buf)).decode(),
+            }))
 
     async def handle_events():
+        pending_calls = []
         async for raw in ws:
             e = json.loads(raw)
             et = e.get("type", "")
@@ -506,31 +829,59 @@ async def main():
 
             if et == "session.created":
                 print(f"[{t}] Connected — session {e['session']['id']}")
+                await ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
+
             elif et == "input_audio_buffer.speech_started":
                 print(f"[{t}] You started speaking")
+                player.clear()
+
             elif et == "input_audio_buffer.speech_stopped":
                 print(f"[{t}] You stopped speaking")
+
             elif et == "conversation.item.input_audio_transcription.completed":
-                print(f"[{t}] You:   {e.get('transcript', '')}")
+                txt = e.get("transcript", "")
+                if txt:
+                    print(f"[{t}] You:   {txt}")
+
             elif et == "response.output_audio.delta":
                 player.play(base64.b64decode(e["delta"]))
+
             elif et == "response.output_audio_transcript.done":
                 print(f"[{t}] Agent: {e.get('transcript', '')}")
-            elif et == "response.function_call_arguments.done":
-                args = json.loads(e["arguments"])
-                pending_tasks[e["call_id"]] = asyncio.create_task(run_tool(e["name"], args))
-                print(f"[{t}] Tool:  {e['name']}({e['arguments']})")
+
+            elif et == "response.output_item.done":
+                item = e.get("item", {})
+                if item.get("type") == "function_call":
+                    call_id = item.get("call_id", "")
+                    if not any(c["call_id"] == call_id for c in pending_calls):
+                        pending_calls.append({
+                            "name": item.get("name", ""),
+                            "call_id": call_id,
+                            "arguments": json.loads(item.get("arguments", "{}")),
+                        })
+                        print(f"[{t}] Tool:  {item['name']}({item.get('arguments', '{}')})")
+
             elif et == "response.done":
                 s = e.get("response", {}).get("status", "?")
                 print(f"[{t}] Done ({s})")
-                if pending_tasks and s == "completed":
-                    for cid, task in pending_tasks.items():
-                        result = await task
+                if pending_calls:
+                    calls = pending_calls[:]
+                    pending_calls.clear()
+                    for call in calls:
+                        result = run_tool(call["name"], call["arguments"])
+                        print(f"[{t}]   → {call['name']}: {json.dumps(result)[:80]}")
                         await ws.send(json.dumps({
                             "type": "conversation.item.create",
-                            "item": {"type": "function_call_output", "call_id": cid, "output": json.dumps(result)},
+                            "item": {
+                                "id": f"item_{uuid.uuid4().hex[:24]}",
+                                "type": "function_call_output",
+                                "call_id": call["call_id"],
+                                "output": json.dumps(result),
+                            },
                         }))
-                    pending_tasks.clear()
+
+            elif et == "error":
+                print(f"[{t}] Error: {e.get('error', {})}")
 
     print("Listening — start talking.\n")
     try:
@@ -539,166 +890,6 @@ async def main():
         pass
     finally:
         mic.stop(); mic.close(); player.close(); await ws.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### OpenAI Python SDK
-
-Uses the OpenAI GA Realtime API. Note the differences from the beta API: `websocket_base_url` instead of `base_url`, `client.realtime.connect()` instead of `client.beta.realtime.connect()`, and the nested session format.
-
-```bash
-pip install openai sounddevice
-```
-
-```python
-import asyncio, base64, json, threading, time
-import sounddevice as sd
-from openai import AsyncOpenAI
-
-API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
-SAMPLE_RATE = 24000
-
-client = AsyncOpenAI(
-    api_key=API_KEY,
-    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
-)
-
-TOOLS = [{
-    "type": "function",
-    "name": "get_weather",
-    "description": "Get the current weather for a location",
-    "parameters": {
-        "type": "object",
-        "properties": {"location": {"type": "string", "description": "City name"}},
-        "required": ["location"],
-    },
-}]
-
-
-async def run_tool(name, args):
-    """Replace with your own tool implementations."""
-    if name == "get_weather":
-        return {"temperature": 72, "condition": "sunny", "location": args["location"]}
-    return {"error": f"Unknown tool: {name}"}
-
-
-class AudioPlayer:
-    def __init__(self):
-        self._buf = bytearray()
-        self._lock = threading.Lock()
-        self._out = sd.RawOutputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480, latency="low",
-        )
-        self._out.start()
-
-    def play(self, pcm: bytes):
-        with self._lock:
-            self._buf.extend(pcm)
-            while len(self._buf) >= 960:
-                self._out.write(bytes(self._buf[:960]))
-                del self._buf[:960]
-
-    def close(self):
-        self._out.stop()
-        self._out.close()
-
-
-async def main():
-    player = AudioPlayer()
-    q = asyncio.Queue()
-
-    def mic_cb(data, frames, ti, status):
-        q.put_nowait(bytes(data))
-
-    mic = sd.RawInputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=480,
-        callback=mic_cb, latency="low",
-    )
-    mic.start()
-
-    connection = await client.realtime.connect(
-        model="universal-streaming",
-        websocket_connection_options={"compression": None},
-    ).enter()
-
-    print("Listening — start talking.\n")
-
-    async def send_config():
-        await connection.session.update(session={
-            "instructions": "You are a helpful voice assistant. Keep responses brief.",
-            "output_modalities": ["audio", "text"],
-            "audio": {
-                "input": {
-                    "format": {"type": "audio/pcm", "rate": 24000},
-                    "transcription": {"model": "universal-streaming"},
-                    "turn_detection": {
-                        "type": "server_vad", "threshold": 0.5,
-                        "prefix_padding_ms": 300, "silence_duration_ms": 200,
-                    },
-                },
-                "output": {
-                    "format": {"type": "audio/pcm", "rate": 24000},
-                    "voice": "sage",
-                },
-            },
-            "tools": TOOLS,
-            "tool_choice": "auto",
-        })
-
-    async def stream_mic():
-        while True:
-            pcm = await q.get()
-            await connection.input_audio_buffer.append(audio=base64.b64encode(pcm).decode())
-
-    async def handle_events():
-        pending_tasks = {}
-        while True:
-            data = await connection.recv_bytes()
-            e = json.loads(data.decode("utf-8"))
-            et = e.get("type", "")
-            t = time.strftime("%H:%M:%S")
-
-            if et == "session.created":
-                print(f"[{t}] Connected — session {e['session']['id']}")
-            elif et == "input_audio_buffer.speech_started":
-                print(f"[{t}] You started speaking")
-            elif et == "input_audio_buffer.speech_stopped":
-                print(f"[{t}] You stopped speaking")
-            elif et == "conversation.item.input_audio_transcription.completed":
-                txt = e.get("transcript", "")
-                if txt:
-                    print(f"[{t}] You:   {txt}")
-            elif et == "response.output_audio.delta":
-                player.play(base64.b64decode(e["delta"]))
-            elif et == "response.output_audio_transcript.done":
-                print(f"[{t}] Agent: {e.get('transcript', '')}")
-            elif et == "response.function_call_arguments.done":
-                args = json.loads(e["arguments"])
-                pending_tasks[e["call_id"]] = asyncio.create_task(run_tool(e["name"], args))
-                print(f"[{t}] Tool:  {e['name']}({e['arguments']})")
-            elif et == "response.done":
-                s = e.get("response", {}).get("status", "?")
-                print(f"[{t}] Done ({s})")
-                if pending_tasks and s == "completed":
-                    for cid, task in pending_tasks.items():
-                        result = await task
-                        await connection.conversation.item.create(item={
-                            "type": "function_call_output", "call_id": cid,
-                            "output": json.dumps(result)})
-                    pending_tasks.clear()
-            elif et == "error":
-                print(f"[{t}] Error: {e.get('error', {})}")
-
-    try:
-        await asyncio.gather(send_config(), stream_mic(), handle_events())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        mic.stop(); mic.close(); player.close()
-        await connection.close()
 
 
 if __name__ == "__main__":
