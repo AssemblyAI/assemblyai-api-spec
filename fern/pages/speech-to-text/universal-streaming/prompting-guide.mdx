@@ -61,26 +61,6 @@ We are actively working to expand Universal-3-Pro's prompting capabilities:
 These improvements are under active development. In the meantime, use `keyterms_prompt` for domain-specific term boosting and instructional prompts for formatting control.
 </Note>
 
-## Optimizing prompts for turn detection
-
-Because Universal-3-Pro's turn detection is punctuation-based, the way the model punctuates its output directly affects when turns end. Prompting gives you a lever to influence that punctuation behavior and improve turn detection accuracy.
-
-Internal testing on 100 audio samples shows that well-crafted punctuation rules significantly reduce false positives (the model incorrectly signaling a turn end) while maintaining near-perfect recall (catching real turn ends):
-
-| Prompt | Accuracy | Recall | False positive rate |
-| ------ | -------- | ------ | ------------------- |
-| **Default** | **88%** | **100%** | **24%** |
-| Prompt omitted | 83% | 100% | 34% |
-
-The default prompt—used when no `prompt` is provided—dropped the false positive rate from 34% to 24% compared to no prompt at all. That translates to fewer false interruptions in production voice agent conversations.
-
-**Key takeaways for prompt design:**
-
-1. **The default prompt already optimizes for turn detection.** When the prompt is omitted entirely, Universal-3-Pro still achieves 83% accuracy thanks to its built-in punctuation behavior—but the built-in default prompt raises this to 88%. Try the default before customizing.
-2. **Concrete punctuation rules work best.** The model responds better to specific formatting instructions (like "use period only for complete sentences") than to abstract conversational framing. Keep custom prompts focused on punctuation behavior.
-3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
-4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
-
 ## Updating configuration mid-stream
 
 You can update prompting parameters during an active streaming session using `UpdateConfiguration`. **The recommended approach is to dynamically update `keyterms_prompt` based on the current stage of your voice agent flow.** If you know what answers or terminology to expect at a given point in the conversation, add those terms with `keyterms_prompt` so the model is primed to recognize them accurately.
@@ -119,3 +99,23 @@ You can also update the `prompt` parameter mid-stream to adjust formatting or be
 ```
 
 Updating `prompt` mid-stream is useful for passing updated behavioral instructions into the STT stream. For domain-specific term recognition, prefer `keyterms_prompt` as described above.
+
+## Optimizing prompts for turn detection
+
+Because Universal-3-Pro's turn detection is punctuation-based, the way the model punctuates its output directly affects when turns end. Prompting gives you a lever to influence that punctuation behavior and improve turn detection accuracy.
+
+Internal testing on 100 audio samples shows that well-crafted punctuation rules significantly reduce false positives (the model incorrectly signaling a turn end) while maintaining near-perfect recall (catching real turn ends):
+
+| Prompt | Accuracy | Recall | False positive rate |
+| ------ | -------- | ------ | ------------------- |
+| **Default** | **88%** | **100%** | **24%** |
+| Prompt omitted | 83% | 100% | 34% |
+
+The default prompt—used when no `prompt` is provided—dropped the false positive rate from 34% to 24% compared to no prompt at all. That translates to fewer false interruptions in production voice agent conversations.
+
+**Key takeaways for prompt design:**
+
+1. **The default prompt already optimizes for turn detection.** When the prompt is omitted entirely, Universal-3-Pro still achieves 83% accuracy thanks to its built-in punctuation behavior—but the built-in default prompt raises this to 88%. Try the default before customizing.
+2. **Concrete punctuation rules work best.** The model responds better to specific formatting instructions (like "use period only for complete sentences") than to abstract conversational framing. Keep custom prompts focused on punctuation behavior.
+3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
+4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
