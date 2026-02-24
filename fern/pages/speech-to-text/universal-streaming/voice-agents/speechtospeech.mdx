@@ -1242,8 +1242,7 @@ Used when connecting with raw WebSocket.
       "type": "server_vad",
       "threshold": 0.5,
       "prefix_padding_ms": 300,
-      "silence_duration_ms": 200,
-      "create_response": true
+      "silence_duration_ms": 200
     },
     "tools": [],
     "tool_choice": "auto"
@@ -1288,8 +1287,7 @@ Used when connecting with raw WebSocket.
   "type": "server_vad",
   "threshold": 0.5,
   "prefix_padding_ms": 300,
-  "silence_duration_ms": 200,
-  "create_response": true
+  "silence_duration_ms": 200
 }
 ```
 
@@ -1303,10 +1301,6 @@ Used when connecting with raw WebSocket.
 
 <ParamField path="silence_duration_ms" type="integer" default="200">
   Pause length before considering a turn complete. **Raise to 400–500ms** if the agent interrupts before the user has finished speaking.
-</ParamField>
-
-<ParamField path="create_response" type="boolean" default="true">
-  Auto-generate a response when the user finishes their turn.
 </ParamField>
 
 ### Voices
@@ -1509,7 +1503,7 @@ if __name__ == "__main__":
 npm install openai
 ```
 
-Browser-based voice agent using Web Audio API for low-latency, gapless playback. Connect via your own proxy server (browsers can't set auth headers on WebSocket — see the proxy pattern below).
+Browser-based voice agent using Web Audio API for low-latency, gapless playback. Browsers can't set auth headers on WebSocket, so connect via a lightweight proxy that injects your API key:
 
 <Accordion title="Full browser example">
 
@@ -1703,7 +1697,47 @@ document.getElementById('start').addEventListener('click', startAgent);
 </Accordion>
 
 <Note>
-Browsers can't set custom headers on WebSocket connections. In production, connect through a proxy server that injects your API key. See the [proxy pattern](/docs/speech-to-text/universal-streaming/voice-agents/proxy) for a minimal FastAPI implementation.
+Browsers can't set custom headers on WebSocket connections. Run a minimal proxy that forwards the connection with your API key injected:
+
+```python proxy.py
+from fastapi import FastAPI, WebSocket
+from openai import AsyncOpenAI
+import asyncio, json
+
+app = FastAPI()
+client = AsyncOpenAI(api_key="YOUR_ASSEMBLYAI_API_KEY",
+                     websocket_base_url="wss://speech-to-speech.assemblyai.com/v1")
+
+@app.websocket("/api/s2s")
+async def proxy(websocket: WebSocket):
+    await websocket.accept()
+    conn = await client.realtime.connect(
+        model="universal-streaming",
+        websocket_connection_options={"compression": None},
+    ).enter()
+    raw_ws = conn._connection
+
+    async def from_client():
+        try:
+            while True:
+                await raw_ws.send(await websocket.receive_text())
+        except Exception: pass
+
+    async def from_server():
+        try:
+            while True:
+                await websocket.send_text((await conn.recv_bytes()).decode())
+        except Exception: pass
+
+    _, pending = await asyncio.wait(
+        [asyncio.create_task(from_client()), asyncio.create_task(from_server())],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for t in pending: t.cancel()
+    await conn.close()
+```
+
+Then connect the browser to `ws://localhost:8000/api/s2s`.
 </Note>
 
 </Tab>
@@ -1923,7 +1957,6 @@ async def entrypoint(ctx: JobContext):
                 threshold=0.5,
                 prefix_padding_ms=300,
                 silence_duration_ms=200,
-                create_response=True,
             ),
         )
     )
