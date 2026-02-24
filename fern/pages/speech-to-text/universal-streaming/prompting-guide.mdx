@@ -83,16 +83,31 @@ The default prompt—used when no `prompt` is provided—dropped the false posit
 
 ## Updating configuration mid-stream
 
-You can update prompting parameters during an active streaming session using `UpdateConfiguration`. The recommended approach is to update `keyterms_prompt` with domain-specific terms as they become relevant during the conversation:
+You can update prompting parameters during an active streaming session using `UpdateConfiguration`. **The recommended approach is to dynamically update `keyterms_prompt` based on the current stage of your voice agent flow.** If you know what answers or terminology to expect at a given point in the conversation, add those terms with `keyterms_prompt` so the model is primed to recognize them accurately.
+
+For example, if your voice agent is currently asking for the caller's name and date of birth, send the expected terms for that stage:
 
 ```json
 {
   "type": "UpdateConfiguration",
-  "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel"]
+  "keyterms_prompt": ["Kelly Byrne-Donoghue", "date of birth", "January", "February"]
 }
 ```
 
-This is the most effective way to improve recognition accuracy mid-stream, because `keyterms_prompt` directly boosts the specified terms. See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for details.
+Then, when the conversation moves to a medical intake stage, update `keyterms_prompt` with the relevant domain terms:
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel", "metoprolol"]
+}
+```
+
+<Tip>
+**Dynamically update `keyterms_prompt` for each stage of your voice agent flow.** If you expect certain answers at a specific stage — names, addresses, account numbers, medical terms — proactively add those as keyterms so the model recognizes them accurately when the caller speaks them. This is the most effective way to improve recognition accuracy mid-stream.
+</Tip>
+
+See [Keyterms prompting](/docs/universal-streaming/keyterms-prompting) for more details on how `keyterms_prompt` works.
 
 You can also update the `prompt` parameter mid-stream to adjust formatting or behavioral instructions:
 
@@ -103,4 +118,4 @@ You can also update the `prompt` parameter mid-stream to adjust formatting or be
 }
 ```
 
-Updating `prompt` or `keyterms_prompt` mid-stream is particularly useful for passing updated context from the agent session (e.g., the agent's responses or newly mentioned terms) into the STT stream to directly influence how the model transcribes the user's next utterance.
+Updating `prompt` mid-stream is useful for passing updated behavioral instructions into the STT stream. For domain-specific term recognition, prefer `keyterms_prompt` as described above.
