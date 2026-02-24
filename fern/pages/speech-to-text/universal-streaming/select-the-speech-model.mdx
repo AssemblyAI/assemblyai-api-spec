@@ -116,6 +116,27 @@ This prompt is designed for turn detection use cases. It ensures the model captu
 Turn detection relies on terminal punctuation (`.` `?` `!`), so custom prompts that reduce or remove punctuation from the transcription output may negatively impact turn detection. The default prompt is optimized for this, so we recommend trying it first before any customization.
 </Note>
 
+#### Optimizing prompts for turn detection
+
+Because Universal-3-Pro's turn detection is punctuation-based, the way the model punctuates its output directly affects when turns end. Prompting gives you a lever to influence that punctuation behavior and improve turn detection accuracy.
+
+Internal testing on 100 audio samples shows that well-crafted punctuation rules significantly reduce false positives (the model incorrectly signaling a turn end) while maintaining near-perfect recall (catching real turn ends):
+
+| Prompt | Accuracy | Recall | False positive rate |
+| ------ | -------- | ------ | ------------------- |
+| **Strict punctuation rules** (default) | **88%** | **100%** | **24%** |
+| No prompt | 83% | 100% | 34% |
+| Turn-signal framing | 80% | 98% | 38% |
+
+The strict punctuation rules prompt—which is the [default prompt](#default-prompt) used when no `prompt` is provided—dropped the false positive rate from 34% to 24% compared to no prompt at all. That translates to fewer false interruptions in production voice agent conversations.
+
+**Key takeaways for prompt design:**
+
+1. **The default prompt already optimizes for turn detection.** Without any custom prompt, Universal-3-Pro still achieves 83% accuracy thanks to its built-in punctuation behavior—but the default prompt improves this further. Try the default before customizing.
+2. **Concrete punctuation rules outperform semantic turn-taking instructions.** A prompt explicitly framed around "turn signals" and "turn detection" performed worse than one with specific punctuation rules. The model responds better to concrete formatting instructions than abstract conversational concepts.
+3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
+4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
+
 ### Updating configuration mid-stream
 
 You can update configuration during an active streaming session using `UpdateConfiguration`. This applies changes without needing to reconnect. You can update `prompt`, `max_turn_silence`, `min_end_of_turn_silence_when_confident`, or any combination at the same time:
