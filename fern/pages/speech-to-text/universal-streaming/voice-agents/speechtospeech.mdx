@@ -1,131 +1,119 @@
 ---
 title: "Speech-to-Speech"
-description: "Build real-time voice agents with a single WebSocket connection. Stream audio in, get intelligent spoken responses back."
+description: "The fastest speech-to-speech API. Build production voice agents with a single WebSocket — built-in VAD, transcription, and function calling included."
 ---
 
-import { AgentGenerator } from "../../../../assets/components/AgentGenerator";
+Stream audio in, get intelligent spoken responses back — with built-in turn detection, real-time transcription, and function calling. OpenAI Realtime-compatible, so your existing clients work out of the box.
 
-Build voice agents with a single WebSocket connection. Stream audio in, get intelligent spoken responses back — with built-in transcription, turn detection, and function calling. The API is compatible with the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime), so you can use the OpenAI SDK or any OpenAI-compatible framework like LiveKit.
+<CardGroup cols={3}>
+  <Card title="300/300 knowledge grounding" icon="bullseye">
+    Perfect score on the S2S benchmark — correctly grounds responses in provided knowledge every time
+  </Card>
+  <Card title="Beats GPT Realtime on instruction following" icon="check">
+    270/300 vs 260/300 — follows complex, multi-step instructions more reliably
+  </Card>
+  <Card title="OpenAI-compatible" icon="plug">
+    Works with any OpenAI Realtime client — just swap the endpoint
+  </Card>
+</CardGroup>
 
-## Quickstart
+| Model | Pass Rate | Tool Use | Instruction Following | Knowledge Grounding |
+|-------|-----------|----------|-----------------------|---------------------|
+| **AssemblyAI** | **90.0%** | 270/300 | 270/300 | **300/300** |
+| GPT Realtime | 86.7% | **271/300** | 260/300 | **300/300** |
+| Gemini Live | 86.0% | 258/300 | 261/300 | 293/300 |
+| Grok Realtime | — | 267/300 | **275/300** | 295/300 |
 
-Install dependencies and talk to your agent in under a minute.
+<Note>
+Benchmark data from [aiewf-eval](https://github.com/kwindla/aiewf-eval) — an open-source evaluation suite for speech-to-speech models covering tool use, instruction following, and knowledge grounding.
+</Note>
 
+---
+
+## Your agent in 30 seconds
+
+<Steps>
+
+<Step title="Install">
 ```bash
 pip install openai sounddevice
 ```
+</Step>
 
-```python
+<Step title="Get your API key">
+Grab your key from the [AssemblyAI dashboard](https://www.assemblyai.com/dashboard/signup).
+</Step>
+
+<Step title="Run this">
+```python agent.py
 import asyncio, base64, json, queue, threading
 import sounddevice as sd
 from openai import AsyncOpenAI
 
-API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
-SAMPLE_RATE = 24000
-
 client = AsyncOpenAI(
-    api_key=API_KEY,
+    api_key="YOUR_ASSEMBLYAI_API_KEY",
     websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
 )
 
-
 class AudioPlayer:
-    """Callback-based player — never blocks the event loop."""
     def __init__(self):
-        self._buf = bytearray()
-        self._lock = threading.Lock()
-        self._out = sd.RawOutputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-            blocksize=480, latency="low", callback=self._callback,
-        )
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=24000, channels=1,
+            dtype="int16", blocksize=480, latency="low", callback=self._cb)
         self._out.start()
-
-    def _callback(self, outdata, frames, time_info, status):
+    def _cb(self, out, frames, *_):
         n = frames * 2
         with self._lock:
-            chunk = bytes(self._buf[:n])
-            del self._buf[:n]
-        if len(chunk) < n:
-            chunk += b'\x00' * (n - len(chunk))
-        outdata[:] = chunk
-
-    def play(self, pcm: bytes):
-        with self._lock:
-            self._buf.extend(pcm)
-
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        out[:] = chunk + b'\x00' * (n - len(chunk))
+    def play(self, pcm):
+        with self._lock: self._buf.extend(pcm)
     def clear(self):
-        with self._lock:
-            self._buf.clear()
-
-    def close(self):
-        self._out.stop(); self._out.close()
-
+        with self._lock: self._buf.clear()
+    def close(self): self._out.stop(); self._out.close()
 
 async def main():
-    player = AudioPlayer()
-    q = queue.Queue()
+    player, q = AudioPlayer(), queue.Queue()
+    sd.RawInputStream(samplerate=24000, channels=1, dtype="int16",
+        blocksize=480, latency="low",
+        callback=lambda d,f,t,s: q.put_nowait(bytes(d))).start()
 
-    def mic_cb(data, frames, ti, status):
-        q.put_nowait(bytes(data))
-
-    mic = sd.RawInputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-        blocksize=480, callback=mic_cb, latency="low",
-    )
-    mic.start()
-
-    connection = await client.realtime.connect(
+    conn = await client.realtime.connect(
         model="universal-streaming",
         websocket_connection_options={"compression": None},
     ).enter()
 
-    # Send config immediately after connecting
-    await connection.session.update(session={
+    await conn.session.update(session={
         "type": "realtime",
         "instructions": "You are a helpful voice assistant. Keep responses brief.",
         "output_modalities": ["audio", "text"],
         "audio": {
-            "input": {
-                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
-                "transcription": {"model": "universal-streaming"},
-                "turn_detection": {
-                    "type": "server_vad", "threshold": 0.5,
-                    "prefix_padding_ms": 300, "silence_duration_ms": 200,
-                },
-            },
-            "output": {
-                "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
-                "voice": "sage",
-            },
+            "input": {"format": {"type": "audio/pcm", "rate": 24000},
+                      "transcription": {"model": "universal-streaming"},
+                      "turn_detection": {"type": "server_vad", "threshold": 0.5,
+                                         "prefix_padding_ms": 300, "silence_duration_ms": 200}},
+            "output": {"format": {"type": "audio/pcm", "rate": 24000}, "voice": "sage"},
         },
     })
 
-    raw_ws = connection._connection
+    raw_ws = conn._connection
     loop = asyncio.get_running_loop()
-
-    # Drain any mic audio that accumulated during connection setup
-    while not q.empty():
-        q.get_nowait()
+    while not q.empty(): q.get_nowait()  # drain stale mic audio
 
     async def stream_mic():
         while True:
             pcm = await loop.run_in_executor(None, q.get)
-            await raw_ws.send(json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(pcm).decode(),
-            }))
+            await raw_ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(pcm).decode()}))
 
     async def handle_events():
         while True:
-            data = await connection.recv_bytes()
-            e = json.loads(data.decode("utf-8"))
+            e = json.loads((await conn.recv_bytes()).decode())
             et = e.get("type", "")
-
             if et == "session.created":
-                print(f"Connected — session {e['session']['id']}")
-                await connection.input_audio_buffer.clear()
+                await conn.input_audio_buffer.clear()
             elif et == "input_audio_buffer.speech_started":
-                player.clear()  # stop agent audio when user interrupts
+                player.clear()
             elif et == "response.output_audio.delta":
                 player.play(base64.b64decode(e["delta"]))
             elif et == "response.output_audio_transcript.done":
@@ -133,21 +121,1012 @@ async def main():
             elif et == "conversation.item.input_audio_transcription.completed":
                 print(f"You:   {e.get('transcript', '')}")
 
-    print("Listening — start talking.\n")
     try:
         await asyncio.gather(stream_mic(), handle_events())
     except KeyboardInterrupt:
         pass
     finally:
-        mic.stop(); mic.close(); player.close()
-        await connection.close()
+        player.close(); await conn.close()
+
+asyncio.run(main())
+```
+</Step>
+
+<Step title="Start talking">
+```bash
+python agent.py
+```
+You'll see transcripts in the terminal and hear the agent respond in real time.
+</Step>
+
+</Steps>
+
+<Tip>
+That's the entire stack — mic capture, VAD, transcription, LLM, and TTS — in one script. Keep reading to build something real.
+</Tip>
+
+---
+
+## What you can build
+
+These aren't toy demos — they're production-quality voice agents you can copy, run, and iterate on in minutes.
+
+<CardGroup cols={3}>
+  <Card title="🍕 Pizza order taker" href="#pizza-order-taker">
+    Takes a complete order through natural conversation. Handles toppings, sizes, delivery addresses, and specials. Calls a single tool at checkout — no mid-conversation tool spam. Stage-based prompting keeps the agent focused at each phase.
+  </Card>
+  <Card title="🔧 Auto service desk" href="#auto-service-desk">
+    Diagnoses car problems by asking smart follow-up questions ("does it happen all the time?", "any warning lights?"), suggests the right service, then books an appointment. The LLM's reasoning does the diagnostic work — no lookup tables needed.
+  </Card>
+  <Card title="🏥 ENT appointment setter" href="#ent-appointment-setter">
+    Routes callers to the right specialist based on their symptoms, checks doctor availability, and confirms all details before booking. Handles new vs. returning patients, allergy checks, and scheduling constraints.
+  </Card>
+</CardGroup>
+
+---
+
+## Agent examples
+
+<Tabs>
+
+<Tab title="🍕 Pizza order taker">
+
+A full pizza ordering experience — the agent answers the phone, takes the order through conversation, and only calls a tool once when the customer confirms. No tool calls mid-order.
+
+**Try saying:** *"Hi, I'd like a large pepperoni with extra cheese for delivery to 42 Main Street."*
+
+**What makes it interesting:** The `place_order` tool is called exactly once at the end with the entire order — items, delivery method, and address all gathered from conversation context. Stage-based prompting shifts the agent's instructions as the call progresses.
+
+```python Key snippets
+STAGE_INSTRUCTIONS = {
+    "greeting": """You work the phones at Sal's Pizza.
+Your opener is "Sal's Pizza, pickup or delivery?" — nothing more.""",
+
+    "ordering": """Take items one by one. "Got it, what else?" after each.
+Remember everything from the conversation — no tools yet.
+When done: read back the order, ask "that sound right?"
+Only call place_order AFTER they confirm.""",
+
+    "placed": """Order is placed. Just say the total and ETA from the result.
+Do NOT repeat the items. Do NOT call more tools.""",
+}
+
+TOOLS = [{
+    "type": "function",
+    "name": "place_order",
+    "description": "Place the complete order. Call ONCE after the customer confirms.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {"type": "object", "properties": {
+                    "type": {"type": "string", "description": "'pizza' or 'side' or 'drink'"},
+                    "size": {"type": "string"},
+                    "toppings": {"type": "array", "items": {"type": "string"}},
+                    "special": {"type": "string", "description": "Meat Lover's, Veggie Supreme, or BBQ Chicken"},
+                    "name": {"type": "string", "description": "For sides/drinks"},
+                    "quantity": {"type": "integer"},
+                }},
+            },
+            "method": {"type": "string", "description": "'delivery' or 'pickup'"},
+            "address": {"type": "string"},
+        },
+        "required": ["items", "method"],
+    },
+}]
+```
+
+<Accordion title="Full runnable script">
+
+```python pizza_agent.py
+import asyncio, base64, datetime, json, queue, struct, threading, time, uuid
+import sounddevice as sd
+from openai import AsyncOpenAI
+
+API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
+TARGET_RATE = 24000
+
+client = AsyncOpenAI(
+    api_key=API_KEY,
+    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
+)
+
+MENU = {
+    "sizes": {"small": 8.99, "medium": 11.99, "large": 14.99, "extra-large": 17.99},
+    "toppings": {"pepperoni": 1.50, "sausage": 1.50, "bacon": 2.00, "ham": 1.50,
+                 "chicken": 2.00, "mushrooms": 1.00, "onions": 1.00, "peppers": 1.00,
+                 "olives": 1.00, "jalapeños": 1.00, "pineapple": 1.50, "extra cheese": 1.50},
+    "sides": {"garlic bread": 4.99, "wings (6pc)": 7.99, "wings (12pc)": 13.99, "caesar salad": 6.99},
+    "drinks": {"coke": 2.49, "diet coke": 2.49, "sprite": 2.49, "water": 1.99},
+    "specials": {
+        "Meat Lover's": {"toppings": ["pepperoni", "sausage", "bacon", "ham"], "discount": 2.00},
+        "Veggie Supreme": {"toppings": ["mushrooms", "onions", "peppers", "olives"], "discount": 2.50},
+        "BBQ Chicken": {"toppings": ["chicken", "onions", "bacon", "extra cheese"], "discount": 1.50},
+    },
+}
+
+orders = {}
+
+
+def calc_order(items):
+    line_items = []
+    for item in items:
+        if item.get("type") == "pizza":
+            size = item.get("size", "large")
+            base = MENU["sizes"].get(size, 14.99)
+            toppings = item.get("toppings", [])
+            special = item.get("special")
+            if special and special in MENU["specials"]:
+                toppings = MENU["specials"][special]["toppings"]
+                discount = MENU["specials"][special]["discount"]
+            else:
+                discount = 0
+            price = round(max(base + sum(MENU["toppings"].get(t, 1.00) for t in toppings) - discount, 0), 2)
+            line_items.append({"description": f"{size} {special or ', '.join(toppings) or 'cheese'} pizza", "price": price})
+        else:
+            name = item.get("name", "")
+            qty = item.get("quantity", 1)
+            unit = MENU["sides"].get(name) or MENU["drinks"].get(name)
+            if unit:
+                line_items.append({"description": f"{qty}x {name}", "price": round(unit * qty, 2)})
+    return line_items, sum(i["price"] for i in line_items)
+
+
+def run_tool(name, args):
+    if name != "place_order":
+        return {"error": f"Unknown tool: {name}"}
+    items = args.get("items", [])
+    method = args.get("method", "pickup")
+    address = args.get("address", "")
+    if not items:
+        return {"error": "No items in order"}
+    if method == "delivery" and not address:
+        return {"error": "Need address for delivery"}
+    line_items, subtotal = calc_order(items)
+    delivery_fee = 3.99 if method == "delivery" else 0
+    tax = round((subtotal + delivery_fee) * 0.08, 2)
+    return {
+        "confirmed": True,
+        "total": f"${round(subtotal + delivery_fee + tax, 2):.2f}",
+        "estimated_time": "30-45 min" if method == "delivery" else "15-20 min",
+    }
+
+
+TOOLS = [{
+    "type": "function",
+    "name": "place_order",
+    "description": "Place the complete order. Call ONCE after the customer confirms.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {"type": "object", "properties": {
+                    "type": {"type": "string"},
+                    "size": {"type": "string"},
+                    "toppings": {"type": "array", "items": {"type": "string"}},
+                    "special": {"type": "string"},
+                    "name": {"type": "string"},
+                    "quantity": {"type": "integer"},
+                }},
+            },
+            "method": {"type": "string", "description": "'delivery' or 'pickup'"},
+            "address": {"type": "string"},
+        },
+        "required": ["items", "method"],
+    },
+}]
+
+VOICE = """You ARE a real person. Max 1-2 sentences. "Got it", "cool", "yep" — not "Absolutely!" or "I'd be happy to!"
+NEVER say: certainly, absolutely, I'd be happy to, great question, fantastic."""
+
+STAGE_INSTRUCTIONS = {
+    "greeting": VOICE + "\n\nYou work the phones at Sal's Pizza. Your opener: \"Sal's Pizza, pickup or delivery?\" Nothing more.",
+    "ordering": VOICE + f"""
+
+You're taking a pizza order at Sal's. Take items one by one. "Got it, what else?" after each.
+Remember everything from conversation — no tools yet. Default to regular crust.
+When done: "anything else?" once, then read back and ask "that sound right?"
+Only call place_order AFTER they confirm.
+
+Menu: small $8.99, medium $11.99, large $14.99, XL $17.99. Toppings $1-2 each.
+Specials: Meat Lover's ($2 off), Veggie Supreme ($2.50 off), BBQ Chicken ($1.50 off).
+Sides: garlic bread $4.99, wings 6pc $7.99/12pc $13.99. Drinks $2.49. Delivery: $3.99.""",
+    "placed": VOICE + "\n\nOrder placed. Just say total + ETA from the result. Do NOT repeat items. Do NOT call more tools.",
+}
+
+
+class AudioPlayer:
+    def __init__(self):
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=TARGET_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback)
+        self._out.start()
+
+    def _callback(self, outdata, frames, *_):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        outdata[:] = chunk + b'\x00' * (n - len(chunk))
+
+    def play(self, pcm):
+        with self._lock: self._buf.extend(pcm)
+
+    def clear(self):
+        with self._lock: self._buf.clear()
+
+    def close(self): self._out.stop(); self._out.close()
+
+
+def resample(pcm: bytes, src: int) -> bytes:
+    if src == TARGET_RATE: return pcm
+    n = len(pcm) // 2
+    samps = struct.unpack(f"<{n}h", pcm)
+    r = src / TARGET_RATE
+    out = [int(samps[min(int(i*r), n-1)] + (samps[min(int(i*r)+1, n-1)] - samps[min(int(i*r), n-1)]) * (i*r - int(i*r)))
+           for i in range(int(n / r))]
+    return struct.pack(f"<{len(out)}h", *out)
+
+
+async def main():
+    player, q = AudioPlayer(), queue.Queue()
+    dev = sd.query_devices(kind="input")
+    native_rate = int(dev["default_samplerate"])
+    sd.RawInputStream(samplerate=native_rate, channels=1, dtype="int16",
+        blocksize=int(native_rate * 0.02), latency="low",
+        callback=lambda d,f,t,s: q.put_nowait(bytes(d))).start()
+
+    conn = await client.realtime.connect(
+        model="universal-streaming",
+        websocket_connection_options={"compression": None},
+    ).enter()
+
+    await conn.session.update(session={
+        "type": "realtime",
+        "instructions": STAGE_INSTRUCTIONS["greeting"],
+        "output_modalities": ["audio", "text"],
+        "audio": {
+            "input": {"format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                      "transcription": {"model": "universal-streaming"},
+                      "turn_detection": {"type": "server_vad", "threshold": 0.6,
+                                         "prefix_padding_ms": 300, "silence_duration_ms": 500}},
+            "output": {"format": {"type": "audio/pcm", "rate": TARGET_RATE}, "voice": "sage"},
+        },
+        "tools": TOOLS, "tool_choice": "auto",
+    })
+
+    raw_ws = conn._connection
+    loop = asyncio.get_running_loop()
+    while not q.empty(): q.get_nowait()
+
+    async def set_stage(name):
+        await conn.session.update(session={"type": "realtime", "instructions": STAGE_INSTRUCTIONS[name]})
+
+    stage = "greeting"
+    user_turns = 0
+
+    async def stream_mic():
+        while True:
+            pcm = await loop.run_in_executor(None, q.get)
+            buf = bytearray(pcm)
+            while not q.empty():
+                try: buf.extend(q.get_nowait())
+                except: break
+            await raw_ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode()}))
+
+    async def handle_events():
+        nonlocal stage, user_turns
+        pending_call = None
+        while True:
+            e = json.loads((await conn.recv_bytes()).decode())
+            et = e.get("type", "")
+            if et == "response.output_audio.delta":
+                player.play(base64.b64decode(e["delta"])); continue
+            t = time.strftime("%H:%M:%S")
+            if et == "session.created":
+                await conn.input_audio_buffer.clear()
+            elif et == "input_audio_buffer.speech_started":
+                player.clear()
+                user_turns += 1
+                if stage == "greeting" and user_turns >= 2:
+                    stage = "ordering"; await set_stage("ordering")
+            elif et == "response.output_audio_transcript.done":
+                print(f"[{t}] Sal's: {e.get('transcript', '')}")
+            elif et == "response.output_item.done":
+                item = e.get("item", {})
+                if item.get("type") == "function_call" and not pending_call:
+                    pending_call = {"call_id": item["call_id"], "arguments": json.loads(item.get("arguments", "{}"))}
+            elif et == "response.done":
+                if pending_call:
+                    stage = "placed"; await set_stage("placed")
+                    result = run_tool("place_order", pending_call["arguments"])
+                    print(f"[{t}] 🧾 {result.get('total', '?')} — {result.get('estimated_time', '?')}")
+                    await conn.conversation.item.create(item={
+                        "id": f"item_{uuid.uuid4().hex[:24]}", "type": "function_call_output",
+                        "call_id": pending_call["call_id"], "output": json.dumps(result),
+                    })
+                    pending_call = None
+                elif stage == "greeting" and e.get("response", {}).get("status") == "completed" and user_turns >= 1:
+                    stage = "ordering"; await set_stage("ordering")
+            elif et == "error":
+                print(f"[{t}] Error: {e.get('error', {})}")
+
+    print("\n🍕 Sal's Pizza — Order Line\n")
+    try:
+        await asyncio.gather(stream_mic(), handle_events())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        player.close(); await conn.close()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Replace `YOUR_ASSEMBLYAI_API_KEY` with your key from the [AssemblyAI dashboard](https://www.assemblyai.com/dashboard/signup), run the script, and start talking.
+</Accordion>
+
+</Tab>
+
+<Tab title="🔧 Auto service desk">
+
+A mechanic's service advisor that diagnoses car problems through conversation before booking. No lookup tables — the LLM does the reasoning.
+
+**Try saying:** *"My brakes are making a grinding noise when I slow down."*
+
+**What makes it interesting:** The agent asks smart diagnostic follow-ups ("does it happen all the time?", "any warning lights?", "what's the mileage?") and maps symptoms to the right service. One tool call at the end with everything.
+
+```python Key snippets
+STAGES = {
+    "greeting": """Answer: "Mike's Auto, this is the service desk, how can I help?"
+Find out what's going on. Don't use tools.""",
+
+    "diagnosing": """Figure out the problem. Ask one question at a time:
+- "When did it start?"
+- "Does it happen all the time or sometimes?"
+- "Any warning lights?"
+- "Roughly how many miles?"
+You know cars — grinding brakes = worn pads. Check engine light = diagnostic.
+Once you have a clear picture, confirm details and only then call book_service.""",
+
+    "booked": """Appointment booked. Just give them the date and time.
+Mention the lockbox if they're dropping off early. Say bye. No more tools.""",
+}
+
+# Symptom → service mappings the agent knows:
+# Grinding/squealing when braking → brake inspection/replacement
+# Check engine light → engine diagnostic ($95-125)
+# Won't start / slow crank → battery test
+# AC not cold → AC service ($125-250)
+# Pulling to one side → alignment check
+# Vibration at speed → tire balance
+```
+
+<Accordion title="Full runnable script">
+
+```python mechanic_agent.py
+import asyncio, base64, datetime, json, queue, struct, threading, time, uuid
+import sounddevice as sd
+from openai import AsyncOpenAI
+
+API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
+TARGET_RATE = 24000
+
+client = AsyncOpenAI(
+    api_key=API_KEY,
+    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
+)
+
+TODAY = datetime.date.today()
+bookings = {}
+
+
+def get_available_slots(date_str):
+    booked = {b["time"] for b in bookings.values() if b["date"] == date_str}
+    return [f"{h:02d}:{m:02d}" for h in range(8, 17) for m in [0, 30] if f"{h:02d}:{m:02d}" not in booked]
+
+
+def run_tool(name, args):
+    if name != "book_service": return {"error": f"Unknown: {name}"}
+    customer = args.get("customer_name", "")
+    vehicle = args.get("vehicle", "")
+    issue = args.get("issue_description", "")
+    date = args.get("date", "")
+    time_slot = args.get("time", "")
+    if not all([customer, vehicle, issue, date, time_slot]):
+        return {"error": "Missing: customer_name, vehicle, issue_description, date, time"}
+    try: d = datetime.date.fromisoformat(date)
+    except ValueError: return {"error": f"Bad date: {date}"}
+    if d < TODAY: return {"error": "Can't book in the past"}
+    if d.weekday() >= 6: return {"error": "Closed Sundays"}
+    available = get_available_slots(date)
+    if time_slot not in available:
+        return {"error": f"{time_slot} taken. Open: {', '.join(available[:4])}"}
+    booking_id = f"MA-{uuid.uuid4().hex[:6].upper()}"
+    bookings[booking_id] = {"id": booking_id, "customer": customer, "vehicle": vehicle,
+                             "issue": issue, "date": date, "time": time_slot,
+                             "drop_off": args.get("drop_off", False)}
+    return {"confirmed": True, "booking_id": booking_id, "date": d.strftime("%A %B %d"),
+            "time": time_slot, "drop_off_note": "Lockbox by the front door for early drop-off." if args.get("drop_off") else None}
+
+
+TOOLS = [{
+    "type": "function",
+    "name": "book_service",
+    "description": "Book a service appointment. Call ONCE after confirming all details.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "customer_name": {"type": "string"},
+            "phone": {"type": "string"},
+            "vehicle": {"type": "string", "description": "Year make model (e.g. '2019 Honda Civic')"},
+            "mileage": {"type": "string"},
+            "issue_description": {"type": "string"},
+            "suggested_service": {"type": "string"},
+            "date": {"type": "string", "description": "YYYY-MM-DD"},
+            "time": {"type": "string", "description": "HH:MM (24h)"},
+            "drop_off": {"type": "boolean"},
+        },
+        "required": ["customer_name", "vehicle", "issue_description", "date", "time"],
+    },
+}]
+
+VOICE = """You ARE a real person. You're the service advisor at Mike's Auto. Friendly, knows cars. Max 1-2 sentences.
+"Yeah", "got it", "mm-hmm" — not "Absolutely!" or "I'd be happy to!"
+NEVER say: certainly, absolutely, I'd be happy to, great question, fantastic."""
+
+STAGES = {
+    "greeting": VOICE + f"\n\nAnswer: \"Mike's Auto, service desk, how can I help?\"\nFind out what's wrong. Don't use tools. Today: {TODAY.strftime('%A, %B %d, %Y')}. Open Mon-Sat 8-5.",
+    "diagnosing": VOICE + f"""
+
+Figure out the problem. Ask one follow-up at a time — react to answers naturally.
+Ask: when it started, if it's constant or intermittent, warning lights, mileage, what kind of car.
+Based on symptoms, suggest what it might be and what service is needed.
+You know cars: grinding brakes = worn pads; check engine = diagnostic; won't start = battery; AC not cold = recharge.
+Once you have everything, confirm: "[name], [vehicle], [issue], [date] at [time]. That right?"
+Only call book_service AFTER they confirm. Today: {TODAY.strftime('%A, %B %d, %Y')}.""",
+    "booked": VOICE + "\n\nAppointment booked. Give date + time. Mention lockbox for early drop-off. Ask if anything else. Say bye. No more tools.",
+}
+
+
+class AudioPlayer:
+    def __init__(self):
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=TARGET_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._cb)
+        self._out.start()
+
+    def _cb(self, out, frames, *_):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        out[:] = chunk + b'\x00' * (n - len(chunk))
+
+    def play(self, pcm):
+        with self._lock: self._buf.extend(pcm)
+
+    def clear(self):
+        with self._lock: self._buf.clear()
+
+    def close(self): self._out.stop(); self._out.close()
+
+
+def resample(pcm, src):
+    if src == TARGET_RATE: return pcm
+    n = len(pcm) // 2; samps = struct.unpack(f"<{n}h", pcm); r = src / TARGET_RATE
+    out = [int(samps[min(int(i*r), n-1)] + (samps[min(int(i*r)+1, n-1)] - samps[min(int(i*r), n-1)]) * (i*r - int(i*r)))
+           for i in range(int(n / r))]
+    return struct.pack(f"<{len(out)}h", *out)
+
+
+async def main():
+    player, q = AudioPlayer(), queue.Queue()
+    dev = sd.query_devices(kind="input")
+    native_rate = int(dev["default_samplerate"])
+    sd.RawInputStream(samplerate=native_rate, channels=1, dtype="int16",
+        blocksize=int(native_rate * 0.02), latency="low",
+        callback=lambda d,f,t,s: q.put_nowait(bytes(d))).start()
+
+    conn = await client.realtime.connect(
+        model="universal-streaming", websocket_connection_options={"compression": None},
+    ).enter()
+    await conn.session.update(session={
+        "type": "realtime", "instructions": STAGES["greeting"],
+        "output_modalities": ["audio", "text"],
+        "audio": {
+            "input": {"format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                      "transcription": {"model": "universal-streaming"},
+                      "turn_detection": {"type": "server_vad", "threshold": 0.6,
+                                         "prefix_padding_ms": 300, "silence_duration_ms": 500}},
+            "output": {"format": {"type": "audio/pcm", "rate": TARGET_RATE}, "voice": "sage"},
+        },
+        "tools": TOOLS, "tool_choice": "auto",
+    })
+
+    raw_ws = conn._connection
+    loop = asyncio.get_running_loop()
+    while not q.empty(): q.get_nowait()
+
+    async def set_stage(name):
+        await conn.session.update(session={"type": "realtime", "instructions": STAGES[name]})
+
+    stage = "greeting"
+    user_turns = 0
+
+    async def stream_mic():
+        while True:
+            pcm = await loop.run_in_executor(None, q.get)
+            buf = bytearray(pcm)
+            while not q.empty():
+                try: buf.extend(q.get_nowait())
+                except: break
+            await raw_ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode()}))
+
+    async def handle_events():
+        nonlocal stage, user_turns
+        pending = None
+        while True:
+            e = json.loads((await conn.recv_bytes()).decode())
+            et = e.get("type", "")
+            if et == "response.output_audio.delta":
+                player.play(base64.b64decode(e["delta"])); continue
+            t = time.strftime("%H:%M:%S")
+            if et == "session.created": await conn.input_audio_buffer.clear()
+            elif et == "input_audio_buffer.speech_started":
+                player.clear(); user_turns += 1
+                if stage == "greeting" and user_turns >= 2:
+                    stage = "diagnosing"; await set_stage("diagnosing")
+            elif et == "response.output_audio_transcript.done":
+                print(f"[{t}] Mike's: {e.get('transcript', '')}")
+            elif et == "response.output_item.done":
+                item = e.get("item", {})
+                if item.get("type") == "function_call" and not pending:
+                    pending = {"call_id": item["call_id"], "arguments": json.loads(item.get("arguments", "{}"))}
+                    print(f"[{t}] 🔧 booking...")
+            elif et == "response.done":
+                if pending:
+                    stage = "booked"; await set_stage("booked")
+                    result = run_tool("book_service", pending["arguments"])
+                    if result.get("confirmed"): print(f"[{t}] ✅ {result['date']} at {result['time']}")
+                    else:
+                        print(f"[{t}] ❌ {result.get('error')}"); stage = "diagnosing"; await set_stage("diagnosing")
+                    await conn.conversation.item.create(item={
+                        "id": f"item_{uuid.uuid4().hex[:24]}", "type": "function_call_output",
+                        "call_id": pending["call_id"], "output": json.dumps(result),
+                    })
+                    pending = None
+                elif stage == "greeting" and e.get("response", {}).get("status") == "completed" and user_turns >= 1:
+                    stage = "diagnosing"; await set_stage("diagnosing")
+            elif et == "error": print(f"[{t}] Error: {e.get('error', {})}")
+
+    print(f"\n🔧 Mike's Auto — Service Desk\nToday: {TODAY.strftime('%A, %B %d, %Y')}\n")
+    try:
+        await asyncio.gather(stream_mic(), handle_events())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        player.close(); await conn.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+</Accordion>
+
+</Tab>
+
+<Tab title="🏥 ENT appointment setter">
+
+Routes callers to the right specialist based on their symptoms, finds an available slot, and books the appointment. Handles new vs. returning patients and scheduling constraints.
+
+**Try saying:** *"Hi, I've been having really bad sinus pressure for a few weeks."*
+
+**What makes it interesting:** The agent recommends the right doctor based on described symptoms (sinus → Dr. Okafor, child → Dr. Sharma, lump → Dr. Liu), gathers patient info conversationally, and only books after confirmation. Falls back gracefully on scheduling errors.
+
+```python Key snippets
+PROVIDERS = {
+    "Dr. Sarah Chen":    {"specialty": "General ENT",         "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"]},
+    "Dr. Michael Okafor":{"specialty": "Sinus & Allergy",     "days": ["Monday","Wednesday","Friday"]},
+    "Dr. Priya Sharma":  {"specialty": "Pediatric ENT",       "days": ["Tuesday","Thursday"]},
+    "Dr. James Liu":     {"specialty": "Head & Neck Surgery", "days": ["Monday","Tuesday","Thursday"]},
+}
+
+# Routing logic lives in the prompt — no hard-coded rules:
+# "Sinus issues, allergies, congestion → Dr. Okafor"
+# "Kids → Dr. Sharma"
+# "Lumps, growths, post-surgical → Dr. Liu"
+# "Everything else → Dr. Chen (Mon-Fri)"
+```
+
+<Accordion title="Full runnable script">
+
+```python ent_agent.py
+import asyncio, base64, datetime, json, queue, struct, threading, time, uuid
+import sounddevice as sd
+from openai import AsyncOpenAI
+
+API_KEY = "YOUR_ASSEMBLYAI_API_KEY"
+TARGET_RATE = 24000
+
+client = AsyncOpenAI(
+    api_key=API_KEY,
+    websocket_base_url="wss://speech-to-speech.assemblyai.com/v1",
+)
+
+TODAY = datetime.date.today()
+PROVIDERS = {
+    "Dr. Sarah Chen":    {"specialty": "General ENT",         "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"]},
+    "Dr. Michael Okafor":{"specialty": "Sinus & Allergy",     "days": ["Monday","Wednesday","Friday"]},
+    "Dr. Priya Sharma":  {"specialty": "Pediatric ENT",       "days": ["Tuesday","Thursday"]},
+    "Dr. James Liu":     {"specialty": "Head & Neck Surgery", "days": ["Monday","Tuesday","Thursday"]},
+}
+appointments = {}
+
+
+def get_slots(provider, date):
+    booked = {a["time"] for a in appointments.values() if a["provider"] == provider and a["date"] == date}
+    return [f"{h:02d}:{m:02d}" for h in range(8, 17) for m in [0, 30] if f"{h:02d}:{m:02d}" not in booked]
+
+
+def run_tool(name, args):
+    if name != "book_appointment": return {"error": f"Unknown: {name}"}
+    patient = args.get("patient_name", "")
+    provider = args.get("provider", "")
+    date = args.get("date", "")
+    slot = args.get("time", "")
+    reason = args.get("reason", "")
+    if not all([patient, provider, date, slot, reason]):
+        return {"error": "Missing: patient_name, provider, date, time, reason"}
+    if provider not in PROVIDERS: return {"error": f"Unknown provider. Use: {list(PROVIDERS.keys())}"}
+    try: d = datetime.date.fromisoformat(date)
+    except: return {"error": f"Bad date: {date}"}
+    day = d.strftime("%A")
+    if day not in PROVIDERS[provider]["days"]:
+        return {"error": f"{provider} doesn't work {day}s. Available: {', '.join(PROVIDERS[provider]['days'])}"}
+    if d < TODAY: return {"error": "Can't book in the past"}
+    available = get_slots(provider, date)
+    if slot not in available: return {"error": f"{slot} not available. Open: {', '.join(available[:5])}"}
+    apt_id = f"ENT-{uuid.uuid4().hex[:6].upper()}"
+    appointments[apt_id] = {"id": apt_id, "patient": patient, "provider": provider,
+                             "date": date, "time": slot, "reason": reason,
+                             "new_patient": args.get("new_patient", False)}
+    return {"confirmed": True, "appointment_id": apt_id,
+            "summary": f"{patient} with {provider} on {d.strftime('%A %B %d')} at {slot}",
+            "arrive_early": args.get("new_patient", False)}
+
+
+TOOLS = [{
+    "type": "function",
+    "name": "book_appointment",
+    "description": "Book an ENT appointment. Call ONCE after confirming all details.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "patient_name": {"type": "string"},
+            "provider": {"type": "string", "description": "Doctor's full name"},
+            "date": {"type": "string", "description": "YYYY-MM-DD"},
+            "time": {"type": "string", "description": "HH:MM (24h)"},
+            "reason": {"type": "string"},
+            "phone": {"type": "string"},
+            "new_patient": {"type": "boolean"},
+        },
+        "required": ["patient_name", "provider", "date", "time", "reason"],
+    },
+}]
+
+VOICE = """You ARE a real person. Warm but efficient — you're busy. Max 1-2 sentences.
+"Sure thing", "got it", "mm-hmm" — not "Absolutely!" or "I'd be happy to!"
+NEVER say: certainly, absolutely, I'd be happy to, great question, fantastic."""
+
+STAGES = {
+    "greeting": VOICE + f"\n\nYou're the receptionist at Riverside ENT Associates. Answer: \"Riverside ENT, how can I help you?\"\nFind out what they need. Ask if new or existing. Don't use tools. Today: {TODAY.strftime('%A, %B %d, %Y')}.",
+    "scheduling": VOICE + f"""
+
+You're scheduling at Riverside ENT. Gather through conversation: patient name, what they need seen for, preferred date/time, callback number.
+Suggest the right doctor based on their symptoms. Don't use tools yet.
+
+Today: {TODAY.strftime('%A, %B %d, %Y')}.
+Doctors:
+- Dr. Sarah Chen — General ENT (Mon-Fri). Good default.
+- Dr. Michael Okafor — Sinus & Allergy (Mon/Wed/Fri). Sinus, allergies, congestion.
+- Dr. Priya Sharma — Pediatric ENT (Tue/Thu). Kids.
+- Dr. James Liu — Head & Neck Surgery (Mon/Tue/Thu). Lumps, growths, post-surgical.
+
+Once you have everything: "[name] with [doctor] on [date] at [time] for [reason]. Sound right?"
+Only call book_appointment AFTER they confirm.""",
+    "booked": VOICE + "\n\nAppointment booked. Tell them the confirmation (date, time, doctor).\nIf new patient, mention arriving 15 min early for paperwork. Ask if anything else. Say bye. No more tools.",
+}
+
+
+class AudioPlayer:
+    def __init__(self):
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=TARGET_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._cb)
+        self._out.start()
+
+    def _cb(self, out, frames, *_):
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        out[:] = chunk + b'\x00' * (n - len(chunk))
+
+    def play(self, pcm):
+        with self._lock: self._buf.extend(pcm)
+
+    def clear(self):
+        with self._lock: self._buf.clear()
+
+    def close(self): self._out.stop(); self._out.close()
+
+
+def resample(pcm, src):
+    if src == TARGET_RATE: return pcm
+    n = len(pcm) // 2; samps = struct.unpack(f"<{n}h", pcm); r = src / TARGET_RATE
+    out = [int(samps[min(int(i*r), n-1)] + (samps[min(int(i*r)+1, n-1)] - samps[min(int(i*r), n-1)]) * (i*r - int(i*r)))
+           for i in range(int(n / r))]
+    return struct.pack(f"<{len(out)}h", *out)
+
+
+async def main():
+    player, q = AudioPlayer(), queue.Queue()
+    dev = sd.query_devices(kind="input")
+    native_rate = int(dev["default_samplerate"])
+    sd.RawInputStream(samplerate=native_rate, channels=1, dtype="int16",
+        blocksize=int(native_rate * 0.02), latency="low",
+        callback=lambda d,f,t,s: q.put_nowait(bytes(d))).start()
+
+    conn = await client.realtime.connect(
+        model="universal-streaming", websocket_connection_options={"compression": None},
+    ).enter()
+    await conn.session.update(session={
+        "type": "realtime", "instructions": STAGES["greeting"],
+        "output_modalities": ["audio", "text"],
+        "audio": {
+            "input": {"format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                      "transcription": {"model": "universal-streaming"},
+                      "turn_detection": {"type": "server_vad", "threshold": 0.6,
+                                         "prefix_padding_ms": 300, "silence_duration_ms": 500}},
+            "output": {"format": {"type": "audio/pcm", "rate": TARGET_RATE}, "voice": "sage"},
+        },
+        "tools": TOOLS, "tool_choice": "auto",
+    })
+
+    raw_ws = conn._connection
+    loop = asyncio.get_running_loop()
+    while not q.empty(): q.get_nowait()
+
+    async def set_stage(name):
+        await conn.session.update(session={"type": "realtime", "instructions": STAGES[name]})
+
+    stage = "greeting"
+    user_turns = 0
+
+    async def stream_mic():
+        while True:
+            pcm = await loop.run_in_executor(None, q.get)
+            buf = bytearray(pcm)
+            while not q.empty():
+                try: buf.extend(q.get_nowait())
+                except: break
+            await raw_ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode()}))
+
+    async def handle_events():
+        nonlocal stage, user_turns
+        pending = None
+        while True:
+            e = json.loads((await conn.recv_bytes()).decode())
+            et = e.get("type", "")
+            if et == "response.output_audio.delta":
+                player.play(base64.b64decode(e["delta"])); continue
+            t = time.strftime("%H:%M:%S")
+            if et == "session.created": await conn.input_audio_buffer.clear()
+            elif et == "input_audio_buffer.speech_started":
+                player.clear(); user_turns += 1
+                if stage == "greeting" and user_turns >= 2:
+                    stage = "scheduling"; await set_stage("scheduling")
+            elif et == "response.output_audio_transcript.done":
+                print(f"[{t}] Riverside: {e.get('transcript', '')}")
+            elif et == "response.output_item.done":
+                item = e.get("item", {})
+                if item.get("type") == "function_call" and not pending:
+                    pending = {"call_id": item["call_id"], "arguments": json.loads(item.get("arguments", "{}"))}
+                    print(f"[{t}] 🔧 booking...")
+            elif et == "response.done":
+                if pending:
+                    stage = "booked"; await set_stage("booked")
+                    result = run_tool("book_appointment", pending["arguments"])
+                    if result.get("confirmed"): print(f"[{t}] ✅ {result['summary']}")
+                    else:
+                        print(f"[{t}] ❌ {result.get('error')}"); stage = "scheduling"; await set_stage("scheduling")
+                    await conn.conversation.item.create(item={
+                        "id": f"item_{uuid.uuid4().hex[:24]}", "type": "function_call_output",
+                        "call_id": pending["call_id"], "output": json.dumps(result),
+                    })
+                    pending = None
+                elif stage == "greeting" and e.get("response", {}).get("status") == "completed" and user_turns >= 1:
+                    stage = "scheduling"; await set_stage("scheduling")
+            elif et == "error": print(f"[{t}] Error: {e.get('error', {})}")
+
+    print(f"\n🏥 Riverside ENT Associates\nToday: {TODAY.strftime('%A, %B %d, %Y')}\n")
+    try:
+        await asyncio.gather(stream_mic(), handle_events())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        player.close(); await conn.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+</Accordion>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Iterate fast with Claude Code
+
+The best way to build and tune voice agents is with an AI coding assistant that already understands the API. Drop a `CLAUDE.md` into your project and [Claude Code](https://claude.ai/code) will handle the boilerplate so you can focus on the agent behavior.
+
+<Steps>
+
+<Step title="Install Claude Code">
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+</Step>
+
+<Step title="Start from an example above">
+Copy one of the agent scripts above into your project. Running it first means Claude Code has a concrete starting point to build on.
+</Step>
+
+<Step title="Drop in a CLAUDE.md">
+Create `CLAUDE.md` at the root of your project with the context below. Claude Code reads this automatically and will know exactly how the API works — no copy-pasting docs into every prompt.
+
+```markdown CLAUDE.md
+# AssemblyAI Speech-to-Speech API
+
+## Connection sequence (critical — order matters)
+1. Connect WebSocket to `wss://speech-to-speech.assemblyai.com/v1`
+2. Send `session.update` IMMEDIATELY — do NOT wait for `session.created`
+3. Start streaming mic audio right away (server needs audio to warm up)
+4. When `session.created` arrives: call `input_audio_buffer.clear()`, drain mic queue
+5. From here, fresh audio flows with config applied
+
+## OpenAI SDK (Python) session config
+```python
+await connection.session.update(session={
+    "type": "realtime",            # required for nested format
+    "instructions": "...",
+    "output_modalities": ["audio", "text"],
+    "audio": {
+        "input": {
+            "format": {"type": "audio/pcm", "rate": 24000},
+            "transcription": {"model": "universal-streaming"},
+            "turn_detection": {
+                "type": "server_vad",
+                "threshold": 0.5,      # raise to 0.6-0.7 if triggering on noise
+                "prefix_padding_ms": 300,
+                "silence_duration_ms": 200,  # raise to 400-500 if interrupting too early
+            },
+        },
+        "output": {"format": {"type": "audio/pcm", "rate": 24000}, "voice": "sage"},
+    },
+    "tools": [...],
+    "tool_choice": "auto",
+})
+```
+
+## Tool calling (capture → wait → inject)
+```python
+pending_calls = []
+
+# Capture on response.output_item.done (not response.function_call_arguments.done)
+if et == "response.output_item.done":
+    item = e.get("item", {})
+    if item.get("type") == "function_call":
+        pending_calls.append({"name": item["name"], "call_id": item["call_id"],
+                               "arguments": json.loads(item.get("arguments", "{}"))})
+
+# Inject on response.done — server auto-generates follow-up, no response.create needed
+elif et == "response.done":
+    for call in pending_calls:
+        result = run_tool(call["name"], call["arguments"])
+        await connection.conversation.item.create(item={
+            "id": f"item_{uuid.uuid4().hex[:24]}",  # id field is REQUIRED
+            "type": "function_call_output",
+            "call_id": call["call_id"],
+            "output": json.dumps(result),
+        })
+    pending_calls.clear()
+```
+
+## Stage-based prompting
+Update instructions mid-session to keep the agent focused at each phase:
+```python
+await connection.session.update(session={
+    "type": "realtime",
+    "instructions": new_stage_instructions,
+})
+```
+Do this:
+- After the opening exchange (greeting → main task)
+- Before injecting a tool result (so post-tool speech uses focused instructions)
+- When recovering from an error (reset back to earlier stage)
+
+## AudioPlayer — must be callback-based
+Never use blocking `write()` on the event loop — it starves mic sending and delays everything:
+```python
+class AudioPlayer:
+    def _callback(self, outdata, frames, *_):  # runs in audio thread — non-blocking
+        n = frames * 2
+        with self._lock:
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        outdata[:] = chunk + b'\x00' * (n - len(chunk))
+
+    def play(self, pcm: bytes):  # returns instantly — just appends
+        with self._lock: self._buf.extend(pcm)
+
+    def clear(self):  # call on speech_started to stop agent audio immediately
+        with self._lock: self._buf.clear()
+```
+
+## Mic streaming
+Use `queue.Queue` (thread-safe) + `run_in_executor` to bridge mic to async:
+```python
+q = queue.Queue()
+# mic callback: q.put_nowait(bytes(data))
+
+async def stream_mic():
+    while True:
+        pcm = await loop.run_in_executor(None, q.get)  # non-blocking wait
+        await raw_ws.send(json.dumps({...}))
+```
+
+Use `raw_ws = connection._connection` and send via `raw_ws.send()` directly for audio
+— bypasses SDK Pydantic overhead on every 20ms chunk.
+
+## Common pitfalls
+- ❌ Sending config on `session.created` — send it BEFORE, immediately after connect
+- ❌ Using `asyncio.Queue` in threads — it's not thread-safe, use `queue.Queue`
+- ❌ Blocking `write()` for audio playback — starves the event loop
+- ❌ Chaining tool calls across multiple responses — process all at once in `response.done`
+- ❌ Missing `id` field in `function_call_output` — breaks tool result association
+- ❌ Large chunks (100ms+) — adds VAD latency. Keep to ~20ms (480 samples at 24kHz)
+```
+</Step>
+
+<Step title="Ask Claude to build or modify your agent">
+```
+> Change the pizza agent persona to a fast food drive-through, add a combo meals tool,
+  and make it push upsells for drinks
+```
+```
+> Add a check_calendar tool to the ENT agent that returns real availability
+  from a Google Calendar API call
+```
+```
+> Tune the VAD settings — the agent keeps interrupting me mid-sentence
+```
+
+Claude Code reads your CLAUDE.md, understands the session init sequence and tool calling pattern, and makes changes that actually work.
+</Step>
+
+</Steps>
+
+<Tip>
+Start with one of the example agents above, not a blank file. Claude Code iterates much faster when it has a running baseline to modify rather than generating from scratch.
+</Tip>
 
 ---
 
@@ -157,10 +1136,10 @@ Replace `YOUR_ASSEMBLYAI_API_KEY` with your key from the [AssemblyAI dashboard](
 Client                                     Server
   |                                           |
   |--- WebSocket connect -------------------->|
-  |--- session.update (config) -------------->|  send immediately after connect
-  |--- input_audio_buffer.append ------------>|  stream mic audio (start right away)
+  |--- session.update (config) -------------->|  ← send immediately, don't wait
+  |--- input_audio_buffer.append ------------>|  ← start streaming right away
   |                                           |
-  |<------------ session.created -------------|  clear buffer here
+  |<------------ session.created -------------|  ← clear buffer here
   |<------------ speech_started --------------|  user is talking
   |<------------ speech_stopped --------------|  user finished
   |<------------ transcription.completed -----|  what the user said
@@ -169,29 +1148,150 @@ Client                                     Server
   |                                           |
 ```
 
-1. **Connect** — Open a WebSocket to `wss://speech-to-speech.assemblyai.com/v1/realtime` with your API key in the `Authorization: Bearer` header.
-2. **Configure** — Send `session.update` **immediately** after connecting (before `session.created` arrives). Don't wait.
-3. **Stream audio** — Start streaming mic audio right away. The server warms up on this audio before the session is fully ready.
-4. **Clear on `session.created`** — When `session.created` arrives, call `input_audio_buffer.clear()` to discard the warmup audio. From this point, fresh audio flows with your config applied.
-5. **Receive responses** — The server transcribes user speech, generates a response, and streams audio and text in real time.
+<Warning>
+**Send config immediately — don't wait for `session.created`.** The server needs audio before it sends `session.created`. Sending config immediately means your instructions and turn detection settings are ready the moment the session is live. When `session.created` arrives, call `input_audio_buffer.clear()` to discard warmup audio and start fresh.
+</Warning>
 
-The API is fully compatible with the OpenAI Realtime protocol, so the [OpenAI Python SDK](https://github.com/openai/openai-python), [LiveKit Agents](https://docs.livekit.io/agents/), and any OpenAI-compatible client work out of the box — just point them at `wss://speech-to-speech.assemblyai.com/v1`.
+The API is fully compatible with the OpenAI Realtime protocol, so the [OpenAI Python SDK](https://github.com/openai/openai-python), [OpenAI JS SDK](https://github.com/openai/openai-node), [LiveKit Agents](https://docs.livekit.io/agents/), and any OpenAI-compatible client work out of the box — just point them at `wss://speech-to-speech.assemblyai.com/v1`.
 
 ---
 
-## Agent generator
+## Tool calling
 
-Describe your agent and we'll generate the complete code — system prompt, tool definitions, and a runnable script.
+Give your agent the ability to call functions — look up data, take actions, call external APIs — then continue the conversation with the result.
 
-<AgentGenerator />
+### Define tools
+
+```json
+"tools": [{
+  "type": "function",
+  "name": "check_availability",
+  "description": "Check available appointment slots for a given date",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "date": {"type": "string", "description": "Date in YYYY-MM-DD format"}
+    },
+    "required": ["date"]
+  }
+}],
+"tool_choice": "auto"
+```
+
+### Handle tool calls
+
+Capture calls via `response.output_item.done`, then inject results on `response.done`. The server auto-generates the follow-up response — no need to call `response.create`.
+
+```python
+import uuid
+
+pending_calls = []
+
+# Step 1: capture when the output item is fully formed
+if et == "response.output_item.done":
+    item = e.get("item", {})
+    if item.get("type") == "function_call":
+        pending_calls.append({
+            "name": item["name"],
+            "call_id": item["call_id"],
+            "arguments": json.loads(item.get("arguments", "{}")),
+        })
+
+# Step 2: execute and inject on response.done
+elif et == "response.done":
+    if pending_calls:
+        calls = pending_calls[:]
+        pending_calls.clear()
+        for call in calls:
+            result = run_tool(call["name"], call["arguments"])
+            await connection.conversation.item.create(item={
+                "id": f"item_{uuid.uuid4().hex[:24]}",  # required
+                "type": "function_call_output",
+                "call_id": call["call_id"],
+                "output": json.dumps(result),
+            })
+```
+
+<Tip>
+Always include the `"id"` field in `function_call_output`. Without it, the server may not properly associate the result with the function call.
+</Tip>
+
+### Stage-based prompting
+
+For multi-step agents, update the instructions at each phase of the conversation. This keeps the model focused and prevents it from repeating information it already said.
+
+<Accordion title="How stage-based prompting works">
+
+Instead of one long system prompt that covers every possible phase, split your agent into stages and update the instructions as the conversation progresses:
+
+```python
+STAGES = {
+    "greeting": "Answer the phone. Find out what the caller needs. No tools yet.",
+    "main_task": "You have all the context now. Take the action and gather any remaining details.",
+    "wrap_up": "The task is done. Confirm the result briefly and say bye. No more tools.",
+}
+
+async def set_stage(name: str):
+    await connection.session.update(session={
+        "type": "realtime",
+        "instructions": STAGES[name],
+    })
+
+# In your event handler:
+# After user speaks a couple times → set_stage("main_task")
+# Before injecting tool result → set_stage("wrap_up")   ← critical timing
+```
+
+**The critical timing:** switch to the wrap-up stage *before* injecting the tool result, not after. The agent responds to the tool result using the *current* instructions at that moment. If you switch to "just give them the confirmation, no repeating" before it sees the result, the follow-up response will be tight and focused.
+
+</Accordion>
 
 ---
 
 ## Configuration
 
-Configure your session by sending a `session.update` event immediately after connecting. The API accepts two session formats depending on your integration approach.
+### Session format
 
-### Flat format (Raw WebSocket)
+<Tabs>
+
+<Tab title="OpenAI SDK (nested)">
+
+Used by the OpenAI Python/JS SDK and LiveKit. Include `"type": "realtime"`.
+
+```json
+{
+  "type": "session.update",
+  "session": {
+    "type": "realtime",
+    "instructions": "You are a helpful voice assistant.",
+    "output_modalities": ["audio", "text"],
+    "audio": {
+      "input": {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "transcription": {"model": "universal-streaming"},
+        "turn_detection": {
+          "type": "server_vad",
+          "threshold": 0.5,
+          "prefix_padding_ms": 300,
+          "silence_duration_ms": 200
+        }
+      },
+      "output": {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "voice": "sage"
+      }
+    },
+    "tools": [],
+    "tool_choice": "auto"
+  }
+}
+```
+
+</Tab>
+
+<Tab title="Raw WebSocket (flat)">
+
+Used when connecting with raw WebSocket.
 
 ```json
 {
@@ -218,68 +1318,22 @@ Configure your session by sending a `session.update` event immediately after con
 }
 ```
 
-### Nested format (OpenAI SDK / LiveKit)
+</Tab>
 
-The OpenAI GA SDK and LiveKit plugin use a nested session format. Include `"type": "realtime"` in the session object.
-
-```json
-{
-  "type": "session.update",
-  "session": {
-    "type": "realtime",
-    "instructions": "You are a helpful voice assistant.",
-    "output_modalities": ["audio", "text"],
-    "audio": {
-      "input": {
-        "format": {"type": "audio/pcm", "rate": 24000},
-        "transcription": {"model": "universal-streaming"},
-        "turn_detection": {
-          "type": "server_vad",
-          "threshold": 0.5,
-          "prefix_padding_ms": 300,
-          "silence_duration_ms": 200,
-          "create_response": true
-        }
-      },
-      "output": {
-        "format": {"type": "audio/pcm", "rate": 24000},
-        "voice": "sage"
-      }
-    },
-    "tools": [],
-    "tool_choice": "auto"
-  }
-}
-```
+</Tabs>
 
 ### Session parameters
 
 <ParamField path="instructions" type="string">
-  System prompt for the AI agent. Defines personality, behavior, and constraints.
+  System prompt. Defines the agent's personality, role, and behavior. Can be updated mid-session with `session.update` to implement stage-based prompting.
 </ParamField>
 
 <ParamField path="voice" type="string" default="sage">
-  Voice for agent audio responses. One of: `sage`, `ember`, `breeze`, `cascade`.
-</ParamField>
-
-<ParamField path="input_audio_format" type="string" default="pcm16">
-  Input audio encoding. Use `pcm16` (signed 16-bit little-endian).
-</ParamField>
-
-<ParamField path="input_audio_sample_rate" type="integer" default="24000">
-  Input audio sample rate in Hz.
-</ParamField>
-
-<ParamField path="output_audio_format" type="string" default="pcm16">
-  Output audio encoding. Use `pcm16` (signed 16-bit little-endian).
-</ParamField>
-
-<ParamField path="output_audio_sample_rate" type="integer" default="24000">
-  Output audio sample rate in Hz.
+  Voice for agent responses. Options: `sage`, `ember`, `breeze`, `cascade`.
 </ParamField>
 
 <ParamField path="output_modalities" type="array">
-  What the agent returns. Include `"audio"` for spoken responses and `"text"` for transcripts.
+  What the agent returns. `["audio", "text"]` gives you both spoken responses and transcripts.
 </ParamField>
 
 <ParamField path="input_audio_transcription" type="object">
@@ -287,33 +1341,14 @@ The OpenAI GA SDK and LiveKit plugin use a nested session format. Include `"type
 </ParamField>
 
 <ParamField path="turn_detection" type="object">
-  Server-side voice activity detection. See [Turn detection](#turn-detection).
+  Server-side voice activity detection settings.
 </ParamField>
 
 <ParamField path="tools" type="array" default="[]">
-  Functions the agent can call. See [Tool calling](#tool-calling).
+  Function definitions the agent can call.
 </ParamField>
 
-<ParamField path="tool_choice" type="string" default="auto">
-  When to use tools. `"auto"` lets the model decide.
-</ParamField>
-
-### Audio format
-
-All audio is **PCM16** (signed 16-bit integer, little-endian), **mono**, **24,000 Hz**. Audio is base64-encoded inside JSON messages. Each chunk should be approximately 20 ms (480 samples, 960 bytes).
-
-### Voices
-
-| Voice | ID |
-|-------|----|
-| Sage | `sage` |
-| Ember | `ember` |
-| Breeze | `breeze` |
-| Cascade | `cascade` |
-
-### Turn detection
-
-The server automatically detects when the user starts and stops speaking using voice activity detection (VAD). When the user finishes a turn, the agent responds automatically.
+### Turn detection tuning
 
 ```json
 "turn_detection": {
@@ -325,148 +1360,52 @@ The server automatically detects when the user starts and stops speaking using v
 }
 ```
 
-<ParamField path="type" type="string" required>
-  Set to `"server_vad"` for server-side voice activity detection.
-</ParamField>
-
 <ParamField path="threshold" type="float" default="0.5">
-  Speech detection sensitivity (0.0 to 1.0). Lower values detect quieter speech. If the agent is triggering on background noise, raise this to `0.6`–`0.7`.
+  Speech sensitivity (0.0–1.0). **Raise to 0.6–0.7** if the agent is triggering on background noise or its own audio.
 </ParamField>
 
 <ParamField path="prefix_padding_ms" type="integer" default="300">
-  Audio to preserve before speech onset, in milliseconds. Prevents clipping the start of a sentence.
+  Audio preserved before speech onset. Prevents clipping the start of sentences.
 </ParamField>
 
 <ParamField path="silence_duration_ms" type="integer" default="200">
-  How long the user must pause before the server considers them done speaking, in milliseconds. Raise to `400`–`500` if the agent interrupts too eagerly.
+  Pause length before considering a turn complete. **Raise to 400–500ms** if the agent interrupts before the user has finished speaking.
 </ParamField>
 
 <ParamField path="create_response" type="boolean" default="true">
-  Automatically generate an agent response when the user finishes speaking.
+  Auto-generate a response when the user finishes their turn.
 </ParamField>
 
----
+### Voices
 
-## Tool calling
+| Voice | ID | Character |
+|-------|----|-----------|
+| Sage | `sage` | Warm, measured, professional |
+| Ember | `ember` | Expressive, energetic |
+| Breeze | `breeze` | Conversational, approachable |
+| Cascade | `cascade` | Clear, authoritative |
 
-Give your agent the ability to call functions in your application — look up data, take actions, or call external APIs — then continue the conversation with the result.
+### Audio format
 
-### Define tools in your session config
-
-```json
-"tools": [{
-  "type": "function",
-  "name": "get_weather",
-  "description": "Get the current weather for a location",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "location": {"type": "string", "description": "City name"}
-    },
-    "required": ["location"]
-  }
-}],
-"tool_choice": "auto"
-```
-
-### Handle tool calls
-
-When the agent decides to call a function, it emits `response.output_item.done` with the complete call (name, arguments, call ID). Capture it there, then execute and return the result when `response.done` arrives.
-
-```python
-import uuid
-
-pending_calls = []  # tool calls from the current response
-
-async for data in event_stream:
-    e = json.loads(data)
-    et = e.get("type", "")
-
-    # Capture tool calls when the output item is fully done
-    if et == "response.output_item.done":
-        item = e.get("item", {})
-        if item.get("type") == "function_call":
-            pending_calls.append({
-                "name": item["name"],
-                "call_id": item["call_id"],
-                "arguments": json.loads(item.get("arguments", "{}")),
-            })
-
-    # Execute and return results when the response is complete
-    elif et == "response.done":
-        if pending_calls:
-            calls = pending_calls[:]
-            pending_calls.clear()
-            for call in calls:
-                result = run_tool(call["name"], call["arguments"])
-                await connection.conversation.item.create(item={
-                    "id": f"item_{uuid.uuid4().hex[:24]}",  # required
-                    "type": "function_call_output",
-                    "call_id": call["call_id"],
-                    "output": json.dumps(result),
-                })
-
-    elif et == "response.output_audio.delta":
-        player.play(base64.b64decode(e["delta"]))
-```
-
-The pattern is: **capture the call** via `response.output_item.done` → **wait for `response.done`** → **send all results**. The server auto-generates the follow-up response after receiving the tool output — no need to call `response.create`.
-
-<Tip>
-Include an `"id"` field in every `function_call_output` item. Without it, the server may not properly associate the result with the function call.
-</Tip>
+All audio is **PCM16** (signed 16-bit little-endian), **mono**, **24,000 Hz**, base64-encoded in JSON. Send chunks of approximately 20ms — 480 samples, 960 bytes raw, ~1280 bytes base64.
 
 ---
 
-## Events reference
+## SDK and framework examples
 
-### Client → Server
+<Tabs>
 
-| Event | Description | Key fields |
-|-------|-------------|------------|
-| `session.update` | Configure the session | `session`: configuration object |
-| `input_audio_buffer.append` | Stream an audio chunk | `audio`: base64-encoded PCM16 |
-| `input_audio_buffer.commit` | Commit buffered audio as a user turn | — |
-| `input_audio_buffer.clear` | Discard buffered audio | — |
-| `conversation.item.create` | Add a message or tool result | `item`: conversation item |
-| `conversation.item.delete` | Remove a conversation item | `item_id`: ID to remove |
-| `response.create` | Trigger the agent to respond | — |
-
-### Server → Client
-
-| Event | Description | Key fields |
-|-------|-------------|------------|
-| `session.created` | Session initialized | `session.id` |
-| `session.updated` | Session config applied | `session` |
-| `input_audio_buffer.speech_started` | User started speaking | `audio_start_ms` |
-| `input_audio_buffer.speech_stopped` | User stopped speaking | `audio_end_ms` |
-| `input_audio_buffer.committed` | Audio committed as a turn | — |
-| `conversation.item.created` | New conversation item added | `item` |
-| `conversation.item.input_audio_transcription.completed` | User speech transcribed | `transcript` |
-| `response.created` | Agent started generating a response | — |
-| `response.output_item.done` | Output item complete (incl. function calls) | `item` |
-| `response.output_audio.delta` | Agent audio chunk | `delta`: base64 PCM16 |
-| `response.output_audio.done` | Agent audio complete | — |
-| `response.output_audio_transcript.delta` | Agent text (streaming) | `delta` |
-| `response.output_audio_transcript.done` | Agent text (final) | `transcript` |
-| `response.done` | Response complete | `response.status`: `completed` or `cancelled` |
-| `error` | Error occurred | `error.message` |
-
----
-
-## Complete examples
-
-Production-ready examples for three integration approaches. Each handles microphone input, speaker output, turn detection, transcription, interruptions, and tool calling.
-
-### OpenAI Python SDK
-
-The recommended approach. Uses the OpenAI GA Realtime API with `client.realtime.connect()` and the nested session format.
+<Tab title="Python (OpenAI SDK)" default>
 
 ```bash
 pip install openai sounddevice
 ```
 
-```python
+The recommended approach. Full production example with native-rate mic capture, callback-based audio player, interruption handling, and correct tool calling.
+
+<Accordion title="Full example">
+
+```python agent.py
 import asyncio, base64, json, queue, struct, threading, time, uuid
 import sounddevice as sd
 from openai import AsyncOpenAI
@@ -498,219 +1437,355 @@ def run_tool(name, args):
 
 
 class AudioPlayer:
-    """Callback-based player — the audio thread pulls from the buffer,
-    so play() returns instantly and never blocks the event loop."""
+    """Callback-based — play() returns instantly, audio thread does the work."""
     def __init__(self):
-        self._buf = bytearray()
-        self._lock = threading.Lock()
-        self._out = sd.RawOutputStream(
-            samplerate=TARGET_RATE, channels=1, dtype="int16",
-            blocksize=480, latency="low", callback=self._callback,
-        )
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=TARGET_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback)
         self._out.start()
 
-    def _callback(self, outdata, frames, time_info, status):
+    def _callback(self, outdata, frames, *_):
         n = frames * 2
         with self._lock:
-            chunk = bytes(self._buf[:n])
-            del self._buf[:n]
-        if len(chunk) < n:
-            chunk += b'\x00' * (n - len(chunk))
-        outdata[:] = chunk
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        outdata[:] = chunk + b'\x00' * (n - len(chunk))
 
     def play(self, pcm: bytes):
-        with self._lock:
-            self._buf.extend(pcm)
+        with self._lock: self._buf.extend(pcm)
 
-    def clear(self):
-        """Stop agent audio immediately (call on user interruption)."""
-        with self._lock:
-            self._buf.clear()
+    def clear(self):  # call on speech_started to stop agent audio immediately
+        with self._lock: self._buf.clear()
 
-    def close(self):
-        self._out.stop(); self._out.close()
+    def close(self): self._out.stop(); self._out.close()
 
 
 async def main():
-    player = AudioPlayer()
-    q = queue.Queue()
+    player, q = AudioPlayer(), queue.Queue()
 
-    # Capture at the device's native sample rate to avoid hidden driver
-    # resampling buffers. We resample to 24kHz ourselves before sending.
-    device_info = sd.query_devices(kind="input")
-    native_rate = int(device_info["default_samplerate"])
+    # Capture at native rate — avoids hidden driver resampling buffers
+    dev = sd.query_devices(kind="input")
+    native_rate = int(dev["default_samplerate"])
 
-    def mic_cb(data, frames, ti, status):
-        q.put_nowait(bytes(data))
+    def mic_cb(data, frames, ti, status): q.put_nowait(bytes(data))
+    sd.RawInputStream(samplerate=native_rate, channels=1, dtype="int16",
+        blocksize=int(native_rate * 0.02), callback=mic_cb, latency="low").start()
 
-    mic = sd.RawInputStream(
-        samplerate=native_rate, channels=1, dtype="int16",
-        blocksize=int(native_rate * 0.02),  # ~20ms chunks
-        callback=mic_cb, latency="low",
-    )
-    mic.start()
-
-    connection = await client.realtime.connect(
+    conn = await client.realtime.connect(
         model="universal-streaming",
         websocket_connection_options={"compression": None},
     ).enter()
 
     # Send config IMMEDIATELY — don't wait for session.created
-    await connection.session.update(session={
+    await conn.session.update(session={
         "type": "realtime",
         "instructions": "You are a helpful voice assistant. Keep responses brief.",
         "output_modalities": ["audio", "text"],
         "audio": {
-            "input": {
-                "format": {"type": "audio/pcm", "rate": TARGET_RATE},
-                "transcription": {"model": "universal-streaming"},
-                "turn_detection": {
-                    "type": "server_vad", "threshold": 0.5,
-                    "prefix_padding_ms": 300, "silence_duration_ms": 200,
-                },
-            },
-            "output": {
-                "format": {"type": "audio/pcm", "rate": TARGET_RATE},
-                "voice": "sage",
-            },
+            "input": {"format": {"type": "audio/pcm", "rate": TARGET_RATE},
+                      "transcription": {"model": "universal-streaming"},
+                      "turn_detection": {"type": "server_vad", "threshold": 0.5,
+                                         "prefix_padding_ms": 300, "silence_duration_ms": 200}},
+            "output": {"format": {"type": "audio/pcm", "rate": TARGET_RATE}, "voice": "sage"},
         },
-        "tools": TOOLS,
-        "tool_choice": "auto",
+        "tools": TOOLS, "tool_choice": "auto",
     })
 
-    # Use the underlying websocket for audio sends — bypasses SDK
-    # serialization overhead on every chunk
-    raw_ws = connection._connection
+    raw_ws = conn._connection
     loop = asyncio.get_running_loop()
+    while not q.empty(): q.get_nowait()  # drain stale mic audio
 
-    # Drain mic audio that accumulated during the connection handshake
-    while not q.empty():
-        q.get_nowait()
-
-    def resample(pcm: bytes, src_rate: int) -> bytes:
-        """Linear interpolation resample to TARGET_RATE."""
-        if src_rate == TARGET_RATE:
-            return pcm
-        n = len(pcm) // 2
-        samples = struct.unpack(f"<{n}h", pcm)
-        ratio = src_rate / TARGET_RATE
-        out_len = int(n / ratio)
-        out = []
-        for i in range(out_len):
-            si = i * ratio
-            idx = int(si)
-            frac = si - idx
-            s1 = samples[min(idx, n - 1)]
-            s2 = samples[min(idx + 1, n - 1)]
-            out.append(int(s1 + frac * (s2 - s1)))
-        return struct.pack(f"<{out_len}h", *out)
+    def resample(pcm: bytes, src: int) -> bytes:
+        if src == TARGET_RATE: return pcm
+        n = len(pcm) // 2; samps = struct.unpack(f"<{n}h", pcm); r = src / TARGET_RATE
+        out = [int(samps[min(int(i*r), n-1)] + (samps[min(int(i*r)+1, n-1)] -
+               samps[min(int(i*r), n-1)]) * (i*r - int(i*r))) for i in range(int(n / r))]
+        return struct.pack(f"<{len(out)}h", *out)
 
     async def stream_mic():
         while True:
-            # run_in_executor waits on the thread-safe queue without
-            # blocking the event loop
             pcm = await loop.run_in_executor(None, q.get)
             buf = bytearray(pcm)
             while not q.empty():
-                try:
-                    buf.extend(q.get_nowait())
-                except Exception:
-                    break
-            await raw_ws.send(json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode(),
-            }))
+                try: buf.extend(q.get_nowait())
+                except: break
+            await raw_ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(resample(bytes(buf), native_rate)).decode()}))
 
     async def handle_events():
         pending_calls = []
         while True:
-            data = await connection.recv_bytes()
-            e = json.loads(data.decode("utf-8"))
+            e = json.loads((await conn.recv_bytes()).decode())
             et = e.get("type", "")
 
-            # Fast path: audio deltas — decode and play with minimal overhead
             if et == "response.output_audio.delta":
-                player.play(base64.b64decode(e["delta"]))
-                continue
+                player.play(base64.b64decode(e["delta"])); continue
 
             t = time.strftime("%H:%M:%S")
-
             if et == "session.created":
-                print(f"[{t}] Connected — session {e['session']['id']}")
-                # Clear warmup audio — fresh audio flows from here
-                await connection.input_audio_buffer.clear()
-
+                print(f"[{t}] Connected — {e['session']['id']}")
+                await conn.input_audio_buffer.clear()
             elif et == "input_audio_buffer.speech_started":
-                print(f"[{t}] You started speaking")
-                player.clear()  # stop agent audio immediately on interruption
-
-            elif et == "input_audio_buffer.speech_stopped":
-                print(f"[{t}] You stopped speaking")
-
+                print(f"[{t}] You speaking"); player.clear()
             elif et == "conversation.item.input_audio_transcription.completed":
-                txt = e.get("transcript", "")
-                if txt:
-                    print(f"[{t}] You:   {txt}")
-
+                if txt := e.get("transcript", ""): print(f"[{t}] You:   {txt}")
             elif et == "response.output_audio_transcript.done":
                 print(f"[{t}] Agent: {e.get('transcript', '')}")
-
-            # Capture tool calls when the output item is fully formed
             elif et == "response.output_item.done":
                 item = e.get("item", {})
                 if item.get("type") == "function_call":
-                    call_id = item.get("call_id", "")
+                    call_id = item["call_id"]
                     if not any(c["call_id"] == call_id for c in pending_calls):
-                        pending_calls.append({
-                            "name": item.get("name", ""),
-                            "call_id": call_id,
-                            "arguments": json.loads(item.get("arguments", "{}")),
-                        })
-                        print(f"[{t}] Tool:  {item['name']}({item.get('arguments', '{}')})")
-
+                        pending_calls.append({"name": item["name"], "call_id": call_id,
+                                              "arguments": json.loads(item.get("arguments", "{}"))})
+                        print(f"[{t}] Tool: {item['name']}({item.get('arguments', '{}')})")
             elif et == "response.done":
-                s = e.get("response", {}).get("status", "?")
-                print(f"[{t}] Done ({s})")
-                # Send all tool results — server auto-generates the follow-up response
                 if pending_calls:
-                    calls = pending_calls[:]
-                    pending_calls.clear()
+                    calls = pending_calls[:]; pending_calls.clear()
                     for call in calls:
                         result = run_tool(call["name"], call["arguments"])
-                        print(f"[{t}]   → {call['name']}: {json.dumps(result)[:80]}")
-                        await connection.conversation.item.create(item={
+                        print(f"[{t}]   → {json.dumps(result)[:80]}")
+                        await conn.conversation.item.create(item={
                             "id": f"item_{uuid.uuid4().hex[:24]}",
                             "type": "function_call_output",
                             "call_id": call["call_id"],
                             "output": json.dumps(result),
                         })
-
             elif et == "error":
                 print(f"[{t}] Error: {e.get('error', {})}")
 
-    print(f"Listening — start talking.\n")
+    print("Listening — start talking.\n")
     try:
         await asyncio.gather(stream_mic(), handle_events())
     except KeyboardInterrupt:
         pass
     finally:
-        mic.stop(); mic.close(); player.close()
-        await connection.close()
+        player.close(); await conn.close()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Raw WebSocket
+</Accordion>
 
-Direct WebSocket control — useful if you can't use the OpenAI SDK or need the flat session format.
+</Tab>
+
+<Tab title="JavaScript (Browser)">
+
+```bash
+npm install openai
+```
+
+Browser-based voice agent using Web Audio API for low-latency, gapless playback. Connect via your own proxy server (browsers can't set auth headers on WebSocket — see the proxy pattern below).
+
+<Accordion title="Full browser example">
+
+```javascript agent.js
+// Browser voice agent — connect to a proxy that adds your AssemblyAI API key
+// Proxy endpoint: wss://your-server.com/api/s2s
+
+const WS_PROXY_URL = 'wss://your-server.com/api/s2s';
+
+// ── Audio playback ──────────────────────────────────────────────────────────
+// Web Audio API with precise scheduling: buffers play back-to-back with no gaps
+const audioCtx = new AudioContext({ sampleRate: 24000 });
+const gainNode = audioCtx.createGain();
+gainNode.connect(audioCtx.destination);
+let nextPlayTime = 0;
+
+function decodeAndPlay(base64Delta) {
+  const binary = atob(base64Delta);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const int16 = new Int16Array(bytes.buffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+
+  const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+  buffer.getChannelData(0).set(float32);
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(gainNode);
+
+  const now = audioCtx.currentTime;
+  if (nextPlayTime < now) nextPlayTime = now; // reset if fallen behind
+  source.start(nextPlayTime);
+  nextPlayTime += buffer.duration;
+}
+
+function stopPlayback() {
+  // Recreate AudioContext to immediately stop all scheduled audio (interruption)
+  gainNode.disconnect();
+  const newCtx = new AudioContext({ sampleRate: 24000 });
+  const newGain = newCtx.createGain();
+  newGain.connect(newCtx.destination);
+  Object.assign(audioCtx, newCtx);
+  Object.assign(gainNode, newGain);
+  nextPlayTime = 0;
+}
+
+// ── Mic capture ─────────────────────────────────────────────────────────────
+async function startMic(onChunk) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const ctx = new AudioContext(); // capture at native rate
+  const source = ctx.createMediaStreamSource(stream);
+  const processor = ctx.createScriptProcessor(2048, 1, 1);
+
+  processor.onaudioprocess = (e) => {
+    const inputData = e.inputBuffer.getChannelData(0);
+
+    // Resample from native rate to 24kHz
+    const ratio = ctx.sampleRate / 24000;
+    const outLength = Math.floor(inputData.length / ratio);
+    const pcm16 = new Int16Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const srcIdx = i * ratio;
+      const idx = Math.floor(srcIdx);
+      const frac = srcIdx - idx;
+      const s1 = inputData[idx] || 0;
+      const s2 = inputData[Math.min(idx + 1, inputData.length - 1)] || s1;
+      const sample = Math.max(-1, Math.min(1, s1 + frac * (s2 - s1)));
+      pcm16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+    }
+
+    // Convert to base64
+    const bytes = new Uint8Array(pcm16.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    onChunk(btoa(binary));
+  };
+
+  source.connect(processor);
+  processor.connect(ctx.destination);
+  return { stop: () => { processor.disconnect(); stream.getTracks().forEach(t => t.stop()); } };
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+async function startAgent() {
+  // Resume AudioContext on user gesture (browser autoplay policy)
+  await audioCtx.resume();
+
+  const ws = new WebSocket(WS_PROXY_URL);
+  let sessionReady = false;
+
+  ws.onopen = () => {
+    // Send config immediately on open
+    ws.send(JSON.stringify({
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        instructions: 'You are a helpful voice assistant. Keep responses brief.',
+        output_modalities: ['audio', 'text'],
+        audio: {
+          input: {
+            format: { type: 'audio/pcm', rate: 24000 },
+            transcription: { model: 'universal-streaming' },
+            turn_detection: { type: 'server_vad', threshold: 0.5,
+                               prefix_padding_ms: 300, silence_duration_ms: 200 },
+          },
+          output: { format: { type: 'audio/pcm', rate: 24000 }, voice: 'sage' },
+        },
+      },
+    }));
+    sessionReady = true;
+  };
+
+  const pendingCalls = [];
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    // Fast path: audio deltas — decode and schedule immediately
+    if (msg.type === 'response.output_audio.delta') {
+      decodeAndPlay(msg.delta);
+      return;
+    }
+
+    if (msg.type === 'session.created') {
+      console.log('Connected — session', msg.session.id);
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+    }
+    else if (msg.type === 'input_audio_buffer.speech_started') {
+      console.log('User speaking');
+      stopPlayback(); // interrupt agent
+    }
+    else if (msg.type === 'response.output_audio_transcript.done') {
+      console.log('Agent:', msg.transcript);
+    }
+    else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+      console.log('You:  ', msg.transcript);
+    }
+    else if (msg.type === 'response.output_item.done') {
+      const item = msg.item;
+      if (item?.type === 'function_call') {
+        pendingCalls.push({ name: item.name, callId: item.call_id,
+                            arguments: JSON.parse(item.arguments || '{}') });
+      }
+    }
+    else if (msg.type === 'response.done') {
+      if (pendingCalls.length > 0) {
+        const calls = pendingCalls.splice(0);
+        for (const call of calls) {
+          const result = runTool(call.name, call.arguments);
+          ws.send(JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              id: `item_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
+              type: 'function_call_output',
+              call_id: call.callId,
+              output: JSON.stringify(result),
+            },
+          }));
+        }
+      }
+    }
+    else if (msg.type === 'error') {
+      console.error('Error:', msg.error);
+    }
+  };
+
+  // Start mic and forward audio
+  const mic = await startMic((base64Audio) => {
+    if (ws.readyState === WebSocket.OPEN && sessionReady) {
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: base64Audio }));
+    }
+  });
+
+  return { stop: () => { mic.stop(); ws.close(); } };
+}
+
+function runTool(name, args) {
+  if (name === 'get_weather') {
+    return { temperature: 72, condition: 'sunny', location: args.location };
+  }
+  return { error: `Unknown tool: ${name}` };
+}
+
+// Start on button click (required for AudioContext autoplay policy)
+document.getElementById('start').addEventListener('click', startAgent);
+```
+
+</Accordion>
+
+<Note>
+Browsers can't set custom headers on WebSocket connections. In production, connect through a proxy server that injects your API key. See the [proxy pattern](/docs/speech-to-text/universal-streaming/voice-agents/proxy) for a minimal FastAPI implementation.
+</Note>
+
+</Tab>
+
+<Tab title="Raw WebSocket (Python)">
 
 ```bash
 pip install websockets sounddevice
 ```
 
-```python
+Direct WebSocket control. Use this if you prefer the flat session format or can't use the OpenAI SDK.
+
+<Accordion title="Full example">
+
+```python agent_ws.py
 import asyncio, base64, json, queue, threading, time, uuid
 import sounddevice as sd
 import websockets
@@ -739,49 +1814,34 @@ def run_tool(name, args):
 
 class AudioPlayer:
     def __init__(self):
-        self._buf = bytearray()
-        self._lock = threading.Lock()
-        self._out = sd.RawOutputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-            blocksize=480, latency="low", callback=self._callback,
-        )
+        self._buf, self._lock = bytearray(), threading.Lock()
+        self._out = sd.RawOutputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+            blocksize=480, latency="low", callback=self._callback)
         self._out.start()
 
-    def _callback(self, outdata, frames, time_info, status):
+    def _callback(self, outdata, frames, *_):
         n = frames * 2
         with self._lock:
-            chunk = bytes(self._buf[:n])
-            del self._buf[:n]
-        if len(chunk) < n:
-            chunk += b'\x00' * (n - len(chunk))
-        outdata[:] = chunk
+            chunk = bytes(self._buf[:n]); del self._buf[:n]
+        outdata[:] = chunk + b'\x00' * (n - len(chunk))
 
-    def play(self, pcm: bytes):
-        with self._lock:
-            self._buf.extend(pcm)
+    def play(self, pcm):
+        with self._lock: self._buf.extend(pcm)
 
     def clear(self):
-        with self._lock:
-            self._buf.clear()
+        with self._lock: self._buf.clear()
 
-    def close(self):
-        self._out.stop(); self._out.close()
+    def close(self): self._out.stop(); self._out.close()
 
 
 async def main():
-    player = AudioPlayer()
-    q = queue.Queue()
+    player, q = AudioPlayer(), queue.Queue()
 
-    def mic_cb(data, frames, ti, status):
-        q.put_nowait(bytes(data))
+    def mic_cb(data, frames, ti, status): q.put_nowait(bytes(data))
+    sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+        blocksize=480, callback=mic_cb, latency="low").start()
 
-    mic = sd.RawInputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-        blocksize=480, callback=mic_cb, latency="low",
-    )
-    mic.start()
-
-    # websockets 13.x uses extra_headers, 14.x+ uses additional_headers
+    # websockets 13.x uses extra_headers; 14.x+ uses additional_headers
     try:
         ws = await websockets.connect(WS_URL, extra_headers={"Authorization": f"Bearer {API_KEY}"})
     except TypeError:
@@ -802,23 +1862,17 @@ async def main():
     }}))
 
     loop = asyncio.get_running_loop()
-
-    while not q.empty():
-        q.get_nowait()
+    while not q.empty(): q.get_nowait()
 
     async def stream_mic():
         while True:
             pcm = await loop.run_in_executor(None, q.get)
             buf = bytearray(pcm)
             while not q.empty():
-                try:
-                    buf.extend(q.get_nowait())
-                except Exception:
-                    break
-            await ws.send(json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(bytes(buf)).decode(),
-            }))
+                try: buf.extend(q.get_nowait())
+                except: break
+            await ws.send(json.dumps({"type": "input_audio_buffer.append",
+                "audio": base64.b64encode(bytes(buf)).decode()}))
 
     async def handle_events():
         pending_calls = []
@@ -828,58 +1882,37 @@ async def main():
             t = time.strftime("%H:%M:%S")
 
             if et == "session.created":
-                print(f"[{t}] Connected — session {e['session']['id']}")
+                print(f"[{t}] Connected — {e['session']['id']}")
                 await ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
-
             elif et == "input_audio_buffer.speech_started":
-                print(f"[{t}] You started speaking")
-                player.clear()
-
-            elif et == "input_audio_buffer.speech_stopped":
-                print(f"[{t}] You stopped speaking")
-
+                print(f"[{t}] You speaking"); player.clear()
             elif et == "conversation.item.input_audio_transcription.completed":
-                txt = e.get("transcript", "")
-                if txt:
-                    print(f"[{t}] You:   {txt}")
-
+                if txt := e.get("transcript", ""): print(f"[{t}] You:   {txt}")
             elif et == "response.output_audio.delta":
                 player.play(base64.b64decode(e["delta"]))
-
             elif et == "response.output_audio_transcript.done":
                 print(f"[{t}] Agent: {e.get('transcript', '')}")
-
             elif et == "response.output_item.done":
                 item = e.get("item", {})
                 if item.get("type") == "function_call":
-                    call_id = item.get("call_id", "")
+                    call_id = item["call_id"]
                     if not any(c["call_id"] == call_id for c in pending_calls):
-                        pending_calls.append({
-                            "name": item.get("name", ""),
-                            "call_id": call_id,
-                            "arguments": json.loads(item.get("arguments", "{}")),
-                        })
-                        print(f"[{t}] Tool:  {item['name']}({item.get('arguments', '{}')})")
-
+                        pending_calls.append({"name": item["name"], "call_id": call_id,
+                                              "arguments": json.loads(item.get("arguments", "{}"))})
             elif et == "response.done":
                 s = e.get("response", {}).get("status", "?")
                 print(f"[{t}] Done ({s})")
                 if pending_calls:
-                    calls = pending_calls[:]
-                    pending_calls.clear()
+                    calls = pending_calls[:]; pending_calls.clear()
                     for call in calls:
                         result = run_tool(call["name"], call["arguments"])
-                        print(f"[{t}]   → {call['name']}: {json.dumps(result)[:80]}")
                         await ws.send(json.dumps({
                             "type": "conversation.item.create",
-                            "item": {
-                                "id": f"item_{uuid.uuid4().hex[:24]}",
-                                "type": "function_call_output",
-                                "call_id": call["call_id"],
-                                "output": json.dumps(result),
-                            },
+                            "item": {"id": f"item_{uuid.uuid4().hex[:24]}",
+                                     "type": "function_call_output",
+                                     "call_id": call["call_id"],
+                                     "output": json.dumps(result)},
                         }))
-
             elif et == "error":
                 print(f"[{t}] Error: {e.get('error', {})}")
 
@@ -889,22 +1922,26 @@ async def main():
     except KeyboardInterrupt:
         pass
     finally:
-        mic.stop(); mic.close(); player.close(); await ws.close()
+        player.close(); await ws.close()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### LiveKit Agents
+</Accordion>
 
-Uses the [LiveKit Agents framework](https://docs.livekit.io/agents/) with the OpenAI Realtime plugin. LiveKit handles audio transport, room management, and client connections — you define the agent behavior.
+</Tab>
+
+<Tab title="LiveKit Agents">
 
 ```bash
 pip install "livekit-agents[openai,silero]" python-dotenv
 ```
 
-```python
+Uses the [LiveKit Agents framework](https://docs.livekit.io/agents/) for production deployments with WebRTC transport, room management, and client SDKs for web and mobile.
+
+```python agent.py
 import asyncio, os
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, JobProcess, RunContext, cli, function_tool
@@ -965,8 +2002,63 @@ if __name__ == "__main__":
     cli.run_app(server)
 ```
 
-Run with:
-
 ```bash
 python agent.py console
 ```
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Events reference
+
+### Client → Server
+
+| Event | Description | Key fields |
+|-------|-------------|------------|
+| `session.update` | Configure the session | `session`: config object |
+| `input_audio_buffer.append` | Stream an audio chunk | `audio`: base64 PCM16 |
+| `input_audio_buffer.commit` | Commit buffered audio as a user turn | — |
+| `input_audio_buffer.clear` | Discard buffered audio | — |
+| `conversation.item.create` | Add a message or tool result | `item` |
+| `conversation.item.delete` | Remove a conversation item | `item_id` |
+| `response.create` | Trigger the agent to respond | — |
+| `response.cancel` | Cancel an in-progress response | — |
+
+### Server → Client
+
+| Event | Description | Key fields |
+|-------|-------------|------------|
+| `session.created` | Session initialized — clear buffer here | `session.id` |
+| `session.updated` | Config applied | `session` |
+| `input_audio_buffer.speech_started` | User started speaking | `audio_start_ms` |
+| `input_audio_buffer.speech_stopped` | User stopped speaking | `audio_end_ms` |
+| `input_audio_buffer.committed` | Audio committed as a turn | — |
+| `conversation.item.created` | New item added | `item` |
+| `conversation.item.input_audio_transcription.completed` | User speech transcribed | `transcript` |
+| `response.created` | Agent started generating | — |
+| `response.output_item.done` | Output item complete — capture tool calls here | `item` |
+| `response.output_audio.delta` | Agent audio chunk | `delta`: base64 PCM16 |
+| `response.output_audio.done` | Agent audio complete | — |
+| `response.output_audio_transcript.delta` | Agent text (streaming) | `delta` |
+| `response.output_audio_transcript.done` | Agent text (final) | `transcript` |
+| `response.done` | Response complete — inject tool results here | `response.status` |
+| `error` | Error occurred | `error.message` |
+
+---
+
+## What's next
+
+<CardGroup cols={3}>
+  <Card title="Universal Streaming STT" href="/docs/speech-to-text/universal-streaming">
+    Use AssemblyAI's STT on its own — real-time transcription with speaker diarization, word timestamps, and more.
+  </Card>
+  <Card title="LeMUR" href="/docs/lemur">
+    Apply LLMs to audio — summarize calls, extract action items, answer questions about recordings.
+  </Card>
+  <Card title="Audio Intelligence" href="/docs/audio-intelligence">
+    Sentiment analysis, topic detection, PII redaction, and more on top of transcription.
+  </Card>
+</CardGroup>
