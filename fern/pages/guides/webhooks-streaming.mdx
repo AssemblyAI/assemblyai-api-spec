@@ -1,0 +1,541 @@
+---
+title: "Webhooks for streaming speech-to-text"
+hide-nav-links: true
+description: "Get notified when a streaming transcription session ends."
+---
+
+Webhooks allow you to receive the complete transcript via HTTP callback when a streaming session ends. This is in addition to the normal WebSocket responses you receive during the session.
+
+<Note>
+  This guide covers webhooks for [streaming audio
+  transcription](/docs/speech-to-text/universal-streaming). For webhooks with
+  pre-recorded audio, see [Webhooks for pre-recorded
+  audio](/docs/deployment/webhooks).
+</Note>
+
+## Configure webhooks for a streaming session
+
+To use webhooks with streaming speech-to-text, add the following parameters to your WebSocket connection URL:
+
+| Parameter                   | Required | Description                                                               |
+| --------------------------- | -------- | ------------------------------------------------------------------------- |
+| `webhook_url`               | Yes      | The URL to send the transcript to when the session ends.                  |
+| `webhook_auth_header_name`  | No       | The name of the authentication header to include in the webhook request.  |
+| `webhook_auth_header_value` | No       | The value of the authentication header to include in the webhook request. |
+
+<Tip title="Don't have a webhook endpoint yet?">
+  Create a test webhook endpoint with [webhook.site](https://webhook.site) to
+  test your webhook integration.
+</Tip>
+
+### Example WebSocket URL with webhook parameters
+
+Add the webhook parameters as query parameters to the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&webhook_url=https://example.com/webhook
+```
+
+To include authentication:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&webhook_url=https://example.com/webhook&webhook_auth_header_name=X-Webhook-Secret&webhook_auth_header_value=secret-value
+```
+
+<Tabs>
+<Tab language="python-sdk" title="Python SDK">
+
+```python
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+from typing import Type
+
+api_key = "<YOUR_API_KEY>"
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(f"Session terminated: {event.audio_duration_seconds} seconds of audio processed")
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+            # Webhook parameters
+            webhook_url="https://example.com/webhook",
+            webhook_auth_header_name="X-Webhook-Secret",  # Optional
+            webhook_auth_header_value="secret-value",  # Optional
+        )
+    )
+
+    try:
+        client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
+    finally:
+        client.disconnect(terminate=True)
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
+<Tab language="python" title="Python">
+
+```python
+import pyaudio
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
+
+# --- Configuration ---
+YOUR_API_KEY = "<YOUR_API_KEY>"
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    # Webhook parameters
+    "webhook_url": "https://example.com/webhook",
+    "webhook_auth_header_name": "X-Webhook-Secret",  # Optional
+    "webhook_auth_header_value": "secret-value",  # Optional
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+
+
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
+
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+
+def on_message(ws, message):
+    """Called when a message is received from the WebSocket."""
+    try:
+        data = json.loads(message)
+        msg_type = data.get("type")
+
+        if msg_type == "Begin":
+            session_id = data.get("id")
+            expires_at = data.get("expires_at")
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get("transcript", "")
+            formatted = data.get("turn_is_formatted", False)
+            if formatted:
+                print("\r" + " " * 80 + "\r", end="")
+                print(transcript)
+            else:
+                print(f"\r{transcript}", end="")
+        elif msg_type == "Termination":
+            audio_duration = data.get("audio_duration_seconds", 0)
+            session_duration = data.get("session_duration_seconds", 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(2)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete.")
+
+
+if __name__ == "__main__":
+    run()
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    formatTurns: true,
+    // Webhook parameters
+    webhookUrl: "https://example.com/webhook",
+    webhookAuthHeaderName: "X-Webhook-Secret", // Optional
+    webhookAuthHeaderValue: "secret-value", // Optional
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+    console.log("Turn:", turn.transcript);
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+    await transcriber.connect();
+
+    console.log("Starting recording");
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav",
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const WebSocket = require("ws");
+
+const API_KEY = "<YOUR_API_KEY>";
+
+const connectionParams = new URLSearchParams({
+  sample_rate: 16000,
+  format_turns: true,
+  // Webhook parameters
+  webhook_url: "https://example.com/webhook",
+  webhook_auth_header_name: "X-Webhook-Secret", // Optional
+  webhook_auth_header_value: "secret-value", // Optional
+});
+
+const API_ENDPOINT = `wss://streaming.assemblyai.com/v3/ws?${connectionParams.toString()}`;
+
+const ws = new WebSocket(API_ENDPOINT, {
+  headers: {
+    Authorization: API_KEY,
+  },
+});
+
+ws.on("open", () => {
+  console.log("WebSocket connection opened.");
+  console.log(`Connected to: ${API_ENDPOINT}`);
+
+  // Start streaming audio data here
+  // For example, using a microphone input library
+});
+
+ws.on("message", (data) => {
+  try {
+    const message = JSON.parse(data);
+    const msgType = message.type;
+
+    if (msgType === "Begin") {
+      const sessionId = message.id;
+      const expiresAt = new Date(message.expires_at * 1000);
+      console.log(`\nSession began: ID=${sessionId}, ExpiresAt=${expiresAt}`);
+    } else if (msgType === "Turn") {
+      const transcript = message.transcript || "";
+      const formatted = message.turn_is_formatted || false;
+      if (formatted) {
+        process.stdout.write("\r" + " ".repeat(80) + "\r");
+        console.log(transcript);
+      } else {
+        process.stdout.write(`\r${transcript}`);
+      }
+    } else if (msgType === "Termination") {
+      const audioDuration = message.audio_duration_seconds || 0;
+      const sessionDuration = message.session_duration_seconds || 0;
+      console.log(
+        `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+      );
+    }
+  } catch (e) {
+    console.error("Error handling message:", e);
+  }
+});
+
+ws.on("error", (error) => {
+  console.error("WebSocket Error:", error);
+});
+
+ws.on("close", (code, reason) => {
+  console.log(`WebSocket Disconnected: Status=${code}, Msg=${reason}`);
+});
+
+// To gracefully close the session, send a Terminate message
+function terminateSession() {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "Terminate" }));
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Handle webhook deliveries
+
+When the streaming session ends, AssemblyAI sends a `POST` HTTP request to the URL you specified. The webhook contains the complete transcript from the session.
+
+Your webhook endpoint must return a 2xx HTTP status code within 10 seconds to indicate successful receipt. If a 2xx status is not received within 10 seconds, AssemblyAI will retry the webhook call up to a total of 10 attempts. If at any point your endpoint returns a 4xx status code, the webhook call is considered failed and will not be retried.
+
+<Note title="Static Webhook IP addresses">
+
+AssemblyAI sends all webhook deliveries from fixed IP addresses:
+
+| Region | IP Address     |
+| ------ | -------------- |
+| US     | `44.238.19.20` |
+| EU     | `54.220.25.36` |
+
+</Note>
+
+### Delivery payload
+
+The webhook delivery payload contains the complete transcript from the streaming session as a JSON object. The payload includes the session ID and an array of messages containing all the transcript turns.
+
+```json
+{
+  "session_id": "273e79fd-99e9-4e1d-91da-90f56a132d01",
+  "messages": [
+    {
+      "turn_order": 0,
+      "turn_is_formatted": true,
+      "end_of_turn": true,
+      "transcript": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US Skylines from Maine to Maryland to Minnesota are gray and smoggy, and in some places the air.",
+      "end_of_turn_confidence": 0.5005,
+      "words": [
+        {
+          "start": 4880,
+          "end": 5040,
+          "text": "Smoke",
+          "confidence": 0.76054,
+          "word_is_final": true
+        },
+        {
+          "start": 5280,
+          "end": 5360,
+          "text": "from",
+          "confidence": 0.761065,
+          "word_is_final": true
+        }
+      ],
+      "utterance": "",
+      "type": "Turn"
+    }
+  ]
+}
+```
+
+| Key                                 | Type    | Description                                                    |
+| ----------------------------------- | ------- | -------------------------------------------------------------- |
+| `session_id`                        | string  | The unique identifier for the streaming session.               |
+| `messages`                          | array   | An array of transcript turn objects from the session.          |
+| `messages[].turn_order`             | integer | The order of the turn in the session (0-indexed).              |
+| `messages[].turn_is_formatted`      | boolean | Whether the transcript has been formatted.                     |
+| `messages[].end_of_turn`            | boolean | Whether this message represents the end of a turn.             |
+| `messages[].transcript`             | string  | The transcribed text for this turn.                            |
+| `messages[].end_of_turn_confidence` | number  | Confidence score for the end of turn detection.                |
+| `messages[].words`                  | array   | Word-level details including timestamps and confidence scores. |
+| `messages[].type`                   | string  | The message type, typically "Turn".                            |
+
+## Authenticate webhook deliveries
+
+To secure your webhook endpoint, you can include custom authentication headers in the webhook request. When configuring your streaming session, provide the `webhook_auth_header_name` and `webhook_auth_header_value` parameters.
+
+AssemblyAI will include this header in the webhook request, allowing you to verify that the request came from AssemblyAI.
+
+```
+webhook_auth_header_name=X-Webhook-Secret&webhook_auth_header_value=secret-value
+```
+
+In your webhook receiver, verify the header value matches what you configured:
+
+```python
+auth_header = request.headers.get("X-Webhook-Secret")
+if auth_header != "secret-value":
+    return "Unauthorized", 401
+```
+
+## Best practices
+
+When implementing webhooks for streaming speech-to-text, consider the following best practices:
+
+1. **Always verify authentication**: If you configure an authentication header, always verify it in your webhook receiver to ensure requests are from AssemblyAI.
+
+2. **Respond quickly**: Return a response from your webhook endpoint as quickly as possible. If you need to perform time-consuming processing, do it asynchronously after returning the response.
+
+3. **Handle failures gracefully**: Your webhook endpoint should handle errors gracefully and return appropriate HTTP status codes.
+
+4. **Use HTTPS**: Always use HTTPS for your webhook URL to ensure the transcript data is encrypted in transit.
+
+5. **Log webhook deliveries**: Keep logs of webhook deliveries for debugging and auditing purposes.
