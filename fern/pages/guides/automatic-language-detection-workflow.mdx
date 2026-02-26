@@ -1,0 +1,129 @@
+---
+title: "Separating automatic language detection from transcription"
+hide-nav-links: true
+description: "Automatically detect the language using a cost-effective Universal-2 ALD workflow"
+---
+
+In this guide, you'll learn how to perform automatic language detection (ALD) separately from the transcription process. For the transcription, the file then gets routed to either [Universal-3-Pro or Universal-2](/docs/speech-to-text/pre-recorded-audio/select-the-speech-model), depending on the supported language.
+
+This workflow is designed to be cost-effective, slicing the first 60 seconds of audio and running it through Universal-2 with ALD, which detects 99 languages, at a cost of $0.002 per transcript for this language detection workflow (not including the total transcription cost).
+
+Performing ALD with this workflow has a few benefits:
+
+- Cost-effective language detection
+- Ability to detect 99 languages
+- Ability to use Universal-2 as fallback if the language is not supported in Universal-3 Pro
+- Ability to enable [Speech Understanding models](/audio-intelligence) if the [language is supported](/docs/speech-to-text/pre-recorded-audio/supported-languages)
+- Ability to use [LLM Gateway](/llm-gateway) with LLM prompts in Spanish for Spanish audio
+
+## Before you begin
+
+To complete this tutorial, you need:
+
+- [Python](https://www.python.org/) installed.
+- A <a href="https://www.assemblyai.com/dashboard/signup" target="_blank">free AssemblyAI account</a>.
+
+The entire source code of this guide can be viewed [here](/docs/guides/automatic-language-detection-separate).
+
+## Step-by-step instructions
+
+Install the Python SDK:
+
+```bash
+pip install assemblyai
+```
+
+```python
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+```
+
+Create a set with all supported languages for Universal. You can find them in our [documentation here](/docs/speech-to-text/pre-recorded-audio/supported-languages#supported-languages-for-universal).
+
+```python
+supported_languages_for_universal = {
+    "en",
+    "es",
+    "fr",
+    "de",
+    "it",
+    "pt",
+    "nl",
+    "hi",
+    "ja",
+    "zh",
+    "fi",
+    "ko",
+    "pl",
+    "ru",
+    "tr",
+    "uk",
+    "vi",
+}
+```
+
+Define a `Transcriber`. Note that here we don't pass in a global `TranscriptionConfig`, but later apply different ones during the `transcribe()` call.
+
+```python
+transcriber = aai.Transcriber()
+```
+
+Define two helper functions:
+
+- `detect_language()` performs language detection on the [first 60 seconds](https://www.assemblyai.com/docs/api-reference/transcripts/submit#request.body.audio_end_at) of the audio using Universal-2 and returns the language code.
+- `transcribe_file()` performs the transcription using Universal-3-Pro or Universal-2 depending on the identified language.
+
+```python
+def detect_language(audio_url):
+    config = aai.TranscriptionConfig(
+        audio_end_at=60000,  # first 60 seconds (in milliseconds)
+        language_detection=True,
+        speech_models=["universal-2"],
+    )
+    transcript = transcriber.transcribe(audio_url, config=config)
+    return transcript.json_response["language_code"]
+
+def transcribe_file(audio_url, language_code):
+    config = aai.TranscriptionConfig(
+        language_code=language_code,
+        speech_models=(
+            ["universal-3-pro", "universal-2"]
+            if language_code in supported_languages_for_universal
+            else ["universal-2"]
+        ),
+    )
+    transcript = transcriber.transcribe(audio_url, config=config)
+    return transcript
+```
+
+Test the code with different audio files. Apply both helper functions sequentially to each file to first identify the language and then transcribe the file.
+
+```python
+audio_urls = [
+    "https://storage.googleapis.com/aai-web-samples/public_benchmarking_portugese.mp3",
+    "https://storage.googleapis.com/aai-web-samples/public_benchmarking_spanish.mp3",
+    "https://storage.googleapis.com/aai-web-samples/slovenian_luka_doncic_interview.mp3",
+    "https://storage.googleapis.com/aai-web-samples/5_common_sports_injuries.mp3",
+]
+
+for audio_url in audio_urls:
+    language_code = detect_language(audio_url)
+    print("Identified language:", language_code)
+
+    transcript = transcribe_file(audio_url, language_code)
+    print("Transcript:", transcript.text[:100], "...")
+```
+
+Output:
+
+```bash
+Identified language: pt
+Transcript: e aí Olá pessoal, sejam bem-vindos a mais um vídeo e hoje eu vou ensinar-vos como fazer esta espada  ...
+Identified language: es
+Transcript: Precisamente sobre este caso, el diario estadounidense New York Times reveló este sábado un conjunto ...
+Identified language: sl
+Transcript: Ni lepška, kaj videl tega otroka v mrekoj svojga okolja, da mu je uspil in to v takimi miri, da pač  ...
+Identified language: en
+Transcript: Runner's knee runner's knee is a condition characterized by pain behind or around the kneecap. It is ...
+```
