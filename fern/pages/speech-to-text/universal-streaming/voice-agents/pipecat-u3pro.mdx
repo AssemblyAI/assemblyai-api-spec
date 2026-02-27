@@ -1,0 +1,653 @@
+---
+title: "Universal-3 Pro on Pipecat"
+description: "Integrate AssemblyAI's Universal-3 Pro streaming speech-to-text model into Pipecat voice agents"
+---
+
+<Note>
+  U3-Pro is currently in **Alpha**. It is not yet officially enabled for
+  production workloads. A limited number of customers are testing it with light
+  usage. [Contact AssemblyAI](https://www.assemblyai.com/contact/sales) to
+  discuss enabling it for your use case.
+</Note>
+
+## Overview
+
+This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-rt-pro)** streaming speech-to-text model into Pipecat voice agents. U3-Pro is AssemblyAI's next-generation model built specifically for voice agent use cases, featuring advanced turn detection, prompt engineering capabilities, speaker diarization, and optimized latency.
+
+### Key features
+
+- **Two-mode turn detection**: Choose between Pipecat-controlled (VAD + Smart Turn) or STT-controlled turn detection
+- **Dynamic parameter updates**: Change configuration mid-conversation without reconnection
+- **Speaker diarization**: Identify and label different speakers in multi-party conversations
+- **Custom prompting**: Guide transcription behavior with custom instructions
+- **Keyterms boosting**: Improve recognition of specific words and names
+- **Language detection**: Automatic language identification with confidence scoring
+
+### Critical configuration requirements
+
+- **Choose your turn detection mode**: Pipecat mode (default, recommended) or STT mode
+- **Set `min_end_of_turn_silence_when_confident` to `100`** for best latency
+- **Enable VAD in Pipecat mode** for interruption handling
+- **Set `format_turns` to `True`** (no added latency with U3-Pro)
+
+## Installation
+
+Install Pipecat with AssemblyAI support:
+
+```bash
+pip install "pipecat-ai[assemblyai,daily]"
+```
+
+Additional recommended packages:
+
+```bash
+# For LLM and TTS
+pip install "pipecat-ai[cerebras,rime]"
+```
+
+Choose your transport:
+
+- `daily` — Daily.co WebRTC (recommended for production)
+- `livekit` — LiveKit WebRTC
+- No extra flag needed for `LocalAudioTransport` (testing/development)
+
+## Authentication
+
+Set your API keys in a `.env` file:
+
+```env
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+DAILY_API_KEY=your_daily_key       # If using Daily transport
+CEREBRAS_API_KEY=your_cerebras_key
+RIME_API_KEY=your_rime_key
+```
+
+<Tip>
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
+
+## Two-mode turn detection
+
+Pipecat offers two distinct approaches to turn detection with U3-Pro.
+
+### Pipecat mode (default, recommended)
+
+**When to use:** Most voice agent applications requiring responsive interruptions.
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_end_of_turn_silence_when_confident=100,
+        format_turns=True,
+    ),
+    vad_force_turn_endpoint=True,  # Default — Pipecat mode
+)
+```
+
+**How it works:**
+
+- VAD + Smart Turn analyzer controls when the user is done speaking
+- `ForceEndpoint` message sent to AssemblyAI on VAD silence detection
+- `max_turn_silence` automatically synchronized with `min_end_of_turn_silence_when_confident`
+- Best for low-latency, responsive voice agents
+
+### STT mode
+
+**When to use:** When you want AssemblyAI's model to control turn endings (experimental).
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_end_of_turn_silence_when_confident=100,
+        max_turn_silence=5000,  # Now respected
+        format_turns=True,
+    ),
+    vad_force_turn_endpoint=False,  # STT mode
+)
+```
+
+**How it works:**
+
+- AssemblyAI's model controls turn detection
+- All timing parameters are respected as configured
+- Emits `UserStartedSpeakingFrame` / `UserStoppedSpeakingFrame`
+- Uses `SpeechStarted` events for fast barge-in
+- Only available with `u3-rt-pro` (other models require Pipecat mode)
+
+### Comparison: Pipecat mode vs STT mode
+
+| Feature                          | Pipecat Mode (default)                             | STT Mode                                      |
+| -------------------------------- | -------------------------------------------------- | --------------------------------------------- |
+| Turn detection control           | VAD + Smart Turn                                   | AssemblyAI model                              |
+| ForceEndpoint sent               | Yes (on VAD stop)                                  | No                                            |
+| `max_turn_silence` behavior      | Auto-synchronized with `min_silence`               | Respected as configured                       |
+| UserStarted/StoppedFrame         | Not emitted from STT                               | Emitted from STT                              |
+| VAD requirement                  | Required (for interruptions)                       | Optional                                      |
+| Recommended for                  | Most voice agent use cases                         | Experimental / specific timing requirements   |
+| Model support                    | All models                                         | `u3-rt-pro` only                              |
+| Interruption latency             | Fast (local VAD)                                   | Fast (SpeechStarted events)                   |
+| Configuration complexity         | Simpler (auto-sync)                                | More control (manual timing)                  |
+
+## Basic example (Pipecat mode)
+
+```python
+import asyncio
+import os
+import sys
+
+from dotenv import load_dotenv
+from loguru import logger
+
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import LLMRunFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
+from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
+from pipecat.services.assemblyai.stt import AssemblyAISTTService
+from pipecat.services.rime.tts import RimeTTSService
+from pipecat.services.cerebras.llm import CerebrasLLMService
+from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+
+load_dotenv()
+logger.remove(0)
+logger.add(sys.stderr, level="INFO")
+
+
+async def main():
+    # Create local audio transport for testing
+    transport = LocalAudioTransport(
+        LocalAudioTransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        )
+    )
+
+    # AssemblyAI U3-Pro STT
+    stt = AssemblyAISTTService(
+        api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+        connection_params=AssemblyAIConnectionParams(
+            speech_model="u3-rt-pro",
+            min_end_of_turn_silence_when_confident=100,
+            format_turns=True,
+        ),
+        vad_force_turn_endpoint=True,  # Pipecat mode
+    )
+
+    # Text-to-Speech
+    tts = RimeTTSService(
+        api_key=os.getenv("RIME_API_KEY"),
+        voice_id="rex",
+        model="mistv2",
+    )
+
+    # LLM
+    llm = CerebrasLLMService(
+        api_key=os.getenv("CEREBRAS_API_KEY"),
+        model="llama-3.3-70b",
+    )
+
+    # Conversation context
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful voice assistant. Keep responses brief (1-2 sentences).",
+        },
+    ]
+    context = LLMContext(messages)
+
+    # Aggregators with VAD for Pipecat mode
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer()  # Required for Pipecat mode
+        ),
+    )
+
+    # Pipeline
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            llm,
+            tts,
+            transport.output(),
+            assistant_aggregator,
+        ]
+    )
+
+    # Task
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(
+            enable_metrics=True,
+            enable_usage_metrics=True,
+        ),
+    )
+
+    # Start conversation
+    await task.queue_frames([LLMRunFrame()])
+
+    # Run
+    runner = PipelineRunner()
+    await runner.run(task)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Prompt engineering
+
+U3-Pro supports custom transcription instructions via the `prompt` parameter:
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_end_of_turn_silence_when_confident=100,
+        format_turns=True,
+        prompt="""Short utterance. Context: Transcribe short utterances such as yes or no answers.
+Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations,
+repetitions, stutters, false starts, and colloquialisms in the spoken language.
+Punctuation rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for
+complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete
+trailing speech.""",
+    ),
+)
+```
+
+### Prompt engineering tips
+
+- **Specify audio context**: Accent, domain, expected utterance length
+- **Call out problem words**: Explicitly mention frequently misrecognized terms
+- **Define punctuation rules**: Helps downstream LLM processing
+- **Preserve speech patterns**: Keep disfluencies for natural interactions
+
+## Keyterms boosting
+
+Improve recognition of specific words or names:
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_end_of_turn_silence_when_confident=100,
+        format_turns=True,
+        keyterms_prompt=["Xiomara", "Saoirse", "Pipecat", "AssemblyAI"],
+    ),
+)
+```
+
+Alternatively, boost terms within a prompt:
+
+```python
+word_boost = ["AssemblyAI", "Pipecat", "async", "webhook"]
+prompt = f"""Your transcription instructions here.
+Make sure to boost the words {', '.join(word_boost)} in the audio."""
+
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        prompt=prompt,
+    ),
+)
+```
+
+## Dynamic parameter updates
+
+Change configuration mid-conversation without reconnection:
+
+```python
+from pipecat.frames.frames import STTUpdateSettingsFrame
+from pipecat.services.assemblyai.stt import AssemblyAISTTSettings
+from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
+
+# Update keyterms during conversation
+await task.queue_frame(
+    STTUpdateSettingsFrame(
+        delta=AssemblyAISTTSettings(
+            connection_params=AssemblyAIConnectionParams(
+                keyterms_prompt=["NewName", "NewCompany"]
+            )
+        )
+    )
+)
+
+# Update prompt
+await task.queue_frame(
+    STTUpdateSettingsFrame(
+        delta=AssemblyAISTTSettings(
+            connection_params=AssemblyAIConnectionParams(
+                prompt="Updated transcription instructions"
+            )
+        )
+    )
+)
+
+# Update silence thresholds
+await task.queue_frame(
+    STTUpdateSettingsFrame(
+        delta=AssemblyAISTTSettings(
+            connection_params=AssemblyAIConnectionParams(
+                min_end_of_turn_silence_when_confident=200,
+                max_turn_silence=3000,  # Only respected in STT mode
+            )
+        )
+    )
+)
+```
+
+## Speaker diarization
+
+Identify different speakers in multi-party conversations.
+
+### Basic diarization
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        speaker_labels=True,
+    ),
+)
+```
+
+Speaker labels (e.g., `"A"`, `"B"`, `"C"`) are included in final transcripts and logged.
+
+### With custom formatting
+
+Format transcripts with speaker labels for LLM context:
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        speaker_labels=True,
+    ),
+    speaker_format="<Speaker {speaker}>{text}</Speaker {speaker}>",
+)
+```
+
+**Format options:**
+
+| Style    | Format string                              |
+| -------- | ------------------------------------------ |
+| XML      | `<{speaker}>{text}</{speaker}>`            |
+| Markdown | `**{speaker}**: {text}`                    |
+| Bracket  | `[{speaker}] {text}`                       |
+
+## Language detection
+
+Enable automatic language detection (for multilingual models):
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="universal-streaming-multilingual",
+        language_detection=True,
+    ),
+)
+```
+
+Language codes and confidence scores are included in transcription frames. The service automatically uses detected languages with confidence >= 0.7.
+
+## Daily transport example
+
+For production deployments with Daily.co:
+
+```python
+from pipecat.transports.daily.transport import DailyTransport
+
+transport = DailyTransport(
+    room_url="https://yourcompany.daily.co/your-room",
+    token="your_meeting_token",
+    bot_name="AssemblyAI Bot",
+)
+
+# Rest of setup is the same as the local transport example
+```
+
+## Parameters reference
+
+### U3-Pro specific parameters
+
+<ParamField path="speech_model" type="str" default="universal-streaming-english">
+  Set to `"u3-rt-pro"` to use Universal-3 Pro.
+</ParamField>
+
+<ParamField
+  path="min_end_of_turn_silence_when_confident"
+  type="int"
+  default="400"
+>
+  Milliseconds of silence before ending a turn when model is confident. Set to
+  `100` for best latency.
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default="2000">
+  Maximum silence before forced turn end. Auto-synced in Pipecat mode; respected
+  in STT mode.
+</ParamField>
+
+<ParamField path="format_turns" type="bool" default="False">
+  Enable turn formatting. Recommended `True` — no added latency with U3-Pro.
+</ParamField>
+
+<ParamField path="prompt" type="str">
+  Custom transcription instructions. Cannot be used with `keyterms_prompt`.
+</ParamField>
+
+<ParamField path="keyterms_prompt" type="list[str]">
+  List of terms to boost recognition for. Cannot be used with `prompt`.
+</ParamField>
+
+<ParamField path="speaker_labels" type="bool" default="False">
+  Enable speaker diarization.
+</ParamField>
+
+### General parameters
+
+<ParamField path="api_key" type="str" required>
+  Your AssemblyAI API key.
+</ParamField>
+
+<ParamField path="vad_force_turn_endpoint" type="bool" default="True">
+  `True` for Pipecat mode; `False` for STT mode.
+</ParamField>
+
+<ParamField path="speaker_format" type="str">
+  Template string for formatting speaker labels (e.g.,
+  `"[{speaker}] {text}"`).
+</ParamField>
+
+<ParamField path="language_detection" type="bool" default="False">
+  Enable automatic language detection.
+</ParamField>
+
+## Running your agent
+
+### Development mode (local audio)
+
+```bash
+python your_agent.py
+```
+
+Speak into your microphone after hearing the greeting.
+
+### Production with Daily
+
+Deploy to Daily.co rooms using the Daily transport. Your agent joins as a participant and handles audio I/O through Daily's infrastructure.
+
+## Troubleshooting
+
+| Issue                                    | Cause                                                    | Solution                                                                          |
+| ---------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| "Are you there?" moments                | High end-of-turn latency                                 | Set `min_end_of_turn_silence_when_confident=100`                                  |
+| Over-segmentation (cutting off user)     | `min_end_of_turn_silence_when_confident` too low         | Increase to `200`–`300`                                                           |
+| Missing VAD warning in Pipecat mode      | No VAD analyzer in user aggregator                       | Add `LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())`                   |
+| STT mode not working                    | Using non-`u3-rt-pro` model                              | Only `u3-rt-pro` supports STT mode                                                |
+| `max_turn_silence` warning              | Setting `max_turn_silence` in Pipecat mode               | Expected — it's auto-synced (or switch to STT mode)                               |
+| Dynamic updates not working             | Using old dict format                                    | Use `STTUpdateSettingsFrame(delta=AssemblyAISTTSettings(...))`                     |
+| Speaker labels always None              | Missing `speaker_labels=True`                            | Enable in `connection_params`                                                     |
+| Prompt + keyterms error                 | Both set simultaneously                                  | Choose one or the other                                                           |
+
+### Known limitations (Alpha)
+
+- **STT mode is experimental**: Pipecat mode is recommended for most use cases
+- **No partial transcripts**: U3-Pro only returns final transcripts
+- **Dynamic prompt updates**: Supported but requires AssemblyAI API support (in progress)
+- **Not yet production-grade**: Alpha status — contact AssemblyAI before deploying to production
+
+## Migration from standard AssemblyAI STT
+
+If migrating from `universal-streaming` models:
+
+| Change                                              | From                                 | To                                                           |
+| --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| Model                                               | Default (`universal-streaming-english`) | `speech_model="u3-rt-pro"`                                |
+| Turn detection                                      | Automatic                            | Choose mode: Pipecat (default) or STT                        |
+| VAD requirement                                     | Optional                             | **Required** in Pipecat mode                                 |
+| `min_end_of_turn_silence_when_confident`            | Default (`400`)                      | `100` recommended                                            |
+| Prompting                                           | Not available                        | Available via `prompt` parameter                             |
+| Keyterms                                            | Not available                        | Available via `keyterms_prompt`                               |
+| Speaker diarization                                 | Not available                        | Available via `speaker_labels=True`                           |
+| Dynamic updates                                     | Not available                        | Supported via `STTUpdateSettingsFrame`                        |
+| `max_turn_silence` in Pipecat mode                  | Configurable                         | Auto-synchronized (or switch to STT mode)                    |
+
+## Full example with all features
+
+```python
+import asyncio
+import os
+
+from dotenv import load_dotenv
+
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import LLMRunFrame, STTUpdateSettingsFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
+from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
+from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
+from pipecat.services.rime.tts import RimeTTSService
+from pipecat.services.cerebras.llm import CerebrasLLMService
+from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+
+load_dotenv()
+
+
+async def main():
+    transport = LocalAudioTransport(
+        LocalAudioTransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        )
+    )
+
+    # U3-Pro with all features enabled
+    stt = AssemblyAISTTService(
+        api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+        connection_params=AssemblyAIConnectionParams(
+            speech_model="u3-rt-pro",
+            min_end_of_turn_silence_when_confident=100,
+            format_turns=True,
+            speaker_labels=True,                                    # Enable diarization
+            keyterms_prompt=["Pipecat", "AssemblyAI", "u3-rt-pro"], # Boost key terms
+        ),
+        vad_force_turn_endpoint=True,          # Pipecat mode
+        speaker_format="[{speaker}] {text}",   # Format speaker labels
+    )
+
+    tts = RimeTTSService(
+        api_key=os.getenv("RIME_API_KEY"),
+        voice_id="rex",
+        model="mistv2",
+    )
+
+    llm = CerebrasLLMService(
+        api_key=os.getenv("CEREBRAS_API_KEY"),
+        model="llama-3.3-70b",
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful voice assistant. Keep responses brief.",
+        },
+    ]
+    context = LLMContext(messages)
+
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer()
+        ),
+    )
+
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            llm,
+            tts,
+            transport.output(),
+            assistant_aggregator,
+        ]
+    )
+
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(
+            enable_metrics=True,
+            enable_usage_metrics=True,
+        ),
+    )
+
+    # Example: dynamically update keyterms after 10 seconds
+    async def update_keyterms():
+        await asyncio.sleep(10)
+        await task.queue_frame(
+            STTUpdateSettingsFrame(
+                delta=AssemblyAISTTSettings(
+                    connection_params=AssemblyAIConnectionParams(
+                        keyterms_prompt=["NewTerm", "UpdatedName"]
+                    )
+                )
+            )
+        )
+
+    asyncio.create_task(update_keyterms())
+
+    await task.queue_frames([LLMRunFrame()])
+
+    runner = PipelineRunner()
+    await runner.run(task)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
