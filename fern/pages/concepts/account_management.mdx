@@ -141,6 +141,18 @@ If you're consistently hitting rate limits when trying to open new sessions, fir
 
 </Note>
 
+### API rate limit
+
+In addition to concurrency limits, there is a global API rate limit that restricts accounts to a maximum of **20,000 requests per five minutes** across all endpoints. This limit applies to all API requests, including transcript submission (`POST /v2/transcript`), status polling (`GET /v2/transcript/{id}`), and other API calls.
+
+If you exceed this limit, the API will respond with a `429 Too Many Requests` status code.
+
+<Note title="Handling 429 responses">
+
+If you receive a `429` response, implement an exponential backoff retry strategy. Wait for an increasing amount of time between retries (e.g., 1s, 2s, 4s, 8s) to allow your rate limit window to reset.
+
+</Note>
+
 ### LLM Gateway usage limits
 
 Your LLM Gateway usage limit dictates the number of requests you can make within a 60-second time window. For more information, see [Rate limits](https://www.assemblyai.com/docs/api-reference/overview#rate-limits).
@@ -156,6 +168,31 @@ Each [LLM Gateway model](/docs/llm-gateway/overview#available-models) has its ow
 LLM Gateway is not available to accounts on the free tier. To use LLM Gateway, please upgrade to a paid account by adding a credit card to your account.
 
 </Note>
+
+## Scaling async transcription
+
+When transcribing large volumes of audio files using the pre-recorded (async) API, keep the following practices in mind to maximize throughput and avoid errors.
+
+### Submit files up to your concurrency limit
+
+You can submit as many transcription requests as you want — jobs that exceed your concurrency limit are automatically queued and processed as earlier jobs complete. However, for optimal throughput, pace your submissions so that you always have jobs processing without overwhelming the API rate limit.
+
+### Use webhooks instead of polling
+
+Instead of repeatedly polling `GET /v2/transcript/{id}` to check if a transcription is complete, use [webhooks](/docs/getting-started/webhooks) to receive a notification when each job finishes. This reduces the number of API requests you make, helping you stay well within the rate limit — especially important at high volume.
+
+### Implement exponential backoff for retries
+
+If you receive a `429 Too Many Requests` response, avoid retrying immediately. Instead, use an exponential backoff strategy:
+
+1. Wait 1 second, then retry.
+2. If still throttled, wait 2 seconds, then retry.
+3. Continue doubling the wait time (4s, 8s, 16s, ...) up to a reasonable maximum (e.g., 60 seconds).
+4. Adding a small random jitter to each wait helps prevent multiple clients from retrying in sync.
+
+### Monitor your usage
+
+Use the [AssemblyAI dashboard](https://www.assemblyai.com/app) to monitor your concurrency usage and spend. If you're consistently hitting concurrency or rate limits, [contact our Sales team](https://www.assemblyai.com/contact) to increase your limits at no additional cost.
 
 ## Best Practices
 
