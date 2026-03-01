@@ -12,8 +12,8 @@ subtitle: >-
 </Warning>
 
 Streaming Diarization lets you identify and label individual speakers in real
-time directly from the Streaming API. Each `Turn` event includes a `speaker`
-field (e.g. `SPEAKER_A`, `SPEAKER_B`) indicating which speaker produced that
+time directly from the Streaming API. Each `Turn` event includes a `speaker_label`
+field (e.g. `A`, `B`) indicating which speaker produced that
 transcript. Speaker accuracy improves over the course of a session as the model
 accumulates embedding context — so the longer the conversation, the better the
 labels.
@@ -23,8 +23,8 @@ Diarization is supported on all streaming models: `u3-rt-pro`,
 
 <Tip title="Already using AssemblyAI streaming?">
   You can enable Streaming Diarization by adding `speaker_labels: true` to your
-  connection parameters. No other changes are required — the `speaker` field
-  will appear on every `Turn` event automatically.
+  connection parameters. No other changes are required — the `speaker_label`
+  field will appear on every `Turn` event automatically.
 </Tip>
 
 ## Quickstart
@@ -70,7 +70,7 @@ Get started with Streaming Diarization using the code below. This example stream
         print(f"Session started: {event.id}")
 
     def on_turn(self: Type[StreamingClient], event: TurnEvent):
-        speaker = event.speaker or "UNKNOWN"
+        speaker = event.speaker_label or "UNKNOWN"
         print(f"[{speaker}] {event.transcript} (end_of_turn={event.end_of_turn})")
 
     def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
@@ -181,7 +181,7 @@ Get started with Streaming Diarization using the code below. This example stream
                 print(f"Session began: ID={data.get('id')}")
             elif msg_type == "Turn":
                 transcript = data.get("transcript", "")
-                speaker = data.get("speaker") or "UNKNOWN"
+                speaker = data.get("speaker_label") or "UNKNOWN"
                 end_of_turn = data.get("end_of_turn", False)
                 if end_of_turn:
                     print(f"\r{' ' * 80}\r[{speaker}] {transcript}")
@@ -305,7 +305,7 @@ Get started with Streaming Diarization using the code below. This example stream
 
       transcriber.on("turn", (turn) => {
         if (!turn.transcript) return;
-        const speaker = turn.speaker ?? "UNKNOWN";
+        const speaker = turn.speakerLabel ?? "UNKNOWN";
         console.log(`[${speaker}] ${turn.transcript}`);
       });
 
@@ -404,7 +404,7 @@ Get started with Streaming Diarization using the code below. This example stream
             console.log(`Session began: ID=${msg.id}`);
           } else if (msg.type === "Turn") {
             const transcript = msg.transcript || "";
-            const speaker = msg.speaker || "UNKNOWN";
+            const speaker = msg.speaker_label || "UNKNOWN";
             if (msg.end_of_turn) {
               process.stdout.write("\r" + " ".repeat(80) + "\r");
               console.log(`[${speaker}] ${transcript}`);
@@ -472,32 +472,32 @@ parameters. You can optionally cap the number of speakers with `max_speakers`.
 
 ## Reading speaker labels
 
-When diarization is enabled, every `Turn` event includes a `speaker` field
-with a label such as `SPEAKER_A`, `SPEAKER_B`, and so on.
+When diarization is enabled, every `Turn` event includes a `speaker_label` field
+with a label such as `A`, `B`, and so on.
 
 ```json
 {
   "type": "Turn",
   "transcript": "And then after that, they had a phone relationship.",
-  "speaker": "SPEAKER_A",
+  "speaker_label": "A",
   "end_of_turn": true,
   "turn_is_formatted": true
 }
 ```
 
 If the model cannot confidently assign a speaker — typically for very short
-utterances at the start of a session — the `speaker` field may be `null` or
-`"UNKNOWN"`. Your application should handle this case gracefully.
+utterances at the start of a session — the `speaker_label` field may be `null`.
+Your application should handle this case gracefully.
 
 A typical multi-speaker exchange looks like this:
 
 ```
-[SPEAKER_A] And then after that, they had a phone relationship, and finally they actually met.
-[SPEAKER_A] God. He was from someplace like Boston or something.
-[SPEAKER_B] So you never know.
-[SPEAKER_B] Yeah.
-[SPEAKER_A] Do you have friends, Laura?
-[SPEAKER_C] Sort of. I have the midwives, and two of them live here, and they're friendly.
+[A] And then after that, they had a phone relationship, and finally they actually met.
+[A] God. He was from someplace like Boston or something.
+[B] So you never know.
+[B] Yeah.
+[A] Do you have friends, Laura?
+[C] Sort of. I have the midwives, and two of them live here, and they're friendly.
 ```
 
 ## How speaker accuracy improves over time
