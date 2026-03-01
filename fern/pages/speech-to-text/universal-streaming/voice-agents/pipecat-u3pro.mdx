@@ -49,7 +49,7 @@ Additional recommended packages:
 
 ```bash
 # For LLM and TTS
-pip install "pipecat-ai[cerebras,rime]"
+pip install "pipecat-ai[openai,cartesia]"
 ```
 
 Choose your transport:
@@ -64,8 +64,8 @@ Set your API keys in a `.env` file:
 ```env
 ASSEMBLYAI_API_KEY=your_assemblyai_key
 DAILY_API_KEY=your_daily_key       # If using Daily transport
-CEREBRAS_API_KEY=your_cerebras_key
-RIME_API_KEY=your_rime_key
+OPENAI_API_KEY=your_openai_key
+CARTESIA_API_KEY=your_cartesia_key
 ```
 
 <Tip>
@@ -75,7 +75,7 @@ RIME_API_KEY=your_rime_key
 
 ## Two-mode turn detection
 
-Pipecat offers two distinct approaches to turn detection with U3-Pro.
+Within Pipecat, you have two distinct approaches to turn detection with AssemblyAI's U3-Pro model.
 
 ### Pipecat mode (default, recommended)
 
@@ -143,12 +143,14 @@ stt = AssemblyAISTTService(
 | Interruption latency             | Fast (local VAD)                                   | Fast (SpeechStarted events)                      |
 | Configuration complexity         | Simpler (auto-sync)                                | More control (manual timing)                     |
 
-## Basic example (Pipecat mode)
+## Basic example
+
+<Tip>
+  This example uses Cartesia for TTS and OpenAI for the LLM, but you can use any TTS or LLM service that Pipecat supports.
+</Tip>
 
 ```python
-import asyncio
 import os
-import sys
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -163,99 +165,111 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
+from pipecat.runner.types import RunnerArguments
+from pipecat.runner.utils import create_transport
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
-from pipecat.services.rime.tts import RimeTTSService
-from pipecat.services.cerebras.llm import CerebrasLLMService
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.daily.transport import DailyParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 
-load_dotenv()
-logger.remove(0)
-logger.add(sys.stderr, level="INFO")
+load_dotenv(override=True)
 
 
-async def main():
-    # Create local audio transport for testing
-    transport = LocalAudioTransport(
-        LocalAudioTransportParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-        )
-    )
+# We use lambdas to defer transport parameter creation until the transport
+# type is selected at runtime.
+transport_params = {
+    "daily": lambda: DailyParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+    ),
+    "twilio": lambda: FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+    ),
+    "webrtc": lambda: TransportParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+    ),
+}
 
-    # AssemblyAI U3-Pro STT
+
+async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
+    logger.info(f"Starting bot")
+
     stt = AssemblyAISTTService(
         api_key=os.getenv("ASSEMBLYAI_API_KEY"),
-        connection_params=AssemblyAIConnectionParams(
-            speech_model="u3-rt-pro",
-            min_turn_silence=100,
-            format_turns=True,
-        ),
-        vad_force_turn_endpoint=True,  # Pipecat mode
     )
 
-    # Text-to-Speech
-    tts = RimeTTSService(
-        api_key=os.getenv("RIME_API_KEY"),
-        voice_id="rex",
-        model="mistv2",
+    tts = CartesiaTTSService(
+        api_key=os.getenv("CARTESIA_API_KEY"),
+        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
     )
 
-    # LLM
-    llm = CerebrasLLMService(
-        api_key=os.getenv("CEREBRAS_API_KEY"),
-        model="llama-3.3-70b",
-    )
+    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Conversation context
     messages = [
         {
             "role": "system",
-            "content": "You are a helpful voice assistant. Keep responses brief (1-2 sentences).",
+            "content": "You are a helpful LLM in a WebRTC call. Your goal is to demonstrate your capabilities in a succinct way. Your output will be spoken aloud, so avoid special characters that can't easily be spoken, such as emojis or bullet points. Respond to what the user said in a creative and helpful way.",
         },
     ]
-    context = LLMContext(messages)
 
-    # Aggregators with VAD for Pipecat mode
+    context = LLMContext(messages)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer()  # Required for Pipecat mode
-        ),
+        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
     )
 
-    # Pipeline
     pipeline = Pipeline(
         [
-            transport.input(),
-            stt,
-            user_aggregator,
-            llm,
-            tts,
-            transport.output(),
-            assistant_aggregator,
+            transport.input(),  # Transport user input
+            stt,  # STT
+            user_aggregator,  # User responses
+            llm,  # LLM
+            tts,  # TTS
+            transport.output(),  # Transport bot output
+            assistant_aggregator,  # Assistant spoken responses
         ]
     )
 
-    # Task
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
+        idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
     )
 
-    # Start conversation
-    await task.queue_frames([LLMRunFrame()])
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(transport, client):
+        logger.info(f"Client connected")
+        # Kick off the conversation.
+        messages.append({"role": "system", "content": "Please introduce yourself to the user."})
+        await task.queue_frames([LLMRunFrame()])
 
-    # Run
-    runner = PipelineRunner()
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(transport, client):
+        logger.info(f"Client disconnected")
+        await task.cancel()
+
+    runner = PipelineRunner(handle_sigint=runner_args.handle_sigint)
+
     await runner.run(task)
 
 
+async def bot(runner_args: RunnerArguments):
+    """Main bot entry point compatible with Pipecat Cloud."""
+    transport = await create_transport(runner_args, transport_params)
+    await run_bot(transport, runner_args)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    from pipecat.runner.run import main
+
+    main()
 ```
 
 ## Prompt engineering
@@ -564,8 +578,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
 from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
-from pipecat.services.rime.tts import RimeTTSService
-from pipecat.services.cerebras.llm import CerebrasLLMService
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 
 load_dotenv()
@@ -593,16 +607,12 @@ async def main():
         speaker_format="[{speaker}] {text}",   # Format speaker labels
     )
 
-    tts = RimeTTSService(
-        api_key=os.getenv("RIME_API_KEY"),
-        voice_id="rex",
-        model="mistv2",
+    tts = CartesiaTTSService(
+        api_key=os.getenv("CARTESIA_API_KEY"),
+        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
     )
 
-    llm = CerebrasLLMService(
-        api_key=os.getenv("CEREBRAS_API_KEY"),
-        model="llama-3.3-70b",
-    )
+    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"))
 
     messages = [
         {
