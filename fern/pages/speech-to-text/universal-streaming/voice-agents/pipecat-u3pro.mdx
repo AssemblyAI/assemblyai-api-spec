@@ -16,7 +16,7 @@ This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-rt-pro)** strea
 
 ### Key features
 
-- **Two-mode turn detection**: Choose between Pipecat-controlled (VAD + Smart Turn) or STT-controlled turn detection
+- **Two-mode turn detection**: Choose between Pipecat-controlled (VAD + Smart Turn) or AssemblyAI's built-in turn detection (STT-based)
 - **Dynamic parameter updates**: Change configuration mid-conversation without reconnection
 - **Speaker diarization**: Identify and label different speakers in multi-party conversations
 - **Custom prompting**: Guide transcription behavior with custom instructions
@@ -25,7 +25,7 @@ This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-rt-pro)** strea
 
 ### Critical configuration requirements
 
-- **Choose your turn detection mode**: Pipecat mode (default, recommended) or STT mode
+- **Choose your turn detection mode**: Pipecat mode (default, recommended) or AssemblyAI's built-in turn detection (STT mode)
 - **Set `min_turn_silence` to `100`** for best latency
 - **Enable VAD in Pipecat mode** for interruption handling
 - **Set `format_turns` to `True`** (no added latency with U3-Pro)
@@ -100,9 +100,9 @@ stt = AssemblyAISTTService(
 - `max_turn_silence` automatically synchronized with `min_turn_silence`
 - Best for low-latency, responsive voice agents
 
-### STT mode
+### AssemblyAI's built-in turn detection (STT mode)
 
-**When to use:** When you want AssemblyAI's model to control turn endings (experimental).
+**When to use:** When you want AssemblyAI's built-in turn detection to control turn endings (experimental).
 
 ```python
 stt = AssemblyAISTTService(
@@ -113,31 +113,35 @@ stt = AssemblyAISTTService(
         max_turn_silence=5000,  # Now respected
         format_turns=True,
     ),
-    vad_force_turn_endpoint=False,  # STT mode
+    vad_force_turn_endpoint=False,  # AssemblyAI's built-in turn detection (STT mode)
 )
 ```
 
 **How it works:**
 
-- AssemblyAI's model controls turn detection
+- AssemblyAI's built-in turn detection controls when the user is done speaking
 - All timing parameters are respected as configured
 - Emits `UserStartedSpeakingFrame` / `UserStoppedSpeakingFrame`
 - Uses `SpeechStarted` events for fast barge-in
 - Only available with `u3-rt-pro` (other models require Pipecat mode)
 
-### Comparison: Pipecat mode vs STT mode
+<Note>
+  AssemblyAI's built-in turn detection uses the STT model's understanding of speech patterns to determine turn boundaries, rather than relying on local VAD silence detection.
+</Note>
 
-| Feature                          | Pipecat Mode (default)                             | STT Mode                                      |
-| -------------------------------- | -------------------------------------------------- | --------------------------------------------- |
-| Turn detection control           | VAD + Smart Turn                                   | AssemblyAI model                              |
-| ForceEndpoint sent               | Yes (on VAD stop)                                  | No                                            |
-| `max_turn_silence` behavior      | Auto-synchronized with `min_silence`               | Respected as configured                       |
-| UserStarted/StoppedFrame         | Not emitted from STT                               | Emitted from STT                              |
-| VAD requirement                  | Required (for interruptions)                       | Optional                                      |
-| Recommended for                  | Most voice agent use cases                         | Experimental / specific timing requirements   |
-| Model support                    | All models                                         | `u3-rt-pro` only                              |
-| Interruption latency             | Fast (local VAD)                                   | Fast (SpeechStarted events)                   |
-| Configuration complexity         | Simpler (auto-sync)                                | More control (manual timing)                  |
+### Comparison: Pipecat mode vs AssemblyAI's built-in turn detection (STT mode)
+
+| Feature                          | Pipecat Mode (default)                             | AssemblyAI's Built-in Turn Detection (STT Mode) |
+| -------------------------------- | -------------------------------------------------- | ------------------------------------------------ |
+| Turn detection control           | VAD + Smart Turn                                   | AssemblyAI's built-in model                      |
+| ForceEndpoint sent               | Yes (on VAD stop)                                  | No                                               |
+| `max_turn_silence` behavior      | Auto-synchronized with `min_silence`               | Respected as configured                          |
+| UserStarted/StoppedFrame         | Not emitted from STT                               | Emitted from STT                                 |
+| VAD requirement                  | Required (for interruptions)                       | Optional                                         |
+| Recommended for                  | Most voice agent use cases                         | Experimental / specific timing requirements      |
+| Model support                    | All models                                         | `u3-rt-pro` only                                 |
+| Interruption latency             | Fast (local VAD)                                   | Fast (SpeechStarted events)                      |
+| Configuration complexity         | Simpler (auto-sync)                                | More control (manual timing)                     |
 
 ## Basic example (Pipecat mode)
 
@@ -351,7 +355,7 @@ await task.queue_frame(
         delta=AssemblyAISTTSettings(
             connection_params=AssemblyAIConnectionParams(
                 min_turn_silence=200,
-                max_turn_silence=3000,  # Only respected in STT mode
+                max_turn_silence=3000,  # Only respected in AssemblyAI's built-in turn detection (STT mode)
             )
         )
     )
@@ -451,7 +455,7 @@ transport = DailyTransport(
 
 <ParamField path="max_turn_silence" type="int" default="2000">
   Maximum silence before forced turn end. Auto-synced in Pipecat mode; respected
-  in STT mode.
+  in AssemblyAI's built-in turn detection (STT mode).
 </ParamField>
 
 <ParamField path="format_turns" type="bool" default="False">
@@ -477,7 +481,7 @@ transport = DailyTransport(
 </ParamField>
 
 <ParamField path="vad_force_turn_endpoint" type="bool" default="True">
-  `True` for Pipecat mode; `False` for STT mode.
+  `True` for Pipecat mode; `False` for AssemblyAI's built-in turn detection (STT mode).
 </ParamField>
 
 <ParamField path="speaker_format" type="str">
@@ -510,15 +514,15 @@ Deploy to Daily.co rooms using the Daily transport. Your agent joins as a partic
 | "Are you there?" moments                | High end-of-turn latency                                 | Set `min_turn_silence=100`                                                        |
 | Over-segmentation (cutting off user)     | `min_turn_silence` too low                               | Increase to `200`–`300`                                                           |
 | Missing VAD warning in Pipecat mode      | No VAD analyzer in user aggregator                       | Add `LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())`                   |
-| STT mode not working                    | Using non-`u3-rt-pro` model                              | Only `u3-rt-pro` supports STT mode                                                |
-| `max_turn_silence` warning              | Setting `max_turn_silence` in Pipecat mode               | Expected — it's auto-synced (or switch to STT mode)                               |
+| AssemblyAI's built-in turn detection not working | Using non-`u3-rt-pro` model                       | Only `u3-rt-pro` supports AssemblyAI's built-in turn detection (STT mode)         |
+| `max_turn_silence` warning              | Setting `max_turn_silence` in Pipecat mode               | Expected — it's auto-synced (or switch to AssemblyAI's built-in turn detection)   |
 | Dynamic updates not working             | Using old dict format                                    | Use `STTUpdateSettingsFrame(delta=AssemblyAISTTSettings(...))`                     |
 | Speaker labels always None              | Missing `speaker_labels=True`                            | Enable in `connection_params`                                                     |
 | Prompt + keyterms error                 | Both set simultaneously                                  | Choose one or the other                                                           |
 
 ### Known limitations (Alpha)
 
-- **STT mode is experimental**: Pipecat mode is recommended for most use cases
+- **AssemblyAI's built-in turn detection (STT mode) is experimental**: Pipecat mode is recommended for most use cases
 - **No partial transcripts**: U3-Pro only returns final transcripts
 - **Dynamic prompt updates**: Supported but requires AssemblyAI API support (in progress)
 - **Not yet production-grade**: Alpha status — contact AssemblyAI before deploying to production
@@ -530,7 +534,7 @@ If migrating from `universal-streaming` models:
 | Change                                              | From                                 | To                                                           |
 | --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
 | Model                                               | Default (`universal-streaming-english`) | `speech_model="u3-rt-pro"`                                |
-| Turn detection                                      | Automatic                            | Choose mode: Pipecat (default) or STT                        |
+| Turn detection                                      | Automatic                            | Choose mode: Pipecat (default) or AssemblyAI's built-in (STT mode) |
 | VAD requirement                                     | Optional                             | **Required** in Pipecat mode                                 |
 | `min_turn_silence`                                  | Default (`400`)                      | `100` recommended                                            |
 | Parameter naming                                    | N/A                                  | `min_end_of_turn_silence_when_confident` deprecated, use `min_turn_silence` |
@@ -538,7 +542,7 @@ If migrating from `universal-streaming` models:
 | Keyterms                                            | Not available                        | Available via `keyterms_prompt`                               |
 | Speaker diarization                                 | Not available                        | Available via `speaker_labels=True`                           |
 | Dynamic updates                                     | Not available                        | Supported via `STTUpdateSettingsFrame`                        |
-| `max_turn_silence` in Pipecat mode                  | Configurable                         | Auto-synchronized (or switch to STT mode)                    |
+| `max_turn_silence` in Pipecat mode                  | Configurable                         | Auto-synchronized (or switch to AssemblyAI's built-in turn detection) |
 
 ## Full example with all features
 
