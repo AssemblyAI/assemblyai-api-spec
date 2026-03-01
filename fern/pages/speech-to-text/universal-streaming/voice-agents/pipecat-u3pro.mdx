@@ -26,9 +26,15 @@ This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-rt-pro)** strea
 ### Critical configuration requirements
 
 - **Choose your turn detection mode**: Pipecat mode (default, recommended) or STT mode
-- **Set `min_end_of_turn_silence_when_confident` to `100`** for best latency
+- **Set `min_turn_silence` to `100`** for best latency
 - **Enable VAD in Pipecat mode** for interruption handling
 - **Set `format_turns` to `True`** (no added latency with U3-Pro)
+
+## Examples
+
+Complete working examples are available in the Pipecat repository:
+
+- **[07o-interruptible-assemblyai-stt.py](https://github.com/pipecat-ai/pipecat/blob/main/examples/foundational/07o-interruptible-assemblyai-stt.py)** — Interruptible voice agent with U3-Pro, demonstrating turn detection modes and VAD configuration
 
 ## Installation
 
@@ -80,7 +86,7 @@ stt = AssemblyAISTTService(
     api_key=os.getenv("ASSEMBLYAI_API_KEY"),
     connection_params=AssemblyAIConnectionParams(
         speech_model="u3-rt-pro",
-        min_end_of_turn_silence_when_confident=100,
+        min_turn_silence=100,
         format_turns=True,
     ),
     vad_force_turn_endpoint=True,  # Default — Pipecat mode
@@ -91,7 +97,7 @@ stt = AssemblyAISTTService(
 
 - VAD + Smart Turn analyzer controls when the user is done speaking
 - `ForceEndpoint` message sent to AssemblyAI on VAD silence detection
-- `max_turn_silence` automatically synchronized with `min_end_of_turn_silence_when_confident`
+- `max_turn_silence` automatically synchronized with `min_turn_silence`
 - Best for low-latency, responsive voice agents
 
 ### STT mode
@@ -103,7 +109,7 @@ stt = AssemblyAISTTService(
     api_key=os.getenv("ASSEMBLYAI_API_KEY"),
     connection_params=AssemblyAIConnectionParams(
         speech_model="u3-rt-pro",
-        min_end_of_turn_silence_when_confident=100,
+        min_turn_silence=100,
         max_turn_silence=5000,  # Now respected
         format_turns=True,
     ),
@@ -178,7 +184,7 @@ async def main():
         api_key=os.getenv("ASSEMBLYAI_API_KEY"),
         connection_params=AssemblyAIConnectionParams(
             speech_model="u3-rt-pro",
-            min_end_of_turn_silence_when_confident=100,
+            min_turn_silence=100,
             format_turns=True,
         ),
         vad_force_turn_endpoint=True,  # Pipecat mode
@@ -257,7 +263,7 @@ stt = AssemblyAISTTService(
     api_key=os.getenv("ASSEMBLYAI_API_KEY"),
     connection_params=AssemblyAIConnectionParams(
         speech_model="u3-rt-pro",
-        min_end_of_turn_silence_when_confident=100,
+        min_turn_silence=100,
         format_turns=True,
         prompt="""Short utterance. Context: Transcribe short utterances such as yes or no answers.
 Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations,
@@ -285,7 +291,7 @@ stt = AssemblyAISTTService(
     api_key=os.getenv("ASSEMBLYAI_API_KEY"),
     connection_params=AssemblyAIConnectionParams(
         speech_model="u3-rt-pro",
-        min_end_of_turn_silence_when_confident=100,
+        min_turn_silence=100,
         format_turns=True,
         keyterms_prompt=["Xiomara", "Saoirse", "Pipecat", "AssemblyAI"],
     ),
@@ -344,7 +350,7 @@ await task.queue_frame(
     STTUpdateSettingsFrame(
         delta=AssemblyAISTTSettings(
             connection_params=AssemblyAIConnectionParams(
-                min_end_of_turn_silence_when_confident=200,
+                min_turn_silence=200,
                 max_turn_silence=3000,  # Only respected in STT mode
             )
         )
@@ -434,12 +440,13 @@ transport = DailyTransport(
 </ParamField>
 
 <ParamField
-  path="min_end_of_turn_silence_when_confident"
+  path="min_turn_silence"
   type="int"
   default="400"
 >
   Milliseconds of silence before ending a turn when model is confident. Set to
-  `100` for best latency.
+  `100` for best latency. (Formerly `min_end_of_turn_silence_when_confident`,
+  which is deprecated but still supported with a warning.)
 </ParamField>
 
 <ParamField path="max_turn_silence" type="int" default="2000">
@@ -500,8 +507,8 @@ Deploy to Daily.co rooms using the Daily transport. Your agent joins as a partic
 
 | Issue                                    | Cause                                                    | Solution                                                                          |
 | ---------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| "Are you there?" moments                | High end-of-turn latency                                 | Set `min_end_of_turn_silence_when_confident=100`                                  |
-| Over-segmentation (cutting off user)     | `min_end_of_turn_silence_when_confident` too low         | Increase to `200`–`300`                                                           |
+| "Are you there?" moments                | High end-of-turn latency                                 | Set `min_turn_silence=100`                                                        |
+| Over-segmentation (cutting off user)     | `min_turn_silence` too low                               | Increase to `200`–`300`                                                           |
 | Missing VAD warning in Pipecat mode      | No VAD analyzer in user aggregator                       | Add `LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())`                   |
 | STT mode not working                    | Using non-`u3-rt-pro` model                              | Only `u3-rt-pro` supports STT mode                                                |
 | `max_turn_silence` warning              | Setting `max_turn_silence` in Pipecat mode               | Expected — it's auto-synced (or switch to STT mode)                               |
@@ -525,7 +532,8 @@ If migrating from `universal-streaming` models:
 | Model                                               | Default (`universal-streaming-english`) | `speech_model="u3-rt-pro"`                                |
 | Turn detection                                      | Automatic                            | Choose mode: Pipecat (default) or STT                        |
 | VAD requirement                                     | Optional                             | **Required** in Pipecat mode                                 |
-| `min_end_of_turn_silence_when_confident`            | Default (`400`)                      | `100` recommended                                            |
+| `min_turn_silence`                                  | Default (`400`)                      | `100` recommended                                            |
+| Parameter naming                                    | N/A                                  | `min_end_of_turn_silence_when_confident` deprecated, use `min_turn_silence` |
 | Prompting                                           | Not available                        | Available via `prompt` parameter                             |
 | Keyterms                                            | Not available                        | Available via `keyterms_prompt`                               |
 | Speaker diarization                                 | Not available                        | Available via `speaker_labels=True`                           |
@@ -572,7 +580,7 @@ async def main():
         api_key=os.getenv("ASSEMBLYAI_API_KEY"),
         connection_params=AssemblyAIConnectionParams(
             speech_model="u3-rt-pro",
-            min_end_of_turn_silence_when_confident=100,
+            min_turn_silence=100,
             format_turns=True,
             speaker_labels=True,                                    # Enable diarization
             keyterms_prompt=["Pipecat", "AssemblyAI", "u3-rt-pro"], # Boost key terms
