@@ -1,11 +1,24 @@
 ---
-title: "Prompting"
+title: "Prompting Guide (Async)"
 ---
 
+import { AudioPlayer } from "../../../assets/components/AudioPlayer";
 import { PromptGenerator } from "../../../assets/components/PromptGenerator";
 import { PromptLibrary } from "../../../assets/components/PromptLibrary";
 
-Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro speech transcription.
+<Note title="Looking for streaming prompting?">
+Prompting behavior differs between async (pre-recorded) and streaming use cases. This guide covers prompting for **async (pre-recorded audio)**. If you're working with real-time audio, see the [Prompting Guide (Streaming)](/docs/streaming/prompting).
+</Note>
+
+Use prompt engineering to control transcription style and improve accuracy for domain-specific terminology. This guide documents best practices for crafting effective prompts for Universal-3-Pro async speech transcription.
+
+<Tip title="Start with no prompt">
+**We strongly recommend testing with no `prompt` first.** When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt that is already optimized for accuracy across a wide range of audio types.
+
+If you're going to build a prompt, start with one of the [recommended prompts](#recommended-prompts) and then tweak it for your use case. **You should not start from scratch with your prompt — use a recommended prompt and then build off of it.**
+
+Remember, prompts are primarily instructional, so adding a large amount of context may not make a significant impact on accuracy and could reduce instruction-following coherence. Feel free to layer in additional instructions from this guide.
+</Tip>
 
 ## How prompting works
 
@@ -13,20 +26,23 @@ Universal-3-Pro is a Speech-augmented Large Language Model (SpeechLLM). The arch
 
 SpeechLLM prompting works more like **selecting modes and knobs** than open-ended instruction following. The model is trained primarily to transcribe, then fine-tuned to respond to common transcription instructions for style, speakers, and speech events.
 
+Prompting is **more instructional than contextual** — the model responds best to explicit formatting rules and behavioral instructions (e.g., "include all filler words" or "use periods only for complete sentences"). Providing domain context like "this is a cardiology appointment" is most effective when paired with specific instructions telling the model *how* to transcribe. We are actively working to make the model more contextual in the future. For boosting specific domain terms today, use [keyterms prompting](/docs/pre-recorded-audio/keyterms-prompting).
+
 ### What prompts can do
 
 | Capability                                  | Description                                                      | Reliability |
 | ------------------------------------------- | ---------------------------------------------------------------- | ----------- |
 | **Verbatim transcription and disfluencies** | Include filler words, false starts, repetitions, stutters        | High        |
+| **Audio event tags**                        | Mark laughter, music, applause, background sounds                | Experimental (YMMV) |
+| **Labeling crosstalk**                      | Label overlapping speech, interruptions, and crosstalk segments  | Experimental (YMMV) |
 | **Output style and formatting**             | Control punctuation, capitalization, number formatting           | High        |
+| **Numbers and measurements**                | Control how numbers, percentages, and measurements are formatted | Medium      |
 | **Context aware clues**                     | Help with jargon, names, and domain expectations                 | Medium      |
 | **Entity accuracy and spelling**            | Improve accuracy for proper nouns, brands, technical terms       | Medium      |
 | **Speaker attribution**                     | Mark speaker turns and add labels                                | Experimental (YMMV) |
-| **Audio event tags**                        | Mark laughter, music, applause, background sounds                | Experimental (YMMV) |
-| **Code-switching and multilingual**         | Handle multilingual audio in same transcript                     | Medium      |
-| **Numbers and measurements**                | Control how numbers, percentages, and measurements are formatted | Medium      |
-| **Difficult audio handling**                | Guidance for unclear audio, overlapping speech, interruptions    | Experimental (YMMV) |
-| **PII redaction**               | Tag and redact personal information like names, addresses, contact info     | Experimental (YMMV) |
+| **Native code switching**                   | Handle multilingual audio in same transcript                     | Medium      |
+| **Difficult audio handling**                | Maximize guesses or flag uncertainty on unclear audio             | Experimental (YMMV) |
+| **PII redaction**                           | Tag and redact personal information like names, addresses, contact info | Experimental (YMMV) |
 
 ### What prompts cannot reliably do
 
@@ -138,9 +154,94 @@ Transcribe this audio
 
 ---
 
+## Evaluating transcription accuracy
+
+When evaluating Universal-3-Pro output against human-labeled ground truth files, **be aware that the model frequently outperforms human transcribers**. If your word error rate (WER) evaluation shows unexpected **insertions** from Universal-3-Pro, listen back to the original audio before assuming the model is wrong. In many cases, the model is correctly transcribing audio that a human transcriber missed or normalized. Similarly, some **substitutions** are purely semantic or formatting differences (e.g., "offsite" vs. "off site," "alright" vs. "all right") that inflate WER without representing meaningful errors.
+
+Tips for accurate evaluation:
+
+- **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
+- **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
+- **Watch for semantic substitutions** — formatting-level differences inflate WER without representing meaningful errors.
+- **Consider Semantic WER** over traditional normalized WER for a more accurate evaluation. Semantic WER won't penalize formatting-level substitutions or insertions that are actually correct transcription, giving you a more realistic measure of true transcription quality.
+
+In addition to the [default prompt](#best-all-around-default), we recommend testing with the [Best simple prompt](#best-simple) and the [Handling unclear audio with [masked]](#handling-unclear-audio-with-masked) prompt to find the best fit for your evaluation and use case.
+
+---
+
+## Recommended prompts
+
+The following prompts are our top recommendations for different use cases. Start here before exploring the detailed [prompt capabilities](#prompt-capabilities) below.
+
+### Best all around (default)
+
+This is the current default prompt, providing the best balance of verbatim accuracy, multilingual support, and performance on challenging audio:
+
+```text
+Required: Preserve the original language(s) and script as spoken,
+including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies,
+filler words, hesitations, repetitions, stutters, false starts, and
+colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all
+possible scenarios where speech is present in the audio.
+```
+
+This prompt maximizes speech pattern capture, preserves code-switching, and tells the model to always attempt transcription even on difficult audio. The trade-off is that the model may occasionally hallucinate disfluencies or language switches that don't exist in the audio.
+
+### Best simple
+
+If you want strong accuracy without the verbatim and multilingual instructions, use this single-line prompt:
+
+```text
+Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
+```
+
+This gives the model clear guidance to always attempt transcription while keeping instructions minimal. It's a great starting point if you don't need multilingual code-switching or maximum disfluency capture.
+
+### Handling unclear audio with [masked]
+
+<Tip title="Recommended for reducing hallucinations">
+This prompt is one of the most effective strategies for avoiding hallucinations on unclear or difficult audio. Instead of forcing the model to guess, it explicitly flags uncertain segments, giving you visibility into areas of uncertainty in the transcript.
+</Tip>
+
+```text
+Always: Transcribe speech exactly as heard. If uncertain or audio is
+unclear, mark as [masked]. After the first output, review the transcript
+again. Pay close attention to hallucinations, misspellings, or errors,
+and revise them like a computer performing spell and grammar checks.
+Ensure words and phrases make grammatical sense in sentences.
+```
+
+You can also use `[unclear]` instead of `[masked]`:
+
+```text
+Always: Transcribe speech exactly as heard. If uncertain or audio is
+unclear, mark as [unclear]. After the first output, review the transcript
+again. Pay close attention to hallucinations, misspellings, or errors,
+and revise them like a computer performing spell and grammar checks.
+Ensure words and phrases make grammatical sense in sentences.
+```
+
+<Note>
+The `[masked]` tag may also be applied to profanity in the audio. If preserving profanity is important for your use case, use `[unclear]` instead to avoid profanity being tagged.
+</Note>
+
+This prompt tells the model to never guess on unclear or difficult audio and instead label it explicitly. The result is a transcript where:
+
+- **Hallucinations are materially reduced** — the model doesn't force potentially incorrect guesses on uncertain audio segments.
+- **Uncertain sections are explicitly flagged** as `[masked]` or `[unclear]`, giving you transparency into exactly where audio quality was insufficient for confident transcription.
+- **Genuine but difficult speech is still preserved** — the model transcribes what it can hear clearly while honestly marking what it cannot.
+
+This is especially useful for quality-sensitive workflows where incorrect guesses are worse than gaps, and for building review pipelines where human reviewers can focus on flagged segments.
+
+---
+
 ## Prompt capabilities
 
-Each capability below acts as a "knob" you can turn. Combine 3-6 capabilities maximum for best results.
+Each capability below acts as a "knob" you can turn. Combine 3-6 capabilities maximum for best results. Each section includes an audio demo showing the before/after effect of prompting.
 
 ### 1. Verbatim transcription and disfluencies
 
@@ -148,10 +249,25 @@ Each capability below acts as a "knob" you can turn. Combine 3-6 capabilities ma
 
 **Reliability:** High
 
+<AudioPlayer src="https://assemblyaiassets.com/audios/verbatim.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Do you and Quentin still socialize when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we're friends. What do you do with him?
+```
+
+With prompt, the model better captures filler words like "uh" and false starts like "we, we, we're friends".
+
+```txt wordWrap
+Do you and Quentin still socialize, uh, when you come to Los Angeles, or is it like he's so used to having you here? No, no, no, we, we, we're friends. What do you do with him?
+```
+
 **Example prompts:**
 
 ```text
-Include spoken filler words, hesitations, plus repetitions and false starts when clearly spoken.
+Include spoken filler words like "um," "uh," "you know," "like," plus repetitions
+and false starts when clearly spoken.
 ```
 
 ```text
@@ -170,11 +286,99 @@ Transcribe verbatim:
 
 ---
 
-### 2. Output style and formatting
+### 2. Audio event tags
+
+**What it does:** Marks non-speech sounds like music, laughter, applause, and background noise.
+
+**Reliability:** Experimental (YMMV)
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/audio_tag.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options.
+```
+
+With prompting, non-speech events like beeps are called out in the transcript.
+
+```txt wordWrap
+Your call has been forwarded to an automatic voice message system. At the tone, please record your message. When you have finished recording, you may hang up or press 1 for more options. [beep]
+```
+
+Here are some examples of audio tags you can prompt for: [music], [laughter], [applause], [noise], [pause], [inaudible], [sigh], [gasp], [cheering], [sound], [screaming], [bell], [beep], [sound effect], [buzzer], and more.
+
+**Example prompts:**
+
+```text
+Preserve non-speech audio in tags to indicate when the audio occurred.
+```
+
+```text
+Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
+```
+
+```text
+Include audio event markers for music, laughter, and applause.
+```
+
+---
+
+### 3. Labeling crosstalk
+
+**What it does:** Labels overlapping speech, interruptions, and crosstalk segments in the transcript.
+
+**Reliability:** Experimental (YMMV)
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/Difficult_audio.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+I hope you got our card. Okay, nobody talk. We'll just wait for her to talk. Well, we just wanted to— damn it!
+```
+
+With prompt:
+
+```txt wordWrap
+I hope you got our card. [CROSSTALK] Okay, nobody talk. We'll just wait for her to talk. Well, we just wanted to— [CROSSTALK] Damn it!
+```
+
+**Example prompts:**
+
+```text
+When multiple speakers talk simultaneously, mark crosstalk segments.
+```
+
+```text
+Mark inaudible segments. Preserve overlapping speech and crosstalk.
+```
+
+```text
+If unintelligible, write (unclear).
+```
+
+---
+
+### 4. Output style and formatting
 
 **What it does:** Controls punctuation, capitalization, and readability without changing words.
 
 **Reliability:** High
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/ouput_formatting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+You got called because you were being loud and screaming. No, that's literally what my dispatch said. I don't give a fuck what your dispatch said. They lied. Okay, well, you need to calm down. I don't. Okay, yeah, calm down please. No, I don't. Yes, I'm Jesus Christ's daughter. I'm not doing this tonight with you. I'm not. I'm not. So you need to calm down.
+```
+
+With prompt, the model accurately captures the speaker's emotional state through punctuation, adding exclamation marks during moments of yelling and emphasis.
+
+```txt wordWrap
+You got called because you were being loud and screaming. No, I wasn't. That's literally what my dispatch said. I don't give a fuck what your dispatch said! They lied! Okay, well, you need to calm down. I don't! Okay, yeah, calm down, please. No, I don't! I'm Jesus Christ's daughter! I'm not doing this tonight with you. I'm not. I'm not. So you need to calm down.
+```
 
 **Example prompts:**
 
@@ -192,11 +396,61 @@ Use standard punctuation and sentence breaks for readability.
 
 ---
 
-### 3. Context aware clues
+### 5. Numbers and measurements
+
+**What it does:** Controls how numbers, percentages, and measurements are formatted.
+
+**Reliability:** Medium
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/numbers_formatting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Commission has presented their communication, a hydrogen strategy for climate-neutral Europe, two weeks ago, which includes investments of between €180 billion and €400 billion.
+```
+
+With prompt:
+
+```txt wordWrap
+Commission has presented their communication, a hydrogen strategy for climate-neutral Europe, 2 weeks ago, which includes investments of between €180,000,000,000 and €400,000,000,000.
+```
+
+**Example prompts:**
+
+```text
+Convert spoken numbers to digits.
+```
+
+```text
+Use digits for numbers, percentages, and measurements.
+```
+
+```text
+Format financial figures with standard notation and format numbers for maximum readability.
+```
+
+---
+
+### 6. Context aware clues
 
 **What it does:** Helps with jargon, names, and domain expectations that are known from the audio file.
 
 **Reliability:** Medium
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/nlp_prompting.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+I just want to move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I do. I take Ramipril. Okay. And I take Metformin, and there's another one that begins with G for the diabetes. Glicoside. Excellent.
+```
+
+With prompt, adding 'clinical history evaluation' as a context clue corrects spelling of 'Glicoside' to 'Glycoside'.
+
+```txt wordWrap
+I just wanna move you along a bit further. Do you take any prescribed medicines? I know you've got diabetes and high blood pressure. I, I do. I take, um, I take Ramipril. Okay, mhm. And I take Metformin, and there's another one that begins with G for the diabetes. So glycosi— glycosi— glycoside. Excellent.
+```
 
 **Example prompts:**
 
@@ -206,6 +460,10 @@ Transcribe this audio. This is a doctor-patient visit, prioritize accurately tra
 
 ```text
 Prioritize transcribing this virtual meeting like a human transcritionist, paying close attention to names, company names, jargon, acronyms, and other entities.
+```
+
+```text
+Transcribe this audio. Context: a technical lecture about GPUs, CUDA, and inference.
 ```
 
 <Warning>
@@ -219,11 +477,25 @@ The instruction tells the model what to pay attention to when transcribing, whil
 
 ---
 
-### 4. Entity accuracy and spelling
+### 7. Entity accuracy and spelling
 
 **What it does:** Improves accuracy for proper nouns, brands, technical terms, and domain vocabulary.
 
 **Reliability:** Medium
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/entity_accuracy.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Watch again closely. This is the potential game changer. The first responder NK cell killing cancer right before your eyes. If you give yourself Entiva, even in healthy volunteers, it dries up your first responders. It dries up your protectors. And that's why I said the power is within us.
+```
+
+With prompt, the model corrects the misrecognition of "Anktiva," which would otherwise be transcribed as "Entiva".
+
+```txt wordWrap
+Watch again closely. This is the potential game changer. The first responder NK cell killing cancer right before your eyes. If you give yourself Anktiva, even in healthy volunteers, it dries up your first responders. It dries up your protectors. And that's why I said the power is within us.
+```
 
 **Example prompts:**
 
@@ -248,11 +520,31 @@ Over instructing the model to follow specific examples that occur in a file can 
 
 ---
 
-### 5. Speaker attribution
+### 8. Speaker attribution
 
 **What it does:** Marks speaker turns and adds identifying labels.
 
 **Reliability:** Experimental (YMMV)
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/speaker_diarization.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+Speaker A: Five milligrams. And you take it regularly? Good. Every evening. And no side effects with it.
+```
+
+With prompt:
+
+```txt wordWrap
+[Speaker:NURSE] 5mg. And do you take it regularly?
+[Speaker:PATIENT] Oh yeah, yeah.
+[Speaker:NURSE] Good.
+[Speaker:PATIENT] I take it every evening.
+[Speaker:NURSE] And no side effects with it?
+```
+
+Without prompting, it may appear that one speaker said everything. But with prompting, the model correctly identifies this as 5 separate speaker turns, capturing utterances as short as a single word, like "good".
 
 **Example prompts:**
 
@@ -280,29 +572,7 @@ For production use cases requiring consistent speaker labels, use the speaker di
 
 ---
 
-### 6. Audio event tags
-
-**What it does:** Marks non-speech sounds like music, laughter, applause, and background noise.
-
-**Reliability:** Experimental (YMMV)
-
-**Example prompts:**
-
-```text
-Preserve non-speech audio in tags to indicate when the audio occurred.
-```
-
-```text
-Tag sounds: [laughter], [silence], [noise], [cough], [sigh].
-```
-
-```text
-Include audio event markers for music, laughter, and applause.
-```
-
----
-
-### 7. Code-switching and multilingual
+### 9. Native code switching
 
 **What it does:** Handles audio where speakers switch between languages.
 
@@ -322,36 +592,14 @@ Preserve natural code-switching between English and Spanish. Retain spoken langu
 <Warning>
 If you expect languages beyond those supported by Universal-3-Pro, we recommend setting `language_detection: true` on your request.
 
-Universal-3-Pro is natively multilingual for English, Spanish, French, German, Italian, and Portuguese. If a language outside of these is encountered, the model will attempt to transcribe and fail and/or mark as `[FOREGIN LANGUAGE]`.
+Universal-3-Pro is natively multilingual for English, Spanish, French, German, Italian, and Portuguese. If a language outside of these is encountered, the model will attempt to transcribe and fail and/or mark as `[FOREIGN LANGUAGE]`.
 
 Using `language_detection: true` ensures files in other languages are [routed to different models](/docs/pre-recorded-audio/select-the-speech-model) which can more reliably transcribe the audio.
 </Warning>
 
 ---
 
-### 8. Numbers and measurements
-
-**What it does:** Controls how numbers, percentages, and measurements are formatted.
-
-**Reliability:** Medium
-
-**Example prompts:**
-
-```text
-Convert spoken numbers to digits.
-```
-
-```text
-Use digits for numbers, percentages, and measurements.
-```
-
-```text
-Format financial figures with standard notation and format numbers for maximum readability.
-```
-
----
-
-### 9. Difficult audio handling
+### 10. Difficult audio handling
 
 **What it does:** Controls how the model handles uncertain or unclear audio segments. You can choose between two opposite strategies: maximizing guesses or flagging uncertainty.
 
@@ -385,9 +633,13 @@ This is useful for quality-sensitive workflows where incorrect guesses are worse
 
 You can run the same audio file with both strategies to create a powerful review workflow. The "best guess" transcript gives you the most complete output, while the "flag uncertainty" transcript highlights exactly which segments need human review.
 
+<Tip>
+For a more robust approach to handling unclear audio, see the [Handling unclear audio with [masked]](#handling-unclear-audio-with-masked) section in Recommended prompts above. The `[masked]` strategy provides explicit flagging of uncertain segments and materially reduces hallucinations.
+</Tip>
+
 ---
 
-### 10. PII redaction
+### 11. PII redaction
 
 **What it does:** Tags personal identifiable information such as names, addresses, and contact details within the transcript.
 
@@ -638,18 +890,6 @@ We recommend you layer on each instruction one by one to see the impact on the t
 5. **Measure success rate** - Test variations on sample files
 
 **Prompt Repair Wizard:** If you need help iterating on your prompts, try the [Prompt Repair Wizard](https://www.assemblyai.com/dashboard/tools/prompt-repair) on the dashboard. Paste your current prompt, describe the issues you're seeing in the output, and it will suggest improvements based on prompting best practices.
-
----
-
-## Evaluating transcription accuracy
-
-When evaluating Universal-3-Pro output against human-labeled ground truth files, be aware that the model frequently outperforms human transcribers. If your word error rate (WER) evaluation shows unexpected insertions from Universal-3-Pro, listen back to the original audio before assuming the model is wrong. In many cases, the model is correctly transcribing audio that a human transcriber missed or normalized.
-
-Tips for accurate evaluation:
-
-- **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
-- **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
-- **Consider Semantic WER** or other evaluation metrics over traditional normalized WER for a more nuanced evaluation that accounts for these differences.
 
 ---
 
