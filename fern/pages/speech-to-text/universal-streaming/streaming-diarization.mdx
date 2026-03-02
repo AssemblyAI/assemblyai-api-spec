@@ -1,0 +1,544 @@
+---
+title: "Streaming Diarization"
+subtitle: >-
+  Identify and label individual speakers in real time using the Streaming API.
+---
+
+Streaming Diarization lets you identify and label individual speakers in real
+time directly from the Streaming API. Each `Turn` event includes a `speaker_label`
+field (e.g. `A`, `B`) indicating which speaker produced that
+transcript. Speaker accuracy improves over the course of a session as the model
+accumulates embedding context — so the longer the conversation, the better the
+labels.
+
+Diarization is supported on all streaming models: `u3-rt-pro`,
+`universal-streaming-english`, and `universal-streaming-multilingual`.
+
+<Tip title="Already using AssemblyAI streaming?">
+  You can enable Streaming Diarization by adding `speaker_labels: true` to your
+  connection parameters. No other changes are required — the `speaker_label`
+  field will appear on every `Turn` event automatically.
+</Tip>
+
+<Note>
+  Looking for multichannel streaming? See [Multichannel streams](/docs/streaming/multichannel-streams).
+</Note>
+
+## Quickstart
+
+Get started with Streaming Diarization using the code below. This example streams audio from your microphone and prints each turn with its speaker label.
+
+<Tabs>
+  <Tab title="Python SDK" language="python-sdk" default>
+    <Steps>
+      <Step>
+        Install the required libraries
+        ```bash
+        pip install "assemblyai>=1.0.0" pyaudio
+        ```
+      </Step>
+      <Step>
+        Create a new file `main.py` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+      </Step>
+      <Step>
+        Run with `python main.py` and speak into your microphone.
+      </Step>
+    </Steps>
+    ```python maxLines=15
+    import logging
+    from typing import Type
+    import assemblyai as aai
+    from assemblyai.streaming.v3 import (
+        BeginEvent,
+        StreamingClient,
+        StreamingClientOptions,
+        StreamingError,
+        StreamingEvents,
+        StreamingParameters,
+        TurnEvent,
+        TerminationEvent,
+    )
+
+    api_key = "<YOUR_API_KEY>"
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    def on_begin(self: Type[StreamingClient], event: BeginEvent):
+        print(f"Session started: {event.id}")
+
+    def on_turn(self: Type[StreamingClient], event: TurnEvent):
+        speaker = event.speaker_label or "UNKNOWN"
+        print(f"[{speaker}] {event.transcript} (end_of_turn={event.end_of_turn})")
+
+    def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+        print(
+            f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+        )
+
+    def on_error(self: Type[StreamingClient], error: StreamingError):
+        print(f"Error occurred: {error}")
+
+    def main():
+        client = StreamingClient(
+            StreamingClientOptions(
+                api_key=api_key,
+                api_host="streaming.assemblyai.com",
+            )
+        )
+        client.on(StreamingEvents.Begin, on_begin)
+        client.on(StreamingEvents.Turn, on_turn)
+        client.on(StreamingEvents.Termination, on_terminated)
+        client.on(StreamingEvents.Error, on_error)
+
+        client.connect(
+            StreamingParameters(
+                sample_rate=16000,
+                speech_model="u3-rt-pro",
+                speaker_labels=True,
+            )
+        )
+        try:
+            client.stream(
+                aai.extras.MicrophoneStream(sample_rate=16000)
+            )
+        finally:
+            client.disconnect(terminate=True)
+
+    if __name__ == "__main__":
+        main()
+    ```
+
+  </Tab>
+  <Tab title="Python" language="python">
+    <Steps>
+      <Step>
+        Install the required libraries
+        ```bash
+        pip install websocket-client pyaudio
+        ```
+      </Step>
+      <Step>
+        Create a new file `main.py` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+      </Step>
+      <Step>
+        Run with `python main.py` and speak into your microphone.
+      </Step>
+    </Steps>
+    ```python maxLines=15
+    import pyaudio
+    import websocket
+    import json
+    import threading
+    import time
+    from urllib.parse import urlencode
+
+    YOUR_API_KEY = "<YOUR_API_KEY>"
+    CONNECTION_PARAMS = {
+        "sample_rate": 16000,
+        "speech_model": "u3-rt-pro",
+        "speaker_labels": "true",
+    }
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+    FRAMES_PER_BUFFER = 800
+    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+    CHANNELS = 1
+    FORMAT = pyaudio.paInt16
+
+    audio = None
+    stream = None
+    ws_app = None
+    audio_thread = None
+    stop_event = threading.Event()
+
+    def on_open(ws):
+        print("WebSocket connection opened.")
+
+        def stream_audio():
+            global stream
+            while not stop_event.is_set():
+                try:
+                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    print(f"Error streaming audio: {e}")
+                    break
+
+        global audio_thread
+        audio_thread = threading.Thread(target=stream_audio)
+        audio_thread.daemon = True
+        audio_thread.start()
+
+    def on_message(ws, message):
+        try:
+            data = json.loads(message)
+            msg_type = data.get("type")
+            if msg_type == "Begin":
+                print(f"Session began: ID={data.get('id')}")
+            elif msg_type == "Turn":
+                transcript = data.get("transcript", "")
+                speaker = data.get("speaker_label") or "UNKNOWN"
+                end_of_turn = data.get("end_of_turn", False)
+                if end_of_turn:
+                    print(f"\r{' ' * 80}\r[{speaker}] {transcript}")
+                else:
+                    print(f"\r[{speaker}] {transcript}", end="")
+            elif msg_type == "Termination":
+                print(f"\nSession terminated: {data.get('audio_duration_seconds', 0)}s of audio")
+        except Exception as e:
+            print(f"Error handling message: {e}")
+
+    def on_error(ws, error):
+        print(f"\nWebSocket Error: {error}")
+        stop_event.set()
+
+    def on_close(ws, close_status_code, close_msg):
+        print(f"\nWebSocket Disconnected: Status={close_status_code}")
+        global stream, audio
+        stop_event.set()
+        if stream:
+            if stream.is_active():
+                stream.stop_stream()
+            stream.close()
+        if audio:
+            audio.terminate()
+
+    def run():
+        global audio, stream, ws_app
+        audio = pyaudio.PyAudio()
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+        ws_app = websocket.WebSocketApp(
+            API_ENDPOINT,
+            header={"Authorization": YOUR_API_KEY},
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+        ws_thread = threading.Thread(target=ws_app.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+        try:
+            while ws_thread.is_alive():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\nStopping...")
+            stop_event.set()
+            if ws_app and ws_app.sock and ws_app.sock.connected:
+                ws_app.send(json.dumps({"type": "Terminate"}))
+                time.sleep(2)
+            if ws_app:
+                ws_app.close()
+            ws_thread.join(timeout=2.0)
+
+    if __name__ == "__main__":
+        run()
+    ```
+
+  </Tab>
+  <Tab title="JavaScript SDK" language="javascript-sdk">
+    <Steps>
+      <Step>
+        Install the required libraries
+        ```bash
+        npm install assemblyai node-record-lpcm16
+        ```
+        <Note>
+          The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+          For Mac OS:
+          ```bash
+          brew install sox
+          ```
+          For most linux distros:
+          ```bash
+          sudo apt-get install sox libsox-fmt-all
+          ```
+          For Windows:
+          [download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+        </Note>
+      </Step>
+      <Step>
+        Create a new file `main.js` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+      </Step>
+      <Step>
+        Run with `node main.js` and speak into your microphone.
+      </Step>
+    </Steps>
+    ```javascript maxLines=15
+    import { Readable } from "stream";
+    import { AssemblyAI } from "assemblyai";
+    import recorder from "node-record-lpcm16";
+
+    const run = async () => {
+      const client = new AssemblyAI({
+        apiKey: "<YOUR_API_KEY>",
+      });
+
+      const transcriber = client.streaming.transcriber({
+        sampleRate: 16_000,
+        speechModel: "u3-rt-pro",
+        speakerLabels: true,
+      });
+
+      transcriber.on("open", ({ id }) => {
+        console.log(`Session opened with ID: ${id}`);
+      });
+
+      transcriber.on("error", (error) => {
+        console.error("Error:", error);
+      });
+
+      transcriber.on("close", (code, reason) =>
+        console.log("Session closed:", code, reason)
+      );
+
+      transcriber.on("turn", (turn) => {
+        if (!turn.transcript) return;
+        const speaker = turn.speakerLabel ?? "UNKNOWN";
+        console.log(`[${speaker}] ${turn.transcript}`);
+      });
+
+      try {
+        console.log("Connecting to streaming transcript service");
+        await transcriber.connect();
+
+        console.log("Starting recording");
+        const recording = recorder.record({
+          channels: 1,
+          sampleRate: 16_000,
+          audioType: "wav",
+        });
+
+        Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+        process.on("SIGINT", async function () {
+          console.log();
+          console.log("Stopping recording");
+          recording.stop();
+          console.log("Closing streaming transcript connection");
+          await transcriber.close();
+          process.exit();
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    run();
+    ```
+
+  </Tab>
+  <Tab title="JavaScript" language="javascript">
+    <Steps>
+      <Step>
+        Install the required libraries
+        ```bash
+        npm install ws mic
+        ```
+      </Step>
+      <Step>
+        Create a new file `main.js` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+      </Step>
+      <Step>
+        Run with `node main.js` and speak into your microphone.
+      </Step>
+    </Steps>
+    ```javascript maxLines=15
+    const WebSocket = require("ws");
+    const mic = require("mic");
+    const querystring = require("querystring");
+
+    const YOUR_API_KEY = "<YOUR_API_KEY>";
+    const CONNECTION_PARAMS = {
+      sample_rate: 16000,
+      speech_model: "u3-rt-pro",
+      speaker_labels: true,
+    };
+    const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+    const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+    const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+
+    let micInstance = null;
+    let ws = null;
+
+    function run() {
+      console.log("Starting AssemblyAI streaming diarization...");
+      ws = new WebSocket(API_ENDPOINT, {
+        headers: { Authorization: YOUR_API_KEY },
+      });
+
+      ws.on("open", () => {
+        console.log("WebSocket connection opened.");
+        micInstance = mic({
+          rate: String(SAMPLE_RATE),
+          channels: "1",
+          bitwidth: "16",
+          encoding: "signed-integer",
+          endian: "little",
+        });
+        const micInputStream = micInstance.getAudioStream();
+        micInputStream.on("data", (data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+          }
+        });
+        micInstance.start();
+        console.log("Speak into your microphone. Press Ctrl+C to stop.");
+      });
+
+      ws.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data);
+          if (msg.type === "Begin") {
+            console.log(`Session began: ID=${msg.id}`);
+          } else if (msg.type === "Turn") {
+            const transcript = msg.transcript || "";
+            const speaker = msg.speaker_label || "UNKNOWN";
+            if (msg.end_of_turn) {
+              process.stdout.write("\r" + " ".repeat(80) + "\r");
+              console.log(`[${speaker}] ${transcript}`);
+            } else {
+              process.stdout.write(`\r[${speaker}] ${transcript}`);
+            }
+          } else if (msg.type === "Termination") {
+            console.log(
+              `\nSession terminated: ${msg.audio_duration_seconds}s of audio`
+            );
+          }
+        } catch (e) {
+          console.error("Error parsing message:", e);
+        }
+      });
+
+      ws.on("error", (error) => {
+        console.error("WebSocket error:", error);
+      });
+
+      ws.on("close", (code, reason) => {
+        console.log(`WebSocket closed: ${code}`);
+        if (micInstance) micInstance.stop();
+      });
+
+      process.on("SIGINT", () => {
+        console.log("\nStopping...");
+        if (micInstance) micInstance.stop();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "Terminate" }));
+          setTimeout(() => ws.close(), 2000);
+        }
+      });
+    }
+
+    run();
+    ```
+
+  </Tab>
+</Tabs>
+
+## Configuration
+
+Enable Streaming Diarization by adding `speaker_labels: true` to your connection
+parameters. You can optionally cap the number of speakers with `max_speakers`.
+
+| Parameter        | Type    | Default | Description                                                                                                                                                        |
+| ---------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `speaker_labels` | boolean | `false` | Set to `true` to enable real-time speaker diarization.                                                                                                             |
+| `max_speakers`   | integer | —       | Optional. Hint the maximum number of speakers expected (1–10). Setting this accurately can improve assignment accuracy when you know the speaker count in advance. |
+
+```json
+{
+  "speech_model": "u3-rt-pro",
+  "speaker_labels": true,
+  "max_speakers": 2
+}
+```
+
+<Note>
+  Diarization is supported on `u3-rt-pro`, `universal-streaming-english`, and
+  `universal-streaming-multilingual`. You do not need to change your speech
+  model to use it — just add `speaker_labels: true`.
+</Note>
+
+## Reading speaker labels
+
+When diarization is enabled, every `Turn` event includes a `speaker_label` field
+with a label such as `A`, `B`, and so on.
+
+```json
+{
+  "type": "Turn",
+  "transcript": "Good morning, thanks for joining the call.",
+  "speaker_label": "A",
+  "end_of_turn": true,
+  "turn_is_formatted": true
+}
+```
+
+If the model cannot confidently assign a speaker — typically for very short
+utterances at the start of a session — the `speaker_label` field may be `null`.
+Your application should handle this case gracefully.
+
+A typical multi-speaker exchange looks like this:
+
+```
+[A] Good morning, thanks for joining the call.
+[B] Good morning. Happy to be here.
+[A] So let's start with a quick overview of the project timeline.
+[B] Sure. We're currently on track for the March deadline.
+[A] Great. And how's the team handling the workload?
+[C] It's been busy, but manageable. We brought on two new engineers last week.
+```
+
+## How speaker accuracy improves over time
+
+Streaming Diarization builds a speaker profile incrementally as audio flows in.
+In practice this means:
+
+- **Early in a session**, speaker assignments may be less stable, especially if
+  the first few turns are short.
+- **As the session progresses**, the model accumulates richer speaker embeddings
+  and assignments become more consistent.
+
+For long-form use cases (call center, clinical scribe, meeting transcription),
+the model will settle into accurate, stable labels well before the end of the
+conversation.
+
+## Known limitations
+
+Real-time diarization is an inherently harder problem than diarization for async transcription on pre-recorded audio.
+The following limitations apply to the current beta:
+
+- **Short utterances** — Turns shorter than ~3 words provide insufficient audio
+  for a reliable speaker embedding. Single-word responses like "yes" or "no"
+  may receive a low-confidence or incorrect label.
+- **Overlapping speech** — When two speakers talk simultaneously, the model
+  cannot split the audio and will assign the turn to a single speaker.
+  Performance degrades with frequent cross-talk.
+- **Session start accuracy** — The first 1–2 turns of a session may be
+  misassigned because the model has not yet built up speaker profiles. This
+  self-corrects quickly in practice.
+- **Noisy environments** — Background noise and microphone bleed between
+  speakers can reduce embedding quality and lead to more frequent
+  misassignments.
+
+<Tip>
+  For the best results, use a microphone setup that minimizes cross-talk and
+  background noise, and ensure each speaker produces at least a few complete
+  sentences before you rely on per-turn labels for downstream processing.
+</Tip>
+
+## Supported models
+
+| Model                              | `speech_model` value               | Diarization supported |
+| ---------------------------------- | ---------------------------------- | --------------------- |
+| Universal-3 Pro (Streaming)        | `u3-rt-pro`                        | ✓                     |
+| Universal Streaming (English)      | `universal-streaming-english`      | ✓                     |
+| Universal Streaming (Multilingual) | `universal-streaming-multilingual` | ✓                     |
