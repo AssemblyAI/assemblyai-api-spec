@@ -1,0 +1,166 @@
+---
+title: "Account Management"
+---
+
+On the [AssemblyAI dashboard](https://www.assemblyai.com/app), you can manage your projects and API keys, and see a breakdown of your usage and spend.
+
+## Projects
+
+Projects can be used to isolate data for different environments or applications, e.g., production, staging, or development. Each project has its own API keys, allowing for better organization and data access control.
+
+Transcripts and other project-specific data is accessible only within the project they were created in — An API key from one project will not be able to access historical transcripts or data from another project. This separation maintains data security and prevents unintended cross-project access.
+
+You can create, rename, and delete projects based on your plan:
+
+| Usage limits       | Free | PAYG | Contracted | Enterprise |
+| ------------------ | ---- | ---- | ---------- | ---------- |
+| Number of projects | 2    | 2    | 5          | Custom     |
+
+## API Keys
+
+API keys are unique credentials that authenticate requests to the API. Each API key is associated with a specific project, ensuring secure and controlled access.
+
+You can create and delete API keys based on your plan:
+
+| Usage limits       | Free | PAYG | Contracted | Enterprise |
+| ------------------ | ---- | ---- | ---------- | ---------- |
+| Number of API keys | 2    | 4    | 25         | Custom     |
+
+### Create a new API Key
+
+1. Log in to your [AssemblyAI Dashboard](https://www.assemblyai.com/dashboard)
+2. Navigate to the "API Keys" section
+3. Click the "Create New API Key" button
+4. Enter a descriptive name for your API key (e.g., "Production API", "Development API")
+5. Click "Create"
+
+### Delete an API Key
+
+1. Log in to your [AssemblyAI Dashboard](https://www.assemblyai.com/dashboard)
+2. Navigate to the "API Keys" section
+3. Locate the API key you want to delete
+4. Click the "Delete" button next to the key
+5. Confirm the deletion in the popup dialog
+
+<Error>
+  This action cannot be undone. Make sure no active applications are using the
+  key before deletion.
+</Error>
+
+## Reporting
+
+Get insights into your usage and spend to track and manage costs effectively with the reporting tool in the AssemblyAI dashboard. You can analyze your usage and spend data at different levels of granularity:
+
+- Account
+- Product (e.g., Speech-to-text, Streaming, LLM Gateway)
+- Models (e.g., Best, Claude 3.5 Sonnet, etc.)
+- Project
+- API key
+
+## Usage Limits
+
+<Note>
+
+With the current version of multi-project support, rate limiting is applied at the account level, not at the project level. This means that the rate limits for each API key mirror the rate limits for the account.
+
+Example: If an account has an Async concurrency of 200, each API key for that account will be able to process up to 200 requests concurrently.
+
+</Note>
+
+To ensure a smooth experience for all users, certain operations have per-account usage limits.
+
+- **Concurrency limits** for asynchronous operations
+- **Rate limits** for synchronous operations
+
+<Note title="Need a higher concurrency?">
+
+Our services are infinitely scalable and we offer custom concurrency limits that scale to support any workload at no additional cost. If you need a higher concurrency limit please either contact our{" "} <a href="https://www.assemblyai.com/contact" target="_blank"> Sales team </a>{" "} or send an email to our [Support team](https://www.assemblyai.com/contact/support).
+
+</Note>
+
+### Pre-recorded audio Speech-to-Text usage limits
+
+AssemblyAI limits the number of transcriptions being processed at any given time.
+
+| Usage limit               | Free account | Paid account |
+| ------------------------- | ------------ | ------------ |
+| Concurrent transcriptions | 5            | 200++        |
+
+If you submit a transcription that would exceed your usage limit, it'll be added to a queue. Queued transcriptions will be processed automatically as previously submitted transcriptions complete.
+
+If your account balance goes below zero, your concurrency limit will be reduced to 1.
+
+If you exceed your concurrency limit, you'll receive an email stating that your transcripts have been throttled. Note that you'll only receive this email once per day.
+
+![Email notifying user that their transcripts have been throttled due to exceeding the Concurrency limit](../guides/limit.png)
+
+### Streaming Speech-to-Text usage limits
+
+Usage limits for streaming speech-to-text are distinct from pre-recorded audio speech-to-text usage limits. Your streaming concurrency dictates the number of new streaming sessions that can be opened per minute.
+
+AssemblyAI's Universal-Streaming API features unlimited, automatic scaling concurrency limits for paid accounts that are dynamic based on usage.
+We do not limit the total number of concurrent streaming sessions. Instead, there is only a limit on the number of **new streaming sessions** that can be created per minute. These limits start at:
+
+| Account type | Starting rate limit (new sessions/min) |
+| ------------ | -------------------------------------- |
+| Free         | 5                                      |
+| Paid         | 100++                                  |
+
+<Tip title="How unlimited streaming session scaling works">
+Anytime you are utilizing **70% or more of your current limit**, the number of new streams able to be opened over the next minute will automatically increase by 10%.
+
+Assuming you follow this pattern minute-over-minute maxing out your available new sessions rate limit for 5 minutes:
+
+- Minute 1: `100 new streams/min` (default of 100) → 100 **concurrent** streams
+- Minute 2: `110 new streams/min` (100 × 1.10) → 210 **concurrent** streams
+- Minute 3: `121 new streams/min` (110 × 1.10) → 331 **concurrent** streams
+- Minute 4: `133 new streams/min` (121 × 1.10) → 464 **concurrent** streams
+- Minute 5: `146 new streams/min` (133 × 1.10) → 610 **concurrent** streams
+
+Total streams: 100 + 110 + 121 + 133 + 146 = `610 streams`
+
+At the start of the 6th minute, there would be `610` **total concurrent open streams**. Over the next 60 seconds, a maximum of `161` (146 x 1.10) **new streams** would be able to be opened.
+
+</Tip>
+
+This usage pattern has no ceiling and can continue to scale up indefinitely to whatever your application requires.
+Based on the rate at which you are opening streams in comparison to your current limit, your new sessions per minute limit will adjust as follows:
+
+- **70% or more** — Scale up by 10%.
+- **Within 50-69%** — Unchanged.
+- **Less than 50%** — Begin to scale back down (to your account's starting limit).
+  - **Important:** This may impact your ability to immediately open a large number of new streams if the rate at which you have been creating new streams has been low for a period of time despite having a high number of open concurrent streams.
+
+If you exceed your current limit, you'll receive a `1008` error with the message: `Unauthorized connection: Too many concurrent sessions`.
+
+<Note title="Properly terminating sessions">
+
+If you're consistently hitting rate limits when trying to open new sessions, first make sure that you're terminating sessions properly.
+
+- If you're using the [WebSocket API](https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api) directly, you need to send a `terminate_session` message.
+
+</Note>
+
+### LLM Gateway usage limits
+
+Your LLM Gateway usage limit dictates the number of requests you can make within a 60-second time window. For more information, see [Rate limits](https://www.assemblyai.com/docs/api-reference/overview#rate-limits).
+
+Each [LLM Gateway model](/docs/llm-gateway/overview#available-models) has its own separate rate limit. Requests to one model will not affect the number of requests per minute that you can make to another model.
+
+| Usage limit         | Free account | Paid account |
+| ------------------- | ------------ | ------------ |
+| Requests per minute | N/A          | 30+          |
+
+<Note>
+
+LLM Gateway is not available to accounts on the free tier. To use LLM Gateway, please upgrade to a paid account by adding a credit card to your account.
+
+</Note>
+
+## Best Practices
+
+- Use different API keys for development and production environments
+- Monitor usage and spend patterns for each API key in your dashboard
+- Keep your API keys secure and never expose them in client-side code
+- Use meaningful names and tags to easily identify the purpose of each key
+- Store API keys as environment variables in your application

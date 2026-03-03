@@ -1,0 +1,327 @@
+---
+title: "Universal-3 Pro on Pipecat"
+description: "Integrate AssemblyAI's Universal-3 Pro streaming speech-to-text model into Pipecat voice agents"
+---
+
+<Card
+  title="Pipecat"
+  icon={
+    <img
+      src="https://assemblyaiassets.com/images/Pipecat.svg"
+      alt="Pipecat logo"
+    />
+  }
+  href="https://docs.pipecat.ai/server/services/stt/assemblyai"
+>
+  View Pipecat's AssemblyAI STT plugin documentation.
+</Card>
+
+## Overview
+
+This guide covers integrating AssemblyAI's **Universal-3 Pro (u3-rt-pro)** streaming speech-to-text model into Pipecat voice agents.
+
+Universal-3 Pro for streaming is optimized for real-time audio utterances typically under 10 seconds, with special efficiencies built in for low-latency turn detection and voice agent workflows. It provides the highest accuracy with native multilingual code switching, entity accuracy, and prompting support.
+
+Universal-3 Pro streaming delivers exceptional entity and alphanumeric accuracy, including credit card numbers, cell phone numbers, email addresses, physical addresses, and names — all with sub-300ms time to complete transcript latency.
+
+### Key features
+
+- **Two-mode turn detection**: Choose between Pipecat-controlled (VAD + Smart Turn) or AssemblyAI's built-in turn detection (STT-based)
+- **Keyterms boosting**: Improve recognition of specific words and names
+- **Dynamic parameter updates**: Change configuration mid-conversation without reconnection
+- **Speaker diarization**: Identify and label different speakers in multi-party conversations
+
+## Examples
+
+Complete working examples are available in the Pipecat repository:
+
+- **[07o-interruptible-assemblyai.py](https://github.com/pipecat-ai/pipecat/blob/main/examples/foundational/07o-interruptible-assemblyai.py)** — Interruptible voice agent with U3-Pro using Pipecat-based turn detection (VAD + Smart Turn)
+- **[07o-interruptible-assemblyai-stt.py](https://github.com/pipecat-ai/pipecat/blob/main/examples/foundational/07o-interruptible-assemblyai-stt.py)** — Interruptible voice agent with U3-Pro using AssemblyAI's built-in turn detection (STT-based)
+
+You can run any example directly as long as your API keys are saved in a `.env` file:
+
+```bash
+python 07o-interruptible-assemblyai.py
+```
+
+<Note>
+  The `vad_force_turn_endpoint` parameter controls which turn detection mode is used. It defaults to `True` (Pipecat mode), which sends a `ForceEndpoint` message to AssemblyAI when the local VAD detects silence. Set it to `False` to use AssemblyAI's built-in turn detection instead. Choosing the right mode is critical for balancing responsiveness and turn accuracy in your voice agent.
+</Note>
+
+## Installation
+
+Install Pipecat with all required dependencies:
+
+```bash
+pip install "pipecat-ai[assemblyai,openai,cartesia]"
+```
+
+**What's included:**
+
+- `assemblyai` — AssemblyAI U3-Pro STT service
+- `openai` — OpenAI LLM service (used in the examples)
+- `cartesia` — Cartesia TTS service (used in the examples)
+
+<Tip>
+  The examples use OpenAI and Cartesia, but you can use any LLM or TTS you want that's supported by Pipecat. Just swap out the extras in the install command (e.g., `pipecat-ai[assemblyai,anthropic,elevenlabs]`).
+</Tip>
+
+## Authentication
+
+Set your API keys in a `.env` file:
+
+```env
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+OPENAI_API_KEY=your_openai_key
+CARTESIA_API_KEY=your_cartesia_key
+```
+
+<Tip>
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup).
+</Tip>
+
+## Two-mode turn detection
+
+Within Pipecat, you have two distinct approaches to turn detection with AssemblyAI's U3-Pro model.
+
+### Pipecat mode (default, recommended)
+
+**When to use:** Most voice agent applications requiring responsive interruptions.
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_turn_silence=100,
+    ),
+    vad_force_turn_endpoint=True,  # Default — Pipecat mode
+)
+```
+
+**How it works:**
+
+- VAD + Smart Turn analyzer controls when the user is done speaking
+- `ForceEndpoint` message sent to AssemblyAI on VAD silence detection
+- `max_turn_silence` automatically synchronized with `min_turn_silence`
+- Best for low-latency, responsive voice agents
+
+### AssemblyAI's built-in turn detection (STT mode)
+
+**When to use:** When you want AssemblyAI's built-in turn detection to control turn endings. This mode is configurable within the connection parameters — see [Configuring turn detection](/docs/streaming/universal-3-pro#configuring-turn-detection) to understand how it works.
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_turn_silence=100,
+        max_turn_silence=1000,  # Now respected
+    ),
+    vad_force_turn_endpoint=False,  # AssemblyAI's built-in turn detection (STT mode)
+)
+```
+
+**How it works:**
+
+- AssemblyAI's built-in turn detection controls when the user is done speaking
+- All timing parameters are respected as configured
+- Emits `UserStartedSpeakingFrame` / `UserStoppedSpeakingFrame`
+- Uses `SpeechStarted` events for fast barge-in
+- Only available with `u3-rt-pro` (other models require Pipecat mode)
+
+<Note>
+  AssemblyAI's built-in turn detection uses the STT model's understanding of speech patterns to determine turn boundaries, rather than relying on local VAD silence detection.
+</Note>
+
+## Keyterms boosting
+
+Improve recognition of specific words or names:
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        min_turn_silence=100,
+        keyterms_prompt=["Xiomara", "Saoirse", "Pipecat", "AssemblyAI"],
+    ),
+)
+```
+
+## Dynamic parameter updates
+
+Change configuration mid-conversation without reconnection. See [55d-update-settings-assemblyai-stt.py](https://github.com/pipecat-ai/pipecat/blob/main/examples/foundational/55d-update-settings-assemblyai-stt.py) for a complete working example.
+
+```python
+from pipecat.frames.frames import STTUpdateSettingsFrame
+from pipecat.services.assemblyai.stt import AssemblyAISTTSettings
+from pipecat.services.assemblyai.models import AssemblyAIConnectionParams
+
+# Update keyterms during conversation
+await task.queue_frame(
+    STTUpdateSettingsFrame(
+        delta=AssemblyAISTTSettings(
+            connection_params=AssemblyAIConnectionParams(
+                keyterms_prompt=["NewName", "NewCompany"]
+            )
+        )
+    )
+)
+
+# Update silence thresholds
+await task.queue_frame(
+    STTUpdateSettingsFrame(
+        delta=AssemblyAISTTSettings(
+            connection_params=AssemblyAIConnectionParams(
+                min_turn_silence=200,
+                max_turn_silence=3000,  # Only respected in AssemblyAI's built-in turn detection (STT mode)
+            )
+        )
+    )
+)
+```
+
+## Speaker diarization
+
+Identify different speakers in multi-party conversations.
+
+### Basic diarization
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        speaker_labels=True,
+    ),
+)
+```
+
+Speaker labels (e.g., `"A"`, `"B"`, `"C"`) are included in final transcripts and logged.
+
+### With custom formatting
+
+Format transcripts with speaker labels for LLM context:
+
+```python
+stt = AssemblyAISTTService(
+    api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+    connection_params=AssemblyAIConnectionParams(
+        speech_model="u3-rt-pro",
+        speaker_labels=True,
+    ),
+    speaker_format="<Speaker {speaker}>{text}</Speaker {speaker}>",
+)
+```
+
+**Format options:**
+
+| Style    | Format string                              |
+| -------- | ------------------------------------------ |
+| XML      | `<{speaker}>{text}</{speaker}>`            |
+| Markdown | `**{speaker}**: {text}`                    |
+| Bracket  | `[{speaker}] {text}`                       |
+
+## Daily transport
+
+For production deployments, use the [Daily transport](https://docs.pipecat.ai/server/services/transport/daily) for WebRTC-based real-time audio/video communication.
+
+## Parameters reference
+
+### U3-Pro specific parameters
+
+<ParamField path="speech_model" type="str" default="u3-rt-pro">
+  The speech model to use. Defaults to `"u3-rt-pro"` (Universal-3 Pro).
+</ParamField>
+
+<ParamField
+  path="min_turn_silence"
+  type="int"
+  default="100"
+>
+  Milliseconds of silence before ending a turn when model is confident. Set to
+  `100` for best latency. (Formerly `min_end_of_turn_silence_when_confident`,
+  which is deprecated but still supported with a warning.)
+</ParamField>
+
+<ParamField path="max_turn_silence" type="int" default="1000">
+  Maximum silence before forced turn end. Auto-synced in Pipecat mode; respected
+  in AssemblyAI's built-in turn detection (STT mode).
+</ParamField>
+
+<ParamField path="keyterms_prompt" type="list[str]">
+  List of terms to boost recognition for. Cannot be used with `prompt`.
+</ParamField>
+
+<ParamField path="speaker_labels" type="bool" default="False">
+  Enable speaker diarization.
+</ParamField>
+
+<ParamField path="prompt" type="str">
+  Custom transcription instructions. Cannot be used with `keyterms_prompt`. **Prompting is currently a beta feature** — see [Prompting](/docs/streaming/prompting) for more information.
+</ParamField>
+
+### General parameters
+
+<ParamField path="api_key" type="str" required>
+  Your AssemblyAI API key.
+</ParamField>
+
+<ParamField path="vad_force_turn_endpoint" type="bool" default="True">
+  `True` for Pipecat mode; `False` for AssemblyAI's built-in turn detection (STT mode).
+</ParamField>
+
+<ParamField path="speaker_format" type="str">
+  Template string for formatting speaker labels (e.g.,
+  `"[{speaker}] {text}"`).
+</ParamField>
+
+## Running your agent
+
+### Development mode (local audio)
+
+```bash
+python your_agent.py
+```
+
+Speak into your microphone after hearing the greeting.
+
+### Production with Daily
+
+Deploy to Daily.co rooms using the Daily transport. Your agent joins as a participant and handles audio I/O through Daily's infrastructure.
+
+## Speech model comparison
+
+Interested in using a different model?
+
+| Feature | u3-rt-pro | universal-streaming-english | universal-streaming-multilingual |
+|---------|-----------|----------------------------|----------------------------------|
+| ***Turn Detection Modes*** | | | |
+| Pipecat mode (VAD + Smart Turn) | ✅ | ✅ | ✅ |
+| AssemblyAI turn detection mode | ✅ | ❌ | ❌ |
+| ***Turn Detection Parameters*** | | | |
+| `min_turn_silence` | ✅ | ✅ | ✅ |
+| `max_turn_silence` | ✅ | ✅ | ✅ |
+| `end_of_turn_confidence_threshold` | ❌ | ✅ (1.0) | ✅ (1.0) |
+| ***Advanced Features*** | | | |
+| Keyterms boosting | ✅ | ✅ | ✅ |
+| Custom prompting (beta) | ✅ | ❌ | ❌ |
+| Speaker diarization | ✅ | ✅ | ✅ |
+| Dynamic parameter updates | ✅ | ✅ | ✅ |
+| ***Language Support*** | | | |
+| Multilingual code switching | ✅ | ❌ | ✅ |
+| Language detection | ✅ | ❌ | ✅ |
+
+**Legend:**
+- ✅ Fully supported and recommended
+- ❌ Not supported / Not used
+
+<Note>
+  **u3-rt-pro is the recommended model** for all new voice agent implementations. The universal-streaming models are maintained for backward compatibility but lack the optimizations and features specifically designed for real-time conversational AI.
+</Note>
+
+<Warning>
+  The `end_of_turn_confidence_threshold` parameter is **not used** with u3-rt-pro (it won't affect behavior). For universal-streaming models, Pipecat automatically sets it to `1.0` in Pipecat mode to disable semantic turn detection and ensure fast responses. You don't need to configure this parameter manually.
+</Warning>

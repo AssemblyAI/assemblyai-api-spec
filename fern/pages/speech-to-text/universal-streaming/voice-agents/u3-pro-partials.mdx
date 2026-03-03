@@ -1,0 +1,125 @@
+---
+title: "Universal-3-Pro Partial Transcripts and Turn Detection"
+description: "How U3 Pro emits partials, finalizes turns, and how to best configure for your use case."
+---
+
+## Overview
+
+Traditional streaming models (like Universal-Streaming-English and Universal-Streaming-Multilingual) emit partials word-by-word as audio is processed. Each word can be revised until it's marked final, after which it's then immutable.
+
+**Universal-3-Pro** takes a different approach: partials are only emitted during periods of silence, producing stable, fully transcribed segments rather than incremental word-by-word updates. All words in partials are marked `word_is_final: false`.
+
+While the segments are stable, the final end-of-turn transcript may differ from earlier partials as the model refines its output with full turn context. On the final end-of-turn transcript, all words are marked `word_is_final: true`.
+
+## Universal-3-Pro partials
+
+U3 Pro uses a punctuation-based turn detection system. When the speaker pauses, the model transcribes the buffered audio and checks for terminal punctuation (`.` `?` `!`):
+
+- **No terminal punctuation** — a partial is emitted (`end_of_turn: false`) and the turn continues waiting until speech continues or `max_turn_silence` is reached.
+- **Terminal punctuation found** — the turn ends and is emitted as a final transcript (`end_of_turn: true`).
+
+This is controlled by two parameters:
+
+| Parameter | Default | Description |
+| --------- | ------- | ----------- |
+| `min_turn_silence` | `100` ms | Silence duration before a speculative end-of-turn (EOT) check fires. |
+| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end. |
+
+**Each period of silence can produce at most one partial.** If the speaker pauses, resumes, and pauses again, each period of silence can potentially trigger a new partial.
+
+See [Configuring turn detection](/docs/streaming/universal-3-pro#configuring-turn-detection) for full turn detection parameter and configuration details.
+
+## Real-world example
+
+This is an example of what partials might look like in a voice agent scenario where a user is reading out a credit card number:
+
+```
+"Yeah my credit card number is—"  [end_of_turn: false] (PARTIAL)
+"One moment—"  [end_of_turn: false] (PARTIAL)
+"Yeah my credit card number is, one moment, it's (555) 555-5555."  [end_of_turn: true] (FINAL)
+```
+
+## Speculative inference
+
+When receiving a **Universal-3-Pro** `Turn` event, use `end_of_turn` to determine the transcript's finality:
+
+**If `end_of_turn` is `false` (partial):**
+- Begin speculative (also known as eager or preemptive) LLM inference
+- Warm TTS or prepare context
+
+**If `end_of_turn` is `true` (final):**
+- Commit to full LLM + TTS generation
+
+This preserves the speculative generation pattern you may already be using with word-by-word transcripts, but provides more stable and accurate segments while still giving your LLM early signals to start preparing a response.
+
+## Advantages over traditional streaming partials
+
+### Fewer, higher-quality partials
+
+Traditional streaming models emit a partial on every audio frame, frequently revising previous words.
+
+U3 Pro only emits partials during silence periods, and each one is processed by a full speech LLM rather than a lightweight RNN-T. This means fewer partials, but ones that are significantly more accurate.
+
+Each partial contains the full cumulative transcription of the turn so far. Earlier words may be refined as more context becomes available, but updates only happen during silence (not on every frame), so the transcript is typically far more stable than traditional streaming models.
+
+### Last word accuracy
+
+Speculative inference based on noisy partials can be counterproductive. The final word of a turn often carries critical semantic weight:
+
+- "I want to **cancel**." (word-by-word, wrong)
+- "I want to **continue**." (full partial after silence, correct)
+
+Getting a high-accuracy segment with a slight delay is often more valuable than getting a lower-accuracy partial a few `ms` earlier.
+
+## Latency performance
+
+After silence detection:
+
+| Metric | Latency |
+|--------|---------|
+| P50 inference latency | ~121ms |
+| P90 inference latency | ~212ms |
+
+This makes U3 Pro competitive with — or faster than — many traditional streaming-partial pipelines. The speech-end to transcript-available window remains very fast.
+
+### Latency vs. entity splitting trade-off
+
+Setting `min_turn_silence` too low can split entities like phone numbers and emails for speakers with slow speech patterns. The accuracy is often still high enough for LLMs to piece together the broken entities, but **we recommend testing carefully with your use case.**
+
+Setting `max_turn_silence` too low can have the same impact, but entity splitting is less likely since `max_turn_silence` is typically a greater value than `min_turn_silence` and a forced end-of-turn only triggers when terminal punctuation is not detected. If you have audio with very long (>1s) pauses and you'd like to keep these utterances as a single turn, you may want to increase `max_turn_silence` to avoid cutting off the turn too early.
+
+## Tuning for your use case
+
+For eager LLM inference on partials, we recommend setting `min_turn_silence` to `100` (default value).
+
+You can also adjust `min_turn_silence` (and potentially `max_turn_silence` for very long pauses) for specific moments mid-stream via `UpdateConfiguration`. For example, increase it when a caller is about to read out a credit card, ID number, or email, and you'd prefer to wait for a longer silence before checking for an end of turn and potentially emitting a partial.
+
+```json
+// LLM detects it's asking for a long utterance (e.g., credit card number)
+{"type": "UpdateConfiguration", "min_turn_silence": 1000}
+```
+
+Then reset it after the user responds:
+
+```json
+// User has responded, restore default turn detection
+{"type": "UpdateConfiguration", "min_turn_silence": 100}
+```
+
+A clean way to implement this is by giving your LLM a tool call:
+```python
+DEFAULT_MIN_TURN_SILENCE = 100  # your preferred default (ms)
+EXTENDED_MIN_TURN_SILENCE = 1000  # your preferred extended value (ms)
+
+def dynamically_set_turn_silence(ws, min_turn_silence_ms: int):
+    f"""Adjust min_turn_silence on the STT stream.
+    Use {EXTENDED_MIN_TURN_SILENCE} when expecting long utterances (credit cards, phone numbers).
+    Use {DEFAULT_MIN_TURN_SILENCE} to restore normal turn detection."""
+    
+    ws.send(json.dumps({
+        "type": "UpdateConfiguration",
+        "min_turn_silence": min_turn_silence_ms
+    }))
+```
+
+See [Updating configuration mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) for more details.
