@@ -82,7 +82,7 @@ types:
     properties:
       type: literal<"ForceEndpoint">
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   FunctionCall:
     properties:
       arguments:
@@ -109,6 +109,25 @@ types:
       function: FunctionCall
       id: string
       type: literal<"function">
+    source:
+      openapi: ../llm-gateway.yml
+  JsonSchemaConfig:
+    docs: Configuration for JSON schema-based structured outputs.
+    properties:
+      name:
+        docs: A name for the schema. Used for identification purposes.
+        type: string
+      schema:
+        docs: >-
+          A valid JSON Schema object that defines the structure of the expected
+          response.
+        type: map<string, unknown>
+      strict:
+        default: false
+        docs: >-
+          When `true`, the model will strictly adhere to the schema. Recommended
+          for reliable parsing.
+        type: optional<boolean>
     source:
       openapi: ../llm-gateway.yml
   LemurTaskParams:
@@ -294,6 +313,19 @@ types:
       usage: optional<Usage>
     source:
       openapi: ../llm-gateway.yml
+  ResponseFormat:
+    docs: >-
+      Specifies the format of the model's response. Use `json_schema` type to
+      constrain the model to output valid JSON matching a schema.
+    properties:
+      json_schema:
+        docs: The JSON schema configuration object.
+        type: JsonSchemaConfig
+      type:
+        docs: The type of response format. Use `json_schema` for structured outputs.
+        type: literal<"json_schema">
+    source:
+      openapi: ../llm-gateway.yml
   ResponseMessage:
     properties:
       content: optional<string>
@@ -325,12 +357,12 @@ types:
         docs: Identifies the type of the message.
         type: literal<"Begin">
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   SessionTerminationPayload:
     properties:
       type: literal<"Terminate">
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   SpeakerIdentificationRequestBody:
     properties:
       speaker_identification: SpeakerIdentificationRequestBodySpeakerIdentification
@@ -368,6 +400,18 @@ types:
       status: optional<string>
     source:
       openapi: ../openapi.yml
+  SpeechStartedPayload:
+    properties:
+      timestamp:
+        docs: >-
+          The timestamp in milliseconds when speech was detected, relative to
+          the beginning of the audio stream.
+        type: integer
+      type:
+        docs: Identifies the type of the message.
+        type: literal<"SpeechStarted">
+    source:
+      openapi: ../usm-streaming.yml
   TerminationPayload:
     properties:
       audio_duration_seconds:
@@ -380,7 +424,7 @@ types:
         docs: Indicates the session has been terminated.
         type: literal<"Termination">
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   TextContent:
     properties:
       text: string
@@ -468,7 +512,8 @@ types:
       end_of_turn_confidence:
         docs: >-
           The confidence score that this is the end of a turn, between 0.0 (low
-          confidence) and 1.0 (high confidence).
+          confidence) and 1.0 (high confidence). For Universal-3 Pro, this is
+          1.0 when `end_of_turn` is true and 0.0 otherwise.
         type: float
       language_code:
         docs: >-
@@ -485,7 +530,9 @@ types:
         docs: Transcript of all finalized words in the turn.
         type: string
       turn_is_formatted:
-        docs: Whether this turn has been formatted.
+        docs: >-
+          Whether this turn has been formatted. For Universal-3 Pro, this always
+          matches `end_of_turn`.
         type: boolean
       turn_order:
         docs: Order of this turn in the conversation.
@@ -500,7 +547,7 @@ types:
         docs: Array of word-level details for this turn.
         type: list<Word>
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   UnderstandingRequestSpeechUnderstanding:
     inline: true
     properties:
@@ -518,20 +565,29 @@ types:
       - CustomFormattingRequestBody
   UpdateConfigurationPayload:
     properties:
-      end_of_turn_confidence_threshold:
-        docs: Confidence threshold (0-1) for detecting end of turn.
-        type: optional<float>
+      keyterms_prompt:
+        docs: >-
+          A list of words and phrases to boost recognition for. Cannot be used
+          together with `prompt`.
+        type: optional<list<string>>
       max_turn_silence:
         docs: >-
-          The maximum amount of silence allowed in a turn before end of turn is
-          triggered.
+          Maximum silence in milliseconds before the turn is forced to end,
+          regardless of punctuation.
         type: optional<integer>
       min_turn_silence:
-        docs: Minimum silence duration in ms when confident about end of turn.
+        docs: >-
+          Silence duration in milliseconds before a speculative end-of-turn
+          check.
         type: optional<integer>
+      prompt:
+        docs: >-
+          Custom transcription instructions. Cannot be used together with
+          `keyterms_prompt`.
+        type: optional<string>
       type: literal<"UpdateConfiguration">
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
   Usage:
     properties:
       input_tokens: integer
@@ -584,7 +640,7 @@ types:
         docs: Whether the word is final.
         type: boolean
     source:
-      openapi: ../usm-streaming.yml
+      openapi: ../usm-streaming-u3-pro.yml
 errors:
   BadRequestError:
     docs: Bad request
@@ -646,7 +702,7 @@ errors:
     type: Error
 service:
   auth: false
-  base-path: ""
+  base-path: ''
   endpoints:
     createChatCompletion:
       display-name: Create a chat completion
@@ -655,7 +711,7 @@ service:
         messages.
       examples:
         - headers:
-            Authorization: "[object Object]"
+            Authorization: '[object Object]'
           name: Chat with messages
           request:
             max_tokens: 100
@@ -694,7 +750,7 @@ service:
                 output_tokens: 1
                 total_tokens: 1
         - headers:
-            Authorization: "[object Object]"
+            Authorization: '[object Object]'
           name: Simple prompt
           request:
             max_tokens: 50
@@ -730,15 +786,83 @@ service:
                 input_tokens: 1
                 output_tokens: 1
                 total_tokens: 1
+        - headers:
+            Authorization: '[object Object]'
+          name: Structured output with JSON schema
+          request:
+            messages:
+              - content: content
+                role: system
+              - content: content
+                role: user
+            model: gemini-2.5-flash-lite
+            response_format:
+              json_schema:
+                name: math_reasoning
+                schema:
+                  additionalProperties: false
+                  properties:
+                    final_answer:
+                      type: string
+                    steps:
+                      items:
+                        additionalProperties: false
+                        properties:
+                          explanation:
+                            type: string
+                          output:
+                            type: string
+                        required:
+                          - explanation
+                          - output
+                        type: object
+                      type: array
+                  required:
+                    - steps
+                    - final_answer
+                  type: object
+                strict: true
+              type: json_schema
+          response:
+            body:
+              choices:
+                - finish_reason: stop
+                  tool_calls:
+                    - function:
+                        arguments: arguments
+                        name: name
+                      id: id
+                      type: function
+              http_status_code: 200
+              llm_status_code: 200
+              request:
+                max_tokens: 1
+                model: model
+                temperature: 1.1
+                tool_choice: none
+                tools:
+                  - function:
+                      name: name
+                      parameters:
+                        key: value
+                    type: function
+              request_id: request_id
+              response_time: 275510459
+              usage:
+                input_tokens: 1
+                output_tokens: 1
+                total_tokens: 1
       method: POST
       path: /chat/completions
       request:
         body:
           properties:
             max_tokens:
-              docs: The maximum number of tokens to generate in the completion. Default is 1000.
-              type: optional<integer>
               default: 1000
+              docs: >-
+                The maximum number of tokens to generate in the completion.
+                Default is 1000.
+              type: optional<integer>
               validation:
                 min: 1
             messages:
@@ -752,6 +876,12 @@ service:
                 A simple string prompt. The API will automatically convert this
                 into a user message.
               type: optional<string>
+            response_format:
+              docs: >-
+                Specifies the format of the model's response. Use this to
+                constrain the model to output valid JSON matching a schema.
+                Supported by OpenAI (GPT-4.1, GPT-5.x) and Gemini models only.
+              type: optional<ResponseFormat>
             temperature:
               docs: >-
                 Controls randomness. Lower values produce more deterministic
@@ -776,7 +906,7 @@ service:
         identification, and custom formatting.
       examples:
         - headers:
-            Authorization: "[object Object]"
+            Authorization: '[object Object]'
           name: Translation request
           request:
             speech_understanding:
@@ -787,7 +917,7 @@ service:
                   target_languages:
                     - es
                     - de
-            transcript_id: "12345"
+            transcript_id: '12345'
           response:
             body:
               speech_understanding:
@@ -828,7 +958,7 @@ service:
               words:
                 - key: value
         - headers:
-            Authorization: "[object Object]"
+            Authorization: '[object Object]'
           name: Speaker identification request
           request:
             speech_understanding:
@@ -838,7 +968,7 @@ service:
                     - interviewer
                     - candidate
                   speaker_type: role
-            transcript_id: "12345"
+            transcript_id: '12345'
           response:
             body:
               speech_understanding:
@@ -879,7 +1009,7 @@ service:
               words:
                 - key: value
         - headers:
-            Authorization: "[object Object]"
+            Authorization: '[object Object]'
           name: Custom formatting request
           request:
             speech_understanding:
@@ -888,7 +1018,7 @@ service:
                   date: mm/dd/yyyy
                   email: username@domain.com
                   phone_number: (xxx)xxx-xxxx
-            transcript_id: "12345"
+            transcript_id: '12345'
           response:
             body:
               speech_understanding:
