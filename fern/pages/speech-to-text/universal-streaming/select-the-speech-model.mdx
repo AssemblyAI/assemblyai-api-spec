@@ -17,19 +17,129 @@ The `speech_model` connection parameter lets you specify which model to use for 
 | **Universal-Streaming English** (default) | `"speech_model": "universal-streaming-english"`      | Our low-latency streaming model optimized for real-time English transcription.                                                                   |
 | **Native Code Switching**                 | `"speech_model": "universal-streaming-multilingual"` | Our low-latency streaming model optimized for real-time multilingual transcription in English, Spanish, French, German, Italian, and Portuguese. |
 | **Universal-3-Pro** (testing)             | `"speech_model": "u3-rt-pro"`                        | Our highest accuracy model with native multilingual code switching, entity accuracy, performance across varying audio, and prompting support.    |
+| **Whisper Streaming**                     | `"speech_model": "whisper-streaming"`                | Transcribe audio streams in 99 languages using the [WhisperLiveKit](https://pypi.org/project/whisperlivekit/) model with automatic language detection. |
 
 ## Choosing a model
 
-| Feature                         | Universal-Streaming English                                                        | Native Code Switching                                                              | Universal-3-Pro Streaming                                                                                                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Latency**                     | Fastest                                                                            | Fast                                                                               | Fast                                                                                                                                                                       |
-| **Partial transcripts**         | Yes                                                                                | Yes                                                                                | Yes                                                                                                                                                                        |
-| **Multilingual**                | No                                                                                 | Per Turn                                                                           | Native Code Switching                                                                                                                                                      |
-| **Entity accuracy**             | Okay                                                                               | Okay                                                                               | Best                                                                                                                                                                       |
-| **Disfluencies & filler words** | No                                                                                 | No                                                                                 | Yes                                                                                                                                                                        |
-| **Customization**               | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) + [Native prompting](/docs/getting-started/universal-3-pro#prompting) (unknown context) |
+| Feature                         | Universal-Streaming English                                                        | Native Code Switching                                                              | Universal-3-Pro Streaming                                                                                                                                                  | Whisper Streaming                                                  |
+| ------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Latency**                     | Fastest                                                                            | Fast                                                                               | Fast                                                                                                                                                                       | Moderate                                                           |
+| **Partial transcripts**         | Yes                                                                                | Yes                                                                                | Yes                                                                                                                                                                        | Yes                                                                |
+| **Multilingual**                | No                                                                                 | Per Turn                                                                           | Native Code Switching                                                                                                                                                      | 99 languages (auto-detected)                                       |
+| **Entity accuracy**             | Okay                                                                               | Okay                                                                               | Best                                                                                                                                                                       | Okay                                                               |
+| **Disfluencies & filler words** | No                                                                                 | No                                                                                 | Yes                                                                                                                                                                        | No                                                                 |
+| **Language detection**          | No                                                                                 | No                                                                                 | No                                                                                                                                                                         | Yes (with confidence scores)                                       |
+| **Non-speech tags**             | No                                                                                 | No                                                                                 | No                                                                                                                                                                         | Yes (`[Silence]`, `[Music]`, etc.)                                 |
+| **Customization**               | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) | [Keyterms prompting](/docs/streaming/keyterms-prompting) (known context) + [Native prompting](/docs/getting-started/universal-3-pro#prompting) (unknown context) | No                                                                 |
 
 For detailed setup and configuration of Universal-3-Pro streaming, see the [Universal-3 Pro](/docs/streaming/universal-3-pro) page. For prompting guidance, see the [Prompting guide](/docs/streaming/prompting).
+
+## Whisper Streaming
+
+Whisper streaming allows you to transcribe audio streams in 99 languages using the [WhisperLiveKit](https://pypi.org/project/whisperlivekit/) model. To use Whisper streaming, set `speech_model` to `"whisper-streaming"` in the WebSocket URL.
+
+<Note>
+  The `whisper-streaming` model does not support the `language` parameter. The
+  model automatically detects the language being spoken. Do not include a
+  `language` parameter when using this model.
+</Note>
+
+<Accordion title="Supported languages (99)">
+  Afrikaans, Albanian, Amharic, Arabic, Armenian, Assamese, Azerbaijani,
+  Bashkir, Basque, Belarusian, Bengali, Bosnian, Breton, Bulgarian, Cantonese,
+  Catalan, Chinese, Croatian, Czech, Danish, Dutch, English, Estonian, Faroese,
+  Finnish, French, Galician, Georgian, German, Greek, Gujarati, Haitian Creole,
+  Hausa, Hawaiian, Hebrew, Hindi, Hungarian, Icelandic, Indonesian, Italian,
+  Japanese, Javanese, Kannada, Kazakh, Khmer, Korean, Lao, Latin, Latvian,
+  Lingala, Lithuanian, Luxembourgish, Macedonian, Malagasy, Malay, Malayalam,
+  Maltese, Maori, Marathi, Mongolian, Myanmar, Nepali, Norwegian, Nynorsk,
+  Occitan, Pashto, Persian, Polish, Portuguese, Punjabi, Romanian, Russian,
+  Sanskrit, Serbian, Shona, Sindhi, Sinhala, Slovak, Slovenian, Somali, Spanish,
+  Sundanese, Swahili, Swedish, Tagalog, Tajik, Tamil, Tatar, Telugu, Thai,
+  Tibetan, Turkish, Turkmen, Ukrainian, Urdu, Uzbek, Vietnamese, Welsh, Yiddish,
+  Yoruba
+</Accordion>
+
+### Language detection
+
+The Whisper streaming model supports automatic language detection, allowing you to identify which language is being spoken in real-time. To enable it, include `language_detection=true` as a query parameter in the WebSocket URL:
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=whisper-streaming&language_detection=true
+```
+
+When enabled, each Turn message (with either a **complete utterance** or `end_of_turn: true`) will include two additional fields:
+
+- `language_code`: The language code of the detected language (e.g., `"es"` for Spanish, `"fr"` for French)
+- `language_confidence`: A confidence score between 0 and 1 indicating how confident the model is in the language detection
+
+<Note>
+  The `language_code` and `language_confidence` fields only appear when either:
+  - The `utterance` field is non-empty and contains a complete utterance
+  - The `end_of_turn` field is `true`
+</Note>
+
+#### Example response
+
+```json
+{
+  "turn_order": 0,
+  "turn_is_formatted": false,
+  "end_of_turn": true,
+  "transcript": "buenos días",
+  "end_of_turn_confidence": 1.0,
+  "words": [
+    {
+      "start": 1200,
+      "end": 2596,
+      "text": "buenos",
+      "confidence": 0.0,
+      "word_is_final": true
+    },
+    {
+      "start": 2828,
+      "end": 3760,
+      "text": "días",
+      "confidence": 0.0,
+      "word_is_final": true
+    }
+  ],
+  "utterance": "Buenos días.",
+  "language_code": "es",
+  "language_confidence": 0.846999,
+  "type": "Turn"
+}
+```
+
+### Non-speech tags
+
+The Whisper streaming model can detect and transcribe non-speech audio events. These are returned as bracketed tags in the `utterance` field. Common non-speech tags include:
+
+- `[Silence]` - Periods of silence or no speech
+- `[Música]` / `[Music]` - Background music detected
+- Other audio events may appear in similar bracketed format
+
+<Note>
+  Non-speech tags appear in the `utterance` field with brackets. The
+  `transcript` field contains the raw text without formatting. You can filter
+  out non-speech turns by checking if the `utterance` contains bracketed tags
+  like `[Silence]` or `[Music]`.
+</Note>
+
+### Understanding formatting
+
+By default, the Whisper streaming model returns unformatted transcripts. To receive formatted transcripts with proper punctuation and capitalization, set `format_turns=true` as a query parameter.
+
+<Warning>
+  Enabling `format_turns` adds additional latency to the transcription. We
+  recommend keeping it **off for voice agents** where low latency is critical,
+  and **on for notetaking applications** where formatted output is more
+  important than speed.
+</Warning>
+
+```
+wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&speech_model=whisper-streaming&format_turns=true
+```
 
 ## End-to-end example
 
@@ -89,7 +199,7 @@ def main():
     client.connect(
         StreamingParameters(
             sample_rate=16000,
-            speech_model="u3-rt-pro",  # or "universal-streaming-english", "universal-streaming-multilingual"
+            speech_model="u3-rt-pro",  # or "universal-streaming-english", "universal-streaming-multilingual", "whisper-streaming"
             min_end_of_turn_silence_when_confident=100,
             max_turn_silence=1200,
             # format_turns=True,  # Whether to return formatted final transcripts (not applicable to u3-rt-pro)
@@ -122,7 +232,7 @@ YOUR_API_KEY = "<YOUR_API_KEY>"
 
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
-    "speech_model": "u3-rt-pro",  # or "universal-streaming-english", "universal-streaming-multilingual"
+    "speech_model": "u3-rt-pro",  # or "universal-streaming-english", "universal-streaming-multilingual", "whisper-streaming"
     "min_end_of_turn_silence_when_confident": 100,
     "max_turn_silence": 1200,
     # "format_turns": True,  # Whether to return formatted final transcripts (not applicable to u3-rt-pro)
@@ -250,7 +360,7 @@ const run = async () => {
 
   const transcriber = client.streaming.transcriber({
     sampleRate: 16_000,
-    speechModel: "u3-rt-pro", // or "universal-streaming-english", "universal-streaming-multilingual"
+    speechModel: "u3-rt-pro", // or "universal-streaming-english", "universal-streaming-multilingual", "whisper-streaming"
     minEndOfTurnSilenceWhenConfident: 100,
     maxTurnSilence: 1200,
     // formatTurns: true, // Whether to return formatted final transcripts (not applicable to u3-rt-pro)
@@ -318,7 +428,7 @@ const querystring = require("querystring");
 const YOUR_API_KEY = "<YOUR_API_KEY>";
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
-  speech_model: "u3-rt-pro", // or "universal-streaming-english", "universal-streaming-multilingual"
+  speech_model: "u3-rt-pro", // or "universal-streaming-english", "universal-streaming-multilingual", "whisper-streaming"
   min_end_of_turn_silence_when_confident: 100,
   max_turn_silence: 1200,
   // format_turns: true, // Whether to return formatted final transcripts (not applicable to u3-rt-pro)
