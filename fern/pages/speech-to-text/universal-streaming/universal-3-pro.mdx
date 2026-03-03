@@ -525,10 +525,10 @@ Universal-3-Pro uses a punctuation-based turn detection system controlled by two
 
 | Parameter                                | Default   | Description                                                          |
 | ---------------------------------------- | --------- | -------------------------------------------------------------------- |
-| `min_end_of_turn_silence_when_confident` | `100` ms  | Silence duration before a speculative end-of-turn (EOT) check fires. |
+| `min_turn_silence` | `100` ms  | Silence duration before a speculative end-of-turn (EOT) check fires. |
 | `max_turn_silence`                       | `1200` ms | Maximum silence before a turn is forced to end.                      |
 
-When silence reaches `min_end_of_turn_silence_when_confident`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
+When silence reaches `min_turn_silence`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
 
 - **Terminal punctuation found** — the turn ends and is emitted as a final transcript (`end_of_turn: true`).
 - **No terminal punctuation** — a partial transcript is emitted (`end_of_turn: false`) and the turn continues waiting.
@@ -537,7 +537,7 @@ When silence reaches `min_end_of_turn_silence_when_confident`, the model transcr
 <Note>
 This differs from Universal-Streaming English and Multilingual, which use a confidence-based end-of-turn system controlled by `end_of_turn_confidence_threshold`.
 
-Instead, Universal-3-Pro makes turn decisions based on ending punctuation after `min_end_of_turn_silence_when_confident` has elapsed. Because of this, `end_of_turn_confidence_threshold` has no impact.
+Instead, Universal-3-Pro makes turn decisions based on ending punctuation after `min_turn_silence` has elapsed. Because of this, `end_of_turn_confidence_threshold` has no impact.
 
 </Note>
 
@@ -554,21 +554,21 @@ For example, to configure both parameters:
 ```json
 {
   "speech_model": "u3-rt-pro",
-  "min_end_of_turn_silence_when_confident": 100,
+  "min_turn_silence": 100,
   "max_turn_silence": 1200
 }
 ```
 
 ### Partials behavior
 
-Partials are `Turn` events where `end_of_turn` is `false`. They are produced whenever `min_end_of_turn_silence_when_confident` is met, but the ending punctuation doesn't signal the end of a turn.
+Partials are `Turn` events where `end_of_turn` is `false`. They are produced whenever `min_turn_silence` is met, but the ending punctuation doesn't signal the end of a turn.
 
-There can be multiple partial transcripts per turn, but each period of silence can produce at most one partial. If silence exceeds `min_end_of_turn_silence_when_confident`, but speech resumes before `max_turn_silence`, the partial is emitted and the EOT check resets until the next period of silence.
+There can be multiple partial transcripts per turn, but each period of silence can produce at most one partial. If silence exceeds `min_turn_silence`, but speech resumes before `max_turn_silence`, the partial is emitted and the EOT check resets until the next period of silence.
 
-If you're running eager LLM inference on partial transcripts, we recommend setting `min_end_of_turn_silence_when_confident` to `100`.
+If you're running eager LLM inference on partial transcripts, we recommend setting `min_turn_silence` to `100`.
 
 <Warning title="Entity splitting (accuracy) vs Model Latency trade-off">
-  Setting `min_end_of_turn_silence_when_confident` too low can split entities
+  Setting `min_turn_silence` too low can split entities
   like phone numbers and emails. We have found LLM steps fix this for voice
   agents, but we recommend testing carefully with your use case.
 </Warning>
@@ -631,14 +631,14 @@ Then, when the conversation moves to a different stage (e.g., medical intake), u
 websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel", "metoprolol"]}')
 ```
 
-You can also update `prompt`, `max_turn_silence`, `min_end_of_turn_silence_when_confident`, or any combination at the same time:
+You can also update `prompt`, `max_turn_silence`, `min_turn_silence`, or any combination at the same time:
 
 ```json
 {
   "type": "UpdateConfiguration",
   "keyterms_prompt": ["account number", "routing number"],
   "max_turn_silence": 5000,
-  "min_end_of_turn_silence_when_confident": 200
+  "min_turn_silence": 200
 }
 ```
 
@@ -647,4 +647,4 @@ Common reasons to update configuration mid-stream:
 - **`keyterms_prompt`** — Dynamically add terms relevant to the current stage of your voice agent flow. This is the most effective way to improve recognition accuracy mid-stream. See [Keyterms prompting](/docs/streaming/keyterms-prompting) for details.
 - **`prompt`** — Pass updated behavioral or formatting instructions into the STT stream.
 - **`max_turn_silence`** — Increase for moments where you'd expect a longer pause, such as when a caller is reading out a credit card number, ID number, or address. Decrease it again afterward to resume snappier turn detection.
-- **`min_end_of_turn_silence_when_confident`** — Tune how quickly speculative EOT checks fire. Lower values produce faster partials for eager LLM inference, while higher values reduce entity splitting for utterances with numbers or proper nouns.
+- **`min_turn_silence`** — Tune how quickly speculative EOT checks fire. Lower values produce faster partials for eager LLM inference, while higher values reduce entity splitting for utterances with numbers or proper nouns.
