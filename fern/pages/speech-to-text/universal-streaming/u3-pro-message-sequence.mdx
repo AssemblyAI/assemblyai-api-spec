@@ -9,15 +9,17 @@ description: "The anatomy of a Universal-3 Pro streaming session from session st
   object](/docs/streaming#turn-object) explanation.
 </Note>
 
-Universal-3 Pro handles message sequences differently from [Universal Streaming](/docs/streaming/message-sequence). Instead of emitting word-by-word partial transcripts as audio is processed, Universal-3 Pro produces complete, formatted transcripts after periods of silence. Key differences include:
+Universal-3 Pro handles message sequences differently from [Universal Streaming](/docs/streaming/message-sequence). Instead of emitting word-by-word partial transcripts as audio is processed, Universal-3 Pro produces transcripts only during silence periods. Key differences include:
 
-- **No word-by-word partials** — transcripts are only emitted during silence periods, not on every audio frame.
-- **Formatting is built in** — `turn_is_formatted` is always `true` on end-of-turn transcripts. There is no separate formatting step.
+- **Partials only during silence** — transcripts are emitted when the speaker pauses, not on every audio frame.
+- **Formatting is built in** — `turn_is_formatted` is `true` on end-of-turn transcripts. There is no separate formatting step.
 - **Punctuation-based turn detection** — turns end when terminal punctuation (`.` `?` `!`) is detected, not based on a confidence threshold.
 - **`end_of_turn_confidence` is always `1`** when triggered by terminal punctuation.
 
 For this example, we walk through a user saying:
-`Hi. My name is Sonny.`
+`My name is Sonny.`
+
+The speaker pauses briefly mid-sentence (after "is"), producing a partial transcript, then finishes the sentence, producing a final end-of-turn transcript.
 
 ## Session initialization
 
@@ -26,148 +28,61 @@ When the session begins, you receive a `Begin` message with the session ID and e
 ```json
 {
   "type": "Begin",
-  "id": "4015768a-b856-46bf-afa0-e03ab845d89c",
-  "expires_at": 1772568751
+  "id": "3207b601-2054-48df-ba77-8784dfcf9fb8",
+  "expires_at": 1772570132
 }
 ```
 
-## First turn
-
-### Speech detected
+## Speech detected
 
 Before any Turn messages are sent, the server sends a `SpeechStarted` message indicating that speech has been detected. The `timestamp` field indicates when the speech was detected, in milliseconds relative to the beginning of the audio stream.
 
 ```json
 {
   "type": "SpeechStarted",
-  "timestamp": 2336
+  "timestamp": 1216
 }
 ```
 
-### End of turn (Final transcript)
+## Partial transcript
 
-After the speaker says "Hi." and pauses, Universal-3 Pro transcribes the buffered audio and detects terminal punctuation (`.`). The turn ends immediately with a fully formatted final transcript.
+The speaker says "My name is" and pauses briefly. Because the speaker has stopped talking but no terminal punctuation has been detected, Universal-3 Pro emits a **partial transcript**.
 
 Notice that:
-- `end_of_turn` is `true` — the turn has ended.
-- `turn_is_formatted` is `true` — formatting is always built in for Universal-3 Pro.
-- `end_of_turn_confidence` is `1` — terminal punctuation triggered the end of turn.
-- All words have `word_is_final: true` — this is a final transcript.
-- The `utterance` field contains the finalized utterance text.
+- `end_of_turn` is `false` — the turn has not ended yet.
+- `turn_is_formatted` is `false` — this is not a finalized transcript.
+- `end_of_turn_confidence` is `0` — no terminal punctuation detected.
+- All words have `word_is_final: false` — the transcript may be revised in the final message.
+- The `transcript` ends with an em dash (`—`), indicating the utterance is incomplete.
+- The `utterance` field is an empty string because the turn has not ended.
 
 ```json
 {
   "turn_order": 0,
-  "turn_is_formatted": true,
-  "end_of_turn": true,
-  "transcript": "Hi.",
-  "end_of_turn_confidence": 1,
-  "words": [
-    {
-      "start": 2336,
-      "end": 3071,
-      "text": "Hi.",
-      "confidence": 0.645748,
-      "word_is_final": true
-    }
-  ],
-  "utterance": "Hi.",
-  "type": "Turn"
-}
-```
-
-Unlike Universal Streaming, there is no separate formatting message. The end-of-turn transcript is always formatted.
-
-## Second turn
-
-### Speech detected
-
-When the user begins speaking again, another `SpeechStarted` message is sent.
-
-```json
-{
-  "type": "SpeechStarted",
-  "timestamp": 3136
-}
-```
-
-### End of turn (Final transcript)
-
-The speaker says "My name is Sonny." and pauses. Universal-3 Pro transcribes the full utterance and detects terminal punctuation, ending the turn with a formatted final transcript.
-
-```json
-{
-  "turn_order": 1,
-  "turn_is_formatted": true,
-  "end_of_turn": true,
-  "transcript": "My name is Sonny.",
-  "end_of_turn_confidence": 1,
-  "words": [
-    {
-      "start": 3136,
-      "end": 3337,
-      "text": "My",
-      "confidence": 0.950153,
-      "word_is_final": true
-    },
-    {
-      "start": 3357,
-      "end": 3759,
-      "text": "name",
-      "confidence": 0.998939,
-      "word_is_final": true
-    },
-    {
-      "start": 3779,
-      "end": 3980,
-      "text": "is",
-      "confidence": 0.999285,
-      "word_is_final": true
-    },
-    {
-      "start": 4000,
-      "end": 4544,
-      "text": "Sonny.",
-      "confidence": 0.446247,
-      "word_is_final": true
-    }
-  ],
-  "utterance": "My name is Sonny.",
-  "type": "Turn"
-}
-```
-
-## Session termination
-
-When the session ends, a `Termination` message is sent with the total audio and session durations.
-
-```json
-{
-  "type": "Termination",
-  "audio_duration_seconds": 17,
-  "session_duration_seconds": 17
-}
-```
-
-## Partials (mid-turn transcripts)
-
-In the example above, both turns ended immediately because terminal punctuation was detected on the first silence check. However, if the speaker pauses mid-sentence without terminal punctuation, Universal-3 Pro emits a **partial transcript** before the turn ends.
-
-For example, if a user says "Yeah my credit card number is" and pauses, a partial is emitted:
-
-```json
-{
-  "turn_order": 0,
-  "turn_is_formatted": true,
+  "turn_is_formatted": false,
   "end_of_turn": false,
-  "transcript": "Yeah my credit card number is--",
+  "transcript": "My name is—",
   "end_of_turn_confidence": 0,
   "words": [
     {
-      "start": 1000,
-      "end": 1200,
-      "text": "Yeah",
-      "confidence": 0.95,
+      "start": 1216,
+      "end": 1627,
+      "text": "My",
+      "confidence": 0.956314,
+      "word_is_final": false
+    },
+    {
+      "start": 1668,
+      "end": 2490,
+      "text": "name",
+      "confidence": 0.999393,
+      "word_is_final": false
+    },
+    {
+      "start": 2531,
+      "end": 3067,
+      "text": "is—",
+      "confidence": 0.753325,
       "word_is_final": false
     }
   ],
@@ -176,13 +91,86 @@ For example, if a user says "Yeah my credit card number is" and pauses, a partia
 }
 ```
 
-Key differences from end-of-turn transcripts:
+Each silence period produces **at most one partial**. If the speaker continues pausing without finishing the sentence, no additional partial is emitted until new speech is detected.
 
-- `end_of_turn` is `false` — the turn has not ended.
-- All words have `word_is_final: false` — the transcript may be revised in the final end-of-turn message.
-- Each silence period produces **at most one partial**.
+## End of turn (Final transcript)
 
-When the speaker eventually finishes with terminal punctuation, the final end-of-turn transcript includes the complete, refined text with all words marked `word_is_final: true`.
+The speaker continues and says "Sonny." — completing the sentence with a period. Universal-3 Pro detects the terminal punctuation and ends the turn with a fully formatted final transcript.
+
+Notice how the final transcript differs from the partial:
+- `end_of_turn` is now `true` — the turn has ended.
+- `turn_is_formatted` is `true` — this is a finalized, formatted transcript.
+- `end_of_turn_confidence` is `1` — terminal punctuation triggered the end of turn.
+- All words now have `word_is_final: true` — the transcript is final and will not be revised.
+- The word timestamps and confidences have been refined compared to the partial.
+- The `utterance` field now contains the complete finalized text.
+- The incomplete "is—" from the partial has been resolved to "is" and "Sonny." in the final transcript.
+
+```json
+{
+  "turn_order": 0,
+  "turn_is_formatted": true,
+  "end_of_turn": true,
+  "transcript": "My name is Sonny.",
+  "end_of_turn_confidence": 1,
+  "words": [
+    {
+      "start": 1216,
+      "end": 1635,
+      "text": "My",
+      "confidence": 0.956583,
+      "word_is_final": true
+    },
+    {
+      "start": 1676,
+      "end": 2515,
+      "text": "name",
+      "confidence": 0.999199,
+      "word_is_final": true
+    },
+    {
+      "start": 2556,
+      "end": 2975,
+      "text": "is",
+      "confidence": 0.999535,
+      "word_is_final": true
+    },
+    {
+      "start": 3016,
+      "end": 4155,
+      "text": "Sonny.",
+      "confidence": 0.316031,
+      "word_is_final": true
+    }
+  ],
+  "utterance": "My name is Sonny.",
+  "type": "Turn"
+}
+```
+
+Unlike Universal Streaming, there is no separate formatting message. The end-of-turn transcript is always formatted.
+
+## Session termination
+
+When the session ends, a `Termination` message is sent with the total audio and session durations.
+
+```json
+{
+  "type": "Termination",
+  "audio_duration_seconds": 13,
+  "session_duration_seconds": 13
+}
+```
+
+## Summary
+
+The complete message flow for this example is:
+
+1. **Begin** — session initialized
+2. **SpeechStarted** — speech detected at 1216ms
+3. **Turn** (partial) — speaker pauses mid-sentence; `end_of_turn: false`, `turn_is_formatted: false`
+4. **Turn** (final) — speaker finishes with terminal punctuation; `end_of_turn: true`, `turn_is_formatted: true`
+5. **Termination** — session ended
 
 For more details on how partials work and how to tune turn detection timing, see [Turn Detection and Partials](/docs/streaming/universal-3-pro/turn-detection-and-partials).
 
@@ -190,7 +178,7 @@ For more details on how partials work and how to tune turn detection timing, see
 
 | Behavior | Universal-3 Pro | Universal Streaming |
 | --- | --- | --- |
-| **Partial frequency** | Only during silence periods | Every audio frame (word-by-word) |
+| **Partial frequency** | At most one per silence period | Every audio frame (word-by-word) |
 | **Formatting** | Built in to every end-of-turn transcript | Separate `turn_is_formatted` message after end of turn |
 | **Turn detection** | Punctuation-based (`min_turn_silence` / `max_turn_silence`) | Confidence-based (`end_of_turn_confidence_threshold`) |
 | **`end_of_turn_confidence`** | Always `1` when triggered by punctuation | Varies based on model confidence |
