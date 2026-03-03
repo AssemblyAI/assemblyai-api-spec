@@ -3,7 +3,6 @@ import * as React from "react";
 
 const SDK_URL =
   "https://cdn.jsdelivr.net/npm/@sampleapp.ai/sdk@1.0.60/dist/index.standalone.umd.js";
-const API_KEY = "3ZVJcRgexi5xBUtxhny9iGAz";
 
 interface BuildWizardEmbedProps {
   height?: string;
@@ -56,9 +55,6 @@ export function BuildWizardEmbed({
         }
 
         instanceRef.current = sdk.BuildWizardIllustrated(
-          {
-            apiKey: API_KEY,
-          },
           containerRef.current
         );
 
