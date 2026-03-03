@@ -4,14 +4,14 @@ Extract inline code blocks from ~165 MDX files into separate native-language fil
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| Multi-language code display | `<CodeBlocks>` wrapping `<Code src>` | Fern's native tabbed code display. Auto-syncs language preference site-wide. Cleaner than `<Tabs>/<Tab>`. |
-| Tabs with prose + code | Keep `<Tabs>/<Tab>`, extract code to `<Code src>` | Prose is tab-specific and must stay inside the Tab. Only the code gets extracted. |
-| File placement | Sibling `snippets/` directory per section | e.g., `fern/pages/audio-intelligence/snippets/auto-chapters/quickstart.python-sdk.py` |
-| Short code blocks (1-2 lines) | Leave inline | Install commands, single config lines stay as triple-backtick. Extract blocks >= 3 lines. |
-| `<Json>` components | Leave as-is | Already in separate `*-response.mdx` files. JSX syntax not suitable for `.json` extraction. |
-| Commented-out code | Extract file, comment the `<Code>` reference | Preserves code for future use while keeping it hidden. |
+| Decision                      | Choice                                            | Rationale                                                                                                 |
+| ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Multi-language code display   | `<CodeBlocks>` wrapping `<Code src>`              | Fern's native tabbed code display. Auto-syncs language preference site-wide. Cleaner than `<Tabs>/<Tab>`. |
+| Tabs with prose + code        | Keep `<Tabs>/<Tab>`, extract code to `<Code src>` | Prose is tab-specific and must stay inside the Tab. Only the code gets extracted.                         |
+| File placement                | Sibling `snippets/` directory per section         | e.g., `fern/pages/audio-intelligence/snippets/auto-chapters/quickstart.python-sdk.py`                     |
+| Short code blocks (1-2 lines) | Leave inline                                      | Install commands, single config lines stay as triple-backtick. Extract blocks >= 3 lines.                 |
+| `<Json>` components           | Leave as-is                                       | Already in separate `*-response.mdx` files. JSX syntax not suitable for `.json` extraction.               |
+| Commented-out code            | Extract file, comment the `<Code>` reference      | Preserves code for future use while keeping it hidden.                                                    |
 
 ---
 
@@ -20,13 +20,15 @@ Extract inline code blocks from ~165 MDX files into separate native-language fil
 ### Rule 1: Multi-language groups (code only) → `<CodeBlocks>` + `<Code src>`
 
 **Before** (current `<Tabs>` pattern, code only):
-```jsx
+
+````jsx
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
 ```python {8}
 import assemblyai as aai
 ...
-```
+````
+
   </Tab>
   <Tab language="javascript-sdk" title="JavaScript SDK">
 ```javascript {12}
@@ -38,6 +40,7 @@ import { AssemblyAI } from "assemblyai";
 ```
 
 **After**:
+
 ```jsx
 <CodeBlocks>
   <Code
@@ -58,28 +61,31 @@ import { AssemblyAI } from "assemblyai";
 ### Rule 2: Multi-language groups (prose + code) → Keep `<Tabs>`, extract code
 
 **Before**:
-```jsx
+
+````jsx
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
   Enable Auto Chapters by setting `auto_chapters` to `True`.
 ```python {8}
 import assemblyai as aai
 ...
-```
+````
+
   </Tab>
 </Tabs>
 ```
 
 **After**:
+
 ```jsx
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
-  Enable Auto Chapters by setting `auto_chapters` to `True`.
-  <Code
-    src="./snippets/auto-chapters/quickstart.python-sdk.py"
-    language="python"
-    highlight="{8}"
-  />
+    Enable Auto Chapters by setting `auto_chapters` to `True`.
+    <Code
+      src="./snippets/auto-chapters/quickstart.python-sdk.py"
+      language="python"
+      highlight="{8}"
+    />
   </Tab>
 </Tabs>
 ```
@@ -87,20 +93,24 @@ import assemblyai as aai
 ### Rule 3: Existing `<CodeBlocks>` with inline fences → `<CodeBlocks>` + `<Code src>`
 
 **Before**:
-```jsx
+
+````jsx
 <CodeBlocks>
 ```python title="Python SDK" highlight={17} maxLines=15
 import assemblyai as aai
 ...
-```
+````
+
 ```javascript title="JavaScript SDK" highlight={19} maxLines=15
 import { AssemblyAI } from "assemblyai";
 ...
 ```
+
 </CodeBlocks>
 ```
 
 **After**:
+
 ```jsx
 <CodeBlocks>
   <Code
@@ -123,13 +133,16 @@ import { AssemblyAI } from "assemblyai";
 ### Rule 4: Standalone blocks >= 3 lines → `<Code src>`
 
 **Before**:
-```markdown
+
+````markdown
 ```python
 import assemblyai as aai
 aai.settings.api_key = "YOUR_API_KEY"
 transcript = aai.Transcriber().transcribe(audio_file)
 ```
-```
+````
+
+````
 
 **After**:
 ```jsx
@@ -137,15 +150,17 @@ transcript = aai.Transcriber().transcribe(audio_file)
   src="./snippets/batch-transcription/quickstart.py"
   language="python"
 />
-```
+````
 
 ### Rule 5: Short blocks (< 3 lines) → Leave inline
 
-```markdown
+````markdown
 ```bash
 pip install -U assemblyai
 ```
-```
+````
+
+````
 Stays as-is.
 
 ### Rule 6: Commented-out code → Extract file, comment the reference
@@ -156,9 +171,11 @@ Stays as-is.
 ```python
 import assemblyai as aai
 ...
-```
-</Tab> */}
-```
+````
+
+</Tab> \*/}
+
+````
 
 **After** (extract the code to a file, comment the `<Code>` reference):
 ```jsx
@@ -167,7 +184,7 @@ import assemblyai as aai
   title="Python SDK"
   language="python"
 /> */}
-```
+````
 
 ---
 
@@ -175,13 +192,14 @@ import assemblyai as aai
 
 **Format**: `{section}.{variant}.{ext}` or `{section}.{ext}` (no variant for single-language)
 
-| Component | Description | Example |
-|---|---|---|
-| `{section}` | Semantic slug for what the code block does | `quickstart`, `api-request`, `step1-setup`, `enable-feature`, `example-output` |
+| Component   | Description                                             | Example                                                                                           |
+| ----------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `{section}` | Semantic slug for what the code block does              | `quickstart`, `api-request`, `step1-setup`, `enable-feature`, `example-output`                    |
 | `{variant}` | Language/SDK variant, matching Tab `language` attribute | `python-sdk`, `python`, `javascript-sdk`, `javascript`, `csharp`, `ruby`, `php`, `java`, `golang` |
-| `{ext}` | Native file extension | `.py`, `.js`, `.cs`, `.rb`, `.php`, `.java`, `.go`, `.sh`, `.json`, `.txt`, `.yml`, `.ts` |
+| `{ext}`     | Native file extension                                   | `.py`, `.js`, `.cs`, `.rb`, `.php`, `.java`, `.go`, `.sh`, `.json`, `.txt`, `.yml`, `.ts`         |
 
 **Examples**:
+
 ```
 snippets/auto-chapters/quickstart.python-sdk.py
 snippets/auto-chapters/quickstart.javascript-sdk.js
@@ -195,6 +213,7 @@ snippets/aws-to-aai/comparison.aai.py
 ```
 
 **Directory structure**:
+
 ```
 fern/pages/audio-intelligence/
   auto-chapters.mdx
@@ -218,26 +237,27 @@ fern/pages/audio-intelligence/
 
 **Language → Extension mapping**:
 
-| Language/Fence | Extension |
-|---|---|
-| `python` | `.py` |
+| Language/Fence              | Extension     |
+| --------------------------- | ------------- |
+| `python`                    | `.py`         |
 | `javascript` / `typescript` | `.js` / `.ts` |
-| `csharp` | `.cs` |
-| `ruby` | `.rb` |
-| `php` | `.php` |
-| `java` | `.java` |
-| `go` / `golang` | `.go` |
-| `bash` / `sh` / `curl` | `.sh` |
-| `json` | `.json` |
-| `yaml` / `yml` | `.yml` |
-| `plain` / `text` / `txt` | `.txt` |
-| `nginx` | `.conf` |
+| `csharp`                    | `.cs`         |
+| `ruby`                      | `.rb`         |
+| `php`                       | `.php`        |
+| `java`                      | `.java`       |
+| `go` / `golang`             | `.go`         |
+| `bash` / `sh` / `curl`      | `.sh`         |
+| `json`                      | `.json`       |
+| `yaml` / `yml`              | `.yml`        |
+| `plain` / `text` / `txt`    | `.txt`        |
+| `nginx`                     | `.conf`       |
 
 ---
 
 ## `src` Path Resolution
 
 Fern's `<Code>` component resolves `src` paths relative to the Fern docs directory (`fern/`). So for:
+
 - MDX file: `fern/pages/audio-intelligence/auto-chapters.mdx`
 - Code file: `fern/pages/audio-intelligence/snippets/auto-chapters/quickstart.python-sdk.py`
 
@@ -249,17 +269,17 @@ The `src` should be: `pages/audio-intelligence/snippets/auto-chapters/quickstart
 
 ## PR Splitting Strategy (~10 PRs)
 
-| PR | Section | ~Files | Notes |
-|---|---|---|---|
-| **PR 1** | `audio-intelligence/` | 8 | Most consistent pattern (all Tabs with 7 langs). Skip `*-response.mdx` files. |
-| **PR 2** | `speech-to-text/pre-recorded-audio/` | 21 | Mix of CodeBlocks (17) and Tabs (4). |
-| **PR 3** | `speech-to-text/` remaining (streaming, universal-streaming, pipecat, livekit) | 18 | Includes `streaming.mdx` (very heavy, 9 Tabs groups). |
-| **PR 4** | `getting-started/` + `lemur/` | 10 | High-traffic pages; test carefully. |
-| **PR 5** | `llm-gateway/` + `speech-understanding/` | 10 | Includes commented-out Tab edge case (3 files). |
-| **PR 6** | `guides/` top-level (not cookbooks) | 15 | Longer guides with multiple code groups per file. |
-| **PR 7a** | `guides/cookbooks/core-transcription/` + `streaming-stt/` | ~51 | Mostly standalone Python-only code. |
-| **PR 7b** | `guides/cookbooks/lemur/` + `audio-intelligence/` | ~16 | Standalone Python cookbooks. |
-| **PR 8** | `integrations/` + `use-cases/` + `concepts/` + misc | ~31 | Everything remaining. |
+| PR        | Section                                                                        | ~Files | Notes                                                                         |
+| --------- | ------------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------- |
+| **PR 1**  | `audio-intelligence/`                                                          | 8      | Most consistent pattern (all Tabs with 7 langs). Skip `*-response.mdx` files. |
+| **PR 2**  | `speech-to-text/pre-recorded-audio/`                                           | 21     | Mix of CodeBlocks (17) and Tabs (4).                                          |
+| **PR 3**  | `speech-to-text/` remaining (streaming, universal-streaming, pipecat, livekit) | 18     | Includes `streaming.mdx` (very heavy, 9 Tabs groups).                         |
+| **PR 4**  | `getting-started/` + `lemur/`                                                  | 10     | High-traffic pages; test carefully.                                           |
+| **PR 5**  | `llm-gateway/` + `speech-understanding/`                                       | 10     | Includes commented-out Tab edge case (3 files).                               |
+| **PR 6**  | `guides/` top-level (not cookbooks)                                            | 15     | Longer guides with multiple code groups per file.                             |
+| **PR 7a** | `guides/cookbooks/core-transcription/` + `streaming-stt/`                      | ~51    | Mostly standalone Python-only code.                                           |
+| **PR 7b** | `guides/cookbooks/lemur/` + `audio-intelligence/`                              | ~16    | Standalone Python cookbooks.                                                  |
+| **PR 8**  | `integrations/` + `use-cases/` + `concepts/` + misc                            | ~31    | Everything remaining.                                                         |
 
 ---
 
