@@ -155,6 +155,124 @@ channels:
         $ref: "#/components/messages/Turn"
       termination:
         $ref: "#/components/messages/Termination"
+
+  streamingU3Pro:
+    address: /v3/ws
+    description: |
+      Main channel for bi-directional audio and transcription data using the Universal-3 Pro model.
+
+      <Note> To use our EU server for Streaming STT, replace `streaming.assemblyai.com` with
+      `streaming.eu.assemblyai.com`. </Note>
+    servers:
+      - $ref: "#/servers/production"
+    parameters:
+      sample_rate:
+        description: Sample rate of the audio stream
+        location: $message.payload#/sample_rate
+        schema:
+          type: integer
+        examples: [16000, 48000]
+
+      encoding:
+        description: Encoding of the audio stream
+        location: $message.payload#/encoding
+        enum: ["pcm_s16le", "pcm_mulaw"]
+        default: "pcm_s16le"
+
+      inactivity_timeout:
+        description: Optional time in seconds of inactivity before session is terminated. If not set, no inactivity timeout is applied.
+        location: $message.payload#/inactivity_timeout
+        schema:
+          type: integer
+          minimum: 5
+          maximum: 3600
+        examples:
+          - 5
+          - 3600
+        default: None
+        format: s
+
+      keyterms_prompt:
+        description: A list of words and phrases to improve recognition accuracy for. Behind the scenes, your boosted words are appended to the default prompt. Cannot be used together with `prompt`.
+        location: $message.payload#/keyterms_prompt
+        schema:
+          type: array
+          items:
+            x-label: Word
+            type: string
+
+      language_detection:
+        description: Whether to detect the language and return `language_code` and `language_confidence` on utterances and final turns. Universal-3 Pro supports English, Spanish, German, French, Portuguese, and Italian.
+        location: $message.payload#/language_detection
+        enum: ["true", "false"]
+        default: "false"
+
+      min_turn_silence:
+        description: Silence duration in milliseconds before a speculative end-of-turn check. If terminal punctuation is found, the turn ends. Otherwise, a partial is emitted and the turn continues.
+        location: $message.payload#/min_turn_silence
+        examples:
+          - "100"
+          - "200"
+        default: "100"
+        format: ms
+
+      max_turn_silence:
+        description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation.
+        location: $message.payload#/max_turn_silence
+        examples:
+          - "700"
+          - "1000"
+        default: "1000"
+        format: ms
+
+      prompt:
+        description: Custom transcription instructions for the model. When not provided, a default prompt optimized for turn detection is used automatically. Prompting is a beta feature. Cannot be used together with `keyterms_prompt`.
+        location: $message.payload#/prompt
+        schema:
+          type: string
+
+      speech_model:
+        description: The speech model used for your Streaming session.
+        location: $message.payload#/speech_model
+        enum:
+          [
+            "u3-rt-pro",
+          ]
+        default: "u3-rt-pro"
+
+      token:
+        description: API token for authentication
+        location: $message.payload#/token
+
+      vad_threshold:
+        description: The confidence threshold (0.0 to 1.0) for classifying audio frames as silence. Frames with VAD confidence below this value are considered silent. Increase for noisy environments to reduce false speech detection.
+        location: $message.payload#/vad_threshold
+        default: "0.3"
+
+      ApiKey:
+        description: >-
+          Use your API key for authentication, or alternatively generate a [temporary token](/docs/api-reference/universal-3-pro/generate-streaming-token) and pass it via the `token` query parameter.
+        location: $message.header#/Authorization
+        examples:
+          - token YOUR_ASSEMBLYAI_API_KEY
+
+    messages:
+      updateConfiguration:
+        $ref: "#/components/messages/UpdateConfigurationU3Pro"
+      forceEndpoint:
+        $ref: "#/components/messages/ForceEndpoint"
+      sessionTermination:
+        $ref: "#/components/messages/SessionTermination"
+      audioChunk:
+        $ref: "#/components/messages/AudioChunk"
+
+      sessionBegins:
+        $ref: "#/components/messages/SessionBegins"
+      turn:
+        $ref: "#/components/messages/TurnU3Pro"
+      termination:
+        $ref: "#/components/messages/Termination"
+
 operations:
   sendAudio:
     action: send
@@ -218,6 +336,62 @@ operations:
       $ref: "#/channels/streaming"
     messages:
       - $ref: "#/channels/streaming/messages/termination"
+    description: Receive confirmation that the session has been terminated by the server.
+
+  sendAudioU3Pro:
+    action: send
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/audioChunk"
+    description: Send audio data chunks for transcription. The payload must be of type bytes and contain audio data between 50ms and 1000ms in length.
+
+  sendUpdateConfigurationU3Pro:
+    action: send
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/updateConfiguration"
+    description: Update streaming configuration parameters during an active session. You can update `prompt`, `keyterms_prompt`, `min_turn_silence`, and `max_turn_silence`.
+
+  sendForceEndpointU3Pro:
+    action: send
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/forceEndpoint"
+    description: Manually force an endpoint in the transcription.
+
+  sendSessionTerminationU3Pro:
+    action: send
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/sessionTermination"
+    description: Gracefully terminate the streaming session.
+
+  receiveSessionBeginsU3Pro:
+    action: receive
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/sessionBegins"
+    description: Receive confirmation that the streaming session has successfully started.
+
+  receiveTurnU3Pro:
+    action: receive
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/turn"
+    description: Receive a formatted turn-based transcription result.
+
+  receiveTerminationU3Pro:
+    action: receive
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/termination"
     description: Receive confirmation that the session has been terminated by the server.
 
 components:
@@ -298,6 +472,22 @@ components:
       contentType: application/json
       payload:
         $ref: "#/components/schemas/TerminationPayload"
+
+    UpdateConfigurationU3Pro:
+      name: UpdateConfiguration
+      title: Update Streaming Configuration
+      summary: Client message to update streaming configuration parameters during an active session.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/UpdateConfigurationU3ProPayload"
+
+    TurnU3Pro:
+      name: Turn
+      title: Formatted Turn Result
+      summary: Server message containing a formatted turn-based transcription result.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TurnU3ProPayload"
 
   schemas:
     UpdateConfigurationPayload:
@@ -472,3 +662,80 @@ components:
         - type
         - audio_duration_seconds
         - session_duration_seconds
+
+    UpdateConfigurationU3ProPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: UpdateConfiguration
+        prompt:
+          type: string
+          nullable: true
+          description: Custom transcription instructions. Cannot be used together with `keyterms_prompt`.
+        keyterms_prompt:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: A list of words and phrases to boost recognition for. Cannot be used together with `prompt`.
+        min_turn_silence:
+          type: integer
+          nullable: true
+          description: Silence duration in milliseconds before a speculative end-of-turn check.
+        max_turn_silence:
+          type: integer
+          nullable: true
+          description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation.
+      required:
+        - type
+
+    TurnU3ProPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: Turn
+        turn_order:
+          type: integer
+          description: Order of this turn in the conversation.
+        turn_is_formatted:
+          type: boolean
+          description: Whether this turn has been formatted. For Universal-3 Pro, this always matches `end_of_turn`.
+        end_of_turn:
+          type: boolean
+          description: Whether this marks the end of a turn.
+        transcript:
+          type: string
+          description: Transcript of all finalized words in the turn.
+        utterance:
+          type: string
+          description: Transcript of all finalized words when an utterance is complete. Can be multiple utterances in a turn.
+        language_code:
+          type: string
+          description: The language of the turn. Only populated when language detection is enabled and an utterance is complete or turn is final.
+        language_confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: The confidence score for the detected language, between 0 (low confidence) and 1 (high confidence). Only populated when language detection is enabled and an utterance is complete or turn is final.
+        end_of_turn_confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: The confidence score that this is the end of a turn, between 0.0 (low confidence) and 1.0 (high confidence). For Universal-3 Pro, this is 1.0 when `end_of_turn` is true and 0.0 otherwise.
+        words:
+          type: array
+          items:
+            $ref: "#/components/schemas/Word"
+          description: Array of word-level details for this turn.
+      required:
+        - type
+        - turn_order
+        - turn_is_formatted
+        - end_of_turn
+        - transcript
+        - end_of_turn_confidence
+        - words
