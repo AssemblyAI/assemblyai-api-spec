@@ -18,74 +18,47 @@ Here's the full sample code for what you'll build in this tutorial:
 
 ```python
 import logging
-import json
-import requests
 from typing import Type
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
     BeginEvent,
+    LLMGatewayResponseEvent,
     StreamingClient,
     StreamingClientOptions,
     StreamingError,
     StreamingEvents,
     StreamingParameters,
-    TerminationEvent,
     TurnEvent,
+    TerminationEvent,
 )
+from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
 
 api_key = "<YOUR_API_KEY>"
-
-prompt = "Provide a brief summary of the transcript."
+prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-conversation_data = ""
-
-
 def on_begin(self: Type[StreamingClient], event: BeginEvent):
     print(f"Session started: {event.id}")
 
-
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    global conversation_data
-    print(f"{event.transcript} ({event.end_of_turn})")
     if event.end_of_turn:
-        conversation_data += f"{event.transcript}\n"
+        print(f"\nTranscript:\n{event.transcript}\n")
 
+def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
+    # Extract the actual LLM response content from the data
+    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"LLM Response:\n{llm_content}\n")
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
     print(
         f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
     )
 
-
 def on_error(self: Type[StreamingClient], error: StreamingError):
     print(f"Error occurred: {error}")
-
-
-def analyze_with_llm_gateway(text):
-    headers = {
-        "authorization": api_key,
-        "content-type": "application/json"
-    }
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
-        ],
-        "max_tokens": 4000
-    }
-
-    result = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-    return result.json()["choices"][0]["message"]["content"]
-
 
 def main():
     client = StreamingClient(
@@ -97,20 +70,22 @@ def main():
 
     client.on(StreamingEvents.Begin, on_begin)
     client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
     client.on(StreamingEvents.Termination, on_terminated)
     client.on(StreamingEvents.Error, on_error)
 
     client.connect(
         StreamingParameters(
             sample_rate=16000,
+            speech_model="u3-rt-pro",
             format_turns=True,
-            llm_gateway=json.dumps({
-                "model": "claude-sonnet-4-20250514",
-                "messages": [
-                    {"role": "user", "content": prompt}
+            llm_gateway=LLMGatewayConfig(
+                model="claude-sonnet-4-20250514",
+                messages=[
+                    LLMGatewayMessage(role="user", content=prompt)
                 ],
-                "max_tokens": 4000
-            })
+                max_tokens=4000
+            )
         )
     )
 
@@ -120,13 +95,6 @@ def main():
         )
     finally:
         client.disconnect(terminate=True)
-
-        if conversation_data.strip():
-            print("\nAnalyzing conversation with LLM Gateway...")
-            print(analyze_with_llm_gateway(conversation_data))
-        else:
-            print("No conversation data to analyze.")
-
 
 if __name__ == "__main__":
     main()
@@ -608,10 +576,10 @@ To complete this tutorial, you need:
 <Tabs groupId="language">
 
 <Tab language="python-sdk" title="Python SDK" default>
-Install the AssemblyAI Python SDK and requests via pip:
+Install the AssemblyAI Python SDK via pip:
 
 ```bash
-pip install "assemblyai[extras]" requests
+pip install "assemblyai[extras]"
 ```
 
 </Tab>
@@ -657,30 +625,27 @@ For more information about streaming transcription, see [Transcribe streaming au
 
 ```python
 import logging
-import json
-import requests
 from typing import Type
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
     BeginEvent,
+    LLMGatewayResponseEvent,
     StreamingClient,
     StreamingClientOptions,
     StreamingError,
     StreamingEvents,
     StreamingParameters,
-    TerminationEvent,
     TurnEvent,
+    TerminationEvent,
 )
+from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
 
 api_key = "<YOUR_API_KEY>"
-
-prompt = "Provide a brief summary of the transcript."
+prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-conversation_data = ""
 ```
 
 </Tab>
@@ -810,19 +775,19 @@ Set up the event handlers to stream audio and collect transcripts from completed
 def on_begin(self: Type[StreamingClient], event: BeginEvent):
     print(f"Session started: {event.id}")
 
-
 def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    global conversation_data
-    print(f"{event.transcript} ({event.end_of_turn})")
     if event.end_of_turn:
-        conversation_data += f"{event.transcript}\n"
+        print(f"\nTranscript:\n{event.transcript}\n")
 
+def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
+    # Extract the actual LLM response content from the data
+    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"LLM Response:\n{llm_content}\n")
 
 def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
     print(
         f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
     )
-
 
 def on_error(self: Type[StreamingClient], error: StreamingError):
     print(f"Error occurred: {error}")
@@ -997,28 +962,7 @@ Define a function to send the accumulated transcript to LLM Gateway for analysis
 
 <Tab language="python-sdk" title="Python SDK" default>
 
-```python
-def analyze_with_llm_gateway(text):
-    headers = {
-        "authorization": api_key,
-        "content-type": "application/json"
-    }
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
-        ],
-        "max_tokens": 4000
-    }
-
-    result = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-    return result.json()["choices"][0]["message"]["content"]
-```
+When using the Python SDK with `LLMGatewayConfig`, analysis responses are received automatically through the `LLMGatewayResponseEvent` event handler registered in the previous step. No separate API call is needed.
 
 </Tab>
 
@@ -1127,20 +1071,22 @@ def main():
 
     client.on(StreamingEvents.Begin, on_begin)
     client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
     client.on(StreamingEvents.Termination, on_terminated)
     client.on(StreamingEvents.Error, on_error)
 
     client.connect(
         StreamingParameters(
             sample_rate=16000,
+            speech_model="u3-rt-pro",
             format_turns=True,
-            llm_gateway=json.dumps({
-                "model": "claude-sonnet-4-20250514",
-                "messages": [
-                    {"role": "user", "content": prompt}
+            llm_gateway=LLMGatewayConfig(
+                model="claude-sonnet-4-20250514",
+                messages=[
+                    LLMGatewayMessage(role="user", content=prompt)
                 ],
-                "max_tokens": 4000
-            })
+                max_tokens=4000
+            )
         )
     )
 
@@ -1150,13 +1096,6 @@ def main():
         )
     finally:
         client.disconnect(terminate=True)
-
-        if conversation_data.strip():
-            print("\nAnalyzing conversation with LLM Gateway...")
-            print(analyze_with_llm_gateway(conversation_data))
-        else:
-            print("No conversation data to analyze.")
-
 
 if __name__ == "__main__":
     main()
