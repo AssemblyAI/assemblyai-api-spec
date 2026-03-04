@@ -17,23 +17,32 @@ channels:
   streamingU3Pro:
     address: /v3/ws
     description: |
-      Main channel for bi-directional audio and transcription data.
+      Stream audio and receive real-time transcription results using the Universal-3 Pro model. The most accurate streaming model for voice agents that demand the highest quality, with best-in-class accuracy and advanced prompting capabilities.
+      
+      Supports: English, Spanish, German, French, Portuguese, and Italian.
 
       <Note> To use our EU server for Streaming STT, replace `streaming.assemblyai.com` with
       `streaming.eu.assemblyai.com`. </Note>
     servers:
       - $ref: "#/servers/production"
     parameters:
-      sample_rate:
-        description: Sample rate of the audio stream
-        location: $message.payload#/sample_rate
-        schema:
-          type: integer
-          default: 16000
-        examples: [16000, 48000]
+      speech_model:
+        description: The speech model to use.
+        location: $message.payload#/speech_model
+        enum:
+          [
+            "u3-rt-pro",
+          ]
+
+      ApiKey:
+        description: >-
+          Use your API key for authentication, or alternatively generate a [temporary token](/docs/api-reference/universal-3-pro/generate-streaming-token) and pass it via the `token` query parameter.
+        location: $message.header#/Authorization
+        examples:
+          - token YOUR_ASSEMBLYAI_API_KEY
 
       encoding:
-        description: Encoding of the audio stream
+        description: Encoding of the audio stream.
         location: $message.payload#/encoding
         enum: ["pcm_s16le", "pcm_mulaw"]
         default: "pcm_s16le"
@@ -61,20 +70,10 @@ channels:
             type: string
 
       language_detection:
-        description: Whether to detect the language and return `language_code` and `language_confidence` on utterances and final turns. Universal-3 Pro supports English, Spanish, German, French, Portuguese, and Italian.
+        description: Whether to return `language_code` and `language_confidence` in turn messages. Universal-3 Pro natively code-switches between English, Spanish, German, French, Portuguese, and Italian by default without any necessary configuration.
         location: $message.payload#/language_detection
         enum: ["true", "false"]
         default: "false"
-
-      min_turn_silence:
-        description: Silence duration in milliseconds before a speculative end-of-turn check. If terminal punctuation is found, the turn ends. Otherwise, a partial is emitted and the turn continues.
-        location: $message.payload#/min_turn_silence
-        schema:
-          type: integer
-          default: 100
-        examples:
-          - 100
-          - 200
 
       max_turn_silence:
         description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation.
@@ -86,23 +85,32 @@ channels:
           - 700
           - 1000
 
+      min_turn_silence:
+        description: Silence duration in milliseconds before a speculative end-of-turn check. If terminal punctuation is found, the turn ends. Otherwise, a partial is emitted and the turn continues.
+        location: $message.payload#/min_turn_silence
+        schema:
+          type: integer
+          default: 100
+        examples:
+          - 100
+          - 200
+
       prompt:
-        description: Prompting is a beta feature. Custom transcription instructions for the model. When not provided, a default prompt optimized for turn detection is used automatically.
+        description: Prompting is a beta feature. Custom transcription instructions for the model. When not provided, a default prompt optimized for native turn detection is used automatically.
         location: $message.payload#/prompt
         schema:
           type: string
 
-      speech_model:
-        description: The speech model used for your Streaming session.
-        location: $message.payload#/speech_model
-        enum:
-          [
-            "u3-rt-pro",
-          ]
-        default: "u3-rt-pro"
+      sample_rate:
+        description: Sample rate of the audio stream.
+        location: $message.payload#/sample_rate
+        schema:
+          type: integer
+          default: 16000
+        examples: [16000, 48000]
 
       token:
-        description: API token for authentication
+        description: API token for authentication (if using a [temporary token](/docs/api-reference/streaming-api/generate-streaming-token)).
         location: $message.payload#/token
 
       vad_threshold:
@@ -110,15 +118,8 @@ channels:
         location: $message.payload#/vad_threshold
         schema:
           type: number
-          format: float
           default: 0.3
-
-      ApiKey:
-        description: >-
-          Use your API key for authentication, or alternatively generate a [temporary token](/docs/api-reference/universal-3-pro/generate-streaming-token) and pass it via the `token` query parameter.
-        location: $message.header#/Authorization
-        examples:
-          - token YOUR_ASSEMBLYAI_API_KEY
+        default: 0.3
 
     messages:
       updateConfiguration:
@@ -132,6 +133,8 @@ channels:
 
       sessionBegins:
         $ref: "#/components/messages/SessionBegins"
+      speechStarted:
+        $ref: "#/components/messages/SpeechStarted"
       turn:
         $ref: "#/components/messages/Turn"
       termination:
@@ -176,6 +179,14 @@ operations:
     messages:
       - $ref: "#/channels/streamingU3Pro/messages/sessionBegins"
     description: Receive confirmation that the streaming session has successfully started.
+
+  receiveSpeechStarted:
+    action: receive
+    channel:
+      $ref: "#/channels/streamingU3Pro"
+    messages:
+      - $ref: "#/channels/streamingU3Pro/messages/speechStarted"
+    description: Receive a notification that speech has been detected in the audio stream.
 
   receiveTurn:
     action: receive
@@ -240,6 +251,14 @@ components:
       contentType: application/json
       payload:
         $ref: "#/components/schemas/SessionBeginsPayload"
+
+    SpeechStarted:
+      name: SpeechStarted
+      title: Speech Started
+      summary: Server message indicating that speech has been detected in the audio stream.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SpeechStartedPayload"
 
     Turn:
       name: Turn
@@ -321,6 +340,21 @@ components:
         - type
         - id
         - expires_at
+
+    SpeechStartedPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: SpeechStarted
+          description: Identifies the type of the message.
+        timestamp:
+          type: integer
+          description: The timestamp in milliseconds when speech was detected, relative to the beginning of the audio stream.
+          format: ms
+      required:
+        - type
+        - timestamp
 
     Word:
       type: object

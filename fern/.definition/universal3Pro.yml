@@ -3,7 +3,7 @@ imports:
 types:
   Encoding:
     default: pcm_s16le
-    docs: Encoding of the audio stream
+    docs: Encoding of the audio stream.
     enum:
       - pcm_s16le
       - pcm_mulaw
@@ -12,9 +12,10 @@ types:
   LanguageDetection:
     default: 'false'
     docs: >-
-      Whether to detect the language and return `language_code` and
-      `language_confidence` on utterances and final turns. Universal-3 Pro
-      supports English, Spanish, German, French, Portuguese, and Italian.
+      Whether to return `language_code` and `language_confidence` in turn
+      messages. Universal-3 Pro natively code-switches between English, Spanish,
+      German, French, Portuguese, and Italian by default without any necessary
+      configuration.
     enum:
       - 'true'
       - 'false'
@@ -24,7 +25,13 @@ channel:
   auth: false
   display-name: Universal-3 Pro
   docs: >
-    Main channel for bi-directional audio and transcription data.
+    Stream audio and receive real-time transcription results using the
+    Universal-3 Pro model. The most accurate streaming model for voice agents
+    that demand the highest quality, with best-in-class accuracy and advanced
+    prompting capabilities.
+
+
+    Supports: English, Spanish, German, French, Portuguese, and Italian.
 
 
     <Note> To use our EU server for Streaming STT, replace
@@ -45,8 +52,8 @@ channel:
           type: sendAudio
       name: This is an example of a speech-to-text session using Universal-3 Pro
       query-parameters:
-        sample_rate: 16000
-        vad_threshold: 0.3
+        sample_rate: 1
+        speech_model: u3-rt-pro
   headers:
     Authorization:
       docs: >-
@@ -72,6 +79,9 @@ channel:
     sessionTermination:
       body: root.SessionTerminationPayload
       origin: client
+    speechStarted:
+      body: root.SpeechStartedPayload
+      origin: server
     termination:
       body: root.TerminationPayload
       origin: server
@@ -87,7 +97,7 @@ channel:
   query-parameters:
     encoding:
       default: pcm_s16le
-      docs: Encoding of the audio stream
+      docs: Encoding of the audio stream.
       type: optional<Encoding>
     inactivity_timeout:
       docs: >-
@@ -104,9 +114,10 @@ channel:
     language_detection:
       default: 'false'
       docs: >-
-        Whether to detect the language and return `language_code` and
-        `language_confidence` on utterances and final turns. Universal-3 Pro
-        supports English, Spanish, German, French, Portuguese, and Italian.
+        Whether to return `language_code` and `language_confidence` in turn
+        messages. Universal-3 Pro natively code-switches between English,
+        Spanish, German, French, Portuguese, and Italian by default without any
+        necessary configuration.
       type: optional<LanguageDetection>
     max_turn_silence:
       default: 1000
@@ -124,17 +135,20 @@ channel:
     prompt:
       docs: >-
         Prompting is a beta feature. Custom transcription instructions for the
-        model. When not provided, a default prompt optimized for turn detection
-        is used automatically.
+        model. When not provided, a default prompt optimized for native turn
+        detection is used automatically.
       type: optional<string>
     sample_rate:
-      docs: Sample rate of the audio stream
+      default: 16000
+      docs: Sample rate of the audio stream.
       type: integer
     speech_model:
-      docs: The speech model used for your Streaming session.
-      type: optional<literal<"u3-rt-pro">>
+      docs: The speech model to use.
+      type: literal<"u3-rt-pro">
     token:
-      docs: API token for authentication
+      docs: >-
+        API token for authentication (if using a [temporary
+        token](/docs/api-reference/streaming-api/generate-streaming-token)).
       type: optional<string>
     vad_threshold:
       default: 0.3
@@ -143,5 +157,5 @@ channel:
         silence. Frames with VAD confidence below this value are considered
         silent. Increase for noisy environments to reduce false speech
         detection.
-      type: optional<float>
+      type: optional<double>
   url: production
