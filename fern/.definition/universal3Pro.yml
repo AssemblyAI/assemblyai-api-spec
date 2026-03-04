@@ -1,3 +1,5 @@
+imports:
+  root: __package__.yml
 types:
   Encoding:
     default: pcm_s16le
@@ -33,7 +35,7 @@ channel:
     - headers: {}
       messages:
         - body:
-            expires_at: '2024-01-15T09:30:00Z'
+            expires_at: 1745483367
             id: cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f
             type: Begin
           type: receiveSessionBegins
@@ -43,9 +45,7 @@ channel:
           type: sendAudio
       name: This is an example of a speech-to-text session using Universal-3 Pro
       query-parameters:
-        max_turn_silence: 1000
-        min_turn_silence: 100
-        sample_rate: sample_rate
+        sample_rate: 1
         vad_threshold: vad_threshold
   headers:
     Authorization:
@@ -56,7 +56,31 @@ channel:
         pass it via the `token` query parameter.
       name: authorization
       type: optional<string>
-  messages: {}
+  messages:
+    audioChunk:
+      body:
+        type: string
+        validation:
+          format: binary
+      origin: client
+    forceEndpoint:
+      body: root.ForceEndpointPayload
+      origin: client
+    sessionBegins:
+      body: root.SessionBeginsPayload
+      origin: server
+    sessionTermination:
+      body: root.SessionTerminationPayload
+      origin: client
+    termination:
+      body: root.TerminationPayload
+      origin: server
+    turn:
+      body: root.TurnPayload
+      origin: server
+    updateConfiguration:
+      body: root.UpdateConfigurationPayload
+      origin: client
   path: /v3/ws
   path-parameters:
     filter_profanity: optional<string>
@@ -66,12 +90,15 @@ channel:
       docs: Encoding of the audio stream
       type: optional<Encoding>
     inactivity_timeout:
-      default: None
       docs: >-
         Optional time in seconds of inactivity before session is terminated. If
         not set, no inactivity timeout is applied.
-      type: optional<string>
+      type: optional<integer>
+      validation:
+        max: 3600
+        min: 5
     keyterms_prompt:
+      allow-multiple: true
       docs: A list of words and phrases to improve recognition accuracy for.
       type: optional<string>
     language_detection:
@@ -86,14 +113,14 @@ channel:
       docs: >-
         Maximum silence in milliseconds before the turn is forced to end,
         regardless of punctuation.
-      type: optional<string>
+      type: optional<integer>
     min_turn_silence:
       default: 100
       docs: >-
         Silence duration in milliseconds before a speculative end-of-turn check.
         If terminal punctuation is found, the turn ends. Otherwise, a partial is
         emitted and the turn continues.
-      type: optional<string>
+      type: optional<integer>
     prompt:
       docs: >-
         Prompting is a beta feature. Custom transcription instructions for the
@@ -102,7 +129,7 @@ channel:
       type: optional<string>
     sample_rate:
       docs: Sample rate of the audio stream
-      type: string
+      type: integer
     speech_model:
       docs: The speech model used for your Streaming session.
       type: optional<literal<"u3-rt-pro">>
