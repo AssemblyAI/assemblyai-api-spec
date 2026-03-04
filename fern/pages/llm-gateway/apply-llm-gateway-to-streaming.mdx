@@ -109,56 +109,107 @@ import websocket
 import json
 import threading
 import time
-import requests
+import wave
 from urllib.parse import urlencode
+from datetime import datetime
 
-YOUR_API_KEY = "<YOUR_API_KEY>"
+# --- Configuration ---
+YOUR_API_KEY = "<YOUR_API_KEY>"  # Replace with your actual API key
 
-prompt = "Provide a brief summary of the transcript."
+# LLM Gateway Configuration
+PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
+LLM_GATEWAY_CONFIG = {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+        {"role": "user", "content": PROMPT}
+    ],
+    "max_tokens": 4000
+}
 
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
-    "format_turns": True,
-    "llm_gateway": json.dumps({
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 4000
-    })
+    "format_turns": True,  # Request formatted final transcripts
+    "speech_model": "u3-rt-pro",  # USM 3 Pro model
+    "llm_gateway": json.dumps(LLM_GATEWAY_CONFIG)  # LLM Gateway configuration
 }
-
 API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
-FRAMES_PER_BUFFER = 800
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
 SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
 
+# Global variables for audio stream and websocket
 audio = None
 stream = None
 ws_app = None
 audio_thread = None
-stop_event = threading.Event()
-conversation_data = ""
+stop_event = threading.Event()  # To signal the audio thread to stop
+
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
+
+def save_wav_file():
+    """Save recorded audio frames to a WAV file."""
+    if not recorded_frames:
+        print("No audio data recorded.")
+        return
+
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"recorded_audio_{timestamp}.wav"
+
+    try:
+        with wave.open(filename, 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(2)  # 16-bit = 2 bytes
+            wf.setframerate(SAMPLE_RATE)
+
+            # Write all recorded frames
+            with recording_lock:
+                wf.writeframes(b''.join(recorded_frames))
+
+        print(f"Audio saved to: {filename}")
+        print(f"Duration: {len(recorded_frames) * FRAMES_PER_BUFFER / SAMPLE_RATE:.2f} seconds")
+
+    except Exception as e:
+        print(f"Error saving WAV file: {e}")
+
+# --- WebSocket Event Handlers ---
 
 def on_open(ws):
+    """Called when the WebSocket connection is established."""
     print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT_BASE_URL}")
 
+    # Start sending audio data in a separate thread
     def stream_audio():
         global stream
+        print("Starting audio streaming...")
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+
+                # Send audio data as binary message
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
                 break
+        print("Audio streaming stopped.")
 
     global audio_thread
     audio_thread = threading.Thread(target=stream_audio)
-    audio_thread.daemon = True
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
     audio_thread.start()
 
 def on_message(ws, message):
@@ -167,28 +218,47 @@ def on_message(ws, message):
         msg_type = data.get('type')
 
         if msg_type == "Begin":
-            print(f"Session started: {data.get('id')}")
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"Session started: {session_id}")
         elif msg_type == "Turn":
-            transcript = data.get('transcript', '')
-            formatted = data.get('turn_is_formatted', False)
+            end_of_turn = data.get('end_of_turn', False)
 
-            if formatted:
-                global conversation_data
-                print(f"\nTranscript: {transcript}")
-                conversation_data += f"{transcript}\n"
+            if end_of_turn:
+                transcript = data.get('transcript', '')
+                print(f"\nTranscript:\n{transcript}\n")
+        elif msg_type == "LLMGatewayResponse":
+            # Extract the LLM response content
+            llm_data = data.get('data', {})
+            llm_content = llm_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            print(f"LLM Response:\n{llm_content}\n")
         elif msg_type == "Termination":
-            print(f"\nSession terminated: {data.get('audio_duration_seconds')}s of audio processed")
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"Session terminated: {audio_duration} seconds of audio processed")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
     except Exception as e:
         print(f"Error handling message: {e}")
 
 def on_error(ws, error):
-    print(f"Error: {error}")
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
     stop_event.set()
 
+
 def on_close(ws, close_status_code, close_msg):
-    print(f"\nDisconnected: {close_status_code}")
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+
+    # Save recorded audio to WAV file
+    save_wav_file()
+
+    # Ensure audio resources are released
     global stream, audio
-    stop_event.set()
+    stop_event.set()  # Signal audio thread just in case it's still running
+
     if stream:
         if stream.is_active():
             stream.stop_stream()
@@ -197,32 +267,18 @@ def on_close(ws, close_status_code, close_msg):
     if audio:
         audio.terminate()
         audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
 
-def analyze_with_llm_gateway(text):
-    headers = {
-        "authorization": YOUR_API_KEY,
-        "content-type": "application/json"
-    }
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
-        ],
-        "max_tokens": 4000
-    }
-
-    result = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-    return result.json()["choices"][0]["message"]["content"]
-
+# --- Main Execution ---
 def run():
     global audio, stream, ws_app
 
+    # Initialize PyAudio
     audio = pyaudio.PyAudio()
+
+    # Open microphone stream
     try:
         stream = audio.open(
             input=True,
@@ -231,13 +287,16 @@ def run():
             format=FORMAT,
             rate=SAMPLE_RATE,
         )
+        print("Microphone stream opened successfully.")
         print("Speak into your microphone. Press Ctrl+C to stop.")
+        print("Audio will be saved to a WAV file when the session ends.")
     except Exception as e:
-        print(f"Error opening microphone: {e}")
+        print(f"Error opening microphone stream: {e}")
         if audio:
             audio.terminate()
-        return
+        return  # Exit if microphone cannot be opened
 
+    # Create WebSocketApp
     ws_app = websocket.WebSocketApp(
         API_ENDPOINT,
         header={"Authorization": YOUR_API_KEY},
@@ -247,38 +306,54 @@ def run():
         on_close=on_close,
     )
 
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
     ws_thread = threading.Thread(target=ws_app.run_forever)
     ws_thread.daemon = True
     ws_thread.start()
 
     try:
+        # Keep main thread alive until interrupted
         while ws_thread.is_alive():
             time.sleep(0.1)
     except KeyboardInterrupt:
-        print("\nStopping...")
-        stop_event.set()
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
         if ws_app and ws_app.sock and ws_app.sock.connected:
             try:
-                ws_app.send(json.dumps({"type": "Terminate"}))
-                time.sleep(2)
-            except Exception:
-                pass
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
         if ws_app:
             ws_app.close()
         ws_thread.join(timeout=2.0)
 
-        if conversation_data.strip():
-            print("\nAnalyzing conversation with LLM Gateway...")
-            print(analyze_with_llm_gateway(conversation_data))
-        else:
-            print("No conversation data to analyze.")
     finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
         if stream and stream.is_active():
             stream.stop_stream()
         if stream:
             stream.close()
         if audio:
             audio.terminate()
+        print("Cleanup complete. Exiting.")
+
 
 if __name__ == "__main__":
     run()
@@ -588,7 +663,7 @@ pip install "assemblyai[extras]"
 Install the required packages via pip:
 
 ```bash
-pip install pyaudio websocket-client requests
+pip install pyaudio websocket-client
 ```
 
 </Tab>
@@ -658,39 +733,48 @@ import websocket
 import json
 import threading
 import time
-import requests
+import wave
 from urllib.parse import urlencode
+from datetime import datetime
 
-YOUR_API_KEY = "<YOUR_API_KEY>"
+# --- Configuration ---
+YOUR_API_KEY = "<YOUR_API_KEY>"  # Replace with your actual API key
 
-prompt = "Provide a brief summary of the transcript."
+# LLM Gateway Configuration
+PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
+LLM_GATEWAY_CONFIG = {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+        {"role": "user", "content": PROMPT}
+    ],
+    "max_tokens": 4000
+}
 
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
-    "format_turns": True,
-    "llm_gateway": json.dumps({
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 4000
-    })
+    "format_turns": True,  # Request formatted final transcripts
+    "speech_model": "u3-rt-pro",  # USM 3 Pro model
+    "llm_gateway": json.dumps(LLM_GATEWAY_CONFIG)  # LLM Gateway configuration
 }
-
 API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
 API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
 
-FRAMES_PER_BUFFER = 800
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
 SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
 
+# Global variables for audio stream and websocket
 audio = None
 stream = None
 ws_app = None
 audio_thread = None
-stop_event = threading.Event()
-conversation_data = ""
+stop_event = threading.Event()  # To signal the audio thread to stop
+
+# WAV recording variables
+recorded_frames = []  # Store audio frames for WAV file
+recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 ```
 
 </Tab>
@@ -798,22 +882,64 @@ def on_error(self: Type[StreamingClient], error: StreamingError):
 <Tab language="python" title="Python">
 
 ```python
-def on_open(ws):
-    print("WebSocket connection opened.")
+def save_wav_file():
+    """Save recorded audio frames to a WAV file."""
+    if not recorded_frames:
+        print("No audio data recorded.")
+        return
 
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"recorded_audio_{timestamp}.wav"
+
+    try:
+        with wave.open(filename, 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(2)  # 16-bit = 2 bytes
+            wf.setframerate(SAMPLE_RATE)
+
+            # Write all recorded frames
+            with recording_lock:
+                wf.writeframes(b''.join(recorded_frames))
+
+        print(f"Audio saved to: {filename}")
+        print(f"Duration: {len(recorded_frames) * FRAMES_PER_BUFFER / SAMPLE_RATE:.2f} seconds")
+
+    except Exception as e:
+        print(f"Error saving WAV file: {e}")
+
+# --- WebSocket Event Handlers ---
+
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT_BASE_URL}")
+
+    # Start sending audio data in a separate thread
     def stream_audio():
         global stream
+        print("Starting audio streaming...")
         while not stop_event.is_set():
             try:
                 audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+
+                # Store audio data for WAV recording
+                with recording_lock:
+                    recorded_frames.append(audio_data)
+
+                # Send audio data as binary message
                 ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 print(f"Error streaming audio: {e}")
+                # If stream read fails, likely means it's closed, stop the loop
                 break
+        print("Audio streaming stopped.")
 
     global audio_thread
     audio_thread = threading.Thread(target=stream_audio)
-    audio_thread.daemon = True
+    audio_thread.daemon = (
+        True  # Allow main thread to exit even if this thread is running
+    )
     audio_thread.start()
 
 def on_message(ws, message):
@@ -822,28 +948,47 @@ def on_message(ws, message):
         msg_type = data.get('type')
 
         if msg_type == "Begin":
-            print(f"Session started: {data.get('id')}")
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"Session started: {session_id}")
         elif msg_type == "Turn":
-            transcript = data.get('transcript', '')
-            formatted = data.get('turn_is_formatted', False)
+            end_of_turn = data.get('end_of_turn', False)
 
-            if formatted:
-                global conversation_data
-                print(f"\nTranscript: {transcript}")
-                conversation_data += f"{transcript}\n"
+            if end_of_turn:
+                transcript = data.get('transcript', '')
+                print(f"\nTranscript:\n{transcript}\n")
+        elif msg_type == "LLMGatewayResponse":
+            # Extract the LLM response content
+            llm_data = data.get('data', {})
+            llm_content = llm_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            print(f"LLM Response:\n{llm_content}\n")
         elif msg_type == "Termination":
-            print(f"\nSession terminated: {data.get('audio_duration_seconds')}s of audio processed")
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"Session terminated: {audio_duration} seconds of audio processed")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
     except Exception as e:
         print(f"Error handling message: {e}")
 
 def on_error(ws, error):
-    print(f"Error: {error}")
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    # Attempt to signal stop on error
     stop_event.set()
 
+
 def on_close(ws, close_status_code, close_msg):
-    print(f"\nDisconnected: {close_status_code}")
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+
+    # Save recorded audio to WAV file
+    save_wav_file()
+
+    # Ensure audio resources are released
     global stream, audio
-    stop_event.set()
+    stop_event.set()  # Signal audio thread just in case it's still running
+
     if stream:
         if stream.is_active():
             stream.stop_stream()
@@ -852,6 +997,9 @@ def on_close(ws, close_status_code, close_msg):
     if audio:
         audio.terminate()
         audio = None
+    # Try to join the audio thread to ensure clean exit
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
 ```
 
 </Tab>
@@ -968,28 +1116,7 @@ When using the Python SDK with `LLMGatewayConfig`, analysis responses are receiv
 
 <Tab language="python" title="Python">
 
-```python
-def analyze_with_llm_gateway(text):
-    headers = {
-        "authorization": YOUR_API_KEY,
-        "content-type": "application/json"
-    }
-
-    llm_gateway_data = {
-        "model": "claude-sonnet-4-20250514",
-        "messages": [
-            {"role": "user", "content": f"{prompt}\n\nTranscript: {text}"}
-        ],
-        "max_tokens": 4000
-    }
-
-    result = requests.post(
-        "https://llm-gateway.assemblyai.com/v1/chat/completions",
-        headers=headers,
-        json=llm_gateway_data
-    )
-    return result.json()["choices"][0]["message"]["content"]
-```
+When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback registered in the previous step. No separate API call is needed.
 
 </Tab>
 
@@ -1106,10 +1233,14 @@ if __name__ == "__main__":
 <Tab language="python" title="Python">
 
 ```python
+# --- Main Execution ---
 def run():
     global audio, stream, ws_app
 
+    # Initialize PyAudio
     audio = pyaudio.PyAudio()
+
+    # Open microphone stream
     try:
         stream = audio.open(
             input=True,
@@ -1118,13 +1249,16 @@ def run():
             format=FORMAT,
             rate=SAMPLE_RATE,
         )
+        print("Microphone stream opened successfully.")
         print("Speak into your microphone. Press Ctrl+C to stop.")
+        print("Audio will be saved to a WAV file when the session ends.")
     except Exception as e:
-        print(f"Error opening microphone: {e}")
+        print(f"Error opening microphone stream: {e}")
         if audio:
             audio.terminate()
-        return
+        return  # Exit if microphone cannot be opened
 
+    # Create WebSocketApp
     ws_app = websocket.WebSocketApp(
         API_ENDPOINT,
         header={"Authorization": YOUR_API_KEY},
@@ -1134,38 +1268,54 @@ def run():
         on_close=on_close,
     )
 
+    # Run WebSocketApp in a separate thread to allow main thread to catch KeyboardInterrupt
     ws_thread = threading.Thread(target=ws_app.run_forever)
     ws_thread.daemon = True
     ws_thread.start()
 
     try:
+        # Keep main thread alive until interrupted
         while ws_thread.is_alive():
             time.sleep(0.1)
     except KeyboardInterrupt:
-        print("\nStopping...")
-        stop_event.set()
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()  # Signal audio thread to stop
+
+        # Send termination message to the server
         if ws_app and ws_app.sock and ws_app.sock.connected:
             try:
-                ws_app.send(json.dumps({"type": "Terminate"}))
-                time.sleep(2)
-            except Exception:
-                pass
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                # Give a moment for messages to process before forceful close
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        # Close the WebSocket connection (will trigger on_close)
+        if ws_app:
+            ws_app.close()
+
+        # Wait for WebSocket thread to finish
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
         if ws_app:
             ws_app.close()
         ws_thread.join(timeout=2.0)
 
-        if conversation_data.strip():
-            print("\nAnalyzing conversation with LLM Gateway...")
-            print(analyze_with_llm_gateway(conversation_data))
-        else:
-            print("No conversation data to analyze.")
     finally:
+        # Final cleanup (already handled in on_close, but good as a fallback)
         if stream and stream.is_active():
             stream.stop_stream()
         if stream:
             stream.close()
         if audio:
             audio.terminate()
+        print("Cleanup complete. Exiting.")
+
 
 if __name__ == "__main__":
     run()
