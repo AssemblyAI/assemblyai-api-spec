@@ -482,64 +482,121 @@ run();
 const WebSocket = require("ws");
 const mic = require("mic");
 const querystring = require("querystring");
+const fs = require("fs");
 
-const YOUR_API_KEY = "<YOUR_API_KEY>";
+// --- Configuration ---
+const YOUR_API_KEY = "<YOUR_API_KEY>"; // Replace with your actual API key
 
-const prompt = "Provide a brief summary of the transcript.";
+// LLM Gateway Configuration
+const PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [
+    { role: "user", content: PROMPT }
+  ],
+  max_tokens: 4000
+};
 
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
-  format_turns: true,
-  llm_gateway: JSON.stringify({
-    model: "claude-sonnet-4-20250514",
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 4000,
-  }),
+  format_turns: true, // Request formatted final transcripts
+  speech_model: "u3-rt-pro", // USM 3 Pro model
+  llm_gateway: JSON.stringify(LLM_GATEWAY_CONFIG) // LLM Gateway configuration
 };
-
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
 
+// Audio Configuration
 const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
 const CHANNELS = 1;
 
+// Global variables
 let micInstance = null;
 let micInputStream = null;
 let ws = null;
 let stopRequested = false;
-let conversationData = "";
 
-async function analyzeWithLlmGateway(text) {
-  const response = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        authorization: YOUR_API_KEY,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        messages: [
-          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
-        ],
-        max_tokens: 4000,
-      }),
-    }
-  );
-  const result = await response.json();
-  return result.choices[0].message.content;
+// WAV recording variables
+let recordedFrames = []; // Store audio frames for WAV file
+
+// --- Helper functions ---
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
 }
 
+function createWavHeader(sampleRate, channels, dataLength) {
+  const buffer = Buffer.alloc(44);
+
+  // RIFF header
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write("WAVE", 8);
+
+  // fmt chunk
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16); // fmt chunk size
+  buffer.writeUInt16LE(1, 20); // PCM format
+  buffer.writeUInt16LE(channels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
+  buffer.writeUInt16LE(channels * 2, 32); // block align
+  buffer.writeUInt16LE(16, 34); // bits per sample
+
+  // data chunk
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataLength, 40);
+
+  return buffer;
+}
+
+function saveWavFile() {
+  if (recordedFrames.length === 0) {
+    console.log("No audio data recorded.");
+    return;
+  }
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `recorded_audio_${timestamp}.wav`;
+
+  try {
+    // Combine all recorded frames
+    const audioData = Buffer.concat(recordedFrames);
+    const dataLength = audioData.length;
+
+    // Create WAV header
+    const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
+
+    // Write WAV file
+    const wavFile = Buffer.concat([wavHeader, audioData]);
+    fs.writeFileSync(filename, wavFile);
+
+    console.log(`Audio saved to: ${filename}`);
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
+  } catch (error) {
+    console.error(`Error saving WAV file: ${error}`);
+  }
+}
+
+// --- Main function ---
 async function run() {
+  console.log("Starting AssemblyAI streaming transcription with LLM Gateway...");
+  console.log("Audio will be saved to a WAV file when the session ends.");
+
+  // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
       Authorization: YOUR_API_KEY,
     },
   });
 
+  // Setup WebSocket event handlers
   ws.on("open", () => {
     console.log("WebSocket connection opened.");
+    console.log(`Connected to: ${API_ENDPOINT_BASE_URL}`);
+    // Start the microphone
     startMicrophone();
   });
 
@@ -549,88 +606,144 @@ async function run() {
       const msgType = data.type;
 
       if (msgType === "Begin") {
-        console.log(`Session started: ${data.id}`);
+        const sessionId = data.id;
+        console.log(`Session started: ${sessionId}`);
       } else if (msgType === "Turn") {
-        const transcript = data.transcript || "";
-        const formatted = data.turn_is_formatted;
+        const endOfTurn = data.end_of_turn;
 
-        if (formatted) {
-          console.log(`\nTranscript: ${transcript}`);
-          conversationData += `${transcript}\n`;
+        if (endOfTurn) {
+          const transcript = data.transcript || "";
+          console.log(`\nTranscript:\n${transcript}\n`);
         }
+      } else if (msgType === "LLMGatewayResponse") {
+        // Extract the LLM response content
+        const llmData = data.data || {};
+        const llmContent = llmData.choices?.[0]?.message?.content || "";
+        console.log(`LLM Response:\n${llmContent}\n`);
       } else if (msgType === "Termination") {
+        const audioDuration = data.audio_duration_seconds;
         console.log(
-          `\nSession terminated: ${data.audio_duration_seconds}s of audio processed`
+          `Session terminated: ${audioDuration} seconds of audio processed`
         );
       }
     } catch (error) {
-      console.error(`Error handling message: ${error}`);
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
     }
   });
 
   ws.on("error", (error) => {
-    console.error(`Error: ${error}`);
+    console.error(`\nWebSocket Error: ${error}`);
     cleanup();
   });
 
   ws.on("close", (code, reason) => {
-    console.log(`\nDisconnected: ${code}`);
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
     cleanup();
   });
 
-  process.on("SIGINT", async () => {
-    console.log("\nStopping...");
-    stopRequested = true;
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "Terminate" }));
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-
-    cleanup();
-
-    if (conversationData.trim()) {
-      console.log("\nAnalyzing conversation with LLM Gateway...");
-      const analysis = await analyzeWithLlmGateway(conversationData);
-      console.log(analysis);
-    } else {
-      console.log("No conversation data to analyze.");
-    }
-
-    process.exit(0);
-  });
+  // Handle process termination
+  setupTerminationHandlers();
 }
 
 function startMicrophone() {
-  micInstance = mic({
-    rate: SAMPLE_RATE.toString(),
-    channels: CHANNELS.toString(),
-    debug: false,
-  });
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
+    });
 
-  micInputStream = micInstance.getAudioStream();
+    micInputStream = micInstance.getAudioStream();
 
-  micInputStream.on("data", (data) => {
-    if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
-      ws.send(data);
-    }
-  });
+    micInputStream.on("data", (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        // Store audio data for WAV recording
+        recordedFrames.push(Buffer.from(data));
 
-  micInstance.start();
-  console.log("Speak into your microphone. Press Ctrl+C to stop.");
+        // Send audio data to WebSocket
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on("error", (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
 }
 
 function cleanup() {
   stopRequested = true;
+
+  // Save recorded audio to WAV file
+  saveWavFile();
+
+  // Stop microphone if it's running
   if (micInstance) {
-    micInstance.stop();
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
     micInstance = null;
   }
-  if (ws) {
-    ws.close();
+
+  // Close WebSocket connection if it's open
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      // Send termination message if possible
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
   }
+
+  console.log("Cleanup complete.");
 }
 
+function setupTerminationHandlers() {
+  // Handle Ctrl+C and other termination signals
+  process.on("SIGINT", () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  // Handle uncaught exceptions
+  process.on("uncaughtException", (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
 run();
 ```
 
@@ -801,39 +914,49 @@ let conversationData = "";
 const WebSocket = require("ws");
 const mic = require("mic");
 const querystring = require("querystring");
+const fs = require("fs");
 
-const YOUR_API_KEY = "<YOUR_API_KEY>";
+// --- Configuration ---
+const YOUR_API_KEY = "<YOUR_API_KEY>"; // Replace with your actual API key
 
-const prompt = "Provide a brief summary of the transcript.";
+// LLM Gateway Configuration
+const PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [
+    { role: "user", content: PROMPT }
+  ],
+  max_tokens: 4000
+};
 
 const CONNECTION_PARAMS = {
   sample_rate: 16000,
-  format_turns: true,
-  llm_gateway: JSON.stringify({
-    model: "claude-sonnet-4-20250514",
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 4000,
-  }),
+  format_turns: true, // Request formatted final transcripts
+  speech_model: "u3-rt-pro", // USM 3 Pro model
+  llm_gateway: JSON.stringify(LLM_GATEWAY_CONFIG) // LLM Gateway configuration
 };
-
 const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
 const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
 
+// Audio Configuration
 const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
 const CHANNELS = 1;
 
+// Global variables
 let micInstance = null;
 let micInputStream = null;
 let ws = null;
 let stopRequested = false;
-let conversationData = "";
+
+// WAV recording variables
+let recordedFrames = []; // Store audio frames for WAV file
 ```
 
 </Tab>
 
 </Tabs>
 
-The `llm_gateway` parameteris a JSON-stringified object that follows the same interface as the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions). It accepts the following fields:
+The `llm_gateway` parameterisa JSON-stringified object that follows the same interface as the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions). It accepts the following fields:
 
 | Key | Type | Description |
 | --- | --- | --- |
@@ -1037,63 +1160,100 @@ transcriber.on("turn", (turn) => {
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
-ws.on("open", () => {
-  console.log("WebSocket connection opened.");
-  startMicrophone();
-});
+// --- Helper functions ---
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
+}
 
-ws.on("message", (message) => {
-  try {
-    const data = JSON.parse(message);
-    const msgType = data.type;
+function createWavHeader(sampleRate, channels, dataLength) {
+  const buffer = Buffer.alloc(44);
 
-    if (msgType === "Begin") {
-      console.log(`Session started: ${data.id}`);
-    } else if (msgType === "Turn") {
-      const transcript = data.transcript || "";
-      const formatted = data.turn_is_formatted;
+  // RIFF header
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write("WAVE", 8);
 
-      if (formatted) {
-        console.log(`\nTranscript: ${transcript}`);
-        conversationData += `${transcript}\n`;
-      }
-    } else if (msgType === "Termination") {
-      console.log(
-        `\nSession terminated: ${data.audio_duration_seconds}s of audio processed`
-      );
-    }
-  } catch (error) {
-    console.error(`Error handling message: ${error}`);
+  // fmt chunk
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16); // fmt chunk size
+  buffer.writeUInt16LE(1, 20); // PCM format
+  buffer.writeUInt16LE(channels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
+  buffer.writeUInt16LE(channels * 2, 32); // block align
+  buffer.writeUInt16LE(16, 34); // bits per sample
+
+  // data chunk
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataLength, 40);
+
+  return buffer;
+}
+
+function saveWavFile() {
+  if (recordedFrames.length === 0) {
+    console.log("No audio data recorded.");
+    return;
   }
-});
 
-ws.on("error", (error) => {
-  console.error(`Error: ${error}`);
-  cleanup();
-});
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `recorded_audio_${timestamp}.wav`;
 
-ws.on("close", (code, reason) => {
-  console.log(`\nDisconnected: ${code}`);
-  cleanup();
-});
+  try {
+    // Combine all recorded frames
+    const audioData = Buffer.concat(recordedFrames);
+    const dataLength = audioData.length;
+
+    // Create WAV header
+    const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
+
+    // Write WAV file
+    const wavFile = Buffer.concat([wavHeader, audioData]);
+    fs.writeFileSync(filename, wavFile);
+
+    console.log(`Audio saved to: ${filename}`);
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
+  } catch (error) {
+    console.error(`Error saving WAV file: ${error}`);
+  }
+}
 
 function startMicrophone() {
-  micInstance = mic({
-    rate: SAMPLE_RATE.toString(),
-    channels: CHANNELS.toString(),
-    debug: false,
-  });
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
+    });
 
-  micInputStream = micInstance.getAudioStream();
+    micInputStream = micInstance.getAudioStream();
 
-  micInputStream.on("data", (data) => {
-    if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
-      ws.send(data);
-    }
-  });
+    micInputStream.on("data", (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        // Store audio data for WAV recording
+        recordedFrames.push(Buffer.from(data));
 
-  micInstance.start();
-  console.log("Speak into your microphone. Press Ctrl+C to stop.");
+        // Send audio data to WebSocket
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on("error", (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
 }
 ```
 
@@ -1150,29 +1310,7 @@ async function analyzeWithLlmGateway(text) {
 
 <Tab language="javascript" title="JavaScript">
 
-```javascript
-async function analyzeWithLlmGateway(text) {
-  const response = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        authorization: YOUR_API_KEY,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        messages: [
-          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
-        ],
-        max_tokens: 4000,
-      }),
-    }
-  );
-  const result = await response.json();
-  return result.choices[0].message.content;
-}
-```
+When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback in the `run()` function. No separate API call is needed.
 
 </Tab>
 
@@ -1389,49 +1527,135 @@ run();
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
+// --- Main function ---
 async function run() {
+  console.log("Starting AssemblyAI streaming transcription with LLM Gateway...");
+  console.log("Audio will be saved to a WAV file when the session ends.");
+
+  // Initialize WebSocket connection
   ws = new WebSocket(API_ENDPOINT, {
     headers: {
       Authorization: YOUR_API_KEY,
     },
   });
 
-  // ... (event handlers from Step 1)
-
-  process.on("SIGINT", async () => {
-    console.log("\nStopping...");
-    stopRequested = true;
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "Terminate" }));
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-
-    cleanup();
-
-    if (conversationData.trim()) {
-      console.log("\nAnalyzing conversation with LLM Gateway...");
-      const analysis = await analyzeWithLlmGateway(conversationData);
-      console.log(analysis);
-    } else {
-      console.log("No conversation data to analyze.");
-    }
-
-    process.exit(0);
+  // Setup WebSocket event handlers
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+    console.log(`Connected to: ${API_ENDPOINT_BASE_URL}`);
+    // Start the microphone
+    startMicrophone();
   });
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === "Begin") {
+        const sessionId = data.id;
+        console.log(`Session started: ${sessionId}`);
+      } else if (msgType === "Turn") {
+        const endOfTurn = data.end_of_turn;
+
+        if (endOfTurn) {
+          const transcript = data.transcript || "";
+          console.log(`\nTranscript:\n${transcript}\n`);
+        }
+      } else if (msgType === "LLMGatewayResponse") {
+        // Extract the LLM response content
+        const llmData = data.data || {};
+        const llmContent = llmData.choices?.[0]?.message?.content || "";
+        console.log(`LLM Response:\n${llmContent}\n`);
+      } else if (msgType === "Termination") {
+        const audioDuration = data.audio_duration_seconds;
+        console.log(
+          `Session terminated: ${audioDuration} seconds of audio processed`
+        );
+      }
+    } catch (error) {
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`\nWebSocket Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
+    cleanup();
+  });
+
+  // Handle process termination
+  setupTerminationHandlers();
 }
 
 function cleanup() {
   stopRequested = true;
+
+  // Save recorded audio to WAV file
+  saveWavFile();
+
+  // Stop microphone if it's running
   if (micInstance) {
-    micInstance.stop();
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
     micInstance = null;
   }
-  if (ws) {
-    ws.close();
+
+  // Close WebSocket connection if it's open
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      // Send termination message if possible
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
   }
+
+  console.log("Cleanup complete.");
 }
 
+function setupTerminationHandlers() {
+  // Handle Ctrl+C and other termination signals
+  process.on("SIGINT", () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  // Handle uncaught exceptions
+  process.on("uncaughtException", (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
 run();
 ```
 
