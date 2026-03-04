@@ -151,7 +151,7 @@ CONNECTION_PARAMS = {
     "sample_rate": SAMPLE_RATE,
     "format_turns": False,  # CRITICAL: Unformatted for fastest response (~200ms savings)
     "end_of_turn_confidence_threshold": 0.4,  # Balanced turn detection
-    "min_end_of_turn_silence_when_confident": 160,  # ms after confident EOT
+    "min_turn_silence": 160,  # ms after confident EOT
     "max_turn_silence": 1280  # Acoustic fallback threshold
 }
 
@@ -294,7 +294,7 @@ async def create_voice_agent():
     stt = assemblyai.STT(
         api_key="your_assemblyai_key",
         end_of_turn_confidence_threshold=0.4,
-        min_end_of_turn_silence_when_confident=160,
+        min_turn_silence=160,
         format_turns=False  # CRITICAL: Faster without formatting
     )
 
@@ -328,7 +328,7 @@ stt = AssemblyAISTTService(
     api_key="your_key",
     connection_params=AssemblyAIConnectionParams(
         end_of_turn_confidence_threshold=0.4,
-        min_end_of_turn_silence_when_confident=160,  # ms after confident EOT
+        min_turn_silence=160,  # ms after confident EOT
         format_turns=False  # CRITICAL: Faster without formatting
     ),
     vad_force_turn_endpoint=False,  # Rely on AssemblyAI's EOT, not VAD
@@ -350,8 +350,9 @@ See our [Vapi integration guide](https://www.assemblyai.com/docs/integrations/va
 
 ### Integration Resources and Full Examples
 
-- [Building a Voice Agent with LiveKit and AssemblyAI](https://www.assemblyai.com/docs/voice-agents/livekit-intro-guide)
-- [Building a Voice Agent with Pipecat and AssemblyAI](https://www.assemblyai.com/docs/voice-agents/pipecat-intro-guide)
+- [Building a Voice Agent with LiveKit and AssemblyAI (Universal-3 Pro)](/docs/voice-agents/livekit-u3-rt-pro)
+- [Building a Voice Agent with LiveKit and AssemblyAI (Universal-Streaming)](/docs/voice-agents/livekit-intro-guide)
+- [Building a Voice Agent with Pipecat and AssemblyAI](/docs/voice-agents/pipecat-intro-guide)
 
 ## How Do I Optimize for Latency with Universal-Streaming?
 
@@ -368,7 +369,7 @@ latency_optimized_params = {
 
     # Aggressive turn detection for quick responses
     "end_of_turn_confidence_threshold": 0.4,  # Lower = faster detection
-    "min_end_of_turn_silence_when_confident": 160,  # Minimal silence required
+    "min_turn_silence": 160,  # Minimal silence required
     "max_turn_silence": 800,  # Faster fallback
 
     # Audio optimization
@@ -410,11 +411,11 @@ This is especially powerful when using external turn detection models. By defaul
 # For rapid back-and-forth (customer service, quick confirmations)
 latency_optimized_params = {
     "end_of_turn_confidence_threshold": 0.4,
-    "min_end_of_turn_silence_when_confident": 160
+    "min_turn_silence": 160
 }
 ```
 
-Note that we recommend testing the end of turn confidence for your use case. You can find our [guide on turn detection here](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection).
+Note that we recommend testing the end of turn confidence for your use case. You can find our [guide on turn detection here](https://www.assemblyai.com/docs/streaming/turn-detection).
 
 **4. Optimize Audio Pipeline**
 
@@ -424,7 +425,7 @@ Note that we recommend testing the end of turn confidence for your use case. You
 - Keep network latency low (use same region as AssemblyAI servers when possible)
 
 **5. Leverage Built-in VAD**
-AssemblyAI includes VAD in the model. You can substitute Universal-Streaming entirely for VAD by adjusting `min_end_of_turn_silence_when_confident`, though this increases latency until the silence threshold has passed. This is recommended most for custom builds where a voice agent orchestrator is not managing the VAD for you.
+AssemblyAI includes VAD in the model. You can substitute Universal-Streaming entirely for VAD by adjusting `min_turn_silence`, though this increases latency until the silence threshold has passed. This is recommended most for custom builds where a voice agent orchestrator is not managing the VAD for you.
 
 ### Voice Agent Specific Tips
 
@@ -438,15 +439,15 @@ AssemblyAI includes VAD in the model. You can substitute Universal-Streaming ent
 
 | Configuration                                                                                                  | TTFT   | End-to-End | Best For                 |
 | -------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------------------------ |
-| [Aggressive](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#aggressive)     | ~200ms | ~500ms     | Quick confirmations, IVR |
-| [Balanced](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#balanced)         | ~300ms | ~800ms     | Most conversations       |
-| [Conservative](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection#conservative) | ~400ms | ~1200ms    | Complex instructions     |
+| [Aggressive](https://www.assemblyai.com/docs/streaming/turn-detection#aggressive)     | ~200ms | ~500ms     | Quick confirmations, IVR |
+| [Balanced](https://www.assemblyai.com/docs/streaming/turn-detection#balanced)         | ~300ms | ~800ms     | Most conversations       |
+| [Conservative](https://www.assemblyai.com/docs/streaming/turn-detection#conservative) | ~400ms | ~1200ms    | Complex instructions     |
 
 ## How Can I Use Turn Detection in My Voice Agent?
 
 ### Understanding Turn Detection
 
-Universal-Streaming uses dual detection methods for [turn detection](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection):
+Universal-Streaming uses dual detection methods for [turn detection](https://www.assemblyai.com/docs/streaming/turn-detection):
 
 **Semantic Detection (Primary)**
 
@@ -454,7 +455,7 @@ Universal-Streaming uses dual detection methods for [turn detection](https://www
 - Triggers when `end_of_turn_confidence` > `end_of_turn_confidence_threshold`
 - Understands natural speech patterns
 - Handles "um", pauses, incomplete thoughts
-- Minimum silence: `min_end_of_turn_silence_when_confident` (default 400ms)
+- Minimum silence: `min_turn_silence` (default 400ms)
 
 **Acoustic Detection (Fallback)**
 
@@ -472,7 +473,7 @@ When either method detects an end-of-turn, the model returns `end_of_turn=True` 
 # Best for: IVR, order confirmations, yes/no questions
 aggressive_params = {
     "end_of_turn_confidence_threshold": 0.3,  # Lower threshold = faster detection
-    "min_end_of_turn_silence_when_confident": 160,  # Less silence needed
+    "min_turn_silence": 160,  # Less silence needed
     "max_turn_silence": 800  # Quick acoustic fallback
 }
 
@@ -480,7 +481,7 @@ aggressive_params = {
 # Best for: Customer support, tech support, general conversations
 balanced_params = {
     "end_of_turn_confidence_threshold": 0.4,
-    "min_end_of_turn_silence_when_confident": 400,
+    "min_turn_silence": 400,
     "max_turn_silence": 1280
 }
 
@@ -488,7 +489,7 @@ balanced_params = {
 # Best for: Healthcare, legal, detailed technical support
 conservative_params = {
     "end_of_turn_confidence_threshold": 0.5,  # Higher threshold = more patient
-    "min_end_of_turn_silence_when_confident": 560,  # More silence before confirming
+    "min_turn_silence": 560,  # More silence before confirming
     "max_turn_silence": 2000  # Longer acoustic fallback
 }
 ```
@@ -496,7 +497,7 @@ conservative_params = {
 **Parameter Explanations:**
 
 - `end_of_turn_confidence_threshold`: Raise to wait for higher confidence before ending turn; lower for faster responses
-- `min_end_of_turn_silence_when_confident`: Amount of silence required after model is confident turn has ended
+- `min_turn_silence`: Amount of silence required after model is confident turn has ended
 - `max_turn_silence`: Maximum silence before forcing turn end (acoustic fallback)
 
 ### Advanced Turn Control
@@ -688,7 +689,7 @@ class FastVoiceAgent:
 
 ### Message Sequence Flow
 
-Universal-Streaming sends [messages in a specific sequence](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/message-sequence) as users speak. Here's a complete example of someone saying "Hi my name is Sonny. I am a voice agent."
+Universal-Streaming sends [messages in a specific sequence](https://www.assemblyai.com/docs/streaming/message-sequence) as users speak. Here's a complete example of someone saying "Hi my name is Sonny. I am a voice agent."
 
 **1. Session Initialization**
 
@@ -896,7 +897,7 @@ class TranscriptProcessor:
 
 ### Using Keyterms Prompting
 
-[Keyterms Prompting](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting) boosts accuracy for domain-specific vocabulary—product names, people, technical terms:
+[Keyterms Prompting](https://www.assemblyai.com/docs/streaming/keyterms-prompting) boosts accuracy for domain-specific vocabulary—product names, people, technical terms:
 
 ```python
 # Include keyterms in connection parameters
@@ -1057,7 +1058,7 @@ websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}')
 - **Progressive disclosure**: Add relevant keyterms as new information becomes available during the conversation
 - **Performance optimization**: Remove keyterms that are no longer relevant to reduce processing overhead
 
-For more details, see the [Keyterms Prompting Guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting).
+For more details, see the [Keyterms Prompting Guide](https://www.assemblyai.com/docs/streaming/keyterms-prompting).
 
 ## How Does the Unlimited Concurrency Work?
 
@@ -1115,11 +1116,11 @@ If you suddenly need to scale from 100 to 1,000 concurrent streams for a product
 
 ## Additional Resources
 
-- [Universal-Streaming Documentation](https://www.assemblyai.com/docs/speech-to-text/universal-streaming)
+- [Universal-Streaming Documentation](https://www.assemblyai.com/docs/streaming)
 - [Getting Started Guide](https://www.assemblyai.com/docs/getting-started/transcribe-streaming-audio)
-- [Turn Detection Guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/turn-detection)
-- [Message Sequence Breakdown](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/message-sequence)
-- [Keyterms Prompting Guide](https://www.assemblyai.com/docs/speech-to-text/universal-streaming/keyterms-prompting)
+- [Turn Detection Guide](https://www.assemblyai.com/docs/streaming/turn-detection)
+- [Message Sequence Breakdown](https://www.assemblyai.com/docs/streaming/message-sequence)
+- [Keyterms Prompting Guide](https://www.assemblyai.com/docs/streaming/keyterms-prompting)
 - [API Playground](https://www.assemblyai.com/playground/streaming)
 - [Changelog](https://www.assemblyai.com/changelog)
 - [Support](https://www.assemblyai.com/contact/support)

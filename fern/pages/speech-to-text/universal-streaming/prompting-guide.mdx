@@ -1,0 +1,131 @@
+---
+title: "Prompting Guide (Streaming)"
+subtitle: "Learn how to use prompts to customize Universal-3 Pro streaming transcription."
+---
+
+Universal-3 Pro supports a `prompt` parameter that lets you customize transcription output for streaming use cases. You can guide the model's behavior for punctuation, disfluencies, formatting, and domain-specific terminology.
+
+<Tip title="Start with no prompt">
+**We strongly recommend testing with no `prompt` first.** When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt optimized for turn detection and streaming accuracy — delivering **88% turn detection accuracy** out of the box.
+
+Universal-3-Pro also supports `keyterms_prompt` for boosting specific terms. We suggest using this with no prompt. The `prompt` and `keyterms_prompt` parameters cannot be used in the same API request — choose one or the other. However, you can recreate this functionality manually. See [Keyterms prompting](#keyterms-prompting) below.
+
+If you're going to build a prompt, start with the [default prompt](#start-with-the-default-prompt) and then tweak it for your use case. **You should not start from scratch with your prompt — use the default prompt and then build off of it.**
+
+Remember, prompts are primarily instructional, so adding a large amount of context may not make a significant impact on accuracy and could reduce instruction-following coherence. Feel free to layer in additional instructions from this guide.
+</Tip>
+
+## Start with the default prompt
+
+We recommend testing with **no prompt first**. When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt that is already optimized for turn detection and streaming accuracy:
+
+```
+Transcribe verbatim. Rules:
+1) Always include punctuation in output.
+2) Use period/question mark ONLY for complete sentences.
+3) Use comma for mid-sentence pauses.
+4) Use no punctuation for incomplete trailing speech.
+5) Filler words (um, uh, so, like) indicate speaker will continue.
+```
+
+This default prompt delivers **88% turn detection accuracy** out of the box. If you need to customize, **build off of this prompt** rather than starting from scratch. Append your additional instructions after the default rules to preserve the turn detection behavior while adding your own requirements.
+
+<Note>
+Turn detection relies on terminal punctuation (`.` `?` `!`), so custom prompts that reduce or remove punctuation from the transcription output may negatively impact turn detection. The default prompt is optimized for this, so we recommend trying it first before any customization.
+</Note>
+
+## How prompting works
+
+Universal-3-Pro prompting is **more instructional than contextual**. The model responds best to explicit formatting rules and behavioral instructions — for example, "use periods only for complete sentences" or "include all filler words." This applies to both streaming and [pre-recorded (async)](/docs/pre-recorded-audio/universal-3-pro) use cases.
+
+Providing topic context alone (e.g., "this is a cardiology appointment") can help, but is most effective when paired with specific instructions telling the model *how* to transcribe. For domain-specific term boosting, use the [`keyterms_prompt`](/docs/streaming/keyterms-prompting) parameter to explicitly list the terms you want the model to recognize.
+
+<Note title="Coming soon: enhanced contextual prompting">
+We are actively working to make Universal-3-Pro more contextual:
+
+- **Contextual prompting** — Providing topic context (e.g., "this is a cardiology appointment") will automatically boost recognition of related terminology, improving accuracy for domain-specific use cases across both streaming and async.
+- **Conversational context for streaming** — For voice agent workflows, you will be able to pass previous utterances from the conversation (e.g., the agent's last response) as context, allowing the model to use the conversation history to improve transcription accuracy of the user's next utterance.
+
+These improvements are under active development. In the meantime, use `keyterms_prompt` for domain-specific term boosting and instructional prompts for formatting control.
+</Note>
+
+## Updating configuration mid-stream
+
+You can update prompting parameters during an active streaming session using `UpdateConfiguration`. **The recommended approach is to dynamically update `keyterms_prompt` based on the current stage of your voice agent flow.** If you know what answers or terminology to expect at a given point in the conversation, add those terms with `keyterms_prompt` so the model is primed to recognize them accurately.
+
+For example, if your voice agent is currently asking for the caller's name and date of birth, send the expected terms for that stage:
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "keyterms_prompt": ["Kelly Byrne-Donoghue", "date of birth", "January", "February"]
+}
+```
+
+Then, when the conversation moves to a medical intake stage, update `keyterms_prompt` with the relevant domain terms:
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel", "metoprolol"]
+}
+```
+
+<Tip>
+**Dynamically update `keyterms_prompt` for each stage of your voice agent flow.** If you expect certain answers at a specific stage — names, addresses, account numbers, medical terms — proactively add those as keyterms so the model recognizes them accurately when the caller speaks them. This is the most effective way to improve recognition accuracy mid-stream.
+</Tip>
+
+See [Keyterms prompting](#keyterms-prompting) for more details on how `keyterms_prompt` works.
+
+You can also update the `prompt` parameter mid-stream to adjust formatting or behavioral instructions:
+
+```json
+{
+  "type": "UpdateConfiguration",
+  "prompt": "Transcribe verbatim. Rules: 1) Always include punctuation in output. 2) Use period/question mark ONLY for complete sentences. 3) Use comma for mid-sentence pauses. 4) Use no punctuation for incomplete trailing speech. 5) Filler words (um, uh, so, like) indicate speaker will continue. Additional: This is a cardiology appointment."
+}
+```
+
+Updating `prompt` mid-stream is useful for passing updated behavioral instructions into the STT stream. For domain-specific term recognition, prefer `keyterms_prompt` as described above.
+
+## Keyterms prompting
+
+Use the `keyterms_prompt` parameter to boost recognition of specific names, brands, or domain terms. Behind the scenes, `keyterms_prompt` relies on the [default prompt](#start-with-the-default-prompt) and appends your boosted words to it. Pass an array of terms you want the model to prioritize:
+
+```
+keyterms_prompt=["Keanu Reeves", "AssemblyAI", "Universal-2"]
+```
+
+You can set `keyterms_prompt` at connection time or [update it mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) as the conversation progresses. For full details, see [Keyterms prompting](/docs/streaming/keyterms-prompting).
+
+<Note title="Prompt and Keyterms Prompt">
+The `prompt` and `keyterms_prompt` parameters cannot be used in the same request. Please choose either one or the other based on your use case. When you use `keyterms_prompt`, your boosted words are appended to the [default prompt](#start-with-the-default-prompt) automatically.
+</Note>
+
+## Streaming vs. async prompting capabilities
+
+Many of the prompt capabilities available for [async (pre-recorded) transcription](/docs/pre-recorded-audio/prompting) — such as audio event tagging, speaker attribution, and labeling crosstalk — are designed for longer audio files and do not reliably work with streaming's shorter audio segments (typically under 10 seconds). For streaming, focus your prompts on punctuation rules, verbatim transcription, and formatting instructions. Use `keyterms_prompt` for domain-specific term boosting.
+
+### Looking for async prompting?
+
+Prompting behavior differs between streaming and async (pre-recorded) use cases. This guide covers prompting for **streaming (real-time audio)**. If you're working with pre-recorded audio, see the [Prompting Guide (Async)](/docs/pre-recorded-audio/prompting).
+
+## Optimizing prompts for turn detection
+
+Because Universal-3-Pro's turn detection is punctuation-based, the way the model punctuates its output directly affects when turns end. Prompting gives you a lever to influence that punctuation behavior and improve turn detection accuracy.
+
+Internal testing on 100 audio samples shows that well-crafted punctuation rules significantly reduce false positives (the model incorrectly signaling a turn end) while maintaining near-perfect recall (catching real turn ends):
+
+| Prompt | Accuracy | Recall | False positive rate |
+| ------ | -------- | ------ | ------------------- |
+| **Default** | **88%** | **100%** | **24%** |
+| Prompt omitted | 83% | 100% | 34% |
+
+The default prompt—used when no `prompt` is provided—dropped the false positive rate from 34% to 24% compared to no prompt at all. That translates to fewer false interruptions in production voice agent conversations.
+
+**Key takeaways for prompt design:**
+
+1. **The default prompt already optimizes for turn detection.** When the prompt is omitted entirely, Universal-3-Pro still achieves 83% accuracy thanks to its built-in punctuation behavior—but the built-in default prompt raises this to 88%. Try the default before customizing.
+2. **Concrete punctuation rules work best.** The model responds better to specific formatting instructions (like "use period only for complete sentences") than to abstract conversational framing. Keep custom prompts focused on punctuation behavior.
+3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
+4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.

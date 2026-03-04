@@ -85,23 +85,25 @@ channels:
         enum: ["true", "false"]
         default: "false"
 
-      min_end_of_turn_silence_when_confident:
+      min_turn_silence:
         description: The minimum amount of silence in milliseconds required to detect end of turn when confident
-        location: $message.payload#/min_end_of_turn_silence_when_confident
+        location: $message.payload#/min_turn_silence
+        schema:
+          type: integer
         examples:
-          - "480"
-          - "600"
-        default: "400"
-        format: ms
+          - 480
+          - 600
+        default: 400
 
       max_turn_silence:
         description: The maximum amount of silence in milliseconds allowed in a turn before end of turn is triggered
         location: $message.payload#/max_turn_silence
+        schema:
+          type: integer
         examples:
-          - "700"
-          - "1000"
-        default: "1280"
-        format: ms
+          - 700
+          - 1000
+        default: 1280
 
       language:
         description: The language of your audio stream.
@@ -114,7 +116,11 @@ channels:
         description: The speech model used for your Streaming session.
         location: $message.payload#/speech_model
         enum:
-          ["universal-streaming-english", "universal-streaming-multilingual"]
+          [
+            "universal-streaming-english",
+            "universal-streaming-multilingual",
+            "u3-rt-pro",
+          ]
         default: "universal-streaming-english"
 
       token:
@@ -145,6 +151,8 @@ channels:
 
       sessionBegins:
         $ref: "#/components/messages/SessionBegins"
+      speechStarted:
+        $ref: "#/components/messages/SpeechStarted"
       turn:
         $ref: "#/components/messages/Turn"
       termination:
@@ -189,6 +197,14 @@ operations:
     messages:
       - $ref: "#/channels/streaming/messages/sessionBegins"
     description: Receive confirmation that the streaming session has successfully started.
+
+  receiveSpeechStarted:
+    action: receive
+    channel:
+      $ref: "#/channels/streaming"
+    messages:
+      - $ref: "#/channels/streaming/messages/speechStarted"
+    description: Receive a notification that speech has been detected in the audio stream.
 
   receiveTurn:
     action: receive
@@ -261,6 +277,14 @@ components:
       payload:
         $ref: "#/components/schemas/SessionBeginsPayload"
 
+    SpeechStarted:
+      name: SpeechStarted
+      title: Speech Started
+      summary: Server message indicating that speech has been detected in the audio stream.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SpeechStartedPayload"
+
     Turn:
       name: Turn
       title: Formatted Turn Result
@@ -289,7 +313,7 @@ components:
           format: float
           nullable: true
           description: Confidence threshold (0-1) for detecting end of turn.
-        min_end_of_turn_silence_when_confident:
+        min_turn_silence:
           type: integer
           nullable: true
           description: Minimum silence duration in ms when confident about end of turn.
@@ -337,6 +361,21 @@ components:
         - type
         - id
         - expires_at
+
+    SpeechStartedPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          const: SpeechStarted
+          description: Identifies the type of the message.
+        timestamp:
+          type: integer
+          description: The timestamp in milliseconds when speech was detected, relative to the beginning of the audio stream.
+          format: ms
+      required:
+        - type
+        - timestamp
 
     Word:
       type: object
