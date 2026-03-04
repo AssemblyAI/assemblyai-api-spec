@@ -17,33 +17,38 @@ channels:
   streaming:
     address: /v3/ws
     description: |
-      Main channel for bi-directional audio and transcription data.
+      Stream audio and receive real-time transcription results. Fast, cost-effective streaming transcription available in three variants:
+       - **Universal-Streaming English** — the fastest real-time English transcription
+       - **Universal-Streaming Multilingual** — multilingual support (English, Spanish, German, French, Portuguese, and Italian) at the same speed and price
+       - **Whisper-Streaming** — open-source Whisper powered by AssemblyAI's infrastructure with 99+ languages
 
       <Note> To use our EU server for Streaming STT, replace `streaming.assemblyai.com` with
       `streaming.eu.assemblyai.com`. </Note>
     servers:
       - $ref: "#/servers/production"
     parameters:
-      sample_rate:
-        description: Sample rate of the audio stream
-        location: $message.payload#/sample_rate
-        schema:
-          type: integer
-        examples: [16000, 48000]
+      speech_model:
+        description: The speech model used for your Streaming session.
+        location: $message.payload#/speech_model
+        enum:
+          [
+            "universal-streaming-english",
+            "universal-streaming-multilingual",
+            "whisper-rt",
+          ]
+
+      ApiKey:
+        description: >-
+          Use your API key for authentication, or alternatively generate a [temporary token](/docs/api-reference/streaming-api/generate-streaming-token) and pass it via the `token` query parameter.
+        location: $message.header#/Authorization
+        examples:
+          - token YOUR_ASSEMBLYAI_API_KEY
 
       encoding:
-        description: Encoding of the audio stream
+        description: Encoding of the audio stream.
         location: $message.payload#/encoding
         enum: ["pcm_s16le", "pcm_mulaw"]
         default: "pcm_s16le"
-
-      end_of_turn_confidence_threshold:
-        description: The confidence threshold (0.0 to 1.0) to use when determining if the end of a turn has been reached
-        location: $message.payload#/end_of_turn_confidence_threshold
-        examples:
-          - "0.4"
-          - "0.7"
-        default: "0.4"
 
       # filter_profanity:
       #   description: Filter profanity from the transcribed text, can be true or false.
@@ -52,7 +57,7 @@ channels:
       #   default: "false"
 
       format_turns:
-        description: Whether to return formatted final transcripts
+        description: Whether to return formatted final transcripts.
         location: $message.payload#/format_turns
         enum: ["true", "false"]
         default: "false"
@@ -85,25 +90,57 @@ channels:
         enum: ["true", "false"]
         default: "false"
 
-      min_turn_silence:
-        description: The minimum amount of silence in milliseconds required to detect end of turn when confident
-        location: $message.payload#/min_turn_silence
-        schema:
-          type: integer
-        examples:
-          - 480
-          - 600
-        default: 400
-
       max_turn_silence:
-        description: The maximum amount of silence in milliseconds allowed in a turn before end of turn is triggered
+        description: The maximum amount of silence in milliseconds allowed in a turn before end of turn is triggered.
         location: $message.payload#/max_turn_silence
         schema:
           type: integer
+          default: 1280
         examples:
           - 700
           - 1000
-        default: 1280
+
+      min_turn_silence:
+        description: The minimum amount of silence in milliseconds required to detect end of turn when confident.
+        location: $message.payload#/min_turn_silence
+        schema:
+          type: integer
+          default: 400
+        examples:
+          - 480
+          - 600
+
+      sample_rate:
+        description: Sample rate of the audio stream.
+        location: $message.payload#/sample_rate
+        schema:
+          type: integer
+          default: 16000
+        examples: [16000, 48000]
+
+      token:
+        description: API token for authentication (if using a [temporary token](/docs/api-reference/streaming-api/generate-streaming-token)).
+        location: $message.payload#/token
+
+      vad_threshold:
+        description: The confidence threshold (0.0 to 1.0) for classifying audio frames as silence. Frames with VAD confidence below this value are considered silent. Increase for noisy environments to reduce false speech detection.
+        location: $message.payload#/vad_threshold
+        schema:
+          type: number
+          default: 0.4
+        default: 0.4
+
+      # Deprecated parameters
+      end_of_turn_confidence_threshold:
+        description: The confidence threshold (0.0 to 1.0) to use when determining if the end of a turn has been reached.
+        location: $message.payload#/end_of_turn_confidence_threshold
+        schema:
+          type: number
+          default: 0.4
+        examples:
+          - 0.4
+          - 0.7
+        deprecated: true
 
       language:
         description: The language of your audio stream.
@@ -111,33 +148,6 @@ channels:
         enum: ["en", "multi"]
         default: "en"
         deprecated: true
-
-      speech_model:
-        description: The speech model used for your Streaming session.
-        location: $message.payload#/speech_model
-        enum:
-          [
-            "universal-streaming-english",
-            "universal-streaming-multilingual",
-            "u3-rt-pro",
-          ]
-        default: "universal-streaming-english"
-
-      token:
-        description: API token for authentication
-        location: $message.payload#/token
-
-      vad_threshold:
-        description: The confidence threshold (0.0 to 1.0) for classifying audio frames as silence. Frames with VAD confidence below this value are considered silent. Increase for noisy environments to reduce false speech detection.
-        location: $message.payload#/vad_threshold
-        default: "0.4"
-
-      ApiKey:
-        description: >-
-          Use your API key for authentication, or alternatively generate a [temporary token](/docs/api-reference/streaming-api/generate-streaming-token) and pass it via the `token` query parameter.
-        location: $message.header#/Authorization
-        examples:
-          - token YOUR_ASSEMBLYAI_API_KEY
 
     messages:
       updateConfiguration:
@@ -354,9 +364,8 @@ components:
           format: uuid
           description: Unique identifier for the streaming session.
         expires_at:
-          type: string
-          format: date-time
-          description: ISO 8601 timestamp indicating when the session will expire.
+          type: integer
+          description: Unix timestamp indicating when the session will expire.
       required:
         - type
         - id
