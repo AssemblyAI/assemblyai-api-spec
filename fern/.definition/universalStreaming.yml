@@ -1,7 +1,9 @@
+imports:
+  root: __package__.yml
 types:
   StreamingEncoding:
     default: pcm_s16le
-    docs: Encoding of the audio stream
+    docs: Encoding of the audio stream.
     enum:
       - pcm_s16le
       - pcm_mulaw
@@ -9,7 +11,7 @@ types:
       openapi: ../usm-streaming.yml
   StreamingFormatTurns:
     default: 'false'
-    docs: Whether to return formatted final transcripts
+    docs: Whether to return formatted final transcripts.
     enum:
       - 'true'
       - 'false'
@@ -34,23 +36,25 @@ types:
     source:
       openapi: ../usm-streaming.yml
   StreamingSpeechModel:
-    default: universal-streaming-english
     docs: The speech model used for your Streaming session.
     enum:
       - name: UniversalStreamingEnglish
         value: universal-streaming-english
       - name: UniversalStreamingMultilingual
         value: universal-streaming-multilingual
-      - name: U3RtPro
-        value: u3-rt-pro
+      - name: WhisperRt
+        value: whisper-rt
     source:
       openapi: ../usm-streaming.yml
 channel:
   auth: false
   display-name: Universal-Streaming
   docs: >
-    Main channel for bi-directional audio and transcription data.
-
+    Stream audio and receive real-time transcription results. Fast,
+    cost-effective streaming transcription available in three variants:
+     - **Universal-Streaming English** — the fastest real-time English transcription
+     - **Universal-Streaming Multilingual** — multilingual support (English, Spanish, German, French, Portuguese, and Italian) at the same speed and price
+     - **Whisper-Streaming** — open-source Whisper powered by AssemblyAI's infrastructure with 99+ languages
 
     <Note> To use our EU server for Streaming STT, replace
     `streaming.assemblyai.com` with
@@ -60,7 +64,7 @@ channel:
     - headers: {}
       messages:
         - body:
-            expires_at: '2024-01-15T09:30:00Z'
+            expires_at: 1745483367
             id: cfd280c7-5a9b-4dd6-8c05-235ccfa3c97f
             type: Begin
           type: receiveSessionBegins
@@ -70,11 +74,8 @@ channel:
           type: sendAudio
       name: This is an example of a speech-to-text session
       query-parameters:
-        end_of_turn_confidence_threshold: '0.4'
-        max_turn_silence: 1280
-        min_turn_silence: 400
-        sample_rate: sample_rate
-        vad_threshold: vad_threshold
+        sample_rate: 1
+        speech_model: universal-streaming-english
   headers:
     Authorization:
       docs: >-
@@ -84,32 +85,63 @@ channel:
         pass it via the `token` query parameter.
       name: authorization
       type: optional<string>
-  messages: {}
+  messages:
+    audioChunk:
+      body:
+        type: string
+        validation:
+          format: binary
+      origin: client
+    forceEndpoint:
+      body: root.ForceEndpointPayload
+      origin: client
+    sessionBegins:
+      body: root.SessionBeginsPayload
+      origin: server
+    sessionTermination:
+      body: root.SessionTerminationPayload
+      origin: client
+    speechStarted:
+      body: root.SpeechStartedPayload
+      origin: server
+    termination:
+      body: root.TerminationPayload
+      origin: server
+    turn:
+      body: root.TurnPayload
+      origin: server
+    updateConfiguration:
+      body: root.UpdateConfigurationPayload
+      origin: client
   path: /v3/ws
   path-parameters:
     filter_profanity: optional<string>
   query-parameters:
     encoding:
       default: pcm_s16le
-      docs: Encoding of the audio stream
+      docs: Encoding of the audio stream.
       type: optional<StreamingEncoding>
     end_of_turn_confidence_threshold:
-      default: '0.4'
+      availability: deprecated
+      default: 0.4
       docs: >-
         The confidence threshold (0.0 to 1.0) to use when determining if the end
-        of a turn has been reached
-      type: optional<string>
+        of a turn has been reached.
+      type: optional<double>
     format_turns:
       default: 'false'
-      docs: Whether to return formatted final transcripts
+      docs: Whether to return formatted final transcripts.
       type: optional<StreamingFormatTurns>
     inactivity_timeout:
-      default: None
       docs: >-
         Optional time in seconds of inactivity before session is terminated. If
         not set, no inactivity timeout is applied.
-      type: optional<string>
+      type: optional<integer>
+      validation:
+        max: 3600
+        min: 5
     keyterms_prompt:
+      allow-multiple: true
       docs: A list of words and phrases to improve recognition accuracy for.
       type: optional<string>
     language:
@@ -127,30 +159,32 @@ channel:
       default: 1280
       docs: >-
         The maximum amount of silence in milliseconds allowed in a turn before
-        end of turn is triggered
-      type: optional<string>
+        end of turn is triggered.
+      type: optional<integer>
     min_turn_silence:
       default: 400
       docs: >-
         The minimum amount of silence in milliseconds required to detect end of
-        turn when confident
-      type: optional<string>
+        turn when confident.
+      type: optional<integer>
     sample_rate:
-      docs: Sample rate of the audio stream
-      type: string
+      default: 16000
+      docs: Sample rate of the audio stream.
+      type: integer
     speech_model:
-      default: universal-streaming-english
       docs: The speech model used for your Streaming session.
-      type: optional<StreamingSpeechModel>
+      type: StreamingSpeechModel
     token:
-      docs: API token for authentication
+      docs: >-
+        API token for authentication (if using a [temporary
+        token](/docs/api-reference/streaming-api/generate-streaming-token)).
       type: optional<string>
     vad_threshold:
-      default: '0.4'
+      default: 0.4
       docs: >-
         The confidence threshold (0.0 to 1.0) for classifying audio frames as
         silence. Frames with VAD confidence below this value are considered
         silent. Increase for noisy environments to reduce false speech
         detection.
-      type: string
+      type: optional<double>
   url: production
