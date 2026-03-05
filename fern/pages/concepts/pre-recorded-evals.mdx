@@ -11,8 +11,8 @@ This guide provides a step-by-step framework for evaluating and benchmarking pre
 <Note>
   Need help with evaluations or prompt optimization? [Contact our Sales
   team](https://www.assemblyai.com/contact/sales) — we can help you design an
-  evaluation, optimize prompts for your audio, and benchmark against your
-  ground truth data.
+  evaluation, optimize prompts for your audio, and benchmark against your ground
+  truth data.
 </Note>
 
 ## Evaluation metrics
@@ -110,6 +110,7 @@ Traditional WER treats every difference between the model output and human trans
 WER is only as good as your ground truth labels. Human transcriptions contain systematic errors — missed filler words, incorrect proper nouns, simplified speech patterns, and translated code-switching. When Universal-3-Pro transcribes audio more accurately than the human label, those improvements show up as WER _errors_.
 
 Before reporting WER, manually audit at least 20 insertions to determine what percentage are true errors versus ground truth omissions. In our testing, the majority of insertions were cases where Universal-3-Pro correctly transcribed audio that the human transcriber missed.
+
 </Warning>
 
 This is why [Artificial Analysis](https://artificialanalysis.ai/speech-to-text), an independent AI benchmarking organization, had to create proprietary evaluation datasets with manually corrected ground truths when building their [Speech-to-Text leaderboard](https://artificialanalysis.ai/speech-to-text). Existing public datasets contain systematic human transcription errors that penalize models which are actually more accurate.
@@ -131,6 +132,7 @@ Then, gather human-labeled data to act as your source of ground truth. Ground tr
 The quality of your ground truth data directly affects the reliability of your evaluation. With Universal-3-Pro, this is more important than ever because the model frequently outperforms human transcribers.
 
 Common issues with ground truth data:
+
 - **Missing filler words**: Human transcribers often omit `um`, `uh`, `like`, and other disfluencies
 - **Incorrect proper nouns**: Rare names, technical terms, and domain vocabulary are often misspelled
 - **Simplified speech patterns**: Human transcribers tend to “clean up” speech, missing repetitions, false starts, and self-corrections
@@ -142,13 +144,13 @@ Before running evaluations, audit a sample of your ground truth files by listeni
 
 A prompt that performs well overall may underperform on specific audio types. Include a diverse mix of audio in your evaluation set and track per-dataset breakdowns:
 
-| Audio type | Characteristics | Typical WER range |
-|---|---|---|
-| Earnings calls | Clean English, formal vocabulary | Low |
-| Meeting recordings | Multi-speaker, informal | Moderate |
-| Code-switching audio | Mixed languages (e.g., English/Spanish) | Higher (normalization affects scoring) |
-| Medical consultations | Clinical vocabulary, accented speech | Moderate |
-| Phone calls | Compression artifacts, background noise | Moderate to high |
+| Audio type            | Characteristics                         | Typical WER range                      |
+| --------------------- | --------------------------------------- | -------------------------------------- |
+| Earnings calls        | Clean English, formal vocabulary        | Low                                    |
+| Meeting recordings    | Multi-speaker, informal                 | Moderate                               |
+| Code-switching audio  | Mixed languages (e.g., English/Spanish) | Higher (normalization affects scoring) |
+| Medical consultations | Clinical vocabulary, accented speech    | Moderate                               |
+| Phone calls           | Compression artifacts, background noise | Moderate to high                       |
 
 ### Step 2: Establish a baseline
 
@@ -184,7 +186,9 @@ This accounts for differences in:
 Normalization can be done with a library like [Whisper Normalizer](https://pypi.org/project/whisper-normalizer/).
 
 <Note>
-If you are prompting Universal-3-Pro to include `[unclear]` or `[masked]` tags for uncertain audio, ensure your normalizer strips these tags before computing WER. Otherwise, they will be counted as insertions.
+  If you are prompting Universal-3-Pro to include `[unclear]` or `[masked]` tags
+  for uncertain audio, ensure your normalizer strips these tags before computing
+  WER. Otherwise, they will be counted as insertions.
 </Note>
 
 ### Step 5: Compare and calculate
@@ -192,6 +196,7 @@ If you are prompting Universal-3-Pro to include `[unclear]` or `[masked]` tags f
 Calculate the error rates using the formulas above or consider using a library like [jiwer](https://github.com/jitsi/jiwer). For Semantic WER or LASER scoring, use an LLM-based evaluator (see [Open-source tools](#open-source-tools) below).
 
 When reviewing results:
+
 - Check per-dataset breakdowns, not just aggregate WER
 - Audit insertions manually by listening to the audio
 - Compare both traditional WER and Semantic WER to get a full picture
@@ -254,6 +259,7 @@ Always: Transcribe speech with your best guess when speech is heard, mark [uncle
 ```
 
 By comparing the two outputs, you can identify exactly which segments the model is least confident about. This is useful for:
+
 - Evaluating how the model handles unclear or noisy audio
 - Finding segments where the model’s guesses may be incorrect
 - Prioritizing which audio segments to manually review
@@ -265,27 +271,35 @@ The following guidance is aligned with the [prompting guide’s best practices](
 
 #### High-value prompt components
 
-| Component | Description | When to use |
-|---|---|---|
-| **Authoritative language** | Use `Required:`, `Mandatory:`, `Always:` prefixes | All prompts |
-| **Disfluency preservation** | Enumerate specific patterns (filler words, hesitations, repetitions, stutters, false starts, colloquialisms) | Meeting, interview, and conversational audio |
-| **Language preservation** | Preserve original languages as spoken, including code-switching | Multilingual audio datasets |
-| **Proper noun precision** | Standard spelling for names, brands, medical terms, and entities | Technical, medical, or domain-specific content |
-| **Completeness / best guess** | "Transcribe speech with your best guess based on context" | Audio with variable quality |
-| **Audio context** | "Transcribe everything spoken despite background noise or audio quality issues" | Noisy or compressed audio |
+| Component                     | Description                                                                                                  | When to use                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| **Authoritative language**    | Use `Required:`, `Mandatory:`, `Always:` prefixes                                                            | All prompts                                    |
+| **Disfluency preservation**   | Enumerate specific patterns (filler words, hesitations, repetitions, stutters, false starts, colloquialisms) | Meeting, interview, and conversational audio   |
+| **Language preservation**     | Preserve original languages as spoken, including code-switching                                              | Multilingual audio datasets                    |
+| **Proper noun precision**     | Standard spelling for names, brands, medical terms, and entities                                             | Technical, medical, or domain-specific content |
+| **Completeness / best guess** | "Transcribe speech with your best guess based on context"                                                    | Audio with variable quality                    |
+| **Audio context**             | "Transcribe everything spoken despite background noise or audio quality issues"                              | Noisy or compressed audio                      |
 
 #### What to avoid in evaluation prompts
 
-| Anti-pattern | Impact |
-|---|---|
-| **Domain labels without instructions** (e.g., `Context: Medical`) | Helps on domain-specific data but hurts on mixed datasets |
-| **Review/correction instructions** (e.g., `Review and correct`, `Edit for accuracy`) | Consistently hurts accuracy |
-| **Over-instruction** (more than 7 rules) | Causes diminishing returns and confusion |
-| **Soft language** (e.g., `try to`, `please`, `if possible`) | Model responds poorly compared to authoritative instructions |
-| **Negative language** (e.g., `Don’t`, `Avoid`, `Never`, `Not`) | Model does not process negative instructions and gets confused |
+| Anti-pattern                                                                         | Impact                                                         |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| **Domain labels without instructions** (e.g., `Context: Medical`)                    | Helps on domain-specific data but hurts on mixed datasets      |
+| **Review/correction instructions** (e.g., `Review and correct`, `Edit for accuracy`) | Consistently hurts accuracy                                    |
+| **Over-instruction** (more than 7 rules)                                             | Causes diminishing returns and confusion                       |
+| **Soft language** (e.g., `try to`, `please`, `if possible`)                          | Model responds poorly compared to authoritative instructions   |
+| **Negative language** (e.g., `Don’t`, `Avoid`, `Never`, `Not`)                       | Model does not process negative instructions and gets confused |
 
 <Warning>
-Listing specific word examples in your prompt causes hallucinations. The model becomes over-eager to insert those exact words into the transcript, even when they weren’t spoken. For example, `Pharmaceutical accuracy required (omeprazole over omeprizole, metformin over metforman)` will cause the model to hallucinate those drug names. Instead, describe the _pattern_ of entities to prioritize: `Pharmaceutical accuracy required across all medications and drug names`. See the [prompting guide](/docs/pre-recorded-audio/prompting#4-entity-accuracy-and-spelling) for more details.
+  Listing specific word examples in your prompt causes hallucinations. The model
+  becomes over-eager to insert those exact words into the transcript, even when
+  they weren’t spoken. For example, `Pharmaceutical accuracy required
+  (omeprazole over omeprizole, metformin over metforman)` will cause the model
+  to hallucinate those drug names. Instead, describe the _pattern_ of entities
+  to prioritize: `Pharmaceutical accuracy required across all medications and
+  drug names`. See the [prompting
+  guide](/docs/pre-recorded-audio/prompting#4-entity-accuracy-and-spelling) for
+  more details.
 </Warning>
 
 ## Open-source tools
