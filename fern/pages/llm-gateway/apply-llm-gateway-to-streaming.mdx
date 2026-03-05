@@ -363,92 +363,85 @@ if __name__ == "__main__":
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
-import { Readable } from "stream";
 import { AssemblyAI } from "assemblyai";
 import recorder from "node-record-lpcm16";
+import { Readable } from "stream";
 
-const apiKey = "<YOUR_API_KEY>";
+// --- Configuration ---
+const API_KEY = "<YOUR_API_KEY>";
 
-const prompt = "Provide a brief summary of the transcript.";
-
-let conversationData = "";
-
-async function analyzeWithLlmGateway(text) {
-  const response = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        authorization: apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        messages: [
-          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
-        ],
-        max_tokens: 4000,
-      }),
-    }
-  );
-  const result = await response.json();
-  return result.choices[0].message.content;
-}
+// LLM Gateway Configuration
+const PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [
+    { role: "user", content: PROMPT }
+  ],
+  max_tokens: 4000
+};
 
 const run = async () => {
   const client = new AssemblyAI({
-    apiKey: apiKey,
+    apiKey: API_KEY,
   });
 
   const transcriber = client.streaming.transcriber({
-    sampleRate: 16_000,
+    sampleRate: 16000,
     formatTurns: true,
-    llmGateway: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 4000,
-    }),
+    speechModel: "u3-rt-pro",
+    llmGateway: LLM_GATEWAY_CONFIG
   });
 
+  // Session started event
   transcriber.on("open", ({ id }) => {
-    console.log(`Session opened with ID: ${id}`);
+    console.log(`Session started: ${id}`);
   });
 
+  // Error event
   transcriber.on("error", (error) => {
-    console.error("Error:", error);
+    console.error(`\nError: ${error}`);
   });
 
-  transcriber.on("close", (code, reason) =>
-    console.log("Session closed:", code, reason)
-  );
+  // Close event
+  transcriber.on("close", (code, reason) => {
+    console.log("Session closed:", code, reason || "");
+  });
 
+  // Turn event - displays transcript when turn ends
   transcriber.on("turn", (turn) => {
-    if (!turn.transcript) {
-      return;
-    }
-
-    console.log("Turn:", turn.transcript);
-
     if (turn.end_of_turn) {
-      conversationData += `${turn.transcript}\n`;
+      console.log(`\nTranscript:\n${turn.transcript}\n`);
     }
+  });
+
+  // LLM Gateway Response event - displays LLM summary
+  transcriber.on("llmGatewayResponse", (response) => {
+    const llmContent = response.data?.choices?.[0]?.message?.content || "";
+    console.log(`\nLLM Response:\n${llmContent}\n`);
+  });
+
+  // Termination event
+  transcriber.on("termination", (event) => {
+    console.log(
+      `Session terminated: ${event.audio_duration_seconds} seconds of audio processed`
+    );
   });
 
   try {
-    console.log("Connecting to streaming transcript service");
-
     await transcriber.connect();
 
+    console.log("Connecting to streaming transcript service");
     console.log("Starting recording");
 
     const recording = recorder.record({
       channels: 1,
-      sampleRate: 16_000,
-      audioType: "wav",
+      sampleRate: 16000,
+      audioType: "wav", // Linear PCM
     });
 
     Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
 
+    // Stop recording and close connection using Ctrl-C
     process.on("SIGINT", async function () {
       console.log();
       console.log("Stopping recording");
@@ -457,18 +450,10 @@ const run = async () => {
       console.log("Closing streaming transcript connection");
       await transcriber.close();
 
-      if (conversationData.trim()) {
-        console.log("\nAnalyzing conversation with LLM Gateway...");
-        const analysis = await analyzeWithLlmGateway(conversationData);
-        console.log(analysis);
-      } else {
-        console.log("No conversation data to analyze.");
-      }
-
       process.exit();
     });
   } catch (error) {
-    console.error(error);
+    console.error(`Error: ${error}`);
   }
 };
 
@@ -895,15 +880,22 @@ recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
-import { Readable } from "stream";
 import { AssemblyAI } from "assemblyai";
 import recorder from "node-record-lpcm16";
+import { Readable } from "stream";
 
-const apiKey = "<YOUR_API_KEY>";
+// --- Configuration ---
+const API_KEY = "<YOUR_API_KEY>";
 
-const prompt = "Provide a brief summary of the transcript.";
-
-let conversationData = "";
+// LLM Gateway Configuration
+const PROMPT = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [
+    { role: "user", content: PROMPT }
+  ],
+  max_tokens: 4000
+};
 ```
 
 </Tab>
@@ -1130,28 +1122,39 @@ def on_close(ws, close_status_code, close_msg):
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
 ```javascript
+// Session started event
 transcriber.on("open", ({ id }) => {
-  console.log(`Session opened with ID: ${id}`);
+  console.log(`Session started: ${id}`);
 });
 
+// Error event
 transcriber.on("error", (error) => {
-  console.error("Error:", error);
+  console.error(`\nError: ${error}`);
 });
 
-transcriber.on("close", (code, reason) =>
-  console.log("Session closed:", code, reason)
-);
+// Close event
+transcriber.on("close", (code, reason) => {
+  console.log("Session closed:", code, reason || "");
+});
 
+// Turn event - displays transcript when turn ends
 transcriber.on("turn", (turn) => {
-  if (!turn.transcript) {
-    return;
-  }
-
-  console.log("Turn:", turn.transcript);
-
   if (turn.end_of_turn) {
-    conversationData += `${turn.transcript}\n`;
+    console.log(`\nTranscript:\n${turn.transcript}\n`);
   }
+});
+
+// LLM Gateway Response event - displays LLM summary
+transcriber.on("llmGatewayResponse", (response) => {
+  const llmContent = response.data?.choices?.[0]?.message?.content || "";
+  console.log(`\nLLM Response:\n${llmContent}\n`);
+});
+
+// Termination event
+transcriber.on("termination", (event) => {
+  console.log(
+    `Session terminated: ${event.audio_duration_seconds} seconds of audio processed`
+  );
 });
 ```
 
@@ -1282,29 +1285,7 @@ When using the raw WebSocket approach with `llm_gateway` in the connection param
 
 <Tab language="javascript-sdk" title="JavaScript SDK">
 
-```javascript
-async function analyzeWithLlmGateway(text) {
-  const response = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        authorization: apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        messages: [
-          { role: "user", content: `${prompt}\n\nTranscript: ${text}` },
-        ],
-        max_tokens: 4000,
-      }),
-    }
-  );
-  const result = await response.json();
-  return result.choices[0].message.content;
-}
-```
+When using the JavaScript SDK with `llmGateway` in the transcriber options, LLM Gateway responses are received automatically through the `llmGatewayResponse` event handler registered in the previous step. No separate API call is needed.
 
 </Tab>
 
@@ -1466,36 +1447,33 @@ if __name__ == "__main__":
 ```javascript
 const run = async () => {
   const client = new AssemblyAI({
-    apiKey: apiKey,
+    apiKey: API_KEY,
   });
 
   const transcriber = client.streaming.transcriber({
-    sampleRate: 16_000,
+    sampleRate: 16000,
     formatTurns: true,
-    llmGateway: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 4000,
-    }),
+    speechModel: "u3-rt-pro",
+    llmGateway: LLM_GATEWAY_CONFIG
   });
 
   // ... (event handlers from Step 1)
 
   try {
-    console.log("Connecting to streaming transcript service");
-
     await transcriber.connect();
 
+    console.log("Connecting to streaming transcript service");
     console.log("Starting recording");
 
     const recording = recorder.record({
       channels: 1,
-      sampleRate: 16_000,
-      audioType: "wav",
+      sampleRate: 16000,
+      audioType: "wav", // Linear PCM
     });
 
     Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
 
+    // Stop recording and close connection using Ctrl-C
     process.on("SIGINT", async function () {
       console.log();
       console.log("Stopping recording");
@@ -1504,18 +1482,10 @@ const run = async () => {
       console.log("Closing streaming transcript connection");
       await transcriber.close();
 
-      if (conversationData.trim()) {
-        console.log("\nAnalyzing conversation with LLM Gateway...");
-        const analysis = await analyzeWithLlmGateway(conversationData);
-        console.log(analysis);
-      } else {
-        console.log("No conversation data to analyze.");
-      }
-
       process.exit();
     });
   } catch (error) {
-    console.error(error);
+    console.error(`Error: ${error}`);
   }
 };
 
