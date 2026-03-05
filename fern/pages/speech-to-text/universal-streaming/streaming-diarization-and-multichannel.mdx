@@ -480,8 +480,23 @@ with a label such as `A`, `B`, and so on.
 }
 ```
 
-If the model cannot confidently assign a speaker — typically for very short
-utterances at the start of a session — the `speaker_label` field may be `null`.
+If a turn contains less than approximately 1 second of audio, the `speaker_label`
+will be set to `"UNKNOWN"`. This is because the model needs at least ~1 second of
+audio to generate a reliable diarization embedding — without enough audio, embeddings
+may be inaccurate and could lead to a single speaker being labeled as multiple
+speakers. Labeling short turns as `"UNKNOWN"` ensures that speaker labels remain
+as accurate as possible.
+
+```json
+{
+  "type": "Turn",
+  "transcript": "Hello?",
+  "speaker_label": "UNKNOWN",
+  "end_of_turn": true,
+  "turn_is_formatted": true
+}
+```
+
 Your application should handle this case gracefully.
 
 A typical multi-speaker exchange looks like this:
@@ -514,9 +529,10 @@ conversation.
 Real-time diarization is an inherently harder problem than diarization for async transcription on pre-recorded audio.
 The following limitations apply to the current beta:
 
-- **Short utterances** — Turns shorter than ~3 words provide insufficient audio
-  for a reliable speaker embedding. Single-word responses like "yes" or "no"
-  may receive a low-confidence or incorrect label.
+- **Short utterances** — Turns with less than ~1 second of audio are labeled
+  as `"UNKNOWN"` because there is insufficient audio to generate a reliable
+  speaker embedding. This prevents inaccurate embeddings from causing a single
+  speaker to be split across multiple labels.
 - **Overlapping speech** — When two speakers talk simultaneously, the model
   cannot split the audio and will assign the turn to a single speaker.
   Performance degrades with frequent cross-talk.
