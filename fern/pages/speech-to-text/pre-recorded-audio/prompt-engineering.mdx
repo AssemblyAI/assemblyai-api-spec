@@ -55,124 +55,6 @@ Prompting is **more instructional than contextual** — the model responds best 
 
 For consistent proper-noun accuracy or domain vocabulary, you'll usually need **context injection into the prompt**, use [keyterms prompt](/docs/pre-recorded-audio/improving-transcript-results-with-keyterms-prompting) to highlight known keyterms, or a **post-processing LLM correction step**.
 
-### Getting started with prompt examples
-
-#### Basic transcription
-
-**Sample prompt 1: Simple, readable transcription**
-
-```text
-Transcribe this audio
-```
-
-Characteristics of prompt output:
-
-- Without much instruction, the model follows its training data to transcribe a human readable transcript
-- Audio is transcribed as a human would read it, not including disfluencies, false starts, hesitations, and other speech patterns
-- No extra weight is given to contextual accuracy of keyterms or in-domain data (i.e. medical), resulting in strong overall WER but higher error rate on rare words
-
-Useful for:
-
-- General transcription
-- Readability and sentence structure
-- Balanced WER vs contextual accuracy
-
-#### Enhanced transcription
-
-**Sample prompt 2: Enhanced speech patterns and entity accuracy**
-
-```text
-Transcribe accurately with attention to proper nouns, technical terms,
-and natural speech patterns.
-```
-
-Characteristics of prompt output:
-
-- With more instruction, the model attempts to add contextual correctness to rare words and entities
-- Audio is transcribed with more natural speech patterns, including basic disfluencies, false starts, hesitations, and other speech patterns
-- Extra weight is given to contextual accuracy of keyterms or in-domain data (i.e. medical), resulting in small degradation of WER for lower error rate on rare words
-
-Useful for:
-
-- In-domain transcription where you know the general context (i.e. medical, legal, finance, technical)
-- Basic capture of speech patterns
-- Higher WER in exchange for contextual accuracy
-
-#### Maximum verbatim transcription
-
-**Sample prompt 3: Maximum speech patterns, context, and multilingual accuracy**
-
-```text
-Required: Preserve the original language(s) and script as spoken,
-including code-switching and mixed-language phrases.
-
-Mandatory: Preserve linguistic speech patterns including disfluencies,
-filler words, hesitations, repetitions, stutters, false starts, and
-colloquialisms in the spoken language.
-
-Always: Transcribe speech with your best guess based on context in all
-possible scenarios where speech is present in the audio.
-```
-
-Characteristics of prompt output:
-
-- With many instructions, the model attempts to become as verbatim as possible across a number of different domains - speech patterns, contextual correctness, entity accuracy, and code-switching/multilingual transcription.
-- Languages are described as spoken without translation, preserving the meaning of natural code-switching and mixed-language phrases.
-- Audio is transcribed with as many natural speech patterns as possible, including all potential disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the original language.
-- Because the model is searching for all speech patterns, prompts like this are more likely to also pick up things like cross talk or background noise or low volume audio
-- Extra weight is given to contextual accuracy by telling the model to guess at different words based on the context surrounding that word.
-
-Useful for:
-
-- Maximum capture of speech patterns - will generate the most words transcribed
-- Higher WER in exchange for contextual accuracy and multilingual accuracy
-- Across a variety of transcripts where you think these different patterns will be encountered
-
-#### System prompts
-
-The current system prompt as of February 25, 2026 is:
-
-```text
-Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
-```
-
-This prompt provides the model with clear guidance to always attempt transcription while keeping instructions minimal.
-
-Prior to February 25, 2026 the system prompt was:
-```text
-Required: Preserve the original language(s) and script as spoken,
-including code-switching and mixed-language phrases.
-
-Mandatory: Preserve linguistic speech patterns including disfluencies,
-filler words, hesitations, repetitions, stutters, false starts, and
-colloquialisms in the spoken language.
-
-Always: Transcribe speech with your best guess based on context in all
-possible scenarios where speech is present in the audio.
-```
-
-Prior to February 20, 2026 the system prompt was:
-```text
-Transcribe this audio
-```
-
----
-
-## Evaluating transcription accuracy
-
-When evaluating Universal-3-Pro output against human-labeled ground truth files, **be aware that the model frequently outperforms human transcribers**. If your word error rate (WER) evaluation shows unexpected **insertions** from Universal-3-Pro, listen back to the original audio before assuming the model is wrong. In many cases, the model is correctly transcribing audio that a human transcriber missed or normalized. Similarly, some **substitutions** are purely semantic or formatting differences (e.g., "offsite" vs. "off site," "alright" vs. "all right") that inflate WER without representing meaningful errors.
-
-Tips for accurate evaluation:
-
-- **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
-- **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
-- **Watch for semantic substitutions** — formatting-level differences inflate WER without representing meaningful errors.
-- **Consider Semantic WER** over traditional normalized WER for a more accurate evaluation. Semantic WER won't penalize formatting-level substitutions or insertions that are actually correct transcription, giving you a more realistic measure of true transcription quality.
-
-In addition to the [default prompt](#best-all-around-default), we recommend testing with the [Best simple prompt](#best-simple) and the [Handling unclear audio with [masked]](#handling-unclear-audio-with-masked) prompt to find the best fit for your evaluation and use case.
-
----
-
 ## Recommended prompts
 
 The following prompts are our top recommendations for different use cases. Start here before exploring the detailed [prompt capabilities](#prompt-capabilities) below.
@@ -240,6 +122,51 @@ This prompt tells the model to never guess on unclear or difficult audio and ins
 - **Genuine but difficult speech is still preserved** — the model transcribes what it can hear clearly while honestly marking what it cannot.
 
 This is especially useful for quality-sensitive workflows where incorrect guesses are worse than gaps, and for building review pipelines where human reviewers can focus on flagged segments.
+
+---
+
+## System prompts
+
+The current system prompt as of February 25, 2026 is:
+
+```text
+Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.
+```
+
+This prompt provides the model with clear guidance to always attempt transcription while keeping instructions minimal.
+
+Prior to February 25, 2026 the system prompt was:
+```text
+Required: Preserve the original language(s) and script as spoken,
+including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies,
+filler words, hesitations, repetitions, stutters, false starts, and
+colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all
+possible scenarios where speech is present in the audio.
+```
+
+Prior to February 20, 2026 the system prompt was:
+```text
+Transcribe this audio
+```
+
+---
+
+## Evaluating transcription accuracy
+
+When evaluating Universal-3-Pro output against human-labeled ground truth files, **be aware that the model frequently outperforms human transcribers**. If your word error rate (WER) evaluation shows unexpected **insertions** from Universal-3-Pro, listen back to the original audio before assuming the model is wrong. In many cases, the model is correctly transcribing audio that a human transcriber missed or normalized. Similarly, some **substitutions** are purely semantic or formatting differences (e.g., "offsite" vs. "off site," "alright" vs. "all right") that inflate WER without representing meaningful errors.
+
+Tips for accurate evaluation:
+
+- **Use the `[unclear]` tag in your evaluation prompt** to prevent the model from guessing on audio that a human transcriber would also miss. This improves WER alignment.
+- **Review insertions manually** by listening to the audio at the flagged timestamps. Many apparent errors are actually the model being more accurate.
+- **Watch for semantic substitutions** — formatting-level differences inflate WER without representing meaningful errors.
+- **Consider Semantic WER** over traditional normalized WER for a more accurate evaluation. Semantic WER won't penalize formatting-level substitutions or insertions that are actually correct transcription, giving you a more realistic measure of true transcription quality.
+
+In addition to the [default prompt](#best-all-around-default), we recommend testing with the [Best simple prompt](#best-simple) and the [Handling unclear audio with [masked]](#handling-unclear-audio-with-masked) prompt to find the best fit for your evaluation and use case.
 
 ---
 
