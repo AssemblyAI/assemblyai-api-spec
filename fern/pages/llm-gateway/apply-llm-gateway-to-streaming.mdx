@@ -786,9 +786,9 @@ npm install ws mic
 
 </Tabs>
 
-## Step 2: Connect to Universal Streaming
+## Step 2: Configure LLM Gateway
 
-In this step, you'll set up a connection to the Universal Streaming API with the `llm_gateway` parameter. This parameter configures LLM Gateway to process your streaming transcripts.
+In this step, you'll configure the `llm_gateway` parameter that will be passed to the streaming connection. This parameter tells the streaming API to process your transcripts with LLM Gateway in real-time.
 
 For more information about streaming transcription, see [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio).
 
@@ -958,13 +958,13 @@ The `llm_gateway` parameterisa JSON-stringified object that follows the same int
 
 ## Step 3: Stream audio and analyze with LLM Gateway
 
-In this step, you'll stream audio from your microphone, collect the transcribed text from completed turns, and then send the accumulated transcript to LLM Gateway for analysis when the session ends.
+In this step, you'll stream audio from your microphone and receive LLM Gateway analysis in real-time after each completed turn.
 
 <Steps>
 
 <Step>
 
-Set up the event handlers to stream audio and collect transcripts from completed turns.
+Set up event handlers to receive transcripts and LLM Gateway responses.
 
 <Tabs groupId="language">
 
@@ -1267,40 +1267,19 @@ function startMicrophone() {
 </Step>
 <Step>
 
-Define a function to send the accumulated transcript to LLM Gateway for analysis. This function uses the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions) to process the transcript with your prompt.
+When you configure the `llm_gateway` parameter in the connection, LLM Gateway automatically processes each completed turn and sends back analysis responses through the streaming connection. The responses are received through the event handlers you set up in the previous step:
 
-<Tabs groupId="language">
+- **Python SDK**: Responses arrive via the `LLMGatewayResponseEvent` handler
+- **Python WebSocket**: Responses arrive as `LLMGatewayResponse` messages in `on_message`
+- **JavaScript SDK**: Responses arrive via the `llmGatewayResponse` event handler
+- **JavaScript WebSocket**: Responses arrive as `LLMGatewayResponse` messages in the message handler
 
-<Tab language="python-sdk" title="Python SDK" default>
-
-When using the Python SDK with `LLMGatewayConfig`, analysis responses are received automatically through the `LLMGatewayResponseEvent` event handler registered in the previous step. No separate API call is needed.
-
-</Tab>
-
-<Tab language="python" title="Python">
-
-When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback registered in the previous step. No separate API call is needed.
-
-</Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-When using the JavaScript SDK with `llmGateway` in the transcriber options, LLM Gateway responses are received automatically through the `llmGatewayResponse` event handler registered in the previous step. No separate API call is needed.
-
-</Tab>
-
-<Tab language="javascript" title="JavaScript">
-
-When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback in the `run()` function. No separate API call is needed.
-
-</Tab>
-
-</Tabs>
+No separate API call is needed - the analysis happens automatically for each turn.
 
 </Step>
 <Step>
 
-Run the streaming session and analyze the transcript with LLM Gateway when the session ends.
+Run the streaming session. LLM Gateway will analyze transcripts in real-time as turns complete.
 
 <Tabs groupId="language">
 
@@ -1638,16 +1617,21 @@ The output will look something like this:
 ```
 Session started: de5d9927-73a6-4be8-b52d-b4c07be37e6b
 
-Transcript: Hi, my name is Sonny.
+Transcript:
+Hi, my name is Sonny.
 
-Transcript: I am a voice agent.
+LLM Response:
+The speaker introduces themselves as Sonny.
+
+Transcript:
+I am a voice agent.
+
+LLM Response:
+The speaker identifies as a voice agent.
 
 Stopping...
 
 Session terminated: 12s of audio processed
-
-Analyzing conversation with LLM Gateway...
-The speaker introduces themselves as Sonny and identifies as a voice agent.
 ```
 
 </Step>
@@ -1666,7 +1650,7 @@ To learn more about LLM Gateway and streaming, see the following resources:
 
 - [LLM Gateway Overview](/docs/llm-gateway/overview)
 - [Basic Chat Completions](/docs/llm-gateway/chat-completions)
-- [Model Selection](/docs/speech-to-text/universal-streaming)
+- [Select the speech model](/docs/streaming/select-the-speech-model)
 - [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio)
 
 ## Need some help?
