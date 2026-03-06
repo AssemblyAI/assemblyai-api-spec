@@ -1,5 +1,5 @@
 ---
-title: "Select the Region"
+title: "Streaming Endpoints and Data Zones"
 ---
 
 Choose the endpoint that best fits your application's requirements—whether that's achieving the lowest possible latency or ensuring your audio data stays within a specific geographic region.
@@ -20,9 +20,170 @@ Data Zone endpoints guarantee your data never leaves the specified region. This 
 | US data residency               | `wss://streaming.us.assemblyai.com/v3/ws`      | Data stays in the US                     |
 | EU data residency               | `wss://streaming.eu.assemblyai.com/v3/ws`      | Data stays in the EU                     |
 
+## Which endpoint should I use?
+
+- **Optimizing for latency?** Use **Edge Routing** (default). No configuration change is needed — it automatically routes to the nearest region for the fastest response.
+- **Need data residency?** Use a **Data Zone** endpoint. Choose US or EU to ensure your audio and transcription data stays within that region.
+
 ## How to use it
 
-Simply update your WebSocket connection URL to your preferred endpoint. The following examples demonstrate using the EU data residency endpoint.
+Update your WebSocket connection URL to your preferred endpoint. Select an endpoint tab below to see examples for each.
+
+<Tabs>
+
+<Tab title="Edge Routing (default)">
+
+Edge Routing is the default. If you're using the SDKs without overriding the base URL, you're already using this endpoint. No configuration change is required.
+
+<CodeBlocks>
+
+```python title="Python SDK" maxLines=15
+import assemblyai as aai
+from assemblyai.streaming.v3 import StreamingClient, StreamingClientOptions
+
+api_key = "<YOUR_API_KEY>"
+
+# No api_host override needed — Edge Routing is the default
+client = StreamingClient(
+    StreamingClientOptions(
+        api_key=api_key,
+    )
+)
+
+client.connect()
+client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
+```
+
+```python title="Python" highlight={6} maxLines=15
+import websocket
+from urllib.parse import urlencode
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+CONNECTION_PARAMS = {"sample_rate": 16000}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+ws = websocket.WebSocketApp(
+    API_ENDPOINT,
+    header={"Authorization": YOUR_API_KEY},
+)
+
+ws.run_forever()
+```
+
+```javascript title="JavaScript SDK" maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+// No streamingBaseUrl override needed — Edge Routing is the default
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const transcriber = client.streaming.transcriber({
+  sampleRate: 16_000,
+});
+
+await transcriber.connect();
+```
+
+```javascript title="JavaScript" highlight={6} maxLines=15
+const WebSocket = require("ws");
+const querystring = require("querystring");
+
+const YOUR_API_KEY = "<YOUR_API_KEY>";
+const CONNECTION_PARAMS = { sample_rate: 16000 };
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+const ws = new WebSocket(API_ENDPOINT, {
+  headers: {
+    Authorization: YOUR_API_KEY,
+  },
+});
+```
+
+</CodeBlocks>
+
+</Tab>
+
+<Tab title="US data residency">
+
+Use the US Data Zone endpoint to keep your audio and transcription data within the United States.
+
+<CodeBlocks>
+
+```python title="Python SDK" highlight={9} maxLines=15
+import assemblyai as aai
+from assemblyai.streaming.v3 import StreamingClient, StreamingClientOptions
+
+api_key = "<YOUR_API_KEY>"
+
+client = StreamingClient(
+    StreamingClientOptions(
+        api_key=api_key,
+        api_host="streaming.us.assemblyai.com",
+    )
+)
+
+client.connect()
+client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
+```
+
+```python title="Python" highlight={6} maxLines=15
+import websocket
+from urllib.parse import urlencode
+
+YOUR_API_KEY = "<YOUR_API_KEY>"
+CONNECTION_PARAMS = {"sample_rate": 16000}
+API_ENDPOINT_BASE_URL = "wss://streaming.us.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+ws = websocket.WebSocketApp(
+    API_ENDPOINT,
+    header={"Authorization": YOUR_API_KEY},
+)
+
+ws.run_forever()
+```
+
+```javascript title="JavaScript SDK" highlight={5} maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+  streamingBaseUrl: "wss://streaming.us.assemblyai.com",
+});
+
+const transcriber = client.streaming.transcriber({
+  sampleRate: 16_000,
+});
+
+await transcriber.connect();
+```
+
+```javascript title="JavaScript" highlight={6} maxLines=15
+const WebSocket = require("ws");
+const querystring = require("querystring");
+
+const YOUR_API_KEY = "<YOUR_API_KEY>";
+const CONNECTION_PARAMS = { sample_rate: 16000 };
+const API_ENDPOINT_BASE_URL = "wss://streaming.us.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+const ws = new WebSocket(API_ENDPOINT, {
+  headers: {
+    Authorization: YOUR_API_KEY,
+  },
+});
+```
+
+</CodeBlocks>
+
+</Tab>
+
+<Tab title="EU data residency">
+
+Use the EU Data Zone endpoint to keep your audio and transcription data within the European Union.
 
 <CodeBlocks>
 
@@ -92,3 +253,7 @@ const ws = new WebSocket(API_ENDPOINT, {
 ```
 
 </CodeBlocks>
+
+</Tab>
+
+</Tabs>
