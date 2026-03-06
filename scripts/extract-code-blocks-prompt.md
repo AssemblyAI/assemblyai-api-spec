@@ -3,19 +3,16 @@
 ## How to Use This Prompt
 
 ### Option A: Process a single file
-
 ```
 Claude, read the file at [MDX_FILE_PATH] and follow the instructions in scripts/extract-code-blocks-prompt.md to extract its code blocks.
 ```
 
 ### Option B: Process an entire section
-
 ```
 Claude, process all MDX files in fern/pages/audio-intelligence/ following the instructions in scripts/extract-code-blocks-prompt.md. Skip any *-response.mdx files.
 ```
 
 ### Option C: Process a list of specific files
-
 ```
 Claude, process these files following the instructions in scripts/extract-code-blocks-prompt.md:
 - fern/pages/audio-intelligence/auto-chapters.mdx
@@ -32,7 +29,6 @@ You are extracting inline code blocks from MDX documentation files into separate
 ### Step 1: Read the MDX file
 
 Read the complete file content. Identify every code block by scanning for:
-
 - Triple-backtick fenced code blocks (` ``` `)
 - Code blocks inside `<Tabs>` / `<Tab>` components
 - Code blocks inside `<CodeBlocks>` components
@@ -40,7 +36,6 @@ Read the complete file content. Identify every code block by scanning for:
 - Code blocks inside `<Accordion>`, `<Step>`, or other wrapper components
 
 Do NOT touch:
-
 - `<Json>` components (leave completely as-is)
 - `<Markdown src="...">` includes (leave as-is)
 - Inline code (single backticks)
@@ -61,13 +56,11 @@ For each code block, determine:
 ### Step 3: Decide what to extract
 
 **EXTRACT** (create external file):
-
 - Any code block >= 3 lines
 - Any code block inside a `<Tabs>` or `<CodeBlocks>` wrapper (even if < 3 lines, for consistency within the group)
 - Commented-out code blocks (still extract the file)
 
 **LEAVE INLINE** (do not extract):
-
 - Code blocks < 3 lines that are standalone (not in Tabs/CodeBlocks), such as:
   - `pip install assemblyai`
   - `npm install assemblyai`
@@ -81,12 +74,10 @@ For each code block, determine:
 For each code block to extract, compute the file path:
 
 **Directory**: `{mdx_dir}/snippets/{page_name}/`
-
 - `{mdx_dir}` = directory containing the MDX file
 - `{page_name}` = MDX filename without `.mdx` extension, using hyphens (e.g., `auto-chapters`)
 
 **Filename**: `{section}.{variant}.{ext}` or `{section}.{ext}`
-
 - `{section}` = semantic slug for the code block's purpose (e.g., `quickstart`, `api-request`, `step1-setup`)
 - `{variant}` = language/SDK variant identifier (omit for single-language standalone blocks):
   - `python-sdk`, `python`, `javascript-sdk`, `javascript`, `csharp`, `ruby`, `php`, `java`, `golang`
@@ -115,7 +106,6 @@ For each code block to extract, compute the file path:
 | `sql` | `.sql` |
 
 **Assigning section slugs**: When a page has multiple distinct groups of code blocks (e.g., a "Quickstart" section and a "Get subtitles" section), assign unique slugs based on the surrounding heading or the purpose of the code. Common slugs:
-
 - `quickstart` — the main/first example on the page
 - `enable-feature` — code that enables a specific feature
 - `api-request` — a curl/HTTP request example
@@ -129,7 +119,6 @@ When multiple code block groups exist on one page and they all serve similar pur
 ### Step 5: Create the snippet files
 
 For each code block to extract:
-
 1. Create the directory if it doesn't exist: `mkdir -p {mdx_dir}/snippets/{page_name}/`
 2. Write the code content to the file — extract ONLY the code, not the fence markers or attributes
 3. Preserve the exact code content (indentation, comments, blank lines)
@@ -160,7 +149,6 @@ If ALL tabs in a `<Tabs>` group contain ONLY a code block (no prose, no callouts
 ```
 
 Notes:
-
 - Transfer `title` from the Tab's `title` attribute
 - Transfer `highlight` from the code fence's `{N}` or `highlight={N}` attribute
 - Transfer `maxLines` from the code fence
@@ -174,18 +162,20 @@ If ANY tab contains prose or other content alongside the code block, keep the `<
 ```jsx
 <Tabs groupId="language">
   <Tab language="python-sdk" title="Python SDK" default>
-    Enable the feature by setting `feature` to `True`.
-    <Code
-      src="./snippets/{page_name}/{section}.{variant}.{ext}"
-      language="{fence_language}"
-      highlight="{highlight_value}"
-    />
+
+  Enable the feature by setting `feature` to `True`.
+
+  <Code
+    src="./snippets/{page_name}/{section}.{variant}.{ext}"
+    language="{fence_language}"
+    highlight="{highlight_value}"
+  />
+
   </Tab>
 </Tabs>
 ```
 
 Notes:
-
 - Keep all Tab attributes (`language`, `title`, `default`)
 - Keep all prose/callout content inside the Tab unchanged
 - Only replace the code fence with `<Code src>`
@@ -208,7 +198,6 @@ Replace inline fences inside `<CodeBlocks>` with `<Code src>`:
 ```
 
 Notes:
-
 - Transfer `title` from the fence's `title="..."` attribute
 - Transfer all other attributes
 
@@ -224,7 +213,6 @@ Replace the fenced code block with:
 ```
 
 Notes:
-
 - No `title` unless the original fence had a `title` attribute
 - No variant in the filename (standalone blocks are single-language)
 
@@ -235,13 +223,11 @@ Do not modify short standalone code blocks. Leave the triple-backtick fence in p
 #### Rule 6: Commented-out code → Extract file, comment the `<Code>` reference
 
 ```jsx
-{
-  /* <Code
+{/* <Code
   src="./snippets/{page_name}/{section}.{variant}.{ext}"
   title="{title}"
   language="{fence_language}"
-/> */
-}
+/> */}
 ```
 
 ### Step 7: Verify your work
@@ -261,7 +247,7 @@ After modifying the file, check:
 
 ### Input: `fern/pages/audio-intelligence/auto-chapters.mdx` (simplified)
 
-````mdx
+```mdx
 ---
 title: "Auto Chapters"
 ---
@@ -291,7 +277,6 @@ transcript = aai.Transcriber().transcribe(audio_file, config)
 for chapter in transcript.chapters:
   print(f"{chapter.start}-{chapter.end}: {chapter.headline}")
 ```
-````
 
 </Tab>
 <Tab language="javascript-sdk" title="JavaScript SDK">
@@ -341,8 +326,7 @@ curl https://api.assemblyai.com/v2/transcript \
 250-28840: Smoke from hundreds of wildfires in Canada is triggering air quality alerts
 28840-56840: The air quality index in Baltimore is considered unhealthy
 ```
-
-````
+```
 
 ### Output
 
@@ -399,12 +383,11 @@ Enable Auto Chapters by setting `auto_chapters` to `true` in the transcription c
   language="plain"
   title="Example output"
 />
-````
+```
 
 **Snippet file contents**:
 
 `snippets/auto-chapters/quickstart.python-sdk.py`:
-
 ```python
 import assemblyai as aai
 
@@ -423,7 +406,6 @@ for chapter in transcript.chapters:
 ```
 
 `snippets/auto-chapters/quickstart.javascript-sdk.js`:
-
 ```javascript
 import { AssemblyAI } from "assemblyai";
 
@@ -449,7 +431,6 @@ run();
 ```
 
 `snippets/auto-chapters/api-request.sh`:
-
 ```bash
 curl https://api.assemblyai.com/v2/transcript \
   --header "Authorization: YOUR_API_KEY" \
@@ -461,7 +442,6 @@ curl https://api.assemblyai.com/v2/transcript \
 ```
 
 `snippets/auto-chapters/example-output.txt`:
-
 ```
 250-28840: Smoke from hundreds of wildfires in Canada is triggering air quality alerts
 28840-56840: The air quality index in Baltimore is considered unhealthy
@@ -472,33 +452,25 @@ curl https://api.assemblyai.com/v2/transcript \
 ## Edge Case Reference
 
 ### Tabs without `groupId`
-
 Some `<Tabs>` lack `groupId="language"`. If the tabs represent language variants, convert to `<CodeBlocks>`. If they represent non-language grouping (OS/platform), keep `<Tabs>`/`<Tab>` but still extract code to `<Code src>`.
 
 ### Tabs with `<Info>`, `<Warning>`, `<Note>` inside
-
 These count as "prose" — keep the `<Tabs>`/`<Tab>` structure (Rule 2).
 
 ### Tabs with `<Steps>` + `<Step>` inside
-
 If Steps contain code blocks >= 3 lines, extract them. If Steps contain 1-2 line install commands, leave inline.
 
 ### Multiple `<Tabs>` groups on one page
-
 Assign unique section slugs based on the surrounding heading or purpose (e.g., `quickstart` for the first, `speaker-filter` for a later section).
 
 ### `title=` on code fences inside `<CodeBlocks>`
-
 Transfer the `title` to the `<Code>` component's `title` attribute.
 
 ### Code blocks with `wordWrap`
-
 Transfer as `wordWrap` attribute on `<Code>`.
 
 ### `python-sdk` vs `python` variants
-
 These are DIFFERENT variants. `python-sdk` uses the AssemblyAI Python SDK (`import assemblyai as aai`). `python` uses raw `requests`/`urllib`. They get separate files.
 
 ### Code inside `<Accordion>` components
-
 Extract code from within Accordions the same way as standalone code. The `<Accordion>` wrapper stays.
