@@ -8,35 +8,43 @@ In this guide, we'll show you how to use the AssemblyAI API to transcribe multip
 
 ```python
 import assemblyai as aai
-import threading
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 aai.settings.api_key = "YOUR_API_KEY"
 batch_folder = "audio"
 transcription_result_folder = "transcripts"
 
-transcriber = aai.Transcriber()
-
 def transcribe_audio(audio_file):
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(os.path.join(batch_folder, audio_file))
-    if transcript.status == "completed":
+    if transcript.status == aai.TranscriptStatus.completed:
         with open(f"{transcription_result_folder}/{audio_file}.txt", "w") as f:
             f.write(transcript.text)
-    elif transcript.status == "error":
-        print("Error: ", transcript.error)
+        return audio_file, "completed"
+    else:
+        print(f"Error transcribing {audio_file}: {transcript.error}")
+        return audio_file, "error"
 
-threads = []
-for filename in os.listdir(batch_folder):
-    thread = threading.Thread(target=transcribe_audio, args=(filename,))
-    threads.append(thread)
-    thread.start()
+max_workers = 50  # Adjust based on your concurrency limit
+files = os.listdir(batch_folder)
 
-for thread in threads:
-    thread.join()
+with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    futures = {
+        executor.submit(transcribe_audio, f): f for f in files
+    }
+    for future in as_completed(futures):
+        filename, status = future.result()
+        print(f"{filename}: {status}")
 
 print("All transcriptions are complete.")
 ```
+
+<Note title="Concurrency and rate limits">
+
+The AssemblyAI API has a concurrency limit (default 200 for paid accounts) and a global rate limit of 20,000 requests per five minutes. The SDK handles queuing automatically — if you exceed your concurrency limit, jobs are queued server-side. However, if you're submitting thousands of files, consider limiting the number of concurrent threads to avoid hitting the API rate limit. For more details, see [Scaling async transcription](/docs/deployment/account-management#scaling-async-transcription).
+
+</Note>
 
 ## Get Started
 
@@ -50,12 +58,12 @@ Install the SDK.
 pip install -U assemblyai
 ```
 
-Import the `assemblyai `package and set the API key. Import `threading` and `OS` Python libraries that enable concurrent task processing and file path interactions respectively.
+Import the `assemblyai` package and set the API key. Import `os` and `concurrent.futures` for file path interactions and managed concurrent task processing respectively.
 
 ```python
 import assemblyai as aai
-import threading
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 aai.settings.api_key = "YOUR_API_KEY"
 ```
@@ -79,27 +87,39 @@ Function to transcribe an audio file. Once the transcript is complete, a .txt fi
 def transcribe_audio(audio_file):
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(os.path.join(batch_folder, audio_file))
-    if transcript.status == "completed":
+    if transcript.status == aai.TranscriptStatus.completed:
         with open(f"{transcription_result_folder}/{audio_file}.txt", "w") as f:
             f.write(transcript.text)
-    elif transcript.status == "error":
-        print("Error: ", transcript.error)
+        return audio_file, "completed"
+    else:
+        print(f"Error transcribing {audio_file}: {transcript.error}")
+        return audio_file, "error"
 ```
 
-Open threads to transcribe each file concurrently. Once all the threads are complete you will receive the "All transcriptions are complete" message in your terminal.
+Use a `ThreadPoolExecutor` to transcribe files concurrently with a controlled number of workers. The `max_workers` parameter limits how many files are submitted in parallel — adjust this based on your [concurrency limit](/docs/deployment/account-management#pre-recorded-audio-speech-to-text-usage-limits). Once all tasks complete, you'll see the "All transcriptions are complete" message.
 
 ```python
-threads = []
-for filename in os.listdir(batch_folder):
-    thread = threading.Thread(target=transcribe_audio, args=(filename,))
-    threads.append(thread)
-    thread.start()
+max_workers = 50  # Adjust based on your concurrency limit
+files = os.listdir(batch_folder)
 
-for thread in threads:
-    thread.join()
+with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    futures = {
+        executor.submit(transcribe_audio, f): f for f in files
+    }
+    for future in as_completed(futures):
+        filename, status = future.result()
+        print(f"{filename}: {status}")
 
 print("All transcriptions are complete.")
 ```
+
+<Tip title="Scaling tips">
+
+- The AssemblyAI API queues jobs that exceed your concurrency limit, so you can safely submit more files than your limit allows.
+- If you're processing thousands of files, limit `max_workers` to avoid hitting the global API rate limit of 20,000 requests per five minutes.
+- For high-volume workloads, consider using [webhooks](/docs/getting-started/webhooks) instead of polling to reduce API calls.
+
+</Tip>
 
 ## Conclusion
 
