@@ -9,6 +9,17 @@ description: "The anatomy of a Universal-3 Pro streaming session from session st
   object](/docs/streaming#turn-object) explanation.
 </Note>
 
+## Understanding `transcript` vs `utterance`
+
+Before walking through the message sequence, it's important to understand the difference between the `transcript` and `utterance` fields:
+
+- **`transcript`** — The running transcript of the current turn. Use this field for displaying live captions or getting the full turn text.
+- **`utterance`** — A snapshot of the finalized text when the turn ends. For Universal-3 Pro, since utterance end and turn end always occur together (turns end on terminal punctuation), `utterance` and `transcript` will contain the same text on the `end_of_turn: true` message. On partial transcripts, `utterance` is always an empty string `""`.
+
+<Note>
+  **Key takeaway:** To get the complete text of a turn, always read `transcript`. The `utterance` field is provided for consistency with Universal Streaming, where utterance boundaries can occur independently of turn boundaries.
+</Note>
+
 Universal-3 Pro handles message sequences differently from [Universal Streaming](/docs/streaming/message-sequence). Instead of emitting word-by-word partial transcripts as audio is processed, Universal-3 Pro produces transcripts only during silence periods. Key differences include:
 
 - **Partials only during silence** — transcripts are emitted when the speaker pauses, not on every audio frame.
@@ -54,7 +65,7 @@ Notice that:
 - `end_of_turn_confidence` is `0` — no terminal punctuation detected.
 - All words have `word_is_final: false` — the transcript may be revised in the final message.
 - The `transcript` ends with an em dash (`—`), indicating the utterance is incomplete.
-- The `utterance` field is an empty string because the turn has not ended.
+- The `utterance` field is an empty string because the turn has not ended. Use `transcript` to access the current partial text.
 
 ```json
 {
