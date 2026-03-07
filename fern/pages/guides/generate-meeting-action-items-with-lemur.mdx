@@ -59,38 +59,7 @@ $headers = array(
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-Create a new file and set your AssemblyAI API key.
-
-```ruby
-require 'net/http'
-require 'json'
-require 'rest-client'
-require 'httparty'
-
-base_url = "https://api.assemblyai.com/v2"
-
-headers = {
-    "authorization" => "<YOUR_API_KEY>",
-    "content-type" => "application/json"
-}
-```
-
-  </Tab>
-
-<Tab language="csharp" title="C#">
-
-Create a new file and set your AssemblyAI API key.
-
-```csharp
-using System.Net.Http;
-using System.Threading;
-
-string apiKey = "<YOUR_API_KEY>";
-```
-
-</Tab>
 
 </Tabs>
 
@@ -150,57 +119,7 @@ curl_close($ch);
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-Upload your local file to the AssemblyAI API.
-
-```ruby
-path = "meeting.mp3"
-response = RestClient.post("#{base_url}/upload", File.read(path), headers)
-upload_url = JSON.parse(response.body)["upload_url"]
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-Upload your local file to the AssemblyAI API.
-
-```csharp
-public async Task<string> UploadFileAsync(string apiKey, string path)
-{
-    using var client = new HttpClient();
-    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiKey);
-
-    using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
-    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-
-    HttpResponseMessage response;
-    try
-    {
-        response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
-    }
-    catch (Exception e)
-    {
-        Console.Error.WriteLine($"Error: {e.Message}");
-        return null;
-    }
-
-    if (response.IsSuccessStatusCode)
-    {
-        string responseBody = await response.Content.ReadAsStringAsync();
-        var json = JObject.Parse(responseBody);
-        return json["upload_url"].ToString();
-    }
-    else
-    {
-        Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
-        return null;
-    }
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -255,47 +174,7 @@ curl_close($curl);
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-Submit a transcription with the `audio_url` parameter set to the value of `upload_url`.
-
-```ruby
-data = {
-    "audio_url" => upload_url
-}
-
-uri = URI.parse("#{base_url}/transcript")
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = true
-
-request = Net::HTTP::Post.new(uri.request_uri, headers)
-request.body = data.to_json
-
-response = http.request(request)
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-Submit a transcription with the `audio_url` parameter set to the value of `upload_url`.
-
-```csharp
-var data = new Dictionary<string, dynamic>(){
-    { "audio_url", upload_url }
-};
-
-using (var client = new HttpClient())
-{
-    client.DefaultRequestHeaders.Add("authorization", apiKey);
-    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-    HttpResponseMessage response = await client.PostAsync("https://api.assemblyai.com/v2/transcript", content);
-    var responseContent = await response.Content.ReadAsStringAsync();
-    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -354,61 +233,7 @@ while (true) {
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-After making the request, you'll receive an ID for the transcription. Use it to poll the API every few seconds to check the status of the transcript job. Once the status is `completed`, you can retrieve the transcript from the API response.
-
-```ruby
-transcript_id = response.parsed_response["id"]
-polling_endpoint = "https://api.assemblyai.com/v2/transcript/#{transcript_id}"
-
-while true
-    polling_response = HTTParty.get(polling_endpoint, headers: headers)
-    transcription_result = polling_response.parsed_response
-
-    if transcription_result["status"] == "completed"
-        break
-    elsif transcription_result["status"] == "error"
-        raise "Transcription failed: #{transcription_result["error"]}"
-    else
-        sleep(3)
-    end
-end
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-After making the request, you'll receive an ID for the transcription. Use it to poll the API every few seconds to check the status of the transcript job. Once the status is `completed`, you can retrieve the transcript from the API response.
-
-```csharp
-string transcriptId = response.Content.ReadAsAsync<dynamic>().Result.id;
-string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
-
-while (true) {
-    var pollingRequest = new HttpRequestMessage {
-        Method = HttpMethod.Get,
-        RequestUri = new Uri(pollingEndpoint),
-        Headers = {
-            { "authorization", "<YOUR_API_KEY>" }
-        }
-    };
-
-    var pollingResponse = httpClient.SendAsync(pollingRequest).Result;
-    var transcriptionResult = JObject.Parse(pollingResponse.Content.ReadAsStringAsync().Result);
-
-    if (transcriptionResult["status"].ToString() == "completed") {
-        break;
-    } else if (transcriptionResult["status"].ToString() == "error") {
-        throw new Exception($"Transcription failed: {transcriptionResult["error"]}");
-    } else {
-        Thread.Sleep(3000);
-    }
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -470,39 +295,7 @@ EOD;
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-Define a prompt to tell LeMUR to extract action items from this meeting.
-
-```ruby
-prompt = "This is a Product team meeting from 2019-07-09." \
-         "Generate Action Items from the meeting in the following format:" \
-
-         "Action Item Title: A brief, descriptive title that summarizes the action item." \
-         "Assignee: The person who is responsible for completing the action item." \
-         "Due Date: The deadline for completing the action item." \
-         "Status: The current status of the action item (e.g., 'In progress', 'Completed', 'Deferred')." \
-         "Notes: Any additional notes or information about the action item."
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-Define a prompt to tell LeMUR to extract action items from this meeting.
-
-```csharp
-string prompt = @"This is a Product team meeting from 2019-07-09.
-                Generate Action Items from the meeting in the following format:
-
-                Action Item Title: A brief, descriptive title that summarizes the action item.
-                Assignee: The person who is responsible for completing the action item.
-                Due Date: The deadline for completing the action item.
-                Status: The current status of the action item (e.g., 'In progress', 'Completed', 'Deferred').
-                Notes: Any additional notes or information about the action item.";
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -564,52 +357,7 @@ echo $result["response"];
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-Create a JSON payload containing the transcript ID and your `prompt` as part of a POST request to the LeMUR Task endpoint.
-
-```ruby
-data = {
-    "transcript_ids" => [transcript_id],
-    "prompt" => prompt
-}
-
-uri = URI.parse("https://api.assemblyai.com/lemur/v3/generate/task")
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = true
-
-request = Net::HTTP::Post.new(uri.request_uri, headers)
-request.body = data.to_json
-
-result = http.request(request)
-puts result.parsed_response["response"]
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-Create a JSON payload containing the transcript ID and your `prompt` as part of a POST request to the LeMUR Task endpoint.
-
-```csharp
-var data = new Dictionary<string, dynamic>(){
-    { "transcript_ids", new string [] {transcriptId} },
-    { "prompt", prompt }
-};
-
-using (var client = new HttpClient())
-{
-    client.DefaultRequestHeaders.Add("authorization", apiKey);
-    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-    HttpResponseMessage response = await client.PostAsync("https://api.assemblyai.com/lemur/v3/generate/task", content);
-    var responseContent = await response.Content.ReadAsStringAsync();
-    var result = JsonConvert.DeserializeObject<dynamic>(responseContent);
-
-    Console.WriteLine(response.Content.ReadAsAsync<dynamic>().Result.response);
-}
-```
-
-  </Tab>
 
 </Tabs>
 

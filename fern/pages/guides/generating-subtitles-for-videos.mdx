@@ -100,25 +100,7 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-require 'net/http'
-require 'json'
-require 'rest-client'
-require 'httparty'
-```
-
-  </Tab>
-
-<Tab language="csharp" title="C#">
-
-```csharp
-using System.Net.Http;
-using System.Threading;
-```
-
-</Tab>
 
 </Tabs>
 
@@ -182,25 +164,7 @@ $headers = array(
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-base_url = "https://api.assemblyai.com/v2"
-
-headers = {
-    "authorization" => "<YOUR_API_KEY>"
-}
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-string apiKey = "<YOUR_API_KEY>";
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -278,53 +242,7 @@ curl_close($ch);
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-path = "/my_audio.mp3"
-response = RestClient.post("#{base_url}/upload", File.read(path), headers)
-upload_url = JSON.parse(response.body)["upload_url"]
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-public async Task<string> UploadFileAsync(string apiKey, string path)
-{
-    using var client = new HttpClient();
-    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(apiKey);
-
-    using var fileContent = new ByteArrayContent(File.ReadAllBytes(path));
-    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-
-    HttpResponseMessage response;
-    try
-    {
-        response = await client.PostAsync("https://api.assemblyai.com/v2/upload", fileContent);
-    }
-    catch (Exception e)
-    {
-        Console.Error.WriteLine($"Error: {e.Message}");
-        return null;
-    }
-
-    if (response.IsSuccessStatusCode)
-    {
-        string responseBody = await response.Content.ReadAsStringAsync();
-        var json = JObject.Parse(responseBody);
-        return json["upload_url"].ToString();
-    }
-    else
-    {
-        Console.Error.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
-        return null;
-    }
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -386,25 +304,7 @@ $data = array(
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-data = {
-    "audio_url" => upload_url
-}
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-var data = new Dictionary<string, string>(){
-    { "audio_url", upload_url }
-};
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -471,35 +371,7 @@ curl_close($curl);
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-uri = URI.parse("#{base_url}/transcript")
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = true
-
-request = Net::HTTP::Post.new(uri.request_uri, headers)
-request.body = data.to_json
-
-response = http.request(request)
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-using (var client = new HttpClient())
-{
-    client.DefaultRequestHeaders.Add("authorization", apiKey);
-    var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-    HttpResponseMessage response = await client.PostAsync("https://api.assemblyai.com/v2/transcript", content);
-    var responseContent = await response.Content.ReadAsStringAsync();
-    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -602,63 +474,7 @@ while (true) {
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-transcript_id = response.parsed_response["id"]
-polling_endpoint = "https://api.assemblyai.com/v2/transcript/#{transcript_id}"
-
-while true
-    polling_response = HTTParty.get(polling_endpoint, headers: headers)
-    transcription_result = polling_response.parsed_response
-
-    if transcription_result["status"] == "completed"
-        break
-    elsif transcription_result["status"] == "error"
-        raise "Transcription failed: #{transcription_result["error"]}"
-    else
-        sleep(3)
-    end
-end
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-using (var client = new HttpClient())
-{
-    ...
-
-    var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
-
-    string transcriptId = responseJson.id;
-    string pollingEndpoint = $"https://api.assemblyai.com/v2/transcript/{transcriptId}";
-
-    while (true)
-    {
-        var pollingResponse = await client.GetAsync(pollingEndpoint);
-        var pollingResponseContent = await pollingResponse.Content.ReadAsStringAsync();
-        var pollingResponseJson = JsonConvert.DeserializeObject<dynamic>(pollingResponseContent);
-
-        if (pollingResponseJson.status == "completed")
-        {
-            return pollingResponseJson;
-        }
-        else if (pollingResponseJson.status == "error")
-        {
-            throw new Exception($"Transcription failed: {pollingResponseJson.error}");
-        }
-        else
-        {
-            Thread.Sleep(3000);
-        }
-    }
-}
-```
-
-  </Tab>
 
 </Tabs>
 
@@ -785,60 +601,7 @@ echo $subtitlesText
 
   </Tab>
 
-  <Tab language="ruby" title="Ruby">
 
-```ruby
-require 'net/http'
-
-def get_transcript_file(transcript_id, file_format)
-  raise "Unsupported file format: #{file_format}. Please specify 'srt' or 'vtt'." unless ['srt', 'vtt'].include?(file_format)
-
-  url = URI.parse("https://api.assemblyai.com/v2/transcript/#{transcript_id}/#{file_format}")
-
-  http = Net::HTTP.new(url.host, url.port)
-  http.use_ssl = true
-
-  response = http.get(url.path, headers)
-  if response.code.to_i == 200
-    response.body
-  else
-    raise "Failed to retrieve #{file_format} file: #{response.code} #{response.message}"
-  end
-end
-
-subtitles_text = get_transcript_file(transcript_id, "vtt")  # or "srt"
-puts subtitles_text
-```
-
-  </Tab>
-
-  <Tab language="csharp" title="C#">
-
-```csharp
-public async Task<string> ExportSubtitlesAsync(string transcriptId, string format)
-{
-    // The URL of the AssemblyAI API endpoint for exporting subtitles
-    string url = $"https://api.assemblyai.com/v2/transcript/{transcriptId}/{format}";
-
-    // Create a new HttpClient to make the HTTP requests
-    using (var client = new HttpClient())
-    {
-        // Set the "authorization" header with your API key
-        client.DefaultRequestHeaders.Add("authorization", apiKey);
-
-        // Send a GET request to the API endpoint
-        HttpResponseMessage response = await client.GetAsync(url);
-
-        // Read the response content as a string
-        var responseContent = await response.Content.ReadAsStringAsync();
-
-        // Return the subtitles content as a string
-        return responseContent;
-    }
-}
-```
-
-  </Tab>
 
 </Tabs>
 

@@ -16,14 +16,6 @@ npm run-script lint
 
 ## Fern
 
-### SDKs
-
-We use Fern to generate some of the AssemblyAI SDKs.
-
-- [Java SDK](https://github.com/AssemblyAI/assemblyai-java-sdk)
-- [Ruby SDK](https://github.com/AssemblyAI/assemblyai-ruby-sdk)
-- [C# .NET SDK](https://github.com/AssemblyAI/assemblyai-csharp-sdk)
-
 ### Docs
 
 Our documentation is hosted at https://www.assemblyai.com/docs and all of the content lives inside the `fern/` folder.
