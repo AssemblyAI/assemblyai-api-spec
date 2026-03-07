@@ -55,17 +55,6 @@ import fs from "fs-extra";
 
   </Tab>
 
-  <Tab language="php" title="PHP">
-Create a new file and import the necessary libraries for making an HTTP request.
-
-```php
-<?php
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-```
-
-  </Tab>
-
 </Tabs>
 </Step>
 <Step>
@@ -105,20 +94,6 @@ const baseUrl = "https://api.assemblyai.com";
 const headers = {
   authorization: "<YOUR_API_KEY>",
 };
-```
-
-</Tab>
-<Tab language="php" title="PHP">
-
-Set up the API endpoint and headers. The headers should include your API key.
-
-```php
-$base_url = "https://api.assemblyai.com";
-
-$headers = array(
-  "authorization: <YOUR_API_KEY>",
-  "content-type: application/json"
-);
 ```
 
 </Tab>
@@ -165,30 +140,6 @@ const uploadUrl = uploadResponse.data.upload_url;
 ```
 
 </Tab>
-
-<Tab language="php" title="PHP">
-
-Upload your local file to the AssemblyAI API.
-
-```php
-$path = "/my_audio.mp3";
-
-$ch = curl_init();
-
-curl_setopt($ch, CURLOPT_URL, $base_url . "/v2/upload");
-curl_setopt($ch, CURLOPT_POST, 1);
-curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-
-$response = curl_exec($ch);
-$response_data = json_decode($response, true);
-$upload_url = $response_data["upload_url"];
-
-curl_close($ch);
-```
-
-</Tab>
 </Tabs>
 </Step>
 <Step>
@@ -230,19 +181,6 @@ const data = {
 ```
 
 </Tab>
-<Tab language="php" title="PHP">
-
-Use the `upload_url` returned by the AssemblyAI API to create a JSON payload containing the `audio_url` parameter.
-
-We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
-
-```php
-$data = array(
-    "audio_url" => $upload_url // You can also use a URL to an audio or video file on the web
-);
-```
-
-</Tab>
 
 </Tabs>
 </Step>
@@ -274,27 +212,6 @@ Make a `POST` request to the AssemblyAI API endpoint with the payload and header
 ```javascript
 const url = `${baseUrl}/v2/transcript`;
 const response = await axios.post(url, data, { headers: headers });
-```
-
-</Tab>
-<Tab language="php" title="PHP">
-
-Make a `POST` request to the AssemblyAI API endpoint with the payload and headers.
-
-```php
-$url = $base_url . "/v2/transcript";
-$curl = curl_init($url);
-
-curl_setopt($curl, CURLOPT_POST, true);
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-$response = curl_exec($curl);
-
-$response = json_decode($response, true);
-
-curl_close($curl);
 ```
 
 </Tab>
@@ -363,37 +280,6 @@ while (true) {
   } else {
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
-}
-```
-
-</Tab>
-
-<Tab language="php" title="PHP">
-
-After making the request, you'll receive an ID for the transcription. Use it to poll the API every few seconds to check the status of the transcript job. Once the status is `completed`, you can retrieve the transcript from the API response.
-
-```php
-$transcript_id = $response['id'];
-echo "Transcript ID: $transcript_id\n";
-
-$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
-
-while (true) {
-    $polling_response = curl_init($polling_endpoint);
-
-    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
-
-    $transcription_result = json_decode(curl_exec($polling_response), true);
-
-    if ($transcription_result['status'] === "completed") {
-        echo $transcription_result['text'];
-        break;
-    } else if ($transcription_result['status'] === "error") {
-        throw new Exception("Transcription failed: " . $transcription_result['error']);
-    } else {
-        sleep(3);
-    }
 }
 ```
 

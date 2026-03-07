@@ -41,24 +41,6 @@ npm install assemblyai
 
   </Tab>
 
-  <Tab language="php" title="PHP">
-
-Create a new file and set your AssemblyAI API key.
-
-```php
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-$base_url = "https://api.assemblyai.com/v2";
-
-$headers = array(
-  "authorization: <YOUR_API_KEY>",
-  "content-type: application/json"
-);
-```
-
-  </Tab>
-
 </Tabs>
 
 </Step>
@@ -93,30 +75,6 @@ const client = new AssemblyAI({
 
   </Tab>
 
-  <Tab language="php" title="PHP">
-
-Upload your local file to the AssemblyAI API.
-
-```php
-$path = "meeting.mp3";
-
-$ch = curl_init();
-
-curl_setopt($ch, CURLOPT_URL, $base_url . "/upload");
-curl_setopt($ch, CURLOPT_POST, 1);
-curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($path));
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-
-$response = curl_exec($ch);
-$response_data = json_decode($response, true);
-$upload_url = $response_data["upload_url"];
-
-curl_close($ch);
-```
-
-  </Tab>
-
 </Tabs>
 
 </Step>
@@ -146,30 +104,6 @@ const params = { audio: audioUrl };
 
   </Tab>
 
-  <Tab language="php" title="PHP">
-
-Submit a transcription with the `audio_url` parameter set to the value of `upload_url`.
-
-```php
-$data = array(
-    "audio_url" => upload_url
-);
-
-$url = $base_url . "/transcript";
-$curl = curl_init($url);
-
-curl_setopt($curl, CURLOPT_POST, true);
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-$response = curl_exec($curl);
-
-curl_close($curl);
-```
-
-  </Tab>
-
 </Tabs>
 
 </Step>
@@ -195,34 +129,6 @@ Pass the URL or file path to `client.transcripts.transcribe()`. You can access t
 const transcript = await client.transcripts.transcribe({
   audio: "meeting.mp3",
 });
-```
-
-  </Tab>
-
-  <Tab language="php" title="PHP">
-
-After making the request, you'll receive an ID for the transcription. Use it to poll the API every few seconds to check the status of the transcript job. Once the status is `completed`, you can retrieve the transcript from the API response.
-
-```php
-$transcript_id = $response['id'];
-$polling_endpoint = "https://api.assemblyai.com/v2/transcript/" . $transcript_id;
-
-while (true) {
-    $polling_response = curl_init($polling_endpoint);
-
-    curl_setopt($polling_response, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($polling_response, CURLOPT_RETURNTRANSFER, true);
-
-    $transcription_result = json_decode(curl_exec($polling_response), true);
-
-    if ($transcription_result['status'] === 'completed') {
-        break;
-    } else if ($transcription_result['status'] === 'error') {
-        throw new Exception("Transcription failed: " . $transcription_result['error']);
-    } else {
-        sleep(3);
-    }
-}
 ```
 
   </Tab>
@@ -268,25 +174,6 @@ const prompt = `This is a Product team meeting from 2019-07-09.
 
   </Tab>
 
-  <Tab language="php" title="PHP">
-
-Define a prompt to tell LeMUR to extract action items from this meeting.
-
-```php
-$prompt = <<<EOD
-This is a Product team meeting from 2019-07-09.
-Generate Action Items from the meeting in the following format:
-
-Action Item Title: A brief, descriptive title that summarizes the action item.
-Assignee: The person who is responsible for completing the action item.
-Due Date: The deadline for completing the action item.
-Status: The current status of the action item (e.g., "In progress", "Completed", "Deferred").
-Notes: Any additional notes or information about the action item.
-EOD;
-```
-
-  </Tab>
-
 </Tabs>
 
 </Step>
@@ -317,32 +204,6 @@ const { response } = await client.lemur.task({
 });
 
 console.log(response);
-```
-
-  </Tab>
-
-  <Tab language="php" title="PHP">
-
-Create a JSON payload containing the transcript ID and your `prompt` as part of a POST request to the LeMUR Task endpoint.
-
-```php
-$data = array(
-    "transcript_ids" => [$transcript_id],
-    "prompt" => $prompt
-);
-
-$url = "https://api.assemblyai.com/lemur/v3/generate/task";
-$curl = curl_init($url);
-
-curl_setopt($curl, CURLOPT_POST, true);
-curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($curl, CURL_RETURNTRANSFER, true);
-
-$result = json_decode(curl_exec($curl), true);
-curl_close($curl);
-
-echo $result["response"];
 ```
 
   </Tab>
