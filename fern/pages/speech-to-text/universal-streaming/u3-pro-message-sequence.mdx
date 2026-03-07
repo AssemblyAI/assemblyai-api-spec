@@ -1,7 +1,7 @@
 ---
-title: "Universal-3 Pro: Message Sequence Breakdown"
+title: "Universal-3 Pro Streaming: Message Sequence Breakdown"
 hide-nav-links: true
-description: "The anatomy of a Universal-3 Pro streaming session from session start to turn finalization"
+description: "The anatomy of a Universal-3 Pro Streaming session from session start to turn finalization"
 ---
 
 <Note>
@@ -9,7 +9,22 @@ description: "The anatomy of a Universal-3 Pro streaming session from session st
   object](/docs/streaming#turn-object) explanation.
 </Note>
 
-Universal-3 Pro handles message sequences differently from [Universal Streaming](/docs/streaming/message-sequence). Instead of emitting word-by-word partial transcripts as audio is processed, Universal-3 Pro produces transcripts only during silence periods. Key differences include:
+## Understanding `transcript` vs `utterance`
+
+Before walking through the message sequence, it's important to understand the difference between the `transcript` and `utterance` fields:
+
+- **`transcript`** — The full transcript of the current turn up to this point in time.
+- **`utterance`** — Only populated on the `end_of_turn: true` message, where it always equals `transcript`. On all other Turn messages, `utterance` is an empty string `""`.
+
+<Note>
+  **Key takeaway:** For Universal-3 Pro Streaming, you can always use `transcript` — the
+  `utterance` field provides no additional information beyond what `transcript`
+  already contains. This field exists for API consistency with
+  Universal-Streaming, where utterance boundaries can fire independently of turn
+  boundaries, typically for the purposes of eager LLM inference.
+</Note>
+
+Universal-3 Pro Streaming handles message sequences differently from [Universal Streaming](/docs/streaming/message-sequence). Instead of emitting word-by-word partial transcripts as audio is processed, Universal-3 Pro Streaming produces transcripts only during silence periods. Key differences include:
 
 - **Partials only during silence** — transcripts are emitted when the speaker pauses, not on every audio frame.
 - **Formatting is built in** — `turn_is_formatted` is `true` on end-of-turn transcripts. There is no separate formatting step.
@@ -46,15 +61,16 @@ Before any Turn messages are sent, the server sends a `SpeechStarted` message in
 
 ## Partial transcript
 
-The speaker says "My name is" and pauses briefly. Because the speaker has stopped talking but no terminal punctuation has been detected, Universal-3 Pro emits a **partial transcript**.
+The speaker says "My name is" and pauses briefly. Because the speaker has stopped talking but no terminal punctuation has been detected, Universal-3 Pro Streaming emits a **partial transcript**.
 
 Notice that:
+
 - `end_of_turn` is `false` — the turn has not ended yet.
 - `turn_is_formatted` is `false` — this is not a finalized transcript.
 - `end_of_turn_confidence` is `0` — no terminal punctuation detected.
 - All words have `word_is_final: false` — the transcript may be revised in the final message.
 - The `transcript` ends with an em dash (`—`), indicating the utterance is incomplete.
-- The `utterance` field is an empty string because the turn has not ended.
+- The `utterance` field is an empty string because the turn has not ended. Use `transcript` to access the current partial text.
 
 ```json
 {
@@ -95,9 +111,10 @@ Each silence period produces **at most one partial**. If the speaker continues p
 
 ## End of turn (Final transcript)
 
-The speaker continues and says "Sonny." — completing the sentence with a period. Universal-3 Pro detects the terminal punctuation and ends the turn with a fully formatted final transcript.
+The speaker continues and says "Sonny." — completing the sentence with a period. Universal-3 Pro Streaming detects the terminal punctuation and ends the turn with a fully formatted final transcript.
 
 Notice how the final transcript differs from the partial:
+
 - `end_of_turn` is now `true` — the turn has ended.
 - `turn_is_formatted` is `true` — this is a finalized, formatted transcript.
 - `end_of_turn_confidence` is `1` — terminal punctuation triggered the end of turn.
@@ -176,12 +193,12 @@ For more details on how partials work and how to tune turn detection timing, see
 
 ## Comparison with Universal Streaming
 
-| Behavior | Universal-3 Pro | Universal Streaming |
-| --- | --- | --- |
-| **Partial frequency** | At most one per silence period | Every audio frame (word-by-word) |
-| **Formatting** | Built in to every end-of-turn transcript | Separate `turn_is_formatted` message after end of turn |
-| **Turn detection** | Punctuation-based (`min_turn_silence` / `max_turn_silence`) | Confidence-based (`end_of_turn_confidence_threshold`) |
-| **`end_of_turn_confidence`** | Always `1` when triggered by punctuation | Varies based on model confidence |
-| **Words in partials** | All `word_is_final: false` | Mix of `true` and `false` as words are finalized incrementally |
+| Behavior                     | Universal-3 Pro Streaming                                   | Universal Streaming                                            |
+| ---------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| **Partial frequency**        | At most one per silence period                              | Every audio frame (word-by-word)                               |
+| **Formatting**               | Built in to every end-of-turn transcript                    | Separate `turn_is_formatted` message after end of turn         |
+| **Turn detection**           | Punctuation-based (`min_turn_silence` / `max_turn_silence`) | Confidence-based (`end_of_turn_confidence_threshold`)          |
+| **`end_of_turn_confidence`** | Always `1` when triggered by punctuation                    | Varies based on model confidence                               |
+| **Words in partials**        | All `word_is_final: false`                                  | Mix of `true` and `false` as words are finalized incrementally |
 
 For the Universal Streaming message sequence, see [Message Sequence](/docs/streaming/message-sequence).
