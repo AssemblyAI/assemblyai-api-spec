@@ -2,6 +2,10 @@ name: ci
 
 on: [push]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -11,6 +15,11 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -39,8 +48,16 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Install Fern
-        run: npm install -g fern-api
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Check Fern API is valid
-        run: fern check
+        run: pnpm exec fern check
