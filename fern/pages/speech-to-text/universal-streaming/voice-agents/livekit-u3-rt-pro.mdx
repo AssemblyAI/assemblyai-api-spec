@@ -18,11 +18,13 @@ This guide covers integrating AssemblyAI's **Universal-3 Pro Streaming** speech-
     
   However, you can always override these by passing your own preferred values explicitly.
 
-  Misconfiguring these parameters is the most common cause of poor performance. Read the [Turn detection](#turn-detection) section below for the recommended values per turn detection mode.
+Misconfiguring these parameters is the most common cause of poor performance. Read the [Turn detection](#turn-detection) section below for the recommended values per turn detection mode.
+
 </Warning>
 
 <Tip>
-  Support for **Universal-3 Pro Streaming** requires `livekit-agents` version [**1.4.4**](https://pypi.org/project/livekit-agents/1.4.4/) or later.
+  Support for **Universal-3 Pro Streaming** requires `livekit-agents` version
+  [**1.4.4**](https://pypi.org/project/livekit-agents/1.4.4/) or later.
 </Tip>
 
 ## Turn detection
@@ -37,20 +39,21 @@ This means the `min_turn_silence` and `max_turn_silence` parameters you pass to 
 
 **Universal-3 Pro Streaming's** endpointing is controlled by two AssemblyAI API parameters — `min_turn_silence` and `max_turn_silence` — that you pass to the STT plugin. These are separate from LiveKit's `min_endpointing_delay` and `max_endpointing_delay`.
 
-| Parameter | AssemblyAI API default | LiveKit plugin default | Description |
-| --- | --- | --- | --- |
-| `min_turn_silence` | `100` ms | `100` ms | Silence before a speculative end-of-turn check. If terminal punctuation (`.` `?` `!`) is found, the turn ends. If not, a partial is emitted and the turn continues. |
-| `max_turn_silence` | **`1000`** ms | **`100`** ms | Maximum silence before forcing the turn to end, regardless of punctuation. |
+| Parameter          | AssemblyAI API default | LiveKit plugin default | Description                                                                                                                                                         |
+| ------------------ | ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `min_turn_silence` | `100` ms               | `100` ms               | Silence before a speculative end-of-turn check. If terminal punctuation (`.` `?` `!`) is found, the turn ends. If not, a partial is emitted and the turn continues. |
+| `max_turn_silence` | **`1000`** ms          | **`100`** ms           | Maximum silence before forcing the turn to end, regardless of punctuation.                                                                                          |
 
 The LiveKit plugin defaults are optimized for third-party turn detection models, where you want transcripts handed off as fast as possible. When using `turn_detection="stt"`, you should explicitly set `max_turn_silence=1000` if you'd like to mimic the behavior of streaming directly to the API without LiveKit.
 
 <Note title="Tuning endpointing parameters">
   **These are the default values used when no parameters are explicitly provided.** You will likely need to experiment with different values depending on your use case:
 
-  - **Increase `min_turn_silence`** — when brief pauses cause the speculative EOT check to fire too early, ending turns on terminal punctuation before the user has finished speaking.
-  - **Increase `max_turn_silence`** — when the forced turn end is cutting off users mid-thought or splitting entities like phone numbers across turns, a higher value lets the model wait longer before forcing the turn to end when the model is unsure.
+- **Increase `min_turn_silence`** — when brief pauses cause the speculative EOT check to fire too early, ending turns on terminal punctuation before the user has finished speaking.
+- **Increase `max_turn_silence`** — when the forced turn end is cutting off users mid-thought or splitting entities like phone numbers across turns, a higher value lets the model wait longer before forcing the turn to end when the model is unsure.
 
-  See the [Entity splitting tradeoff](#entity-splitting-tradeoff) section for examples.
+See the [Entity splitting tradeoff](#entity-splitting-tradeoff) section for examples.
+
 </Note>
 
 ### STT-based Turn Detection (recommended)
@@ -63,10 +66,10 @@ In this mode, we recommend explicitly setting `min_turn_silence=100` and `max_tu
 
 **Recommended starting parameters** (set on `assemblyai.STT()`, not on `AgentSession`):
 
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `min_turn_silence` | `100` ms | Silence duration before a speculative end-of-turn (EOT) check fires. |
-| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end. |
+| Parameter          | Default   | Description                                                          |
+| ------------------ | --------- | -------------------------------------------------------------------- |
+| `min_turn_silence` | `100` ms  | Silence duration before a speculative end-of-turn (EOT) check fires. |
+| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end.                      |
 
 **How it works:**
 
@@ -79,7 +82,8 @@ In this mode, we recommend explicitly setting `min_turn_silence=100` and `max_tu
 <Warning title="`min_endpointing_delay` is additive in STT mode">
   LiveKit's `min_endpointing_delay` (default **0.5 seconds**) is applied **on top of** AssemblyAI's own endpointing. In STT mode, this delay starts *after* the STT end-of-speech signal, meaning it adds up to `500ms` of extra latency by default.
 
-  **Set `min_endpointing_delay=0`** to avoid this. AssemblyAI's own endpointing parameters (`min_turn_silence` and `max_turn_silence`) already control the timing, so an additional delay on the LiveKit side is unnecessary latency.
+**Set `min_endpointing_delay=0`** to avoid this. AssemblyAI's own endpointing parameters (`min_turn_silence` and `max_turn_silence`) already control the timing, so an additional delay on the LiveKit side is unnecessary latency.
+
 </Warning>
 
 ```python
@@ -108,9 +112,9 @@ The LiveKit plugin defaults of `min_turn_silence=100` and `max_turn_silence=100`
 
 **`MultilingualModel` parameters** (set on `AgentSession`, not on the STT plugin):
 
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `min_endpointing_delay` | `0.5` s | Time to wait before committing a turn when the model predicts a likely boundary. |
+| Parameter               | Default | Description                                                                                                                |
+| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `min_endpointing_delay` | `0.5` s | Time to wait before committing a turn when the model predicts a likely boundary.                                           |
 | `max_endpointing_delay` | `3.0` s | Maximum time to wait when the model predicts the user will continue speaking. Has no effect without a turn detector model. |
 
 **How it works:**
@@ -141,6 +145,7 @@ session = AgentSession(
 ### Other turn detection modes
 
 - **`vad`**:
+
   - Detect end of turn from speech and silence data alone using [Silero VAD](https://docs.livekit.io/agents/logic/turns/vad/).
   - Turn boundaries are determined purely by voice activity without semantic context.
   - AssemblyAI's turn detection parameters still control when transcripts are emitted, but it is recommended to leave them at the plugin defaults (`min_turn_silence=100`, `max_turn_silence=100`) so transcripts arrive as quickly as possible.
@@ -158,7 +163,7 @@ Lower `min_turn_silence` and `max_turn_silence` values produce faster transcript
 
 - Speculative check fires too early, splitting entities on punctuation.
 
-- **Example:** *User spells out an email address with brief pauses between parts. The speculative check fires at 100ms of silence, and the model adds terminal punctuation to each segment, ending the turn prematurely.*
+- **Example:** _User spells out an email address with brief pauses between parts. The speculative check fires at 100ms of silence, and the model adds terminal punctuation to each segment, ending the turn prematurely._
 
 ```python
 # With (min_turn_silence=100, max_turn_silence=1000)
@@ -174,7 +179,7 @@ Lower `min_turn_silence` and `max_turn_silence` values produce faster transcript
 
 - Forced turn-end cuts off user mid-thought.
 
-- **Example:** *User pauses longer than 1 second to think mid-sentence. The forced end fires at 1000ms, splitting the utterance into two turns regardless of punctuation.*
+- **Example:** _User pauses longer than 1 second to think mid-sentence. The forced end fires at 1000ms, splitting the utterance into two turns regardless of punctuation._
 
 ```python
 # With (min_turn_silence=100, max_turn_silence=1000)
@@ -188,9 +193,13 @@ Lower `min_turn_silence` and `max_turn_silence` values produce faster transcript
 **Universal-3 Pro Streaming's** formatting is significantly better when it has full context in a single turn — email addresses, phone numbers, credit card numbers, and physical addresses all benefit from this.
 
 <Note>
-  LLMs downstream can usually piece together split entities, but if your use case involves alphanumeric dictation or entity extraction, consider increasing `min_turn_silence` and `max_turn_silence` during those portions of the conversation.
-  
-  You can [update configuration mid-stream](#updating-configuration-mid-stream) to raise `max_turn_silence` temporarily (e.g., to `2000`–`4000` ms) when expecting entity input, then lower it again afterward.
+  LLMs downstream can usually piece together split entities, but if your use
+  case involves alphanumeric dictation or entity extraction, consider increasing
+  `min_turn_silence` and `max_turn_silence` during those portions of the
+  conversation. You can [update configuration
+  mid-stream](#updating-configuration-mid-stream) to raise `max_turn_silence`
+  temporarily (e.g., to `2000`–`4000` ms) when expecting entity input, then
+  lower it again afterward.
 </Note>
 
 Even when using third-party turn detection, you may want to increase `min_turn_silence` or `max_turn_silence` if users are likely to speak slowly or dictate entities. While this adds latency, it improves accuracy by giving the model more audio context before emitting a transcript and keeping the full entity complete within the same turn.
@@ -283,8 +292,11 @@ pip install "livekit-agents[assemblyai,silero,codecs]~=1.0" \
 ```
 
 <Warning>
-  Make sure to install the latest version of `livekit-agents` from PyPI (support for **Universal-3 Pro Streaming** was added in [livekit-agents@1.4.4](https://github.com/livekit/agents/releases/tag/livekit-agents%401.4.4)).
-  Older versions of the plugin will not recognize the `u3-rt-pro` model, resulting in a validation error.
+  Make sure to install the latest version of `livekit-agents` from PyPI (support
+  for **Universal-3 Pro Streaming** was added in
+  [livekit-agents@1.4.4](https://github.com/livekit/agents/releases/tag/livekit-agents%401.4.4)).
+  Older versions of the plugin will not recognize the `u3-rt-pro` model,
+  resulting in a validation error.
 </Warning>
 
 If you plan to use LiveKit turn detection with `MultilingualModel()`, you also need to install the turn detector plugin:
@@ -296,9 +308,9 @@ pip install "livekit-plugins-turn-detector~=1.0"
 <Note>
   Noise cancellation can introduce audio artifacts that negatively impact
   transcription quality. In most cases, the artifacts introduced by noise
-  cancellation cause more harm than the background noise itself, so we
-  recommend not adding any audio pre-processing before it reaches
-  **Universal-3 Pro Streaming**.
+  cancellation cause more harm than the background noise itself, so we recommend
+  not adding any audio pre-processing before it reaches **Universal-3 Pro
+  Streaming**.
 </Note>
 
 For a complete voice agent, you will also need to install LLM and TTS plugins for your chosen providers. See the [LiveKit plugins documentation](https://docs.livekit.io/agents/plugins/) for available options.
@@ -316,7 +328,9 @@ ASSEMBLYAI_API_KEY=your_assemblyai_key
 ```
 
 <Tip>
-  You can obtain an AssemblyAI API key by signing up [here](https://www.assemblyai.com/dashboard/signup) and navigating to the [API Keys tab](https://www.assemblyai.com/dashboard/api-keys) of the dashboard.
+  You can obtain an AssemblyAI API key by signing up
+  [here](https://www.assemblyai.com/dashboard/signup) and navigating to the [API
+  Keys tab](https://www.assemblyai.com/dashboard/api-keys) of the dashboard.
 </Tip>
 
 ### Recommended configuration
@@ -409,30 +423,43 @@ These are the key parameters to tune for LiveKit when using **Universal-3 Pro St
 </ParamField>
 
 <ParamField path="keyterms_prompt" type="list of strings">
-  List of terms to boost recognition for. Appended to the default prompt automatically.
+  List of terms to boost recognition for. Appended to the default prompt
+  automatically.
 </ParamField>
 
 <ParamField path="prompt" type="string">
-  Custom transcription instructions for the model. When not provided, a default prompt optimized for native turn detection is automatically applied.
+  Custom transcription instructions for the model. When not provided, a default
+  prompt optimized for native turn detection is automatically applied.
   <Warning>
-    Prompting is a **beta feature** for **Universal-3 Pro Streaming**. Start with no prompt to establish baseline performance before experimenting with custom prompts.
+    Prompting is a **beta feature** for **Universal-3 Pro Streaming**. Start
+    with no prompt to establish baseline performance before experimenting with
+    custom prompts.
   </Warning>
 </ParamField>
 
 <ParamField path="min_turn_silence" type="integer" default="100">
-  Milliseconds of silence before a speculative end-of-turn check. When the check fires, the model looks for terminal punctuation to decide whether the turn has ended.
+  Milliseconds of silence before a speculative end-of-turn check. When the check
+  fires, the model looks for terminal punctuation to decide whether the turn has
+  ended.
 </ParamField>
 
 <ParamField path="max_turn_silence" type="integer" default="100">
-  Maximum milliseconds of silence before the turn is forced to end, regardless of punctuation. **The LiveKit plugin defaults to `100`.** Set to `1000` when using `turn_detection="stt"`.
+  Maximum milliseconds of silence before the turn is forced to end, regardless
+  of punctuation. **The LiveKit plugin defaults to `100`.** Set to `1000` when
+  using `turn_detection="stt"`.
 </ParamField>
 
 <ParamField path="vad_threshold" type="float" default="0.3">
-  AssemblyAI's internal Silero VAD threshold. **Universal-3 Pro Streaming** defaults to `0.3`, unlike Universal-Streaming's `0.4`. Align with LiveKit's Silero `activation_threshold` for consistent behavior.
+  AssemblyAI's internal Silero VAD threshold. **Universal-3 Pro Streaming**
+  defaults to `0.3`, unlike Universal-Streaming's `0.4`. Align with LiveKit's
+  Silero `activation_threshold` for consistent behavior.
 </ParamField>
 
 <ParamField path="language_detection" type="boolean" default="true">
-  **Universal-3 Pro Streaming** code-switches natively between supported languages. This parameter controls whether `language_code` and `language_confidence` are included in turn messages. Defaults to `true` in the LiveKit plugin, but `false` when using the API directly.
+  **Universal-3 Pro Streaming** code-switches natively between supported
+  languages. This parameter controls whether `language_code` and
+  `language_confidence` are included in turn messages. Defaults to `true` in the
+  LiveKit plugin, but `false` when using the API directly.
 </ParamField>
 
 ### General STT parameters
@@ -452,33 +479,35 @@ These parameters apply to all AssemblyAI streaming models and can remain the sam
 These parameters apply to the `universal-streaming-english` and `universal-streaming-multilingual` AssemblyAI streaming models, but **do not affect Universal-3 Pro Streaming**:
 
 <ParamField path="end_of_turn_confidence_threshold" type="float" default="0.4">
-  Confidence threshold for end-of-turn detection. **Universal-3 Pro Streaming** uses punctuation-based turn detection instead.
+  Confidence threshold for end-of-turn detection. **Universal-3 Pro Streaming**
+  uses punctuation-based turn detection instead.
 </ParamField>
 
 <ParamField path="format_turns" type="boolean" default="false">
-  Whether to return formatted final transcripts. **Universal-3 Pro Streaming** always returns formatted transcripts, so this parameter no longer applies.
+  Whether to return formatted final transcripts. **Universal-3 Pro Streaming**
+  always returns formatted transcripts, so this parameter no longer applies.
 </ParamField>
 
 ## Troubleshooting
 
-| Issue | Cause | Solution |
-| --- | --- | --- |
-| Extra latency with `turn_detection="stt"` | LiveKit's `min_endpointing_delay` is additive in STT mode | Set `min_endpointing_delay=0` on `AgentSession` |
-| No interruption handling | Missing VAD | Ensure `vad=silero.VAD` is set, with `activation_threshold` equal to `vad_threshold` (default `0.3`) |
-| Turn over-segmentation | `min_turn_silence` too low | Increase from `100` to `200`–`500` |
-| Entities split across turns | `max_turn_silence` too low | Increase `max_turn_silence` (e.g., `1500`–`3500`) |
-| Latency on non-terminal utterances | `max_turn_silence` too high | Lower `max_turn_silence` |
+| Issue                                     | Cause                                                     | Solution                                                                                             |
+| ----------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Extra latency with `turn_detection="stt"` | LiveKit's `min_endpointing_delay` is additive in STT mode | Set `min_endpointing_delay=0` on `AgentSession`                                                      |
+| No interruption handling                  | Missing VAD                                               | Ensure `vad=silero.VAD` is set, with `activation_threshold` equal to `vad_threshold` (default `0.3`) |
+| Turn over-segmentation                    | `min_turn_silence` too low                                | Increase from `100` to `200`–`500`                                                                   |
+| Entities split across turns               | `max_turn_silence` too low                                | Increase `max_turn_silence` (e.g., `1500`–`3500`)                                                    |
+| Latency on non-terminal utterances        | `max_turn_silence` too high                               | Lower `max_turn_silence`                                                                             |
 
 ## Migration from standard AssemblyAI STT
 
 If you are migrating from the standard AssemblyAI streaming model:
 
-| Change | From | To |
-| --- | --- | --- |
-| Model | `assemblyai.STT()` | `assemblyai.STT(model="u3-rt-pro")` |
-| Turn detection | `turn_detection="stt"` or `EnglishModel()` | `turn_detection="stt"` or `MultilingualModel()` |
-| VAD | Optional | Set `vad=silero.VAD.load()` to match `vad_threshold` |
-| `min_turn_silence` | `400` (old default) | `100` (new default) |
-| `max_turn_silence` | `1280` (old default) | `1000` (API default) or `100` (with 3rd-party turn detector) |
-| `end_of_turn_confidence_threshold` | Configurable | **Not applicable** — **Universal-3 Pro Streaming** uses punctuation-based turn detection |
-| `min_endpointing_delay` | Default `0.5` | Set to `0` when using `turn_detection="stt"` |
+| Change                             | From                                       | To                                                                                       |
+| ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Model                              | `assemblyai.STT()`                         | `assemblyai.STT(model="u3-rt-pro")`                                                      |
+| Turn detection                     | `turn_detection="stt"` or `EnglishModel()` | `turn_detection="stt"` or `MultilingualModel()`                                          |
+| VAD                                | Optional                                   | Set `vad=silero.VAD.load()` to match `vad_threshold`                                     |
+| `min_turn_silence`                 | `400` (old default)                        | `100` (new default)                                                                      |
+| `max_turn_silence`                 | `1280` (old default)                       | `1000` (API default) or `100` (with 3rd-party turn detector)                             |
+| `end_of_turn_confidence_threshold` | Configurable                               | **Not applicable** — **Universal-3 Pro Streaming** uses punctuation-based turn detection |
+| `min_endpointing_delay`            | Default `0.5`                              | Set to `0` when using `turn_detection="stt"`                                             |
