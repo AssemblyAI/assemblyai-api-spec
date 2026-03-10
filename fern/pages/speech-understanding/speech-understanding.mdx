@@ -4,12 +4,12 @@ description: "Identify speakers by name or role in your transcript"
 hidden: true
 ---
 
-{/* @api-info
+{/_ @api-info
 product: Pre-recorded STT (Speech Understanding)
 speech_models: ["universal-3-pro", "universal-2"]
 api-endpoint: POST https://api.assemblyai.com/v2/transcript
 description: Identify speakers by name or role in pre-recorded audio transcripts. Only available with pre-recorded (async) transcription.
-*/}
+_/}
 
 import { LanguageTable } from "../../assets/components/LanguagesTable";
 
@@ -683,7 +683,7 @@ result = requests.post(
 
 ### Adding speaker metadata with `speakers`
 
-For more accurate speaker identification, you can use the `speakers` parameter instead of `known_values`. The `speakers` parameter lets you provide additional metadata about each speaker, including a `description` that helps the model identify speakers based on conversational context.
+For more accurate speaker identification, you can use the `speakers` parameter instead of `known_values`. The `speakers` parameter lets you provide additional metadata about each speaker to help the model identify speakers based on conversational context.
 
 This is particularly useful when:
 
@@ -691,7 +691,11 @@ This is particularly useful when:
 - You want to provide contextual clues about what each speaker typically discusses
 - You need more precise identification in complex multi-speaker scenarios
 
-#### Example with roles and descriptions
+Each speaker object must include either a `name` or `role` (depending on `speaker_type`). Beyond that, you can add any additional properties you want. The `name` and `role` fields are reserved as strings, but all other properties are flexible and can be any structure.
+
+#### Simple usage
+
+At its simplest, you can provide a `description` alongside each speaker's name or role:
 
 ```python
 # For Method 1 (transcribe and identify in one request):
@@ -755,7 +759,9 @@ result = requests.post(
 ).json()
 ```
 
-#### Example with names and descriptions
+#### Advanced usage
+
+For even more fine-tuned identification, you can include any additional custom properties on each speaker object, such as `company`, `title`, `department`, or any other fields that help describe the speaker:
 
 ```python
 data = {
@@ -768,11 +774,39 @@ data = {
         "speakers": [
           {
             "name": "Michel Martin",
-            "description": "Hosts the program and interviews the guests"
+            "description": "Hosts the program and interviews the guests",
+            "company": "NPR",
+            "title": "Host Morning Edition"
           },
           {
             "name": "Peter DeCarlo",
-            "description": "Answers questions from the interview"
+            "description": "Answers questions from the interview",
+            "company": "Johns Hopkins University",
+            "title": "Professor and Vice Chair of Environmental Health and Engineering"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+You can also use custom properties with role-based identification:
+
+```python
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "role",
+        "speakers": [
+          {
+            "role": "sales",
+            "description": "Provides information about product to make a sale",
+            "company": "Rilla",
+            "title": "Sales manager"
           }
         ]
       }
@@ -783,9 +817,9 @@ data = {
 
 <Note>
   The `speakers` parameter is an alternative to `known_values`. Use `speakers`
-  when you want to provide descriptions alongside names or roles to improve
-  identification accuracy. Use `known_values` when you only need to provide a
-  simple list of names or roles without additional context.
+  when you want to provide descriptions and additional metadata alongside names
+  or roles to improve identification accuracy. Use `known_values` when you only
+  need to provide a simple list of names or roles without additional context.
 </Note>
 
 ## API reference
@@ -854,17 +888,18 @@ curl -X POST "https://llm-gateway.assemblyai.com/v1/understanding" \
 
 #### Request parameters
 
-| Key                                                   | Type   | Required?   | Description                                                                                                                                                                                                                                        |
-| ----------------------------------------------------- | ------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `speech_understanding`                                | object | Yes         | Container for speech understanding requests.                                                                                                                                                                                                       |
-| `speech_understanding.request`                        | object | Yes         | The understanding request configuration.                                                                                                                                                                                                           |
-| `speech_understanding.request.speaker_identification` | object | Yes         | Speaker identification configuration.                                                                                                                                                                                                              |
-| `speaker_identification.speaker_type`                 | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                                                                                                     |
-| `speaker_identification.known_values`                 | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role" and `speakers` is not provided. Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. Use `known_values` or `speakers`, not both. |
-| `speaker_identification.speakers`                     | array  | Conditional | An array of speaker objects with metadata. Use as an alternative to `known_values` when you want to provide additional context about each speaker. Use `speakers` or `known_values`, not both.                                                     |
-| `speaker_identification.speakers[].role`              | string | Conditional | The role of the speaker. Required when `speaker_type` is "role".                                                                                                                                                                                   |
-| `speaker_identification.speakers[].name`              | string | Conditional | The name of the speaker. Required when `speaker_type` is "name".                                                                                                                                                                                   |
-| `speaker_identification.speakers[].description`       | string | No          | A description of the speaker to help the model identify them based on conversational context.                                                                                                                                                      |
+| Key                                                   | Type   | Required?   | Description                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------- | ------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `speech_understanding`                                | object | Yes         | Container for speech understanding requests.                                                                                                                                                                                                                                            |
+| `speech_understanding.request`                        | object | Yes         | The understanding request configuration.                                                                                                                                                                                                                                                |
+| `speech_understanding.request.speaker_identification` | object | Yes         | Speaker identification configuration.                                                                                                                                                                                                                                                   |
+| `speaker_identification.speaker_type`                 | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                                                                                                                                          |
+| `speaker_identification.known_values`                 | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role" and `speakers` is not provided. Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. Use `known_values` or `speakers`, not both.                                      |
+| `speaker_identification.speakers`                     | array  | Conditional | An array of speaker objects with metadata. Use as an alternative to `known_values` when you want to provide additional context about each speaker. You can include any additional custom properties beyond `name`/`role` and `description`. Use `speakers` or `known_values`, not both. |
+| `speaker_identification.speakers[].role`              | string | Conditional | The role of the speaker. Required when `speaker_type` is "role".                                                                                                                                                                                                                        |
+| `speaker_identification.speakers[].name`              | string | Conditional | The name of the speaker. Required when `speaker_type` is "name".                                                                                                                                                                                                                        |
+| `speaker_identification.speakers[].description`       | string | No          | A description of the speaker to help the model identify them based on conversational context.                                                                                                                                                                                           |
+| `speaker_identification.speakers[].<custom_property>` | any    | No          | Any additional custom properties (e.g., `company`, `title`, `department`) to provide more context about the speaker. The `name` and `role` fields are reserved as strings, but all other properties are flexible.                                                                       |
 
 ### Response
 
