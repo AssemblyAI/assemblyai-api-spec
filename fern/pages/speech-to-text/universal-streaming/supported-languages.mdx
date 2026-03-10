@@ -1,29 +1,100 @@
 ---
-title: "Universal-3 Pro Streaming"
-subtitle: "Set up and configure Universal-3 Pro Streaming for real-time streaming transcription."
+title: "Supported Languages"
+description: "Supported languages, regional dialects, and local speech variants for Universal-3 Pro Streaming."
 ---
 
 {/* @api-info
 product: Streaming STT
 speech_model: "u3-rt-pro"
 api-endpoint: wss://streaming.assemblyai.com/v3/ws
-description: Universal-3 Pro Streaming setup and configuration for real-time streaming transcription. Optimized for voice agents with sub-300ms latency.
+description: Supported languages, regional dialects, and local speech variants for Universal-3 Pro Streaming.
 */}
 
-Universal-3 Pro Streaming is optimized for real-time audio utterances typically under 10 seconds, with special efficiencies built in for low-latency turn detection and voice agent workflows. It provides the highest accuracy with native multilingual code switching, entity accuracy, and prompting support.
+import { LanguageTable } from "../../../assets/components/LanguagesTable";
 
-This model is fantastic for **voice agents**, **agent assist**, and **all streaming use cases** that don't require partial transcriptions for every single subword — partials are only produced during periods of silence, with at most one partial per silence period (see [Partials behavior](#partials-behavior) for details). Universal-3 Pro Streaming delivers exceptional **entity and alphanumeric accuracy**, including credit card numbers, cell phone numbers, email addresses, physical addresses, and names — all with **sub-300ms time to complete transcript latency**.
+## Supported languages
 
-<Tip title="Already using AssemblyAI streaming?">
-  If you're an existing AssemblyAI streaming user, you can quickly test
-  Universal-3 Pro Streaming by switching the `speech_model` parameter to
-  `"u3-rt-pro"` in your connection parameters. No other code changes are
-  required — just update the model and start streaming.
-</Tip>
+Universal-3 Pro Streaming supports 6 languages with native multilingual code switching. The model automatically detects and switches between languages mid-stream.
+
+<LanguageTable
+  languages={[
+    { name: "English", code: "en" },
+    { name: "Spanish", code: "es" },
+    { name: "German", code: "de" },
+    { name: "French", code: "fr" },
+    { name: "Portuguese", code: "pt" },
+    { name: "Italian", code: "it" },
+  ]}
+  columns={2}
+/>
+
+<Note title="Need more than 6 languages?">
+  If you need support beyond the 6 languages listed here, consider using the
+  **Whisper Streaming** model (`speech_model: "whisper-rt"`), which supports
+  **99 languages** with automatic language detection. See the [Whisper
+  Streaming](/docs/streaming/universal-streaming/multilingual-transcription#whisper-streaming) page for details.
+</Note>
+
+## Regional dialects and variants
+
+Universal-3 Pro Streaming goes beyond standard language support with deep understanding of regional dialects and local variants. Whether your audio features Quebecois French, Mexican Spanish, or Brazilian Portuguese, the model accurately captures speech as it's naturally spoken — including colloquial expressions, local vocabulary, and accent-specific pronunciation patterns.
+
+<Note title="Dialect support">
+You do not need to specify a dialect code to get accurate dialect transcription. Universal-3 Pro automatically recognizes regional speech patterns when using the base language code (e.g., `fr` for all French dialects, `es` for all Spanish dialects).
+</Note>
+
+<AccordionGroup>
+
+<Accordion title="English dialects and variants">
+| Dialect / Variant | Description |
+| --- | --- |
+| American English | Standard US English, including regional variants (Southern, Midwestern, Northeastern) |
+| British English | UK English, including Received Pronunciation and regional accents |
+| Australian English | Australian English with local expressions and pronunciation |
+</Accordion>
+
+<Accordion title="Spanish dialects and variants">
+| Dialect / Variant | Description |
+| --- | --- |
+| Castilian Spanish | Standard Peninsular Spanish as spoken in central and northern Spain |
+| Mexican Spanish | Mexican Spanish with local vocabulary and pronunciation |
+| Argentine Spanish | Rioplatense Spanish with distinctive *voseo* and pronunciation |
+| Colombian Spanish | Colombian Spanish with regional speech patterns |
+| Chilean Spanish | Chilean Spanish with rapid speech patterns and local slang |
+| Caribbean Spanish | Cuban, Dominican, and Puerto Rican Spanish dialects |
+| Spanglish | English-Spanish code-mixing common in US bilingual communities |
+</Accordion>
+
+<Accordion title="French dialects and variants">
+| Dialect / Variant | Description |
+| --- | --- |
+| Metropolitan French | Standard Parisian French |
+| Canadian French (Quebecois) | Quebec French with distinctive vocabulary, pronunciation, and expressions |
+| Belgian French | Belgian French with local vocabulary and pronunciation |
+</Accordion>
+
+<Accordion title="Portuguese dialects and variants">
+| Dialect / Variant | Description |
+| --- | --- |
+| Brazilian Portuguese | Brazilian Portuguese with local vocabulary, pronunciation, and expressions |
+| European Portuguese | Standard Lisbon Portuguese with Iberian pronunciation |
+</Accordion>
+
+<Accordion title="Italian dialects and variants">
+| Dialect / Variant | Description |
+| --- | --- |
+| Standard Italian | Standard Italian based on Tuscan-influenced speech |
+</Accordion>
+
+</AccordionGroup>
+
+## Configuration
+
+Prompting can be used to guide the model toward a specific language. However, prompts should be thoroughly tested before use in production. For example, pre-pending `Transcribe Spanish` to your prompt has shown to perform well on Spanish audio. See the [Prompting guide](/docs/streaming/universal-3-pro/prompting) for more details.
 
 ## Quickstart
 
-Get started with Universal-3 Pro Streaming using the code below. This example streams audio from your microphone and prints transcription results in real time — no custom prompt is needed, since Universal-3-Pro automatically applies a [default prompt](#default-prompt) optimized for turn detection.
+The following examples demonstrate how to stream audio to Universal-3 Pro Streaming.
 
 <Tabs>
 
@@ -476,162 +547,3 @@ run();
 
 </Tab>
 </Tabs>
-
-## Prompting
-
-Universal-3-Pro supports custom prompts and keyterms prompting to improve transcription accuracy for your use case. For detailed guidance on crafting effective prompts, default prompt behavior, and keyterms prompting, see the [Prompting Guide (Streaming)](/docs/streaming/prompting).
-
-You can also boost recognition of specific terms using the `keyterms_prompt` parameter. See [Keyterms prompting](/docs/streaming/keyterms-prompting) for details.
-
-## Configuring turn detection
-
-Universal-3-Pro uses a punctuation-based turn detection system controlled by two parameters:
-
-| Parameter          | Default   | Description                                                          |
-| ------------------ | --------- | -------------------------------------------------------------------- |
-| `min_turn_silence` | `100` ms  | Silence duration before a speculative end-of-turn (EOT) check fires. |
-| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end.                      |
-
-When silence reaches `min_turn_silence`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
-
-- **Terminal punctuation found** — the turn ends and is emitted as a final transcript (`end_of_turn: true`).
-- **No terminal punctuation** — a partial transcript is emitted (`end_of_turn: false`) and the turn continues waiting.
-  - If silence continues to `max_turn_silence`, the turn is forced to end as a final transcript (`end_of_turn: true`) regardless of punctuation.
-
-<Note>
-This differs from Universal-Streaming English and Multilingual, which use a confidence-based end-of-turn system controlled by `end_of_turn_confidence_threshold`.
-
-Instead, Universal-3-Pro makes turn decisions based on ending punctuation after `min_turn_silence` has elapsed. Because of this, `end_of_turn_confidence_threshold` has no impact.
-
-</Note>
-
-<Note title="end_of_turn and turn_is_formatted">
-  Because formatting is built into the end-of-turn system in Universal-3-Pro
-  streaming, there is only ever one end-of-turn transcript per turn and it is
-  always formatted. This means `end_of_turn` and `turn_is_formatted` always have
-  the same value for Universal-3-Pro streaming. You can reliably use
-  `end_of_turn: true` to detect a formatted, final end-of-turn transcript.
-</Note>
-
-For example, to configure both parameters:
-
-```json
-{
-  "speech_model": "u3-rt-pro",
-  "min_turn_silence": 100,
-  "max_turn_silence": 1200
-}
-```
-
-### Partials behavior
-
-Partials are `Turn` events where `end_of_turn` is `false`. They are produced whenever `min_turn_silence` is met, but the ending punctuation doesn't signal the end of a turn.
-
-There can be multiple partial transcripts per turn, but each period of silence can produce at most one partial. If silence exceeds `min_turn_silence`, but speech resumes before `max_turn_silence`, the partial is emitted and the EOT check resets until the next period of silence.
-
-If you're running eager LLM inference on partial transcripts, we recommend setting `min_turn_silence` to `100`.
-
-<Warning title="Entity splitting (accuracy) vs Model Latency trade-off">
-  Setting `min_turn_silence` too low can split entities like phone numbers and
-  emails. We have found LLM steps fix this for voice agents, but we recommend
-  testing carefully with your use case.
-</Warning>
-
-### Formatting and turn detection
-
-Because the model applies punctuation and formatting intelligently, this works well with formatting-based turn detection. For example, based purely on vocal tone:
-
-- `"Pizza."` — Statement
-- `"Pizza?"` — Questioning tone
-- `"Pizza---"` — Trailing off
-
-The punctuation quality has been excellent when paired with custom turn detection models.
-
-From testing, mid-turn emission looks like this — where each line is an additional partial leading up to the final end-of-turn transcript:
-
-```
-"Yeah my credit card number is--"
-"One moment---"
-"Its 8888-8888-8888-8888"  ← end_of_turn: true
-```
-
-Each partial is emitted during a silence period within the turn. The final line with terminal punctuation triggers the end of turn.
-
-### Forcing a turn endpoint
-
-You can force the current turn to end immediately by sending a `ForceEndpoint` message:
-
-```json
-{
-  "type": "ForceEndpoint"
-}
-```
-
-This is useful when your application knows the user has finished speaking based on external signals (e.g., a button press).
-
-## Prompting language
-
-Providing language information ahead of time in the prompt helps the model with transcription tasks. For example, if the model is told to transcribe Spanish, audio could be transcribed "si", but if told English, it could be transcribed "C".
-
-Although prompting is a beta feature, we've found good results when you build off of the [default prompt](/docs/streaming/prompting#start-with-the-default-prompt) — which is exactly what we do here for adding language information by prepending `Transcribe <language>.` to the default prompt.
-
-Our team is running evaluations to determine the best method for attaching this context to the prompt, and we will update this section with the best methods. So far, we have seen that prepending language information with `Transcribe <language>.` to the [default prompt](/docs/streaming/prompting#start-with-the-default-prompt) improves the output:
-
-```
-Transcribe Spanish. Transcribe verbatim. Rules:
-    1) Always include punctuation in output.
-    2) Use period/question mark ONLY for complete sentences.
-    3) Use comma for mid-sentence pauses.
-    4) Use no punctuation for incomplete trailing speech.
-    5) Filler words (um, uh, so, like) indicate speaker will continue.
-```
-
-If you have multiple languages, append all languages like `Transcribe multilingual conversation in English, Spanish, and German.`
-
-## Supported languages and regional dialects
-
-Universal-3 Pro Streaming supports 6 languages with out-of-the-box recognition of regional dialects and local speech variants. See the [Supported languages](/docs/streaming/universal-3-pro/supported-languages) page for the full language list and dialect reference.
-
-## Updating configuration mid-stream
-
-You can update configuration during an active streaming session using `UpdateConfiguration`. This applies changes without needing to reconnect. **The recommended approach is to dynamically update `keyterms_prompt`** based on the current stage of your voice agent flow — if you expect certain answers or terminology at a specific stage, proactively add those as keyterms so the model recognizes them accurately.
-
-```python
-# Replace or establish new set of keyterms
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Universal-3"]}')
-
-# Remove keyterms and reset context biasing
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": []}')
-```
-
-For example, if your voice agent is currently asking for the caller's name and date of birth, send the expected terms for that stage:
-
-```python
-# Caller identification stage
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["Kelly Byrne-Donoghue", "date of birth", "January", "February"]}')
-```
-
-Then, when the conversation moves to a different stage (e.g., medical intake), update with the relevant terms:
-
-```python
-# Medical intake stage
-websocket.send('{"type": "UpdateConfiguration", "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel", "metoprolol"]}')
-```
-
-You can also update `prompt`, `max_turn_silence`, `min_turn_silence`, or any combination at the same time:
-
-```json
-{
-  "type": "UpdateConfiguration",
-  "keyterms_prompt": ["account number", "routing number"],
-  "max_turn_silence": 5000,
-  "min_turn_silence": 200
-}
-```
-
-Common reasons to update configuration mid-stream:
-
-- **`keyterms_prompt`** — Dynamically add terms relevant to the current stage of your voice agent flow. This is the most effective way to improve recognition accuracy mid-stream. See [Keyterms prompting](/docs/streaming/keyterms-prompting) for details.
-- **`prompt`** — Pass updated behavioral or formatting instructions into the STT stream.
-- **`max_turn_silence`** — Increase for moments where you'd expect a longer pause, such as when a caller is reading out a credit card number, ID number, or address. Decrease it again afterward to resume snappier turn detection.
-- **`min_turn_silence`** — Tune how quickly speculative EOT checks fire. Lower values produce faster partials for eager LLM inference, while higher values reduce entity splitting for utterances with numbers or proper nouns.
