@@ -4,9 +4,30 @@ hide-nav-links: true
 description: "The anatomy of an utterance from partial words to finalized utterance to formatted transcript"
 ---
 
+{/* @api-info
+product: Streaming STT
+speech_model: "universal-streaming-english" | "universal-streaming-multilingual"
+api-endpoint: wss://streaming.assemblyai.com/v3/ws
+description: Message sequence breakdown for Universal Streaming sessions from partial words to finalized utterances.
+*/}
+
 <Note>
   For a description of each message field, refer to our [Turn
-  object](/docs/streaming#turn-object) explanation.
+  object](/docs/streaming/universal-streaming/turn-detection) explanation.
+</Note>
+
+## Understanding `transcript` vs `utterance`
+
+Before walking through the message sequence, it's important to understand the difference between the `transcript` and `utterance` fields:
+
+- **`transcript`** — The running transcript of the current turn. Updated with each Turn message, it accumulates finalized words progressively. Use this field for displaying live captions or getting the full turn text at any point.
+- **`utterance`** — Populated when the system detects a pause in speech (based on a combination of silence duration and model confidence). Contains the finalized text of the current utterance at that moment. On all other Turn messages, `utterance` is an empty string `""`. This enables eager LLM inference, allowing you to start processing text before the turn officially ends. Note that the message where `utterance` is populated may or may not also be an `end_of_turn: true` message, depending on whether the turn ends at the same time.
+
+<Note>
+  **Key takeaway:** To get the complete text of a turn, always read
+  `transcript`. The `utterance` field is an optimization for low-latency voice
+  agent pipelines — it lets you start processing text as soon as an utterance
+  boundary is detected, before the turn officially ends.
 </Note>
 
 For this example, we are going to walk through a user saying:
@@ -25,14 +46,6 @@ When the session begins you will get a message indicating the session ID and exp
 ```
 
 ## Initial utterance and turn
-
-### Speech detected
-
-Before any Turn messages are sent, the server sends a `SpeechStarted` message indicating that speech has been detected in the audio stream. The `timestamp` field indicates when the speech was detected, in milliseconds relative to the beginning of the audio stream.
-
-```json
-{"type":"SpeechStarted","timestamp":1920}
-```
 
 ### Start of utterance (Partial transcript), and Start of turn
 
@@ -268,6 +281,15 @@ When the utterance is completed, the turn may or may not be predicted to end (th
 
 In this case, the turn also ends `"end_of_turn":True` since `end_of_turn_confidence` is greater than `0.5`. If the turn confidence was higher, the turn will end later - see [End of utterance (Final Transcript), not End of turn](#end-of-utterance-final-transcript-not-end-of-turn) section below.
 
+<Note>
+  Because the utterance end and turn end occur on the **same message** here,
+  both `utterance` and `transcript` contain the finalized text. When the
+  utterance ends *before* the turn (see
+  [below](#end-of-utterance-final-transcript-not-end-of-turn)), `utterance` is
+  populated on the earlier message and will be **empty** on the subsequent
+  `end_of_turn: true` message.
+</Note>
+
 ```json
 {
   "turn_order": 0,
@@ -373,14 +395,6 @@ Since LLMs can parse unformatted text, waiting for this message is NOT recommend
 ```
 
 ## Additional utterance(s) and turn(s)
-
-### Speech detected
-
-When the user begins speaking again, another `SpeechStarted` message is sent.
-
-```json
-{"type":"SpeechStarted","timestamp":5200}
-```
 
 ### Start of a new utterance (Partial transcript), and Start of a new turn
 
@@ -612,7 +626,7 @@ In this case, the user is not actually done speaking yet. Normally you would hav
 
 ### End of utterance (Final Transcript), not End of turn
 
-In many cases, the turn may not end but we will have finalized an utterance. For this reason, we supply the `utterances` param to finalize each utterance as fast as possible for downstream LLM pre-emptive generation.
+In many cases, the turn may not end but we will have finalized an utterance. For this reason, we supply the `utterance` field to finalize each utterance as fast as possible for downstream LLM pre-emptive generation.
 
 <Note>
   If you're using a voice agent provider like
@@ -673,6 +687,14 @@ In many cases, the turn may not end but we will have finalized an utterance. For
 ### End of turn, after End of utterance
 
 Once the confidence score of `0.5` is passed for End of Turn, we will end the turn.
+
+<Note>
+  Notice that `utterance` is an empty string in this message. The `utterance`
+  field was already populated on the [previous
+  message](#end-of-utterance-final-transcript-not-end-of-turn) when the
+  utterance boundary was first detected. On the `end_of_turn: true` message, use
+  `transcript` to get the complete turn text.
+</Note>
 
 ```json
 {
@@ -780,8 +802,8 @@ Lastly we will format the transcript if formatting is enabled. Again this is onl
 
 ### Voice agents
 
-- Grab the `utterance` parameter as soon as it is available for the fastest STT model response. This is particularly useful if you are using an external Turn Detection model. You can read more about [configuring for third-party turn detection here](https://www.assemblyai.com/docs/streaming/turn-detection#disable-turn-detection).
-  - If you are using AssemblyAI's turn detection, you can simply configure your settings to be [Aggressive](https://www.assemblyai.com/docs/streaming/turn-detection#aggressive), [Balanced](https://www.assemblyai.com/docs/streaming/turn-detection#balanced), or [Conservative](https://www.assemblyai.com/docs/streaming/turn-detection#conservative).
+- Grab the `utterance` parameter as soon as it is available for the fastest STT model response. This is particularly useful if you are using an external Turn Detection model. You can read more about [configuring for third-party turn detection here](https://www.assemblyai.com/docs/streaming/universal-streaming/turn-detection#disable-turn-detection).
+  - If you are using AssemblyAI's turn detection, you can simply configure your settings to be [Aggressive](https://www.assemblyai.com/docs/streaming/universal-streaming/turn-detection#aggressive), [Balanced](https://www.assemblyai.com/docs/streaming/universal-streaming/turn-detection#balanced), or [Conservative](https://www.assemblyai.com/docs/streaming/universal-streaming/turn-detection#conservative).
 - Avoid using `format_turns` as it will significantly increase latency. LLMs don't need formatting so you can just pass raw text as soon as its ready.
 - Utilize the `end_of_turn` parameter to determine when a user is likely to end their turn. Combined with a VAD you can determine if the user is continuing to speak, or if the turn has ended and you can safely interrupt with your voice agent.
   - Note that AssemblyAI has a built-in VAD to the model. If you modify `min_turn_silence` latency will increase but you can substitute the model entirely for a VAD.
@@ -790,3 +812,17 @@ Lastly we will format the transcript if formatting is enabled. Again this is onl
 
 - Utilize `format_turns` since text will be displayed to the end user and this will make it human-readable. The added latency will be less noticeable to the human eye in these applications.
 - Utilize `keyterms_prompt` to increase the accuracy of rare words and entities. Again since the text will be shown to the end user this will improve their perception of accuracy.
+
+## Session termination
+
+When the session ends (either by sending a `Terminate` message or when the session expires), the server sends a `Termination` message with the total audio and session durations.
+
+```json
+{
+  "type": "Termination",
+  "audio_duration_seconds": 7,
+  "session_duration_seconds": 7
+}
+```
+
+After receiving the `Termination` message, no further messages will be sent and the WebSocket connection will be closed.

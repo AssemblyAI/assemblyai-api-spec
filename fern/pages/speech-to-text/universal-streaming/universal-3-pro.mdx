@@ -1,22 +1,29 @@
 ---
-title: "Universal-3 Pro (Streaming)"
-subtitle: "Set up and configure Universal-3 Pro (Streaming) for real-time streaming transcription."
+title: "Universal-3 Pro Streaming"
+subtitle: "Set up and configure Universal-3 Pro Streaming for real-time streaming transcription."
 ---
 
-Universal-3 Pro for streaming is optimized for real-time audio utterances typically under 10 seconds, with special efficiencies built in for low-latency turn detection and voice agent workflows. It provides the highest accuracy with native multilingual code switching, entity accuracy, and prompting support.
+{/* @api-info
+product: Streaming STT
+speech_model: "u3-rt-pro"
+api-endpoint: wss://streaming.assemblyai.com/v3/ws
+description: Universal-3 Pro Streaming setup and configuration for real-time streaming transcription. Optimized for voice agents with sub-300ms latency.
+*/}
 
-This model is fantastic for **voice agents**, **agent assist**, and **all streaming use cases** that don't require partial transcriptions for every single subword — partials are only produced during periods of silence, with at most one partial per silence period (see [Partials behavior](#partials-behavior) for details). Universal-3 Pro streaming delivers exceptional **entity and alphanumeric accuracy**, including credit card numbers, cell phone numbers, email addresses, physical addresses, and names — all with **sub-300ms time to complete transcript latency**.
+Universal-3 Pro Streaming is optimized for real-time audio utterances typically under 10 seconds, with special efficiencies built in for low-latency turn detection and voice agent workflows. It provides the highest accuracy with native multilingual code switching, entity accuracy, and prompting support.
+
+This model is fantastic for **voice agents**, **agent assist**, and **all streaming use cases** that don't require partial transcriptions for every single subword — partials are only produced during periods of silence, with at most one partial per silence period (see [Partials behavior](#partials-behavior) for details). Universal-3 Pro Streaming delivers exceptional **entity and alphanumeric accuracy**, including credit card numbers, cell phone numbers, email addresses, physical addresses, and names — all with **sub-300ms time to complete transcript latency**.
 
 <Tip title="Already using AssemblyAI streaming?">
   If you're an existing AssemblyAI streaming user, you can quickly test
-  Universal-3 Pro by switching the `speech_model` parameter to `"u3-rt-pro"` in
-  your connection parameters. No other code changes are required — just update
-  the model and start streaming.
+  Universal-3 Pro Streaming by switching the `speech_model` parameter to
+  `"u3-rt-pro"` in your connection parameters. No other code changes are
+  required — just update the model and start streaming.
 </Tip>
 
 ## Quickstart
 
-Get started with Universal-3 Pro streaming using the code below. This example streams audio from your microphone and prints transcription results in real time — no custom prompt is needed, since Universal-3-Pro automatically applies a [default prompt](#default-prompt) optimized for turn detection.
+Get started with Universal-3 Pro Streaming using the code below. This example streams audio from your microphone and prints transcription results in real time — no custom prompt is needed, since Universal-3-Pro automatically applies a [default prompt](#default-prompt) optimized for turn detection.
 
 <Tabs>
 
@@ -480,10 +487,10 @@ You can also boost recognition of specific terms using the `keyterms_prompt` par
 
 Universal-3-Pro uses a punctuation-based turn detection system controlled by two parameters:
 
-| Parameter                                | Default   | Description                                                          |
-| ---------------------------------------- | --------- | -------------------------------------------------------------------- |
+| Parameter          | Default   | Description                                                          |
+| ------------------ | --------- | -------------------------------------------------------------------- |
 | `min_turn_silence` | `100` ms  | Silence duration before a speculative end-of-turn (EOT) check fires. |
-| `max_turn_silence`                       | `1000` ms | Maximum silence before a turn is forced to end.                      |
+| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end.                      |
 
 When silence reaches `min_turn_silence`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
 
@@ -525,9 +532,9 @@ There can be multiple partial transcripts per turn, but each period of silence c
 If you're running eager LLM inference on partial transcripts, we recommend setting `min_turn_silence` to `100`.
 
 <Warning title="Entity splitting (accuracy) vs Model Latency trade-off">
-  Setting `min_turn_silence` too low can split entities
-  like phone numbers and emails. We have found LLM steps fix this for voice
-  agents, but we recommend testing carefully with your use case.
+  Setting `min_turn_silence` too low can split entities like phone numbers and
+  emails. We have found LLM steps fix this for voice agents, but we recommend
+  testing carefully with your use case.
 </Warning>
 
 ### Formatting and turn detection
@@ -561,6 +568,25 @@ You can force the current turn to end immediately by sending a `ForceEndpoint` m
 ```
 
 This is useful when your application knows the user has finished speaking based on external signals (e.g., a button press).
+
+## Prompting language
+
+Providing language information ahead of time in the prompt helps the model with transcription tasks. For example, if the model is told to transcribe Spanish, audio could be transcribed "si", but if told English, it could be transcribed "C".
+
+Although prompting is a beta feature, we've found good results when you build off of the [default prompt](/docs/streaming/prompting#start-with-the-default-prompt) — which is exactly what we do here for adding language information by prepending `Transcribe <language>.` to the default prompt.
+
+Our team is running evaluations to determine the best method for attaching this context to the prompt, and we will update this section with the best methods. So far, we have seen that prepending language information with `Transcribe <language>.` to the [default prompt](/docs/streaming/prompting#start-with-the-default-prompt) improves the output:
+
+```
+Transcribe Spanish. Transcribe verbatim. Rules:
+    1) Always include punctuation in output.
+    2) Use period/question mark ONLY for complete sentences.
+    3) Use comma for mid-sentence pauses.
+    4) Use no punctuation for incomplete trailing speech.
+    5) Filler words (um, uh, so, like) indicate speaker will continue.
+```
+
+If you have multiple languages, append all languages like `Transcribe multilingual conversation in English, Spanish, and German.`
 
 ## Updating configuration mid-stream
 

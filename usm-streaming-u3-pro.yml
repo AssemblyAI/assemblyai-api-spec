@@ -4,7 +4,7 @@ info:
   title: AssemblyAI Universal-3 Pro Streaming WebSocket API
   version: 1.0.0
   description: |
-    Real-time speech-to-text transcription API over WebSocket using the Universal-3 Pro model.
+    Real-time speech-to-text transcription API over WebSocket using the Universal-3 Pro Streaming model.
     Clients send audio data and configuration messages and receive transcription events.
 
 servers:
@@ -17,8 +17,8 @@ channels:
   streamingU3Pro:
     address: /v3/ws
     description: |
-      Stream audio and receive real-time transcription results using the Universal-3 Pro model. The most accurate streaming model for voice agents that demand the highest quality, with best-in-class accuracy and advanced prompting capabilities.
-      
+      Stream audio and receive real-time transcription results using the Universal-3 Pro Streaming model. The most accurate streaming model for voice agents that demand the highest quality, with best-in-class accuracy and advanced prompting capabilities.
+
       Supports: English, Spanish, German, French, Portuguese, and Italian.
 
       <Note> To use our EU server for Streaming STT, replace `streaming.assemblyai.com` with
@@ -29,10 +29,7 @@ channels:
       speech_model:
         description: The speech model to use.
         location: $message.payload#/speech_model
-        enum:
-          [
-            "u3-rt-pro",
-          ]
+        enum: ["u3-rt-pro"]
 
       ApiKey:
         description: >-
@@ -61,7 +58,7 @@ channels:
         format: s
 
       keyterms_prompt:
-        description: A list of words and phrases to improve recognition accuracy for.
+        description: A list of words and phrases to improve recognition accuracy for. See [Keyterms Prompting](https://www.assemblyai.com/docs/streaming/keyterms-prompting) for more details.
         location: $message.payload#/keyterms_prompt
         schema:
           type: array
@@ -70,13 +67,13 @@ channels:
             type: string
 
       language_detection:
-        description: Whether to return `language_code` and `language_confidence` in turn messages. Universal-3 Pro natively code-switches between English, Spanish, German, French, Portuguese, and Italian by default without any necessary configuration.
+        description: Whether to return `language_code` and `language_confidence` in turn messages. Universal-3 Pro Streaming natively code-switches between English, Spanish, German, French, Portuguese, and Italian by default without any necessary configuration.
         location: $message.payload#/language_detection
         enum: ["true", "false"]
         default: "false"
 
       max_turn_silence:
-        description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation.
+        description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation. See [Configuring Turn Detection](https://www.assemblyai.com/docs/streaming/universal-3-pro#configuring-turn-detection) for configuration details.
         location: $message.payload#/max_turn_silence
         schema:
           type: integer
@@ -86,7 +83,7 @@ channels:
           - 1000
 
       min_turn_silence:
-        description: Silence duration in milliseconds before a speculative end-of-turn check. If terminal punctuation is found, the turn ends. Otherwise, a partial is emitted and the turn continues.
+        description: Silence duration in milliseconds before a speculative end-of-turn check. If terminal punctuation is found, the turn ends. Otherwise, a partial is emitted and the turn continues. See [Configuring Turn Detection](https://www.assemblyai.com/docs/streaming/universal-3-pro#configuring-turn-detection) for configuration details.
         location: $message.payload#/min_turn_silence
         schema:
           type: integer
@@ -96,7 +93,7 @@ channels:
           - 200
 
       prompt:
-        description: Prompting is a beta feature. Custom transcription instructions for the model. When not provided, a default prompt optimized for native turn detection is used automatically.
+        description: Prompting is a beta feature. Custom transcription instructions for the model. When not provided, a default prompt optimized for native turn detection is used automatically. See the [Prompting Guide](https://www.assemblyai.com/docs/streaming/universal-3-pro/prompting) for details.
         location: $message.payload#/prompt
         schema:
           type: string
@@ -146,7 +143,7 @@ operations:
       $ref: "#/channels/streamingU3Pro"
     messages:
       - $ref: "#/channels/streamingU3Pro/messages/audioChunk"
-    description: Send audio data chunks for transcription. The payload must be of type bytes and contain audio data between 50ms and 1000ms in length.
+    description: Send audio data chunks for transcription. The payload must be of type bytes and contain audio data between 50ms and 1000ms in length. See the [Universal-3 Pro Streaming quickstart](https://www.assemblyai.com/docs/streaming/universal-3-pro) to get started.
 
   sendUpdateConfiguration:
     action: send
@@ -286,21 +283,21 @@ components:
         prompt:
           type: string
           nullable: true
-          description: Prompting is a beta feature. Custom transcription instructions for the model.
+          description: Prompting is a beta feature. Custom transcription instructions for the model. See the [Prompting Guide](https://www.assemblyai.com/docs/streaming/universal-3-pro/prompting) for details.
         keyterms_prompt:
           type: array
           nullable: true
           items:
             type: string
-          description: A list of words and phrases to boost recognition for.
+          description: A list of words and phrases to boost recognition for. See [Keyterms Prompting](https://www.assemblyai.com/docs/streaming/keyterms-prompting) for more details.
         min_turn_silence:
           type: integer
           nullable: true
-          description: Silence duration in milliseconds before a speculative end-of-turn check.
+          description: Silence duration in milliseconds before a speculative end-of-turn check. See [Configuring Turn Detection](https://www.assemblyai.com/docs/streaming/universal-3-pro#configuring-turn-detection) for configuration details.
         max_turn_silence:
           type: integer
           nullable: true
-          description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation.
+          description: Maximum silence in milliseconds before the turn is forced to end, regardless of punctuation. See [Configuring Turn Detection](https://www.assemblyai.com/docs/streaming/universal-3-pro#configuring-turn-detection) for configuration details.
       required:
         - type
 
@@ -352,9 +349,14 @@ components:
           type: integer
           description: The timestamp in milliseconds when speech was detected, relative to the beginning of the audio stream.
           format: ms
+        confidence:
+          type: number
+          format: float
+          description: The confidence score from the voice activity detection (VAD) model that speech has started.
       required:
         - type
         - timestamp
+        - confidence
 
     Word:
       type: object
@@ -397,16 +399,16 @@ components:
           description: Order of this turn in the conversation.
         turn_is_formatted:
           type: boolean
-          description: Whether this turn has been formatted. For Universal-3 Pro, this always matches `end_of_turn`.
+          description: Whether this turn has been formatted. For Universal-3 Pro Streaming, this always matches `end_of_turn`.
         end_of_turn:
           type: boolean
-          description: Whether this marks the end of a turn.
+          description: Whether this marks the end of a turn. See [Turn Detection](https://www.assemblyai.com/docs/streaming/universal-streaming/turn-detection) for more information.
         transcript:
           type: string
           description: Transcript of all finalized words in the turn.
         utterance:
           type: string
-          description: Transcript of all finalized words when an utterance is complete. Can be multiple utterances in a turn.
+          description: Finalized transcript of the turn, populated only on end_of_turn messages. Empty string on all other Turn messages. Equivalent to transcript when populated.
         language_code:
           type: string
           description: The language of the turn. Only populated when language detection is enabled and an utterance is complete or turn is final.
@@ -421,7 +423,7 @@ components:
           format: float
           minimum: 0
           maximum: 1
-          description: The confidence score that this is the end of a turn, between 0.0 (low confidence) and 1.0 (high confidence). For Universal-3 Pro, this is 1.0 when `end_of_turn` is true and 0.0 otherwise.
+          description: The confidence score that this is the end of a turn, between 0.0 (low confidence) and 1.0 (high confidence). For Universal-3 Pro Streaming, this is 1.0 when `end_of_turn` is true and 0.0 otherwise.
         words:
           type: array
           items:

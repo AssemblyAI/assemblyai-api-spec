@@ -1,18 +1,27 @@
 ---
 title: "Prompting Guide (Streaming)"
-subtitle: "Learn how to use prompts to customize Universal-3 Pro streaming transcription."
+subtitle: "Learn how to use prompts to customize Universal-3 Pro Streaming transcription."
 ---
 
-Universal-3 Pro supports a `prompt` parameter that lets you customize transcription output for streaming use cases. You can guide the model's behavior for punctuation, disfluencies, formatting, and domain-specific terminology.
+{/* @api-info
+product: Streaming STT
+speech_model: "u3-rt-pro"
+api-endpoint: wss://streaming.assemblyai.com/v3/ws
+parameter: prompt (string, connection parameter)
+description: Prompt engineering guide for Universal-3 Pro Streaming transcription.
+*/}
+
+Universal-3 Pro Streaming supports a `prompt` parameter that lets you customize transcription output for streaming use cases. You can guide the model's behavior for punctuation, disfluencies, formatting, and domain-specific terminology.
 
 <Tip title="Start with no prompt">
 **We strongly recommend testing with no `prompt` first.** When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt optimized for turn detection and streaming accuracy — delivering **88% turn detection accuracy** out of the box.
 
-Universal-3-Pro also supports `keyterms_prompt` for boosting specific terms. We suggest using this with no prompt. The `prompt` and `keyterms_prompt` parameters cannot be used in the same API request — choose one or the other. However, you can recreate this functionality manually. See [Keyterms prompting](#keyterms-prompting) below.
+Universal-3-Pro also supports `keyterms_prompt` for boosting specific terms. We recommend using `keyterms_prompt` to boost domain-specific terminology, and you can use it together with `prompt` in the same request. See [Keyterms prompting](#keyterms-prompting) below.
 
 If you're going to build a prompt, start with the [default prompt](#start-with-the-default-prompt) and then tweak it for your use case. **You should not start from scratch with your prompt — use the default prompt and then build off of it.**
 
 Remember, prompts are primarily instructional, so adding a large amount of context may not make a significant impact on accuracy and could reduce instruction-following coherence. Feel free to layer in additional instructions from this guide.
+
 </Tip>
 
 ## Start with the default prompt
@@ -31,14 +40,17 @@ Transcribe verbatim. Rules:
 This default prompt delivers **88% turn detection accuracy** out of the box. If you need to customize, **build off of this prompt** rather than starting from scratch. Append your additional instructions after the default rules to preserve the turn detection behavior while adding your own requirements.
 
 <Note>
-Turn detection relies on terminal punctuation (`.` `?` `!`), so custom prompts that reduce or remove punctuation from the transcription output may negatively impact turn detection. The default prompt is optimized for this, so we recommend trying it first before any customization.
+  Turn detection relies on terminal punctuation (`.` `?` `!`), so custom prompts
+  that reduce or remove punctuation from the transcription output may negatively
+  impact turn detection. The default prompt is optimized for this, so we
+  recommend trying it first before any customization.
 </Note>
 
 ## How prompting works
 
 Universal-3-Pro prompting is **more instructional than contextual**. The model responds best to explicit formatting rules and behavioral instructions — for example, "use periods only for complete sentences" or "include all filler words." This applies to both streaming and [pre-recorded (async)](/docs/pre-recorded-audio/universal-3-pro) use cases.
 
-Providing topic context alone (e.g., "this is a cardiology appointment") can help, but is most effective when paired with specific instructions telling the model *how* to transcribe. For domain-specific term boosting, use the [`keyterms_prompt`](/docs/streaming/keyterms-prompting) parameter to explicitly list the terms you want the model to recognize.
+Providing topic context alone (e.g., "this is a cardiology appointment") can help, but is most effective when paired with specific instructions telling the model _how_ to transcribe. For domain-specific term boosting, use the [`keyterms_prompt`](/docs/streaming/keyterms-prompting) parameter to explicitly list the terms you want the model to recognize.
 
 <Note title="Coming soon: enhanced contextual prompting">
 We are actively working to make Universal-3-Pro more contextual:
@@ -47,7 +59,27 @@ We are actively working to make Universal-3-Pro more contextual:
 - **Conversational context for streaming** — For voice agent workflows, you will be able to pass previous utterances from the conversation (e.g., the agent's last response) as context, allowing the model to use the conversation history to improve transcription accuracy of the user's next utterance.
 
 These improvements are under active development. In the meantime, use `keyterms_prompt` for domain-specific term boosting and instructional prompts for formatting control.
+
 </Note>
+
+## Prompting language
+
+Providing language information ahead of time in the prompt helps the model with transcription tasks. For example, if the model is told to transcribe Spanish, audio could be transcribed "si", but if told English, it could be transcribed "C".
+
+Although prompting is a beta feature, we've found good results when you build off of the [default prompt](#start-with-the-default-prompt) — which is exactly what we do here for adding language information by prepending `Transcribe <language>.` to the default prompt.
+
+Our team is running evaluations to determine the best method for attaching this context to the prompt, and we will update this section with the best methods. So far, we have seen that prepending language information with `Transcribe <language>.` to the [default prompt](#start-with-the-default-prompt) improves the output:
+
+```
+Transcribe Spanish. Transcribe verbatim. Rules:
+    1) Always include punctuation in output.
+    2) Use period/question mark ONLY for complete sentences.
+    3) Use comma for mid-sentence pauses.
+    4) Use no punctuation for incomplete trailing speech.
+    5) Filler words (um, uh, so, like) indicate speaker will continue.
+```
+
+If you have multiple languages, append all languages like `Transcribe multilingual conversation in English, Spanish, and German.`
 
 ## Updating configuration mid-stream
 
@@ -58,7 +90,12 @@ For example, if your voice agent is currently asking for the caller's name and d
 ```json
 {
   "type": "UpdateConfiguration",
-  "keyterms_prompt": ["Kelly Byrne-Donoghue", "date of birth", "January", "February"]
+  "keyterms_prompt": [
+    "Kelly Byrne-Donoghue",
+    "date of birth",
+    "January",
+    "February"
+  ]
 }
 ```
 
@@ -72,7 +109,11 @@ Then, when the conversation moves to a medical intake stage, update `keyterms_pr
 ```
 
 <Tip>
-**Dynamically update `keyterms_prompt` for each stage of your voice agent flow.** If you expect certain answers at a specific stage — names, addresses, account numbers, medical terms — proactively add those as keyterms so the model recognizes them accurately when the caller speaks them. This is the most effective way to improve recognition accuracy mid-stream.
+  **Dynamically update `keyterms_prompt` for each stage of your voice agent
+  flow.** If you expect certain answers at a specific stage — names, addresses,
+  account numbers, medical terms — proactively add those as keyterms so the
+  model recognizes them accurately when the caller speaks them. This is the most
+  effective way to improve recognition accuracy mid-stream.
 </Tip>
 
 See [Keyterms prompting](#keyterms-prompting) for more details on how `keyterms_prompt` works.
@@ -99,7 +140,10 @@ keyterms_prompt=["Keanu Reeves", "AssemblyAI", "Universal-2"]
 You can set `keyterms_prompt` at connection time or [update it mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) as the conversation progresses. For full details, see [Keyterms prompting](/docs/streaming/keyterms-prompting).
 
 <Note title="Prompt and Keyterms Prompt">
-The `prompt` and `keyterms_prompt` parameters cannot be used in the same request. Please choose either one or the other based on your use case. When you use `keyterms_prompt`, your boosted words are appended to the [default prompt](#start-with-the-default-prompt) automatically.
+  You can use `prompt` and `keyterms_prompt` together in the same streaming
+  request. When you use `keyterms_prompt`, your boosted words are appended to
+  the [default prompt](#start-with-the-default-prompt) (or your custom `prompt`
+  if provided) automatically.
 </Note>
 
 ## Streaming vs. async prompting capabilities
@@ -116,10 +160,10 @@ Because Universal-3-Pro's turn detection is punctuation-based, the way the model
 
 Internal testing on 100 audio samples shows that well-crafted punctuation rules significantly reduce false positives (the model incorrectly signaling a turn end) while maintaining near-perfect recall (catching real turn ends):
 
-| Prompt | Accuracy | Recall | False positive rate |
-| ------ | -------- | ------ | ------------------- |
-| **Default** | **88%** | **100%** | **24%** |
-| Prompt omitted | 83% | 100% | 34% |
+| Prompt         | Accuracy | Recall   | False positive rate |
+| -------------- | -------- | -------- | ------------------- |
+| **Default**    | **88%**  | **100%** | **24%**             |
+| Prompt omitted | 83%      | 100%     | 34%                 |
 
 The default prompt—used when no `prompt` is provided—dropped the false positive rate from 34% to 24% compared to no prompt at all. That translates to fewer false interruptions in production voice agent conversations.
 
