@@ -14,93 +14,6 @@ By the end of this tutorial, you'll be able to use LLM Gateway to analyze a stre
 Here's the full sample code for what you'll build in this tutorial:
 
 <Tabs groupId="language">
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-import logging
-from typing import Type
-
-import assemblyai as aai
-from assemblyai.streaming.v3 import (
-    BeginEvent,
-    LLMGatewayResponseEvent,
-    StreamingClient,
-    StreamingClientOptions,
-    StreamingError,
-    StreamingEvents,
-    StreamingParameters,
-    TurnEvent,
-    TerminationEvent,
-)
-from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
-
-api_key = "<YOUR_API_KEY>"
-prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def on_begin(self: Type[StreamingClient], event: BeginEvent):
-    print(f"Session started: {event.id}")
-
-def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    if event.end_of_turn:
-        print(f"\nTranscript:\n{event.transcript}\n")
-
-def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
-    # Extract the actual LLM response content from the data
-    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    print(f"LLM Response:\n{llm_content}\n")
-
-def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-    print(
-        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
-    )
-
-def on_error(self: Type[StreamingClient], error: StreamingError):
-    print(f"Error occurred: {error}")
-
-def main():
-    client = StreamingClient(
-        StreamingClientOptions(
-            api_key=api_key,
-            api_host="streaming.assemblyai.com",
-        )
-    )
-
-    client.on(StreamingEvents.Begin, on_begin)
-    client.on(StreamingEvents.Turn, on_turn)
-    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
-    client.on(StreamingEvents.Termination, on_terminated)
-    client.on(StreamingEvents.Error, on_error)
-
-    client.connect(
-        StreamingParameters(
-            sample_rate=16000,
-            speech_model="u3-rt-pro",
-            format_turns=True,
-            llm_gateway=LLMGatewayConfig(
-                model="claude-sonnet-4-20250514",
-                messages=[
-                    LLMGatewayMessage(role="user", content=prompt)
-                ],
-                max_tokens=4000
-            )
-        )
-    )
-
-    try:
-        client.stream(
-            aai.extras.MicrophoneStream(sample_rate=16000)
-        )
-    finally:
-        client.disconnect(terminate=True)
-
-if __name__ == "__main__":
-    main()
-```
-
-</Tab>
 <Tab language="python" title="Python" default>
 
 ```python
@@ -357,6 +270,366 @@ def run():
 
 if __name__ == "__main__":
     run()
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```python
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    LLMGatewayResponseEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TurnEvent,
+    TerminationEvent,
+)
+from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
+
+api_key = "<YOUR_API_KEY>"
+prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    if event.end_of_turn:
+        print(f"\nTranscript:\n{event.transcript}\n")
+
+def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
+    # Extract the actual LLM response content from the data
+    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"LLM Response:\n{llm_content}\n")
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            speech_model="u3-rt-pro",
+            format_turns=True,
+            llm_gateway=LLMGatewayConfig(
+                model="claude-sonnet-4-20250514",
+                messages=[
+                    LLMGatewayMessage(role="user", content=prompt)
+                ],
+                max_tokens=4000
+            )
+        )
+    )
+
+    try:
+        client.stream(
+            aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+const fs = require("fs");
+
+// --- Configuration ---
+const YOUR_API_KEY = "<YOUR_API_KEY>"; // Replace with your actual API key
+
+// LLM Gateway Configuration
+const PROMPT =
+  "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [{ role: "user", content: PROMPT }],
+  max_tokens: 4000,
+};
+
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  format_turns: true, // Request formatted final transcripts
+  speech_model: "u3-rt-pro", // USM 3 Pro model
+  llm_gateway: JSON.stringify(LLM_GATEWAY_CONFIG), // LLM Gateway configuration
+};
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+// Audio Configuration
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+// Global variables
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+
+// WAV recording variables
+let recordedFrames = []; // Store audio frames for WAV file
+
+// --- Helper functions ---
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
+}
+
+function createWavHeader(sampleRate, channels, dataLength) {
+  const buffer = Buffer.alloc(44);
+
+  // RIFF header
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write("WAVE", 8);
+
+  // fmt chunk
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16); // fmt chunk size
+  buffer.writeUInt16LE(1, 20); // PCM format
+  buffer.writeUInt16LE(channels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
+  buffer.writeUInt16LE(channels * 2, 32); // block align
+  buffer.writeUInt16LE(16, 34); // bits per sample
+
+  // data chunk
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataLength, 40);
+
+  return buffer;
+}
+
+function saveWavFile() {
+  if (recordedFrames.length === 0) {
+    console.log("No audio data recorded.");
+    return;
+  }
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `recorded_audio_${timestamp}.wav`;
+
+  try {
+    // Combine all recorded frames
+    const audioData = Buffer.concat(recordedFrames);
+    const dataLength = audioData.length;
+
+    // Create WAV header
+    const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
+
+    // Write WAV file
+    const wavFile = Buffer.concat([wavHeader, audioData]);
+    fs.writeFileSync(filename, wavFile);
+
+    console.log(`Audio saved to: ${filename}`);
+    console.log(
+      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
+    );
+  } catch (error) {
+    console.error(`Error saving WAV file: ${error}`);
+  }
+}
+
+// --- Main function ---
+async function run() {
+  console.log(
+    "Starting AssemblyAI streaming transcription with LLM Gateway..."
+  );
+  console.log("Audio will be saved to a WAV file when the session ends.");
+
+  // Initialize WebSocket connection
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      Authorization: YOUR_API_KEY,
+    },
+  });
+
+  // Setup WebSocket event handlers
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+    console.log(`Connected to: ${API_ENDPOINT_BASE_URL}`);
+    // Start the microphone
+    startMicrophone();
+  });
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === "Begin") {
+        const sessionId = data.id;
+        console.log(`Session started: ${sessionId}`);
+      } else if (msgType === "Turn") {
+        const endOfTurn = data.end_of_turn;
+
+        if (endOfTurn) {
+          const transcript = data.transcript || "";
+          console.log(`\nTranscript:\n${transcript}\n`);
+        }
+      } else if (msgType === "LLMGatewayResponse") {
+        // Extract the LLM response content
+        const llmData = data.data || {};
+        const llmContent = llmData.choices?.[0]?.message?.content || "";
+        console.log(`LLM Response:\n${llmContent}\n`);
+      } else if (msgType === "Termination") {
+        const audioDuration = data.audio_duration_seconds;
+        console.log(
+          `Session terminated: ${audioDuration} seconds of audio processed`
+        );
+      }
+    } catch (error) {
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`\nWebSocket Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
+    cleanup();
+  });
+
+  // Handle process termination
+  setupTerminationHandlers();
+}
+
+function startMicrophone() {
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
+    });
+
+    micInputStream = micInstance.getAudioStream();
+
+    micInputStream.on("data", (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        // Store audio data for WAV recording
+        recordedFrames.push(Buffer.from(data));
+
+        // Send audio data to WebSocket
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on("error", (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
+}
+
+function cleanup() {
+  stopRequested = true;
+
+  // Save recorded audio to WAV file
+  saveWavFile();
+
+  // Stop microphone if it's running
+  if (micInstance) {
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
+    micInstance = null;
+  }
+
+  // Close WebSocket connection if it's open
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      // Send termination message if possible
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
+  }
+
+  console.log("Cleanup complete.");
+}
+
+function setupTerminationHandlers() {
+  // Handle Ctrl+C and other termination signals
+  process.on("SIGINT", () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  // Handle uncaught exceptions
+  process.on("uncaughtException", (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    // Give time for cleanup before exiting
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
+run();
 ```
 
 </Tab>
@@ -460,279 +733,6 @@ run();
 ```
 
 </Tab>
-<Tab language="javascript" title="JavaScript">
-
-```javascript
-const WebSocket = require("ws");
-const mic = require("mic");
-const querystring = require("querystring");
-const fs = require("fs");
-
-// --- Configuration ---
-const YOUR_API_KEY = "<YOUR_API_KEY>"; // Replace with your actual API key
-
-// LLM Gateway Configuration
-const PROMPT =
-  "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
-const LLM_GATEWAY_CONFIG = {
-  model: "claude-sonnet-4-20250514",
-  messages: [{ role: "user", content: PROMPT }],
-  max_tokens: 4000,
-};
-
-const CONNECTION_PARAMS = {
-  sample_rate: 16000,
-  format_turns: true, // Request formatted final transcripts
-  speech_model: "u3-rt-pro", // USM 3 Pro model
-  llm_gateway: JSON.stringify(LLM_GATEWAY_CONFIG), // LLM Gateway configuration
-};
-const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
-const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
-
-// Audio Configuration
-const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
-const CHANNELS = 1;
-
-// Global variables
-let micInstance = null;
-let micInputStream = null;
-let ws = null;
-let stopRequested = false;
-
-// WAV recording variables
-let recordedFrames = []; // Store audio frames for WAV file
-
-// --- Helper functions ---
-function formatTimestamp(timestamp) {
-  return new Date(timestamp * 1000).toISOString();
-}
-
-function createWavHeader(sampleRate, channels, dataLength) {
-  const buffer = Buffer.alloc(44);
-
-  // RIFF header
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(36 + dataLength, 4);
-  buffer.write("WAVE", 8);
-
-  // fmt chunk
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16); // fmt chunk size
-  buffer.writeUInt16LE(1, 20); // PCM format
-  buffer.writeUInt16LE(channels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * channels * 2, 28); // byte rate
-  buffer.writeUInt16LE(channels * 2, 32); // block align
-  buffer.writeUInt16LE(16, 34); // bits per sample
-
-  // data chunk
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(dataLength, 40);
-
-  return buffer;
-}
-
-function saveWavFile() {
-  if (recordedFrames.length === 0) {
-    console.log("No audio data recorded.");
-    return;
-  }
-
-  // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const filename = `recorded_audio_${timestamp}.wav`;
-
-  try {
-    // Combine all recorded frames
-    const audioData = Buffer.concat(recordedFrames);
-    const dataLength = audioData.length;
-
-    // Create WAV header
-    const wavHeader = createWavHeader(SAMPLE_RATE, CHANNELS, dataLength);
-
-    // Write WAV file
-    const wavFile = Buffer.concat([wavHeader, audioData]);
-    fs.writeFileSync(filename, wavFile);
-
-    console.log(`Audio saved to: ${filename}`);
-    console.log(
-      `Duration: ${(dataLength / (SAMPLE_RATE * CHANNELS * 2)).toFixed(2)} seconds`
-    );
-  } catch (error) {
-    console.error(`Error saving WAV file: ${error}`);
-  }
-}
-
-// --- Main function ---
-async function run() {
-  console.log(
-    "Starting AssemblyAI streaming transcription with LLM Gateway..."
-  );
-  console.log("Audio will be saved to a WAV file when the session ends.");
-
-  // Initialize WebSocket connection
-  ws = new WebSocket(API_ENDPOINT, {
-    headers: {
-      Authorization: YOUR_API_KEY,
-    },
-  });
-
-  // Setup WebSocket event handlers
-  ws.on("open", () => {
-    console.log("WebSocket connection opened.");
-    console.log(`Connected to: ${API_ENDPOINT_BASE_URL}`);
-    // Start the microphone
-    startMicrophone();
-  });
-
-  ws.on("message", (message) => {
-    try {
-      const data = JSON.parse(message);
-      const msgType = data.type;
-
-      if (msgType === "Begin") {
-        const sessionId = data.id;
-        console.log(`Session started: ${sessionId}`);
-      } else if (msgType === "Turn") {
-        const endOfTurn = data.end_of_turn;
-
-        if (endOfTurn) {
-          const transcript = data.transcript || "";
-          console.log(`\nTranscript:\n${transcript}\n`);
-        }
-      } else if (msgType === "LLMGatewayResponse") {
-        // Extract the LLM response content
-        const llmData = data.data || {};
-        const llmContent = llmData.choices?.[0]?.message?.content || "";
-        console.log(`LLM Response:\n${llmContent}\n`);
-      } else if (msgType === "Termination") {
-        const audioDuration = data.audio_duration_seconds;
-        console.log(
-          `Session terminated: ${audioDuration} seconds of audio processed`
-        );
-      }
-    } catch (error) {
-      console.error(`\nError handling message: ${error}`);
-      console.error(`Message data: ${message}`);
-    }
-  });
-
-  ws.on("error", (error) => {
-    console.error(`\nWebSocket Error: ${error}`);
-    cleanup();
-  });
-
-  ws.on("close", (code, reason) => {
-    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
-    cleanup();
-  });
-
-  // Handle process termination
-  setupTerminationHandlers();
-}
-
-function startMicrophone() {
-  try {
-    micInstance = mic({
-      rate: SAMPLE_RATE.toString(),
-      channels: CHANNELS.toString(),
-      debug: false,
-      exitOnSilence: 6, // This won't actually exit, just a parameter for mic
-    });
-
-    micInputStream = micInstance.getAudioStream();
-
-    micInputStream.on("data", (data) => {
-      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
-        // Store audio data for WAV recording
-        recordedFrames.push(Buffer.from(data));
-
-        // Send audio data to WebSocket
-        ws.send(data);
-      }
-    });
-
-    micInputStream.on("error", (err) => {
-      console.error(`Microphone Error: ${err}`);
-      cleanup();
-    });
-
-    micInstance.start();
-    console.log("Microphone stream opened successfully.");
-    console.log("Speak into your microphone. Press Ctrl+C to stop.");
-  } catch (error) {
-    console.error(`Error opening microphone stream: ${error}`);
-    cleanup();
-  }
-}
-
-function cleanup() {
-  stopRequested = true;
-
-  // Save recorded audio to WAV file
-  saveWavFile();
-
-  // Stop microphone if it's running
-  if (micInstance) {
-    try {
-      micInstance.stop();
-    } catch (error) {
-      console.error(`Error stopping microphone: ${error}`);
-    }
-    micInstance = null;
-  }
-
-  // Close WebSocket connection if it's open
-  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
-    try {
-      // Send termination message if possible
-      if (ws.readyState === WebSocket.OPEN) {
-        const terminateMessage = { type: "Terminate" };
-        console.log(
-          `Sending termination message: ${JSON.stringify(terminateMessage)}`
-        );
-        ws.send(JSON.stringify(terminateMessage));
-      }
-      ws.close();
-    } catch (error) {
-      console.error(`Error closing WebSocket: ${error}`);
-    }
-    ws = null;
-  }
-
-  console.log("Cleanup complete.");
-}
-
-function setupTerminationHandlers() {
-  // Handle Ctrl+C and other termination signals
-  process.on("SIGINT", () => {
-    console.log("\nCtrl+C received. Stopping...");
-    cleanup();
-    // Give time for cleanup before exiting
-    setTimeout(() => process.exit(0), 1000);
-  });
-
-  process.on("SIGTERM", () => {
-    console.log("\nTermination signal received. Stopping...");
-    cleanup();
-    // Give time for cleanup before exiting
-    setTimeout(() => process.exit(0), 1000);
-  });
-
-  // Handle uncaught exceptions
-  process.on("uncaughtException", (error) => {
-    console.error(`\nUncaught exception: ${error}`);
-    cleanup();
-    // Give time for cleanup before exiting
-    setTimeout(() => process.exit(1), 1000);
-  });
-}
-
-// Start the application
-run();
-```
-
-</Tab>
 </Tabs>
 
 ## Before you begin
@@ -747,16 +747,6 @@ To complete this tutorial, you need:
 ## Step 1: Install prerequisites
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK">
-Install the AssemblyAI Python SDK via pip:
-
-```bash
-pip install "assemblyai[extras]"
-```
-
-</Tab>
-
 <Tab language="python" title="Python" default>
 Install the required packages via pip:
 
@@ -765,16 +755,14 @@ pip install pyaudio websocket-client
 ```
 
 </Tab>
-
-<Tab language="javascript-sdk" title="JavaScript SDK">
-Install the AssemblyAI JavaScript SDK and a recording package via NPM:
+<Tab language="python-sdk" title="Python SDK">
+Install the AssemblyAI Python SDK via pip:
 
 ```bash
-npm install assemblyai node-record-lpcm16
+pip install "assemblyai[extras]"
 ```
 
 </Tab>
-
 <Tab language="javascript" title="JavaScript">
 Install the required packages via NPM:
 
@@ -783,7 +771,14 @@ npm install ws mic
 ```
 
 </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+Install the AssemblyAI JavaScript SDK and a recording package via NPM:
 
+```bash
+npm install assemblyai node-record-lpcm16
+```
+
+</Tab>
 </Tabs>
 
 ## Step 2: Connect to Universal Streaming
@@ -793,36 +788,6 @@ In this step, you'll set up a connection to the Universal Streaming API with the
 For more information about streaming transcription, see [Transcribe streaming audio](/docs/getting-started/transcribe-streaming-audio).
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-import logging
-from typing import Type
-
-import assemblyai as aai
-from assemblyai.streaming.v3 import (
-    BeginEvent,
-    LLMGatewayResponseEvent,
-    StreamingClient,
-    StreamingClientOptions,
-    StreamingError,
-    StreamingEvents,
-    StreamingParameters,
-    TurnEvent,
-    TerminationEvent,
-)
-from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
-
-api_key = "<YOUR_API_KEY>"
-prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-```
-
-</Tab>
-
 <Tab language="python" title="Python" default>
 
 ```python
@@ -876,29 +841,34 @@ recording_lock = threading.Lock()  # Thread-safe access to recorded_frames
 ```
 
 </Tab>
+<Tab language="python-sdk" title="Python SDK">
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
+```python
+import logging
+from typing import Type
 
-```javascript
-import { AssemblyAI } from "assemblyai";
-import recorder from "node-record-lpcm16";
-import { Readable } from "stream";
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    LLMGatewayResponseEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TurnEvent,
+    TerminationEvent,
+)
+from assemblyai.streaming.v3.models import LLMGatewayConfig, LLMGatewayMessage
 
-// --- Configuration ---
-const API_KEY = "<YOUR_API_KEY>";
+api_key = "<YOUR_API_KEY>"
+prompt = "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}"
 
-// LLM Gateway Configuration
-const PROMPT =
-  "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
-const LLM_GATEWAY_CONFIG = {
-  model: "claude-sonnet-4-20250514",
-  messages: [{ role: "user", content: PROMPT }],
-  max_tokens: 4000,
-};
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 ```
 
 </Tab>
-
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
@@ -943,7 +913,27 @@ let recordedFrames = []; // Store audio frames for WAV file
 ```
 
 </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
 
+```javascript
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+import { Readable } from "stream";
+
+// --- Configuration ---
+const API_KEY = "<YOUR_API_KEY>";
+
+// LLM Gateway Configuration
+const PROMPT =
+  "Provide a brief summary of the transcript.\n\nTranscript: {{turn}}";
+const LLM_GATEWAY_CONFIG = {
+  model: "claude-sonnet-4-20250514",
+  messages: [{ role: "user", content: PROMPT }],
+  max_tokens: 4000,
+};
+```
+
+</Tab>
 </Tabs>
 
 The `llm_gateway` parameterisa JSON-stringified object that follows the same interface as the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions). It accepts the following fields:
@@ -965,33 +955,6 @@ In this step, you'll stream audio from your microphone, collect the transcribed 
 Set up the event handlers to stream audio and collect transcripts from completed turns.
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-def on_begin(self: Type[StreamingClient], event: BeginEvent):
-    print(f"Session started: {event.id}")
-
-def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    if event.end_of_turn:
-        print(f"\nTranscript:\n{event.transcript}\n")
-
-def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
-    # Extract the actual LLM response content from the data
-    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    print(f"LLM Response:\n{llm_content}\n")
-
-def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-    print(
-        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
-    )
-
-def on_error(self: Type[StreamingClient], error: StreamingError):
-    print(f"Error occurred: {error}")
-```
-
-</Tab>
-
 <Tab language="python" title="Python" default>
 
 ```python
@@ -1116,48 +1079,31 @@ def on_close(ws, close_status_code, close_msg):
 ```
 
 </Tab>
+<Tab language="python-sdk" title="Python SDK">
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
+```python
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
 
-```javascript
-// Session started event
-transcriber.on("open", ({ id }) => {
-  console.log(`Session started: ${id}`);
-});
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    if event.end_of_turn:
+        print(f"\nTranscript:\n{event.transcript}\n")
 
-// Error event
-transcriber.on("error", (error) => {
-  console.error(`\nError: ${error}`);
-});
+def on_llm_response(self: Type[StreamingClient], event: LLMGatewayResponseEvent):
+    # Extract the actual LLM response content from the data
+    llm_content = event.data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"LLM Response:\n{llm_content}\n")
 
-// Close event
-transcriber.on("close", (code, reason) => {
-  console.log("Session closed:", code, reason || "");
-});
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
 
-// Turn event - displays transcript when turn ends
-transcriber.on("turn", (turn) => {
-  if (turn.end_of_turn) {
-    console.log(`\nTranscript:\n${turn.transcript}\n`);
-  }
-});
-
-// LLM Gateway Response event - displays LLM summary
-transcriber.on("llmGatewayResponse", (response) => {
-  const llmContent = response.data?.choices?.[0]?.message?.content || "";
-  console.log(`\nLLM Response:\n${llmContent}\n`);
-});
-
-// Termination event
-transcriber.on("termination", (event) => {
-  console.log(
-    `Session terminated: ${event.audio_duration_seconds} seconds of audio processed`
-  );
-});
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
 ```
 
 </Tab>
-
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
@@ -1259,7 +1205,46 @@ function startMicrophone() {
 ```
 
 </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
 
+```javascript
+// Session started event
+transcriber.on("open", ({ id }) => {
+  console.log(`Session started: ${id}`);
+});
+
+// Error event
+transcriber.on("error", (error) => {
+  console.error(`\nError: ${error}`);
+});
+
+// Close event
+transcriber.on("close", (code, reason) => {
+  console.log("Session closed:", code, reason || "");
+});
+
+// Turn event - displays transcript when turn ends
+transcriber.on("turn", (turn) => {
+  if (turn.end_of_turn) {
+    console.log(`\nTranscript:\n${turn.transcript}\n`);
+  }
+});
+
+// LLM Gateway Response event - displays LLM summary
+transcriber.on("llmGatewayResponse", (response) => {
+  const llmContent = response.data?.choices?.[0]?.message?.content || "";
+  console.log(`\nLLM Response:\n${llmContent}\n`);
+});
+
+// Termination event
+transcriber.on("termination", (event) => {
+  console.log(
+    `Session terminated: ${event.audio_duration_seconds} seconds of audio processed`
+  );
+});
+```
+
+</Tab>
 </Tabs>
 
 </Step>
@@ -1268,31 +1253,26 @@ function startMicrophone() {
 Define a function to send the accumulated transcript to LLM Gateway for analysis. This function uses the [LLM Gateway chat completions API](/docs/llm-gateway/chat-completions) to process the transcript with your prompt.
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK">
-
-When using the Python SDK with `LLMGatewayConfig`, analysis responses are received automatically through the `LLMGatewayResponseEvent` event handler registered in the previous step. No separate API call is needed.
-
-</Tab>
-
 <Tab language="python" title="Python" default>
 
 When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback registered in the previous step. No separate API call is needed.
 
 </Tab>
+<Tab language="python-sdk" title="Python SDK">
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-When using the JavaScript SDK with `llmGateway` in the transcriber options, LLM Gateway responses are received automatically through the `llmGatewayResponse` event handler registered in the previous step. No separate API call is needed.
+When using the Python SDK with `LLMGatewayConfig`, analysis responses are received automatically through the `LLMGatewayResponseEvent` event handler registered in the previous step. No separate API call is needed.
 
 </Tab>
-
 <Tab language="javascript" title="JavaScript">
 
 When using the raw WebSocket approach with `llm_gateway` in the connection parameters, LLM Gateway responses are received as `LLMGatewayResponse` messages through the WebSocket, handled by the `on_message` callback in the `run()` function. No separate API call is needed.
 
 </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
 
+When using the JavaScript SDK with `llmGateway` in the transcriber options, LLM Gateway responses are received automatically through the `llmGatewayResponse` event handler registered in the previous step. No separate API call is needed.
+
+</Tab>
 </Tabs>
 
 </Step>
@@ -1301,52 +1281,6 @@ When using the raw WebSocket approach with `llm_gateway` in the connection param
 Run the streaming session and analyze the transcript with LLM Gateway when the session ends.
 
 <Tabs groupId="language">
-
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-def main():
-    client = StreamingClient(
-        StreamingClientOptions(
-            api_key=api_key,
-            api_host="streaming.assemblyai.com",
-        )
-    )
-
-    client.on(StreamingEvents.Begin, on_begin)
-    client.on(StreamingEvents.Turn, on_turn)
-    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
-    client.on(StreamingEvents.Termination, on_terminated)
-    client.on(StreamingEvents.Error, on_error)
-
-    client.connect(
-        StreamingParameters(
-            sample_rate=16000,
-            speech_model="u3-rt-pro",
-            format_turns=True,
-            llm_gateway=LLMGatewayConfig(
-                model="claude-sonnet-4-20250514",
-                messages=[
-                    LLMGatewayMessage(role="user", content=prompt)
-                ],
-                max_tokens=4000
-            )
-        )
-    )
-
-    try:
-        client.stream(
-            aai.extras.MicrophoneStream(sample_rate=16000)
-        )
-    finally:
-        client.disconnect(terminate=True)
-
-if __name__ == "__main__":
-    main()
-```
-
-</Tab>
-
 <Tab language="python" title="Python" default>
 
 ```python
@@ -1439,59 +1373,50 @@ if __name__ == "__main__":
 ```
 
 </Tab>
+<Tab language="python-sdk" title="Python SDK">
 
-<Tab language="javascript-sdk" title="JavaScript SDK">
+```python
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
 
-```javascript
-const run = async () => {
-  const client = new AssemblyAI({
-    apiKey: API_KEY,
-  });
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.LLMGatewayResponse, on_llm_response)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
 
-  const transcriber = client.streaming.transcriber({
-    sampleRate: 16000,
-    formatTurns: true,
-    speechModel: "u3-rt-pro",
-    llmGateway: LLM_GATEWAY_CONFIG,
-  });
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            speech_model="u3-rt-pro",
+            format_turns=True,
+            llm_gateway=LLMGatewayConfig(
+                model="claude-sonnet-4-20250514",
+                messages=[
+                    LLMGatewayMessage(role="user", content=prompt)
+                ],
+                max_tokens=4000
+            )
+        )
+    )
 
-  // ... (event handlers from Step 1)
+    try:
+        client.stream(
+            aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+    finally:
+        client.disconnect(terminate=True)
 
-  try {
-    await transcriber.connect();
-
-    console.log("Connecting to streaming transcript service");
-    console.log("Starting recording");
-
-    const recording = recorder.record({
-      channels: 1,
-      sampleRate: 16000,
-      audioType: "wav", // Linear PCM
-    });
-
-    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
-
-    // Stop recording and close connection using Ctrl-C
-    process.on("SIGINT", async function () {
-      console.log();
-      console.log("Stopping recording");
-      recording.stop();
-
-      console.log("Closing streaming transcript connection");
-      await transcriber.close();
-
-      process.exit();
-    });
-  } catch (error) {
-    console.error(`Error: ${error}`);
-  }
-};
-
-run();
+if __name__ == "__main__":
+    main()
 ```
 
 </Tab>
-
 <Tab language="javascript" title="JavaScript">
 
 ```javascript
@@ -1630,7 +1555,57 @@ run();
 ```
 
 </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
 
+```javascript
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: API_KEY,
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16000,
+    formatTurns: true,
+    speechModel: "u3-rt-pro",
+    llmGateway: LLM_GATEWAY_CONFIG,
+  });
+
+  // ... (event handlers from Step 1)
+
+  try {
+    await transcriber.connect();
+
+    console.log("Connecting to streaming transcript service");
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(`Error: ${error}`);
+  }
+};
+
+run();
+```
+
+</Tab>
 </Tabs>
 
 The output will look something like this:
