@@ -4,12 +4,12 @@ description: "Identify speakers by name or role in your transcript"
 hidden: true
 ---
 
-{/* @api-info
+{/_ @api-info
 product: Pre-recorded STT (Speech Understanding)
 speech_models: ["universal-3-pro", "universal-2"]
 api-endpoint: POST https://api.assemblyai.com/v2/transcript
 description: Identify speakers by name or role in pre-recorded audio transcripts. Only available with pre-recorded (async) transcription.
-*/}
+_/}
 
 import { LanguageTable } from "../../assets/components/LanguagesTable";
 
@@ -681,6 +681,113 @@ result = requests.post(
 - `["Host", "Guest"]` - Podcast or show recordings
 - `["Moderator", "Panelist"]` - Panel discussions
 
+### Adding speaker metadata with `speakers`
+
+For more accurate speaker identification, you can use the `speakers` parameter instead of `known_values`. The `speakers` parameter lets you provide additional metadata about each speaker, including a `description` that helps the model identify speakers based on conversational context.
+
+This is particularly useful when:
+
+- Speakers have similar voices but distinct roles or topics
+- You want to provide contextual clues about what each speaker typically discusses
+- You need more precise identification in complex multi-speaker scenarios
+
+#### Example with roles and descriptions
+
+```python
+# For Method 1 (transcribe and identify in one request):
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "role",
+        "speakers": [
+          {
+            "role": "captain",
+            "description": "Flies ship, instructs crew, manages distress calls"
+          },
+          {
+            "role": "crew",
+            "description": "Assists with completion of the mission"
+          },
+          {
+            "role": "advertiser",
+            "description": "Talks about products near the end of the episode"
+          }
+        ]
+      }
+    }
+  }
+}
+
+# For Method 2 (add identification to existing transcript):
+understanding_body = {
+  "transcript_id": transcript_id,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "role",
+        "speakers": [
+          {
+            "role": "captain",
+            "description": "Flies ship, instructs crew, manages distress calls"
+          },
+          {
+            "role": "crew",
+            "description": "Assists with completion of the mission"
+          },
+          {
+            "role": "advertiser",
+            "description": "Talks about products near the end of the episode"
+          }
+        ]
+      }
+    }
+  }
+}
+
+# Send the modified transcript to the Speech Understanding API
+result = requests.post(
+  "https://llm-gateway.assemblyai.com/v1/understanding",
+  headers = headers,
+  json = understanding_body
+).json()
+```
+
+#### Example with names and descriptions
+
+```python
+data = {
+  "audio_url": upload_url,
+  "speaker_labels": True,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "name",
+        "speakers": [
+          {
+            "name": "Michel Martin",
+            "description": "Hosts the program and interviews the guests"
+          },
+          {
+            "name": "Peter DeCarlo",
+            "description": "Answers questions from the interview"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+<Note>
+  The `speakers` parameter is an alternative to `known_values`. Use `speakers`
+  when you want to provide descriptions alongside names or roles to improve
+  identification accuracy. Use `known_values` when you only need to provide a
+  simple list of names or roles without additional context.
+</Note>
+
 ## API reference
 
 ### Request
@@ -747,13 +854,17 @@ curl -X POST "https://llm-gateway.assemblyai.com/v1/understanding" \
 
 #### Request parameters
 
-| Key                                                   | Type   | Required?   | Description                                                                                                                                                             |
-| ----------------------------------------------------- | ------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `speech_understanding`                                | object | Yes         | Container for speech understanding requests.                                                                                                                            |
-| `speech_understanding.request`                        | object | Yes         | The understanding request configuration.                                                                                                                                |
-| `speech_understanding.request.speaker_identification` | object | Yes         | Speaker identification configuration.                                                                                                                                   |
-| `speaker_identification.speaker_type`                 | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                          |
-| `speaker_identification.known_values`                 | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role". Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. |
+| Key                                                   | Type   | Required?   | Description                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | ------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `speech_understanding`                                | object | Yes         | Container for speech understanding requests.                                                                                                                                                                                                       |
+| `speech_understanding.request`                        | object | Yes         | The understanding request configuration.                                                                                                                                                                                                           |
+| `speech_understanding.request.speaker_identification` | object | Yes         | Speaker identification configuration.                                                                                                                                                                                                              |
+| `speaker_identification.speaker_type`                 | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                                                                                                     |
+| `speaker_identification.known_values`                 | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role" and `speakers` is not provided. Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. Use `known_values` or `speakers`, not both. |
+| `speaker_identification.speakers`                     | array  | Conditional | An array of speaker objects with metadata. Use as an alternative to `known_values` when you want to provide additional context about each speaker. Use `speakers` or `known_values`, not both.                                                     |
+| `speaker_identification.speakers[].role`              | string | Conditional | The role of the speaker. Required when `speaker_type` is "role".                                                                                                                                                                                   |
+| `speaker_identification.speakers[].name`              | string | Conditional | The name of the speaker. Required when `speaker_type` is "name".                                                                                                                                                                                   |
+| `speaker_identification.speakers[].description`       | string | No          | A description of the speaker to help the model identify them based on conversational context.                                                                                                                                                      |
 
 ### Response
 
@@ -761,6 +872,23 @@ The Speaker Identification API returns a modified version of your transcript wit
 
 ```json
 {
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "name",
+        "known_values": ["Michel Martin", "Peter DeCarlo"]
+      }
+    },
+    "response": {
+      "speaker_identification": {
+        "mapping": {
+          "A": "Michel Martin",
+          "B": "Peter DeCarlo"
+        },
+        "status": "success"
+      }
+    }
+  },
   "utterances": [
     {
       "speaker": "Michel Martin",
@@ -802,20 +930,22 @@ The Speaker Identification API returns a modified version of your transcript wit
 
 #### Response fields
 
-| Key                                 | Type   | Description                                                                                                                                                |
-| ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `utterances`                        | array  | A turn-by-turn temporal sequence of the transcript, where the i-th element is an object containing information about the i-th utterance in the audio file. |
-| `utterances[i].confidence`          | number | The confidence score for the transcript of this utterance.                                                                                                 |
-| `utterances[i].end`                 | number | The ending time, in milliseconds, of the utterance in the audio file.                                                                                      |
-| `utterances[i].speaker`             | string | The identified speaker name or role for this utterance.                                                                                                    |
-| `utterances[i].start`               | number | The starting time, in milliseconds, of the utterance in the audio file.                                                                                    |
-| `utterances[i].text`                | string | The transcript for this utterance.                                                                                                                         |
-| `utterances[i].words`               | array  | A sequential array for the words in the transcript, where the j-th element is an object containing information about the j-th word in the utterance.       |
-| `utterances[i].words[j].text`       | string | The text of the j-th word in the i-th utterance.                                                                                                           |
-| `utterances[i].words[j].start`      | number | The starting time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                 |
-| `utterances[i].words[j].end`        | number | The ending time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                   |
-| `utterances[i].words[j].confidence` | number | The confidence score for the transcript of the j-th word in the i-th utterance.                                                                            |
-| `utterances[i].words[j].speaker`    | string | The identified speaker name or role who uttered the j-th word in the i-th utterance.                                                                       |
+| Key                                                            | Type   | Description                                                                                                                                                |
+| -------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `speech_understanding.response.speaker_identification.mapping` | object | A mapping of the original generic speaker labels (e.g., "A", "B") to the identified speaker names or roles.                                                |
+| `speech_understanding.response.speaker_identification.status`  | string | The status of the speaker identification request (e.g., "success").                                                                                        |
+| `utterances`                                                   | array  | A turn-by-turn temporal sequence of the transcript, where the i-th element is an object containing information about the i-th utterance in the audio file. |
+| `utterances[i].confidence`                                     | number | The confidence score for the transcript of this utterance.                                                                                                 |
+| `utterances[i].end`                                            | number | The ending time, in milliseconds, of the utterance in the audio file.                                                                                      |
+| `utterances[i].speaker`                                        | string | The identified speaker name or role for this utterance.                                                                                                    |
+| `utterances[i].start`                                          | number | The starting time, in milliseconds, of the utterance in the audio file.                                                                                    |
+| `utterances[i].text`                                           | string | The transcript for this utterance.                                                                                                                         |
+| `utterances[i].words`                                          | array  | A sequential array for the words in the transcript, where the j-th element is an object containing information about the j-th word in the utterance.       |
+| `utterances[i].words[j].text`                                  | string | The text of the j-th word in the i-th utterance.                                                                                                           |
+| `utterances[i].words[j].start`                                 | number | The starting time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                 |
+| `utterances[i].words[j].end`                                   | number | The ending time for when the j-th word is spoken in the i-th utterance, in milliseconds.                                                                   |
+| `utterances[i].words[j].confidence`                            | number | The confidence score for the transcript of the j-th word in the i-th utterance.                                                                            |
+| `utterances[i].words[j].speaker`                               | string | The identified speaker name or role who uttered the j-th word in the i-th utterance.                                                                       |
 
 #### Key differences from standard transcription
 

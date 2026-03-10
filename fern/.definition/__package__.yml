@@ -243,6 +243,11 @@ types:
   LlmGatewaySpeakerIdentificationResponseSpeechUnderstandingResponseSpeakerIdentification:
     inline: true
     properties:
+      mapping:
+        docs: >-
+          A mapping of the original generic speaker labels (e.g., "A", "B") to
+          the identified speaker names or roles.
+        type: optional<map<string, string>>
       status: string
     source:
       openapi: ../llm-gateway.yml
@@ -398,6 +403,31 @@ types:
           Identification](https://www.assemblyai.com/docs/speech-understanding/speaker-identification)
           for details on each type.
         type: SpeakerIdentificationRequestBodySpeakerIdentificationSpeakerType
+      speakers:
+        docs: >-
+          An array of speaker objects with metadata to improve identification
+          accuracy. Each object should include a `role` or `name` (depending on
+          `speaker_type`) and an optional `description` to help the model
+          identify the speaker. Use this as an alternative to `known_values`
+          when you want to provide additional context about each speaker.
+        type: >-
+          optional<list<SpeakerIdentificationRequestBodySpeakerIdentificationSpeakersItem>>
+    source:
+      openapi: ../llm-gateway.yml
+  SpeakerIdentificationRequestBodySpeakerIdentificationSpeakersItem:
+    inline: true
+    properties:
+      description:
+        docs: >-
+          A description of the speaker to help the model identify them based on
+          conversational context.
+        type: optional<string>
+      name:
+        docs: The name of the speaker. Required when `speaker_type` is "name".
+        type: optional<string>
+      role:
+        docs: The role of the speaker. Required when `speaker_type` is "role".
+        type: optional<string>
     source:
       openapi: ../llm-gateway.yml
   SpeakerIdentificationRequestBodySpeakerIdentificationSpeakerType:
@@ -419,6 +449,11 @@ types:
   SpeakerIdentificationResponseSpeakerIdentification:
     inline: true
     properties:
+      mapping:
+        docs: >-
+          A mapping of the original generic speaker labels (e.g., "A", "B") to
+          the identified speaker names or roles.
+        type: optional<map<string, string>>
       status: optional<string>
     source:
       openapi: ../openapi.yml
@@ -546,8 +581,8 @@ types:
       end_of_turn_confidence:
         docs: >-
           The confidence score that this is the end of a turn, between 0.0 (low
-          confidence) and 1.0 (high confidence). For Universal-3 Pro Streaming, this is
-          1.0 when `end_of_turn` is true and 0.0 otherwise.
+          confidence) and 1.0 (high confidence). For Universal-3 Pro Streaming,
+          this is 1.0 when `end_of_turn` is true and 0.0 otherwise.
         type: float
       language_code:
         docs: >-
@@ -565,8 +600,8 @@ types:
         type: string
       turn_is_formatted:
         docs: >-
-          Whether this turn has been formatted. For Universal-3 Pro Streaming, this always
-          matches `end_of_turn`.
+          Whether this turn has been formatted. For Universal-3 Pro Streaming,
+          this always matches `end_of_turn`.
         type: boolean
       turn_order:
         docs: Order of this turn in the conversation.
@@ -1016,7 +1051,7 @@ service:
                 - key: value
         - headers:
             Authorization: Authorization
-          name: Speaker identification request
+          name: Speaker identification request with known_values
           request:
             speech_understanding:
               request:
@@ -1025,6 +1060,59 @@ service:
                     - interviewer
                     - candidate
                   speaker_type: role
+            transcript_id: "12345"
+          response:
+            body:
+              speech_understanding:
+                request:
+                  translation:
+                    formal: true
+                    match_original_utterance: true
+                    target_languages:
+                      - es
+                      - de
+                response:
+                  translation:
+                    status: completed
+              translated_texts:
+                de: >-
+                  Hallo, ich bin der Interviewer. Rufen Sie mich an unter fünf
+                  fünf fünf eins zwei drei vier fünf sechs sieben acht am
+                  fünfundzwanzigsten Dezember zweitausendvierundzwanzig. Danke!
+                  Ich werde mich dann melden.
+                es: >-
+                  Hola, soy el entrevistador. Llámame al cinco cinco cinco uno
+                  dos tres cuatro cinco seis siete ocho el veinticinco de
+                  diciembre de dos mil veinticuatro. ¡Gracias! Me pondré en
+                  contacto entonces.
+              utterances:
+                - translated_texts:
+                    de: >-
+                      Hallo, ich bin der Interviewer. Rufen Sie mich an unter
+                      fünf fünf fünf eins zwei drei vier fünf sechs sieben acht
+                      am fünfundzwanzigsten Dezember zweitausendvierundzwanzig
+                    es: >-
+                      Hola, soy el entrevistador. Llámame al cinco cinco cinco
+                      uno dos tres cuatro cinco seis siete ocho el veinticinco
+                      de diciembre de dos mil veinticuatro
+                - translated_texts:
+                    de: Danke! Ich werde mich dann melden.
+                    es: ¡Gracias! Me pondré en contacto entonces.
+              words:
+                - key: value
+        - headers:
+            Authorization: Authorization
+          name: Speaker identification request with speakers metadata
+          request:
+            speech_understanding:
+              request:
+                speaker_identification:
+                  speaker_type: role
+                  speakers:
+                    - description: Hosts the program and interviews the guests
+                      role: interviewer
+                    - description: Answers questions from the interview
+                      role: guest
             transcript_id: "12345"
           response:
             body:
