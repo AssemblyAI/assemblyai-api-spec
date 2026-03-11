@@ -23,28 +23,24 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
 - **Promptable model** — feed domain vocabulary (up to 1,000 keyterms) and formatting instructions, and the model applies them as audio arrives
 - **Better turn detection** — punctuation-based system that waits when customers pause mid-thought and responds when they're done, fixing the cut-off conversation problem
 - **Native multilingual code-switching** — English, Spanish, German, French, Portuguese, Italian handled natively in a single model
-- **Sub-300ms latency** — ~150ms P50, ~240ms P90 after VAD endpoint detection
+- **Sub-300ms latency**
 - **Mid-stream configuration** — update keyterms, prompts, and silence parameters without dropping the connection
 
 ## Key Differences
 
-| Feature                                   | Universal Streaming                                                                   | Universal-3 Pro Streaming                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **`speech_model`**                        | `universal-streaming-english` or `universal-streaming-multilingual`                   | `u3-rt-pro`                                                                                       |
-| **Turn detection**                        | Confidence-based (`end_of_turn_confidence_threshold`)                                 | Punctuation-based (`min_turn_silence` + terminal punctuation)                                     |
-| **`min_turn_silence` default**            | `400` ms                                                                              | `100` ms                                                                                          |
-| **`max_turn_silence` default**            | `1280` ms                                                                             | `1000` ms                                                                                         |
-| **Formatting**                            | Opt-in via `format_turns=True`                                                        | Always on — formatting is built into the turn detection system                                    |
-| **`end_of_turn` and `turn_is_formatted`** | Can differ (`turn_is_formatted` arrives as a separate message after `end_of_turn`)    | Always the same value — only one end-of-turn transcript per turn, always formatted                |
-| **Partials behavior**                     | Emitted for every subword as audio is processed                                       | Emitted only during silence periods (at most one partial per silence period)                      |
-| **`end_of_turn_confidence_threshold`**    | Controls turn detection (default `0.4`)                                               | Has no impact — turns are decided by punctuation                                                  |
-| **`utterance` field**                     | Present in Turn messages for eager LLM inference                                      | Not present                                                                                       |
-| **Prompting**                             | Not supported                                                                         | Supported via `prompt` connection parameter                                                       |
-| **Keyterms prompting**                    | Supported                                                                             | Supported                                                                                         |
-| **UpdateConfiguration**                   | Not supported                                                                         | Supported — update `keyterms_prompt`, `prompt`, `min_turn_silence`, `max_turn_silence` mid-stream |
-| **ForceEndpoint**                         | Not supported                                                                         | Supported — force the current turn to end immediately                                             |
-| **Multilingual support**                  | Separate models (`universal-streaming-english` vs `universal-streaming-multilingual`) | Single model with native multilingual code switching                                              |
-| **Entity accuracy**                       | Standard                                                                              | Exceptional — credit cards, phone numbers, emails, addresses, names                               |
+| Feature                                   | Universal Streaming                                                                   | Universal-3 Pro Streaming                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **`speech_model`**                        | `universal-streaming-english` or `universal-streaming-multilingual`                   | `u3-rt-pro`                                                                        |
+| **Turn detection**                        | Confidence-based (`end_of_turn_confidence_threshold`)                                 | Punctuation-based (`min_turn_silence` + terminal punctuation)                      |
+| **`min_turn_silence` default**            | `400` ms                                                                              | `100` ms                                                                           |
+| **`max_turn_silence` default**            | `1280` ms                                                                             | `1000` ms                                                                          |
+| **Formatting**                            | Opt-in via `format_turns=True`                                                        | Always on — formatting is built into the turn detection system                     |
+| **`end_of_turn` and `turn_is_formatted`** | Can differ (`turn_is_formatted` arrives as a separate message after `end_of_turn`)    | Always the same value — only one end-of-turn transcript per turn, always formatted |
+| **Partials behavior**                     | Emitted for every subword as audio is processed                                       | Emitted only during silence periods (at most one partial per silence period)       |
+| **Prompting**                             | Not supported                                                                         | Supported via `prompt` connection parameter                                        |
+| **Keyterms prompting**                    | Supported                                                                             | Supported                                                                          |
+| **`vad_threshold` default**               | `0.4`                                                                                 | `0.3` — more sensitive; may need tuning in noisy environments                      |
+| **Multilingual support**                  | Separate models (`universal-streaming-english` vs `universal-streaming-multilingual`) | Single model with native multilingual code switching                               |
 
 For a complete working example, see the [Universal-3 Pro Streaming quickstart](/docs/streaming/universal-3-pro#quickstart).
 
@@ -85,128 +81,7 @@ Key changes when upgrading:
 
 - **New parameters available** — You can now use `prompt` for custom prompting and `keyterms_prompt` for boosting recognition of specific terms at connection time.
 
-## Turn Detection (Confidence-Based to Punctuation-Based)
-
-One of the most significant differences between Universal Streaming and Universal-3 Pro Streaming is how turn detection works.
-
-### Universal Streaming: Confidence-based
-
-Universal Streaming uses a confidence-based system with three parameters:
-
-| Parameter                          | Default   | Description                                           |
-| ---------------------------------- | --------- | ----------------------------------------------------- |
-| `end_of_turn_confidence_threshold` | `0.4`     | Confidence threshold (0.0–1.0) to trigger end of turn |
-| `min_turn_silence`                 | `400` ms  | Minimum silence required before checking confidence   |
-| `max_turn_silence`                 | `1280` ms | Maximum silence before forcing end of turn            |
-
-The model evaluates an `end_of_turn_confidence` score during silence. If the score exceeds `end_of_turn_confidence_threshold` after `min_turn_silence`, the turn ends. Otherwise, the turn is forced to end after `max_turn_silence`.
-
-### Universal-3 Pro Streaming: Punctuation-based
-
-Universal-3 Pro uses a punctuation-based system controlled by two parameters:
-
-| Parameter          | Default   | Description                                                |
-| ------------------ | --------- | ---------------------------------------------------------- |
-| `min_turn_silence` | `100` ms  | Silence before a speculative end-of-turn (EOT) check fires |
-| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end             |
-
-When silence reaches `min_turn_silence`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
-
-- **Terminal punctuation found** — the turn ends (`end_of_turn: true`).
-- **No terminal punctuation** — a partial is emitted (`end_of_turn: false`) and the turn continues.
-- If silence reaches `max_turn_silence`, the turn is forced to end regardless of punctuation.
-
-<Note>
-  Because turn detection is now punctuation-based, the
-  `end_of_turn_confidence_threshold` parameter has no impact in Universal-3 Pro.
-  You can safely remove it from your connection parameters.
-</Note>
-
-## Receiving Messages
-
-<Tabs groupId="language">
-    <Tab language="universal" title="Universal Streaming">
-    ```python
-    def on_message(ws, message):
-        data = json.loads(message)
-        msg_type = data.get('type')
-
-        if msg_type == "Begin":
-            session_id = data.get('id')
-            expires_at = data.get('expires_at')
-            print(f"Session began: ID={session_id}")
-        elif msg_type == "Turn":
-            transcript = data.get('transcript', '')
-            formatted = data.get('turn_is_formatted', False)
-
-            # Formatted transcript arrives as a separate message
-            # after the end-of-turn message
-            if formatted:
-                print('\r' + ' ' * 80 + '\r', end='')
-                print(transcript)
-            else:
-                print(f"\r{transcript}", end='')
-        elif msg_type == "Termination":
-            audio_duration = data.get('audio_duration_seconds', 0)
-            print(f"Session terminated: {audio_duration}s of audio")
-    ```
-    </Tab>
-    <Tab language="u3pro" title="Universal-3 Pro Streaming">
-    ```python
-    def on_message(ws, message):
-        data = json.loads(message)
-        msg_type = data.get("type")
-
-        if msg_type == "Begin":
-            print(f"Session began: ID={data.get('id')}")
-        elif msg_type == "Turn":
-            transcript = data.get("transcript", "")
-            end_of_turn = data.get("end_of_turn", False)
-
-            # end_of_turn and turn_is_formatted always have the
-            # same value — only one final transcript per turn
-            if end_of_turn:
-                print(f"\r{' ' * 80}\r{transcript}")
-            else:
-                print(f"\r{transcript}", end="")
-        elif msg_type == "Termination":
-            print(f"Session terminated: {data.get('audio_duration_seconds', 0)}s of audio")
-    ```
-    </Tab>
-
-</Tabs>
-
-Key differences in message handling:
-
-- **`turn_is_formatted` and `end_of_turn` are always the same** — In Universal Streaming, the formatted transcript arrives as a separate message after the end-of-turn message (you check `turn_is_formatted`). In Universal-3 Pro, there is only one end-of-turn transcript per turn and it is always formatted. You can simply check `end_of_turn` to detect a formatted, final transcript.
-
-- **No `utterance` field** — Universal Streaming includes an `utterance` field for eager LLM inference. Universal-3 Pro does not include this field. Instead, use partials (`end_of_turn: false`) for eager inference.
-
-- **No `end_of_turn_confidence` to evaluate** — Universal Streaming Turn messages include an `end_of_turn_confidence` score. While this field may still be present in Universal-3 Pro, turn decisions are made by punctuation, not by this score.
-
-## Partials behavior
-
-Universal-3 Pro emits partials only during silence periods instead of for every subword. See [Partials behavior](/docs/streaming/universal-3-pro#partials-behavior) for details.
-
-## New Universal-3 Pro features
-
-Universal-3 Pro Streaming introduces several features not available in Universal Streaming.
-
-### Prompting
-
-Provide custom prompts via the `prompt` connection parameter to improve transcription accuracy for your domain. See the [Prompting guide](/docs/streaming/prompting) for details.
-
-### Keyterms prompting
-
-Boost recognition of up to 1,000 specific terms using the `keyterms_prompt` parameter. See [Keyterms prompting](/docs/streaming/keyterms-prompting) for details.
-
-### `UpdateConfiguration`
-
-Update `keyterms_prompt`, `prompt`, `min_turn_silence`, and `max_turn_silence` during an active session without reconnecting. See [Updating configuration mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) for details.
-
-### `ForceEndpoint`
-
-Force the current turn to end immediately by sending a `ForceEndpoint` message, useful when external signals indicate the user has finished speaking. See [Forcing a turn endpoint](/docs/streaming/universal-3-pro#forcing-a-turn-endpoint) for details.
+For details on configuring turn detection, partials behavior, prompting, keyterms prompting, mid-stream configuration updates, and forcing turn endpoints, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro).
 
 ## Language support
 
