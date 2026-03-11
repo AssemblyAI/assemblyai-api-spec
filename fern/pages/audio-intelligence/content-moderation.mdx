@@ -3,6 +3,14 @@ title: "Content Moderation"
 description: "Detect sensitive content in your audio files"
 ---
 
+{/* @api-info
+product: Pre-recorded STT (Guardrails)
+speech_models: ["universal-3-pro", "universal-2"]
+api-endpoint: POST https://api.assemblyai.com/v2/transcript
+parameter: content_safety (boolean)
+description: Detect sensitive content like hate speech, violence, and other topics in pre-recorded audio. Only available with pre-recorded (async) transcription.
+*/}
+
 import { LanguageTable } from "../../assets/components/LanguagesTable";
 
 <AccordionGroup>
@@ -49,49 +57,7 @@ The model pinpoints sensitive discussions in spoken data and their severity.
 ## Quickstart
 
 <Tabs groupId="language">
-  <Tab language="python-sdk" title="Python SDK" default>
-  
-  Enable Content Moderation by setting `content_safety` to `True` in the transcription config.
-
-```python {8}
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# audio_file = "./local_file.mp3"
-audio_file = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig(
-    speech_models=["universal-3-pro", "universal-2"],
-    language_detection=True,
-    content_safety=True
-)
-
-transcript = aai.Transcriber().transcribe(audio_file, config)
-
-print(f"Transcript ID:", transcript.id)
-
-for result in transcript.content_safety.results:
-    print(result.text)
-    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
-
-    # Get category, confidence, and severity.
-    for label in result.labels:
-        print(f"{label.label} - {label.confidence} - {label.severity}")  # content safety category
-
-# Get the confidence of the most common labels in relation to the entire audio file.
-for label, confidence in transcript.content_safety.summary.items():
-    print(f"{confidence * 100}% confident that the audio contains {label}")
-
-# Get the overall severity of the most common labels in relation to the entire audio file.
-for label, severity_confidence in transcript.content_safety.severity_score_summary.items():
-    print(f"{severity_confidence.low * 100}% confident that the audio contains low-severity {label}")
-    print(f"{severity_confidence.medium * 100}% confident that the audio contains medium-severity {label}")
-    print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
-```
-
-  </Tab>
-  <Tab language="python" title="Python" default>
+<Tab language="python" title="Python" default>
   
   Enable Content Moderation by setting `content_safety` to `True` in the JSON payload.
 
@@ -157,74 +123,49 @@ while True:
 ```
 
   </Tab>
-  <Tab language="javascript-sdk" title="JavaScript SDK">
+<Tab language="python-sdk" title="Python SDK">
   
-  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+  Enable Content Moderation by setting `content_safety` to `True` in the transcription config.
 
-```javascript {12}
-import { AssemblyAI } from "assemblyai";
+```python {8}
+import assemblyai as aai
 
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
+aai.settings.api_key = "<YOUR_API_KEY>"
 
-// const audioFile = './local_file.mp3'
-const audioFile = "https://assembly.ai/wildfires.mp3";
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
 
-const params = {
-  audio: audioFile,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  content_safety: true,
-};
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True,
+    content_safety=True
+)
 
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params);
-  console.log(`Transcript ID: ${transcript.id}`);
-  const contentSafetyLabels = transcript.content_safety_labels;
+transcript = aai.Transcriber().transcribe(audio_file, config)
 
-  // Get the parts of the transcript which were flagged as sensitive
-  for (const result of contentSafetyLabels.results) {
-    console.log(result.text);
-    console.log(
-      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
-    );
+print(f"Transcript ID:", transcript.id)
 
-    // Get category, confidence, and severity
-    for (const label of result.labels) {
-      console.log(`${label.label} - ${label.confidence} - ${label.severity}`);
-    }
-  }
+for result in transcript.content_safety.results:
+    print(result.text)
+    print(f"Timestamp: {result.timestamp.start} - {result.timestamp.end}")
 
-  // Get the confidence of the most common labels in relation to the entire audio file
-  for (const [label, confidence] of Object.entries(
-    contentSafetyLabels.summary
-  )) {
-    console.log(
-      `${confidence * 100}% confident that the audio contains ${label}`
-    );
-  }
+    # Get category, confidence, and severity.
+    for label in result.labels:
+        print(f"{label.label} - {label.confidence} - {label.severity}")  # content safety category
 
-  // Get the overall severity of the most common labels in relation to the entire audio file
-  for (const [label, severity_confidence] of Object.entries(
-    contentSafetyLabels.severity_score_summary
-  )) {
-    console.log(
-      `${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`
-    );
-    console.log(
-      `${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`
-    );
-    console.log(
-      `${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`
-    );
-  }
-};
-run();
+# Get the confidence of the most common labels in relation to the entire audio file.
+for label, confidence in transcript.content_safety.summary.items():
+    print(f"{confidence * 100}% confident that the audio contains {label}")
+
+# Get the overall severity of the most common labels in relation to the entire audio file.
+for label, severity_confidence in transcript.content_safety.severity_score_summary.items():
+    print(f"{severity_confidence.low * 100}% confident that the audio contains low-severity {label}")
+    print(f"{severity_confidence.medium * 100}% confident that the audio contains medium-severity {label}")
+    print(f"{severity_confidence.high * 100}% confident that the audio contains high-severity {label}")
 ```
 
   </Tab>
-  <Tab language="javascript" title="JavaScript">
+<Tab language="javascript" title="JavaScript">
   
   Enable Content Moderation by setting `content_safety` to `true` in the JSON payload.
 
@@ -312,6 +253,73 @@ while (true) {
 ```
 
   </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+  
+  Enable Content Moderation by setting `content_safety` to `true` in the transcription config.
+
+```javascript {12}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  content_safety: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(`Transcript ID: ${transcript.id}`);
+  const contentSafetyLabels = transcript.content_safety_labels;
+
+  // Get the parts of the transcript which were flagged as sensitive
+  for (const result of contentSafetyLabels.results) {
+    console.log(result.text);
+    console.log(
+      `Timestamp: ${result.timestamp.start} - ${result.timestamp.end}`
+    );
+
+    // Get category, confidence, and severity
+    for (const label of result.labels) {
+      console.log(`${label.label} - ${label.confidence} - ${label.severity}`);
+    }
+  }
+
+  // Get the confidence of the most common labels in relation to the entire audio file
+  for (const [label, confidence] of Object.entries(
+    contentSafetyLabels.summary
+  )) {
+    console.log(
+      `${confidence * 100}% confident that the audio contains ${label}`
+    );
+  }
+
+  // Get the overall severity of the most common labels in relation to the entire audio file
+  for (const [label, severity_confidence] of Object.entries(
+    contentSafetyLabels.severity_score_summary
+  )) {
+    console.log(
+      `${severity_confidence.low * 100}% confident that the audio contains low-severity ${label}`
+    );
+    console.log(
+      `${severity_confidence.medium * 100}% confident that the audio contains medium-severity ${label}`
+    );
+    console.log(
+      `${severity_confidence.high * 100}% confident that the audio contains high-severity ${label}`
+    );
+  }
+};
+run();
+```
+
+  </Tab>
 </Tabs>
 
 ### Example output
@@ -347,20 +355,7 @@ health_issues - 0.9358 - 0.8906
 The confidence threshold determines how likely something is to be flagged as inappropriate content. A threshold of 50% (which is the default) means any label with a confidence score of 50% or greater is flagged.
 
 <Tabs groupId="language">
-  <Tab language="python-sdk" title="Python SDK" default>
-  
-  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
-
-```python {4}
-# Setting the content safety confidence threshold to 60%.
-config = aai.TranscriptionConfig(
-  content_safety=True,
-  content_safety_confidence=60
-)
-```
-
-  </Tab>
-  <Tab language="python" title="Python" default>
+<Tab language="python" title="Python" default>
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
 
@@ -374,21 +369,20 @@ data = {
 ```
 
   </Tab>
-  <Tab language="javascript-sdk" title="JavaScript SDK">
+<Tab language="python-sdk" title="Python SDK">
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
 
-```javascript {5}
-// Setting the content safety confidence threshold to 60%.
-const params = {
-  audio: audioUrl,
-  content_safety: true,
-  content_safety_confidence: 60,
-};
+```python {4}
+# Setting the content safety confidence threshold to 60%.
+config = aai.TranscriptionConfig(
+  content_safety=True,
+  content_safety_confidence=60
+)
 ```
 
   </Tab>
-    <Tab language="javascript" title="JavaScript">
+<Tab language="javascript" title="JavaScript">
   
   To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the JSON payload.
 
@@ -396,6 +390,20 @@ const params = {
 // Setting the content safety confidence threshold to 60%.
 const data = {
   audio_url: uploadUrl,
+  content_safety: true,
+  content_safety_confidence: 60,
+};
+```
+
+  </Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+  
+  To adjust the confidence threshold for your transcription, include `content_safety_confidence` in the transcription config.
+
+```javascript {5}
+// Setting the content safety confidence threshold to 60%.
+const params = {
+  audio: audioUrl,
   content_safety: true,
   content_safety_confidence: 60,
 };

@@ -4,12 +4,20 @@ hide-nav-links: true
 description: "Get notified when a streaming transcription session ends."
 ---
 
-Webhooks allow you to receive the complete transcript via HTTP callback when a streaming session ends. This is in addition to the normal WebSocket responses you receive during the session.
+{/* @api-info
+product: Streaming STT
+speech_model: "u3-rt-pro" | "universal-streaming-english" | "universal-streaming-multilingual"
+api-endpoint: wss://streaming.assemblyai.com/v3/ws
+parameter: webhook_url (connection parameter)
+description: Set up webhooks to receive the complete transcript when a streaming session ends.
+*/}
+
+Webhooks allow you to receive the complete transcript via HTTP callback when a streaming session ends. This is in addition to the real-time WebSocket responses you receive during the session, such as partial and finalized turns. These WebSocket messages are delivered continuously as audio is processed, while the webhook is sent once after the session terminates and contains only the finalized turns.
 
 <Note>
   This guide covers webhooks for [streaming audio
   transcription](/docs/streaming). For webhooks with pre-recorded audio, see
-  [Webhooks for pre-recorded audio](/docs/deployment/webhooks).
+  [Webhooks for pre-recorded audio](/docs/webhooks).
 </Note>
 
 ## Configure webhooks for a streaming session
@@ -42,71 +50,7 @@ wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&webhook_url=https://examp
 ```
 
 <Tabs>
-<Tab language="python-sdk" title="Python SDK">
-
-```python
-import assemblyai as aai
-from assemblyai.streaming.v3 import (
-    BeginEvent,
-    StreamingClient,
-    StreamingClientOptions,
-    StreamingError,
-    StreamingEvents,
-    StreamingParameters,
-    TerminationEvent,
-    TurnEvent,
-)
-from typing import Type
-
-api_key = "<YOUR_API_KEY>"
-
-def on_begin(self: Type[StreamingClient], event: BeginEvent):
-    print(f"Session started: {event.id}")
-
-def on_turn(self: Type[StreamingClient], event: TurnEvent):
-    print(f"{event.transcript} ({event.end_of_turn})")
-
-def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-    print(f"Session terminated: {event.audio_duration_seconds} seconds of audio processed")
-
-def on_error(self: Type[StreamingClient], error: StreamingError):
-    print(f"Error occurred: {error}")
-
-def main():
-    client = StreamingClient(
-        StreamingClientOptions(
-            api_key=api_key,
-            api_host="streaming.assemblyai.com",
-        )
-    )
-
-    client.on(StreamingEvents.Begin, on_begin)
-    client.on(StreamingEvents.Turn, on_turn)
-    client.on(StreamingEvents.Termination, on_terminated)
-    client.on(StreamingEvents.Error, on_error)
-
-    client.connect(
-        StreamingParameters(
-            sample_rate=16000,
-            format_turns=True,
-            # Webhook parameters
-            webhook_url="https://example.com/webhook",
-            webhook_auth_header_name="X-Webhook-Secret",  # Optional
-            webhook_auth_header_value="secret-value",  # Optional
-        )
-    )
-
-    try:
-        client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
-    finally:
-        client.disconnect(terminate=True)
-
-if __name__ == "__main__":
-    main()
-```
-
-</Tab>
-<Tab language="python" title="Python">
+<Tab language="python" title="Python" default>
 
 ```python
 import pyaudio
@@ -288,75 +232,67 @@ if __name__ == "__main__":
 ```
 
 </Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
+<Tab language="python-sdk" title="Python SDK">
 
-```javascript
-import { Readable } from "stream";
-import { AssemblyAI } from "assemblyai";
-import recorder from "node-record-lpcm16";
+```python
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+from typing import Type
 
-const run = async () => {
-  const client = new AssemblyAI({
-    apiKey: "<YOUR_API_KEY>",
-  });
+api_key = "<YOUR_API_KEY>"
 
-  const transcriber = client.streaming.transcriber({
-    sampleRate: 16_000,
-    formatTurns: true,
-    // Webhook parameters
-    webhookUrl: "https://example.com/webhook",
-    webhookAuthHeaderName: "X-Webhook-Secret", // Optional
-    webhookAuthHeaderValue: "secret-value", // Optional
-  });
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
 
-  transcriber.on("open", ({ id }) => {
-    console.log(`Session opened with ID: ${id}`);
-  });
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    print(f"{event.transcript} ({event.end_of_turn})")
 
-  transcriber.on("error", (error) => {
-    console.error("Error:", error);
-  });
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(f"Session terminated: {event.audio_duration_seconds} seconds of audio processed")
 
-  transcriber.on("close", (code, reason) =>
-    console.log("Session closed:", code, reason)
-  );
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
 
-  transcriber.on("turn", (turn) => {
-    if (!turn.transcript) {
-      return;
-    }
-    console.log("Turn:", turn.transcript);
-  });
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
 
-  try {
-    console.log("Connecting to streaming transcript service");
-    await transcriber.connect();
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
 
-    console.log("Starting recording");
-    const recording = recorder.record({
-      channels: 1,
-      sampleRate: 16_000,
-      audioType: "wav",
-    });
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            format_turns=True,
+            # Webhook parameters
+            webhook_url="https://example.com/webhook",
+            webhook_auth_header_name="X-Webhook-Secret",  # Optional
+            webhook_auth_header_value="secret-value",  # Optional
+        )
+    )
 
-    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+    try:
+        client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
+    finally:
+        client.disconnect(terminate=True)
 
-    process.on("SIGINT", async function () {
-      console.log();
-      console.log("Stopping recording");
-      recording.stop();
-
-      console.log("Closing streaming transcript connection");
-      await transcriber.close();
-
-      process.exit();
-    });
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-run();
+if __name__ == "__main__":
+    main()
 ```
 
 </Tab>
@@ -436,6 +372,78 @@ function terminateSession() {
     ws.send(JSON.stringify({ type: "Terminate" }));
   }
 }
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    formatTurns: true,
+    // Webhook parameters
+    webhookUrl: "https://example.com/webhook",
+    webhookAuthHeaderName: "X-Webhook-Secret", // Optional
+    webhookAuthHeaderValue: "secret-value", // Optional
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (!turn.transcript) {
+      return;
+    }
+    console.log("Turn:", turn.transcript);
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+    await transcriber.connect();
+
+    console.log("Starting recording");
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav",
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
 ```
 
 </Tab>

@@ -22,7 +22,7 @@ Diarization is supported on all streaming models: `u3-rt-pro`,
 
 <Note>
   Looking for multichannel streaming? See [Multichannel
-  streams](/docs/streaming/multichannel-streams).
+  streams](/docs/streaming/diarization-and-multichannel).
 </Note>
 
 ## Quickstart
@@ -30,87 +30,7 @@ Diarization is supported on all streaming models: `u3-rt-pro`,
 Get started with Streaming Diarization using the code below. This example streams audio from your microphone and prints each turn with its speaker label.
 
 <Tabs>
-  <Tab title="Python SDK" language="python-sdk" default>
-    <Steps>
-      <Step>
-        Install the required libraries
-        ```bash
-        pip install "assemblyai>=1.0.0" pyaudio
-        ```
-      </Step>
-      <Step>
-        Create a new file `main.py` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
-      </Step>
-      <Step>
-        Run with `python main.py` and speak into your microphone.
-      </Step>
-    </Steps>
-    ```python maxLines=15
-    import logging
-    from typing import Type
-    import assemblyai as aai
-    from assemblyai.streaming.v3 import (
-        BeginEvent,
-        StreamingClient,
-        StreamingClientOptions,
-        StreamingError,
-        StreamingEvents,
-        StreamingParameters,
-        TurnEvent,
-        TerminationEvent,
-    )
-
-    api_key = "<YOUR_API_KEY>"
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    def on_begin(self: Type[StreamingClient], event: BeginEvent):
-        print(f"Session started: {event.id}")
-
-    def on_turn(self: Type[StreamingClient], event: TurnEvent):
-        speaker = event.speaker_label or "UNKNOWN"
-        print(f"[{speaker}] {event.transcript} (end_of_turn={event.end_of_turn})")
-
-    def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
-        print(
-            f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
-        )
-
-    def on_error(self: Type[StreamingClient], error: StreamingError):
-        print(f"Error occurred: {error}")
-
-    def main():
-        client = StreamingClient(
-            StreamingClientOptions(
-                api_key=api_key,
-                api_host="streaming.assemblyai.com",
-            )
-        )
-        client.on(StreamingEvents.Begin, on_begin)
-        client.on(StreamingEvents.Turn, on_turn)
-        client.on(StreamingEvents.Termination, on_terminated)
-        client.on(StreamingEvents.Error, on_error)
-
-        client.connect(
-            StreamingParameters(
-                sample_rate=16000,
-                speech_model="u3-rt-pro",
-                speaker_labels=True,
-            )
-        )
-        try:
-            client.stream(
-                aai.extras.MicrophoneStream(sample_rate=16000)
-            )
-        finally:
-            client.disconnect(terminate=True)
-
-    if __name__ == "__main__":
-        main()
-    ```
-
-  </Tab>
-  <Tab title="Python" language="python">
+<Tab title="Python" language="python">
     <Steps>
       <Step>
         Install the required libraries
@@ -245,99 +165,87 @@ Get started with Streaming Diarization using the code below. This example stream
     ```
 
   </Tab>
-  <Tab title="JavaScript SDK" language="javascript-sdk">
+<Tab title="Python SDK" language="python-sdk" default>
     <Steps>
       <Step>
         Install the required libraries
         ```bash
-        npm install assemblyai node-record-lpcm16
+        pip install "assemblyai>=1.0.0" pyaudio
         ```
-        <Note>
-          The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
-          For Mac OS:
-          ```bash
-          brew install sox
-          ```
-          For most linux distros:
-          ```bash
-          sudo apt-get install sox libsox-fmt-all
-          ```
-          For Windows:
-          [download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
-        </Note>
       </Step>
       <Step>
-        Create a new file `main.js` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+        Create a new file `main.py` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
       </Step>
       <Step>
-        Run with `node main.js` and speak into your microphone.
+        Run with `python main.py` and speak into your microphone.
       </Step>
     </Steps>
-    ```javascript maxLines=15
-    import { Readable } from "stream";
-    import { AssemblyAI } from "assemblyai";
-    import recorder from "node-record-lpcm16";
+    ```python maxLines=15
+    import logging
+    from typing import Type
+    import assemblyai as aai
+    from assemblyai.streaming.v3 import (
+        BeginEvent,
+        StreamingClient,
+        StreamingClientOptions,
+        StreamingError,
+        StreamingEvents,
+        StreamingParameters,
+        TurnEvent,
+        TerminationEvent,
+    )
 
-    const run = async () => {
-      const client = new AssemblyAI({
-        apiKey: "<YOUR_API_KEY>",
-      });
+    api_key = "<YOUR_API_KEY>"
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
-      const transcriber = client.streaming.transcriber({
-        sampleRate: 16_000,
-        speechModel: "u3-rt-pro",
-        speakerLabels: true,
-      });
+    def on_begin(self: Type[StreamingClient], event: BeginEvent):
+        print(f"Session started: {event.id}")
 
-      transcriber.on("open", ({ id }) => {
-        console.log(`Session opened with ID: ${id}`);
-      });
+    def on_turn(self: Type[StreamingClient], event: TurnEvent):
+        speaker = event.speaker_label or "UNKNOWN"
+        print(f"[{speaker}] {event.transcript} (end_of_turn={event.end_of_turn})")
 
-      transcriber.on("error", (error) => {
-        console.error("Error:", error);
-      });
+    def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+        print(
+            f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+        )
 
-      transcriber.on("close", (code, reason) =>
-        console.log("Session closed:", code, reason)
-      );
+    def on_error(self: Type[StreamingClient], error: StreamingError):
+        print(f"Error occurred: {error}")
 
-      transcriber.on("turn", (turn) => {
-        if (!turn.transcript) return;
-        const speaker = turn.speakerLabel ?? "UNKNOWN";
-        console.log(`[${speaker}] ${turn.transcript}`);
-      });
+    def main():
+        client = StreamingClient(
+            StreamingClientOptions(
+                api_key=api_key,
+                api_host="streaming.assemblyai.com",
+            )
+        )
+        client.on(StreamingEvents.Begin, on_begin)
+        client.on(StreamingEvents.Turn, on_turn)
+        client.on(StreamingEvents.Termination, on_terminated)
+        client.on(StreamingEvents.Error, on_error)
 
-      try {
-        console.log("Connecting to streaming transcript service");
-        await transcriber.connect();
+        client.connect(
+            StreamingParameters(
+                sample_rate=16000,
+                speech_model="u3-rt-pro",
+                speaker_labels=True,
+            )
+        )
+        try:
+            client.stream(
+                aai.extras.MicrophoneStream(sample_rate=16000)
+            )
+        finally:
+            client.disconnect(terminate=True)
 
-        console.log("Starting recording");
-        const recording = recorder.record({
-          channels: 1,
-          sampleRate: 16_000,
-          audioType: "wav",
-        });
-
-        Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
-
-        process.on("SIGINT", async function () {
-          console.log();
-          console.log("Stopping recording");
-          recording.stop();
-          console.log("Closing streaming transcript connection");
-          await transcriber.close();
-          process.exit();
-        });
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    run();
+    if __name__ == "__main__":
+        main()
     ```
 
   </Tab>
-  <Tab title="JavaScript" language="javascript">
+<Tab title="JavaScript" language="javascript">
     <Steps>
       <Step>
         Install the required libraries
@@ -437,6 +345,98 @@ Get started with Streaming Diarization using the code below. This example stream
         }
       });
     }
+
+    run();
+    ```
+
+  </Tab>
+<Tab title="JavaScript SDK" language="javascript-sdk">
+    <Steps>
+      <Step>
+        Install the required libraries
+        ```bash
+        npm install assemblyai node-record-lpcm16
+        ```
+        <Note>
+          The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+          For Mac OS:
+          ```bash
+          brew install sox
+          ```
+          For most linux distros:
+          ```bash
+          sudo apt-get install sox libsox-fmt-all
+          ```
+          For Windows:
+          [download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+        </Note>
+      </Step>
+      <Step>
+        Create a new file `main.js` and paste the code below. Replace `<YOUR_API_KEY>` with your API key.
+      </Step>
+      <Step>
+        Run with `node main.js` and speak into your microphone.
+      </Step>
+    </Steps>
+    ```javascript maxLines=15
+    import { Readable } from "stream";
+    import { AssemblyAI } from "assemblyai";
+    import recorder from "node-record-lpcm16";
+
+    const run = async () => {
+      const client = new AssemblyAI({
+        apiKey: "<YOUR_API_KEY>",
+      });
+
+      const transcriber = client.streaming.transcriber({
+        sampleRate: 16_000,
+        speechModel: "u3-rt-pro",
+        speakerLabels: true,
+      });
+
+      transcriber.on("open", ({ id }) => {
+        console.log(`Session opened with ID: ${id}`);
+      });
+
+      transcriber.on("error", (error) => {
+        console.error("Error:", error);
+      });
+
+      transcriber.on("close", (code, reason) =>
+        console.log("Session closed:", code, reason)
+      );
+
+      transcriber.on("turn", (turn) => {
+        if (!turn.transcript) return;
+        const speaker = turn.speakerLabel ?? "UNKNOWN";
+        console.log(`[${speaker}] ${turn.transcript}`);
+      });
+
+      try {
+        console.log("Connecting to streaming transcript service");
+        await transcriber.connect();
+
+        console.log("Starting recording");
+        const recording = recorder.record({
+          channels: 1,
+          sampleRate: 16_000,
+          audioType: "wav",
+        });
+
+        Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+        process.on("SIGINT", async function () {
+          console.log();
+          console.log("Stopping recording");
+          recording.stop();
+          console.log("Closing streaming transcript connection");
+          await transcriber.close();
+          process.exit();
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    };
 
     run();
     ```
