@@ -1,28 +1,193 @@
 ---
-title: "Available cloud regions"
+title: "Cloud Endpoints and Data Residency"
 ---
 
 {/* @api-info
 product: Pre-recorded STT
 speech_models: ["universal-3-pro", "universal-2"]
-api-endpoint: POST https://api.assemblyai.com/v2/transcript (US), POST https://api.eu.assemblyai.com/v2/transcript (EU)
-description: Available cloud regions for pre-recorded audio transcription. EU region available for async transcription only.
+api-endpoint: POST https://api.assemblyai.com/v2/transcript (US, default), POST https://api.eu.assemblyai.com/v2/transcript (EU)
+description: Choose pre-recorded transcription endpoints for data residency requirements.
 */}
 
-The default region is US, with base URL `api.assemblyai.com`. For EU data residency requirements, you can use our base URL for EU at `api.eu.assemblyai.com`.
+Choose the endpoint that best fits your application's requirements—whether that's using the default US region or ensuring your audio data stays within the European Union.
 
-<Note>
-  The base URL for EU is currently only available for Async transcription.
-</Note>
+## Default Endpoint
 
-| Region       | Base URL                |
-| ------------ | ----------------------- |
-| US (default) | `api.assemblyai.com`    |
-| EU           | `api.eu.assemblyai.com` |
+The default endpoint (`api.assemblyai.com`) processes your pre-recorded audio transcription requests in the US region. If you don't specify a base URL, this is the endpoint used by the SDKs.
 
-<br />
+## EU Data Residency
 
-To use the EU endpoint, set the base URL for your requests as `api.eu.assemblyai.com`.
+The EU endpoint (`api.eu.assemblyai.com`) guarantees your data never leaves the European Union. This is designed for organizations with strict data residency and governance requirements—your audio and transcription data will remain entirely within the EU.
+
+## Endpoints
+
+| Endpoint       | Base URL                  | Description              |
+| -------------- | ------------------------- | ------------------------ |
+| US (default)   | `api.assemblyai.com`      | Data stays in the US     |
+| EU             | `api.eu.assemblyai.com`   | Data stays in the EU     |
+
+## Which endpoint should I use?
+
+- **No data residency requirements?** Use the **default endpoint**. No configuration change is needed.
+- **Need EU data residency?** Use the **EU endpoint** to ensure your audio and transcription data stays within the European Union.
+
+## How to use it
+
+Update your base URL to your preferred endpoint. Select an endpoint tab below to see examples for each.
+
+<Tabs>
+
+<Tab title="US (default)">
+
+The US endpoint is the default. If you're using the SDKs without overriding the base URL, you're already using this endpoint. No configuration change is required.
+
+<CodeBlocks>
+
+```python title="Python SDK" maxLines=15
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+# No base_url override needed — US is the default
+# audio_file = "./local_file.mp3"
+audio_file = "https://assembly.ai/wildfires.mp3"
+
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True,
+)
+
+transcript = aai.Transcriber(config=config).transcribe(audio_file)
+
+if transcript.status == "error":
+  raise RuntimeError(f"Transcription failed: {transcript.error}")
+
+print(transcript.text)
+```
+
+```python title="Python" highlight={4} maxLines=15
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+with open("./my-audio.mp3", "rb") as f:
+  response = requests.post(base_url + "/v2/upload",
+                          headers=headers,
+                          data=f)
+
+upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True
+}
+
+url = base_url + "/v2/transcript"
+response = requests.post(url, json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+
+  if transcription_result['status'] == 'completed':
+    print(f"Transcript ID:", transcript_id)
+    break
+
+  elif transcription_result['status'] == 'error':
+    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+
+  else:
+    time.sleep(3)
+
+```
+
+```javascript title="JavaScript SDK" maxLines=15
+import { AssemblyAI } from "assemblyai";
+
+// No baseUrl override needed — US is the default
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+// const audioFile = './local_file.mp3'
+const audioFile = "https://assembly.ai/wildfires.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+
+  console.log(transcript.text);
+};
+
+run();
+```
+
+```javascript title="JavaScript" highlight={4} maxLines=15
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const path = "./my-audio.mp3";
+const audioData = await fs.readFile(path);
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
+  headers,
+});
+const uploadUrl = uploadResponse.data.upload_url;
+
+const data = {
+  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</CodeBlocks>
+
+</Tab>
+
+<Tab title="EU data residency">
+
+Use the EU endpoint to keep your audio and transcription data within the European Union.
 
 <CodeBlocks>
 
@@ -165,3 +330,7 @@ while (true) {
 ```
 
 </CodeBlocks>
+
+</Tab>
+
+</Tabs>
