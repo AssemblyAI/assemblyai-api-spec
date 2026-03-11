@@ -298,9 +298,9 @@ config = aai.TranscriptionConfig(
 transcriber = aai.Transcriber()
 transcript = transcriber.transcribe(audio_file, config=config)
 
-# Channel 0 = Agent, Channel 1 = Customer (typical layout)
+# Channel 1 = Agent, Channel 2 = Customer (typical layout)
 for utterance in transcript.utterances:
-    role = "Agent" if utterance.channel == "0" else "Customer"
+    role = "Agent" if utterance.channel == "1" else "Customer"
     print(f"{role}: {utterance.text}")
 ```
 
@@ -344,13 +344,18 @@ class ChannelTranscriber:
 
         # If using websockets >= 13.0, use additional_headers. For < 13.0, use extra_headers.
         async with websockets.connect(url, additional_headers={"Authorization": API_KEY}) as ws:
-            async for audio_chunk in audio_stream:
-                await ws.send(audio_chunk)
+            # Send and receive must run concurrently for real-time streaming
+            async def send_audio():
+                async for audio_chunk in audio_stream:
+                    await ws.send(audio_chunk)
 
-            async for message in ws:
-                data = json.loads(message)
-                if data.get("type") == "Turn" and data.get("turn_is_formatted"):
-                    print(f"{self.role}: {data['transcript']}")
+            async def receive_transcripts():
+                async for message in ws:
+                    data = json.loads(message)
+                    if data.get("type") == "Turn" and data.get("turn_is_formatted"):
+                        print(f"{self.role}: {data['transcript']}")
+
+            await asyncio.gather(send_audio(), receive_transcripts())
 
 # Create transcriber for each channel
 async def transcribe_live_call(agent_audio_stream, customer_audio_stream):
@@ -405,11 +410,11 @@ CONNECTION_PARAMS = {
     "sample_rate": 8000,  # Telephony standard (8kHz)
     "speech_model": "u3-rt-pro",  # Universal-3 Pro Streaming for highest accuracy
     "format_turns": True,
-    "encoding": "pcm_mulaw",  # Common telephony encoding
 
-    # Contact center turn detection - wait for natural pauses
-    "min_turn_silence": 400,  # Default - good for contact center calls
-    "max_turn_silence": 1500,  # Slightly longer for customers explaining issues
+    # Contact center turn detection
+    # u3-rt-pro defaults: min_turn_silence=100ms, max_turn_silence=1000ms
+    "min_turn_silence": 400,  # Longer than default for natural call pauses
+    "max_turn_silence": 1500,  # Longer for customers explaining issues
 
     # Keyterms for accuracy
     "keyterms_prompt": KEYTERMS,
@@ -642,31 +647,38 @@ def assemblyai_webhook():
     if request.headers.get("X-Webhook-Secret") != "your_secret_here":
         return jsonify({"error": "Unauthorized"}), 401
 
+    import requests as http_requests
+
     data = request.json
     transcript_id = data["transcript_id"]
     status = data["status"]
 
     if status == "completed":
-        process_completed_call(data)
+        # Fetch the full transcript (webhook only sends transcript_id and status)
+        transcript = http_requests.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers={"authorization": "your_api_key"}
+        ).json()
+        process_completed_call(transcript)
     elif status == "error":
-        log_transcription_error(transcript_id, data["error"])
+        log_transcription_error(transcript_id)
 
     return jsonify({"received": True}), 200
 
-def process_completed_call(transcript_data):
+def process_completed_call(transcript):
     """Process completed call transcript and push to CRM"""
-    utterances = transcript_data["utterances"]
-    summary = transcript_data["summary"]
+    utterances = transcript["utterances"]
+    summary = transcript["summary"]
 
     # Store in database
-    save_to_database(transcript_data)
+    save_to_database(transcript)
 
     # Push summary to CRM
-    push_to_crm(transcript_data["id"], summary)
+    push_to_crm(transcript["id"], summary)
 
     # Run QA scoring
     qa_score = score_call_quality(utterances)
-    save_qa_score(transcript_data["id"], qa_score)
+    save_qa_score(transcript["id"], qa_score)
 ```
 
 ### Scaling Considerations

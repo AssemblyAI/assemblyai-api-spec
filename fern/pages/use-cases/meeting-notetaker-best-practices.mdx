@@ -299,7 +299,7 @@ CONNECTION_PARAMS = {
     "format_turns": True,  # ALWAYS TRUE for meetings - users need readable text
 
     # Meeting-optimized turn detection (wait longer than voice agents)
-    # Default min_turn_silence is 400ms, default max_turn_silence is 1280ms
+    # u3-rt-pro defaults: min_turn_silence=100ms, max_turn_silence=1000ms
     "min_turn_silence": 560,  # Wait longer for natural pauses (voice agents use ~100ms)
     "max_turn_silence": 2000,  # Allow thinking pauses
 
@@ -700,25 +700,27 @@ def assemblyai_webhook():
     status = data["status"]
 
     if status == "completed":
-        # Process completed transcript
-        process_completed_meeting(data)
+        # Fetch the full transcript (webhook only sends transcript_id and status)
+        transcript = requests.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers={"authorization": "your_api_key"}
+        ).json()
+        process_completed_meeting(transcript)
     elif status == "error":
-        # Handle error
-        log_transcription_error(transcript_id, data["error"])
+        log_transcription_error(transcript_id)
 
     return jsonify({"received": True}), 200
 
-def process_completed_meeting(transcript_data):
+def process_completed_meeting(transcript):
     """Process completed meeting transcript"""
-    # Extract data
-    utterances = transcript_data["utterances"]
-    summary = transcript_data["summary"]
+    utterances = transcript["utterances"]
+    summary = transcript["summary"]
 
     # Store in database
-    save_to_database(transcript_data)
+    save_to_database(transcript)
 
     # Notify user
-    send_notification(transcript_data["id"])
+    send_notification(transcript["id"])
 ```
 
 **Pros:**
@@ -920,10 +922,12 @@ transcript = transcriber.transcribe(audio_url, config=aai.TranscriptionConfig(sp
 # Later, add speaker identification using the transcript ID
 understanding_body = {
     "transcript_id": transcript.id,
-    "request": {
-        "speaker_identification": {
-            "speaker_type": "name",
-            "known_values": ["Sarah Chen", "Michael Rodriguez"]
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "name",
+                "known_values": ["Sarah Chen", "Michael Rodriguez"]
+            }
         }
     }
 }
@@ -935,7 +939,7 @@ result = requests.post(
 ).json()
 
 # Access identified speakers from the response
-for utterance in result["results"][0]["utterances"]:
+for utterance in result["utterances"]:
     print(f"{utterance['speaker']}: {utterance['text']}")
 ```
 

@@ -353,7 +353,7 @@ CONNECTION_PARAMS = {
 
     # MEDICAL SCRIBE CONFIGURATION - Conservative for clinical accuracy
     # Medical conversations have LONG pauses (provider thinking, examining patient, reviewing charts)
-    # Default min_turn_silence is 400ms, default max_turn_silence is 1280ms
+    # u3-rt-pro defaults: min_turn_silence=100ms, max_turn_silence=1000ms
     "min_turn_silence": 800,  # Wait much longer (vs ~100ms for voice agents, 560ms for meetings)
     "max_turn_silence": 2000,  # Longer for clinical thinking pauses
 
@@ -1519,17 +1519,24 @@ def assemblyai_webhook():
     if request.headers.get("X-Webhook-Secret") != "your_secret_here":
         return jsonify({"error": "Unauthorized"}), 401
 
+    import requests as http_requests
+
     data = request.json
     transcript_id = data["transcript_id"]
     status = data["status"]
 
     if status == "completed":
+        # Fetch the full transcript (webhook only sends transcript_id and status)
+        transcript = http_requests.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers={"authorization": "your_api_key"}
+        ).json()
         # Generate SOAP note from transcript
-        generate_soap_note(data)
+        generate_soap_note(transcript)
         # Update EHR
-        update_patient_record(data)
+        update_patient_record(transcript)
     elif status == "error":
-        log_transcription_error(transcript_id, data["error"])
+        log_transcription_error(transcript_id)
 
     return jsonify({"received": True}), 200
 ```
