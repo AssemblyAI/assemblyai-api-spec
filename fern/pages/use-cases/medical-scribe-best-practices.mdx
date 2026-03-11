@@ -98,9 +98,11 @@ For post-visit documentation, Universal-3-Pro supports English for the highest a
 **Core Features**:
 
 - Speaker diarization (provider-patient separation)
+- Multichannel audio support — when provider and patient are on separate audio channels, enables perfect speaker separation without diarization
 - Automatic formatting, punctuation, and capitalization
-- Keyterms Prompting for medical specialties and conditions
+- Keyterms Prompting for medical specialties and conditions (up to 1000 terms for Universal-3-Pro)
 - Ability to prompt on related medical terms and improve the accuracy of others (for example, `ibuprofen` improving `naproxen`)
+- Natural language prompting (Universal-3-Pro) — up to 1,500 words to guide transcription behavior
 
 **Speech Understanding Models**:
 
@@ -126,15 +128,17 @@ For live encounter transcription, Universal-Streaming supports:
 - Partial and final transcripts for responsive documentation
 - Format turns for structured provider-patient dialogue
 - Keyterms Prompt for patient history and current medications
-- End-of-utterance detection for natural clinical conversation flow
+- Turn detection with configurable silence thresholds for natural clinical conversation flow
+- Mid-session configuration updates via `UpdateConfiguration` messages
 - Post-processing LLM Gateway integration for increasing medical accuracy
 
 **Recommended approach:** Use streaming for real-time documentation, then run through Universal-3-Pro post-visit for accurate speaker-labeled final notes.
 
-### Coming Soon
+**Streaming Models**:
 
-- Medical model which packages up the best ways to contextually influence transcript output
-- Multilingual Universal-3-Pro, especially important for multilingual medical conversations to improve accuracy
+- **Universal-Streaming** — Default streaming model with low latency (~300ms), supports English and multilingual
+- **Universal-3 Pro Streaming** (`u3-rt-pro`) — Highest accuracy streaming model, supports prompting. Best for medical scribes that demand the highest quality
+- **Whisper-Streaming** (`whisper-rt`) — 99+ language support for broad multilingual coverage
 
 ## How Can I Get Started Building a Post-Visit Medical Scribe?
 
@@ -145,7 +149,6 @@ import assemblyai as aai
 import asyncio
 from typing import Dict, List
 from assemblyai.types import (
-    SpeakerOptions,
     PIIRedactionPolicy,
     PIISubstitutionPolicy,
 )
@@ -236,9 +239,9 @@ async def transcribe_encounter_async(audio_source: str) -> Dict:
         # Extract clinical entities
         if transcript.entities:
             print("\n=== CLINICAL ENTITIES DETECTED ===\n")
-            medications = [e for e in transcript.entities if e.entity_type == "medication"]
+            medications = [e for e in transcript.entities if e.entity_type == "drug"]
             conditions = [e for e in transcript.entities if e.entity_type == "medical_condition"]
-            procedures = [e for e in transcript.entities if e.entity_type == "medical_procedure"]
+            procedures = [e for e in transcript.entities if e.entity_type == "medical_process"]
 
             if medications:
                 print("Medications:", ", ".join([m.text for m in medications]))
@@ -353,15 +356,16 @@ CONNECTION_PARAMS = {
 
     # MEDICAL SCRIBE CONFIGURATION - Conservative for clinical accuracy
     # Medical conversations have LONG pauses (provider thinking, examining patient, reviewing charts)
-    "end_of_turn_confidence_threshold": 0.7,  # Higher confidence (vs 0.4 for voice agents)
-    "min_turn_silence": 800,  # Wait much longer (vs 160ms voice agents, 560ms meetings)
-    "max_turn_silence": 3600,  # Much longer for clinical thinking pauses
+    # Default min_turn_silence is 400ms, default max_turn_silence is 1280ms
+    "min_turn_silence": 800,  # Wait much longer (vs ~100ms for voice agents, 560ms for meetings)
+    "max_turn_silence": 2000,  # Longer for clinical thinking pauses
 
-    "keyterms_prompt": json.dumps(MEDICAL_KEYTERMS),  # JSON string
+    # Keyterms for accuracy - pass as list; use urlencode(params, doseq=True)
+    "keyterms_prompt": MEDICAL_KEYTERMS,
 }
 
 API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS, doseq=True)}"
 
 # Audio config
 FRAMES_PER_BUFFER = 800  # 50ms @ 16kHz
@@ -776,23 +780,22 @@ config = aai.TranscriptionConfig(
     # HIPAA-mandated PII redaction
     redact_pii=True,
     redact_pii_policies=[
-        # All 18 HIPAA identifiers
+        # HIPAA identifiers mapped to available PII policies
         PIIRedactionPolicy.person_name,              # Patient & provider names
         PIIRedactionPolicy.date_of_birth,            # DOB
         PIIRedactionPolicy.date,                     # All dates (except year)
         PIIRedactionPolicy.phone_number,             # Phone numbers
         PIIRedactionPolicy.email_address,            # Email addresses
-        PIIRedactionPolicy.medical_record_number,    # MRN, account numbers
-        PIIRedactionPolicy.social_security_number,   # SSN
+        PIIRedactionPolicy.healthcare_number,        # MRN, health plan numbers
+        PIIRedactionPolicy.us_social_security_number, # SSN
         PIIRedactionPolicy.account_number,           # Financial accounts
-        PIIRedactionPolicy.certificate_number,       # License numbers
-        PIIRedactionPolicy.vehicle_identifier,       # License plates, VINs
-        PIIRedactionPolicy.device_identifier,        # Serial numbers
-        PIIRedactionPolicy.web_url,                  # URLs
+        PIIRedactionPolicy.drivers_license,          # License numbers
+        PIIRedactionPolicy.vehicle_id,               # License plates, VINs
+        PIIRedactionPolicy.number_sequence,          # Serial numbers, device identifiers
+        PIIRedactionPolicy.url,                      # URLs
         PIIRedactionPolicy.ip_address,               # IP addresses
-        PIIRedactionPolicy.biometric_identifier,     # Fingerprints, voiceprints
-        PIIRedactionPolicy.face_identifier,          # Facial photos
-        PIIRedactionPolicy.other_identifier,         # Any other unique identifiers
+        PIIRedactionPolicy.location,                 # Geographic identifiers
+        PIIRedactionPolicy.username,                 # Usernames and online identifiers
     ],
     redact_pii_sub=PIISubstitutionPolicy.hash,  # Use stable hash tokens
     redact_pii_audio=True,  # Create de-identified audio file
@@ -856,11 +859,11 @@ Use these flags to transform raw medical conversations into structured clinical 
 
 **What it does:** Extracts medical entities (medications, conditions, procedures, anatomy).
 
-**Output:** Array of `{ entity_type, text, start, end, confidence }`.
+**Output:** Array of `{ entity_type, text, start, end }`.
 
 **Great for:** Medication reconciliation, problem list updates, procedure coding.
 
-**Notes:** Recognizes brand/generic drug names, medical conditions, surgical procedures.
+**Notes:** Recognizes brand/generic drug names, medical conditions, surgical procedures. Entity types include `drug`, `medical_condition`, and `medical_process`.
 
 ### Redact PII Text (HIPAA Compliance)
 
@@ -943,7 +946,7 @@ Restricts redaction scope to key HIPAA identifiers:
 **With medical scribe settings:**
 
 - **Text:** "Hi, I'm **#2af4…**. **#7b91…**, born **#e13c…**, is here for follow-up. He's taking _metformin 1000mg twice daily_ for his _diabetes_."
-- **Entities:** `[ { type: "medication", text: "metformin 1000mg" }, { type: "condition", text: "diabetes" } ]`
+- **Entities:** `[ { entity_type: "drug", text: "metformin 1000mg" }, { entity_type: "medical_condition", text: "diabetes" } ]`
 - **Clinical note:** Structured SOAP format via LLM Gateway
 - **Redacted audio:** PHI portions silenced for compliance
 
@@ -1427,18 +1430,19 @@ medical_terms = [
     "spironolactone"
 ]
 
-transcriber = aai.RealtimeTranscriber(
-    sample_rate=16000,
-    format_turns=True,
-    key_terms=medical_terms,
-    on_data=lambda transcript: post_process_medical(transcript)
-)
+# Connect via WebSocket to the v3 streaming API with medical keyterms
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+    "keyterms_prompt": medical_terms,
+}
 
-def post_process_medical(transcript):
+url = f"wss://streaming.assemblyai.com/v3/ws?{urlencode(CONNECTION_PARAMS, doseq=True)}"
+
+# Post-process each final turn with LLM Gateway for medical terminology correction
+def post_process_medical(transcript_text):
     """Apply LLM correction for medical context"""
-    # Send to LLM Gateway for medical terminology correction
-    # This improves contextual accuracy significantly
-    corrected = llm_gateway.correct_medical(transcript.text)
+    corrected = llm_gateway.correct_medical(transcript_text)
     return corrected
 ```
 
