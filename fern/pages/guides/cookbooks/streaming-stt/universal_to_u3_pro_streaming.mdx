@@ -17,6 +17,15 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
   the model and start streaming.
 </Tip>
 
+## Why upgrade
+
+- **Exceptional entity accuracy** — credit card numbers, phone numbers, email addresses, physical addresses, and names captured correctly at streaming speed
+- **Promptable model** — feed domain vocabulary (up to 1,000 keyterms) and formatting instructions, and the model applies them as audio arrives
+- **Better turn detection** — punctuation-based system that waits when customers pause mid-thought and responds when they're done, fixing the cut-off conversation problem
+- **Native multilingual code-switching** — English, Spanish, German, French, Portuguese, Italian handled natively in a single model
+- **Sub-300ms latency** — ~150ms P50, ~240ms P90 after VAD endpoint detection
+- **Mid-stream configuration** — update keyterms, prompts, and silence parameters without dropping the connection
+
 ## Key Differences
 
 | Feature                                   | Universal Streaming                                                                   | Universal-3 Pro Streaming                                                                         |
@@ -37,268 +46,7 @@ Before we begin, make sure you have an AssemblyAI account and an API key. You ca
 | **Multilingual support**                  | Separate models (`universal-streaming-english` vs `universal-streaming-multilingual`) | Single model with native multilingual code switching                                              |
 | **Entity accuracy**                       | Standard                                                                              | Exceptional — credit cards, phone numbers, emails, addresses, names                               |
 
-## Side-By-Side Code Comparison
-
-Below is a side-by-side comparison of a basic snippet to transcribe live audio using Universal Streaming and Universal-3 Pro Streaming with a microphone:
-
-<Tabs groupId="language">
-    <Tab language="universal" title="Universal Streaming">
-
-    ```python
-    import pyaudio
-    import websocket
-    import json
-    import threading
-    import time
-    from urllib.parse import urlencode
-    from datetime import datetime
-
-    YOUR_API_KEY = "YOUR-API-KEY"
-
-    CONNECTION_PARAMS = {
-        "sample_rate": 16000,
-        "format_turns": True,
-    }
-    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-
-    FRAMES_PER_BUFFER = 800
-    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
-    CHANNELS = 1
-    FORMAT = pyaudio.paInt16
-
-    audio = None
-    stream = None
-    ws_app = None
-    audio_thread = None
-    stop_event = threading.Event()
-
-    def on_open(ws):
-        print("WebSocket connection opened.")
-        def stream_audio():
-            global stream
-            while not stop_event.is_set():
-                try:
-                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
-                except Exception as e:
-                    print(f"Error streaming audio: {e}")
-                    break
-
-        global audio_thread
-        audio_thread = threading.Thread(target=stream_audio)
-        audio_thread.daemon = True
-        audio_thread.start()
-
-    def on_message(ws, message):
-        try:
-            data = json.loads(message)
-            msg_type = data.get('type')
-
-            if msg_type == "Begin":
-                session_id = data.get('id')
-                expires_at = data.get('expires_at')
-                print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
-            elif msg_type == "Turn":
-                transcript = data.get('transcript', '')
-                formatted = data.get('turn_is_formatted', False)
-
-                if formatted:
-                    print('\r' + ' ' * 80 + '\r', end='')
-                    print(transcript)
-                else:
-                    print(f"\r{transcript}", end='')
-            elif msg_type == "Termination":
-                audio_duration = data.get('audio_duration_seconds', 0)
-                print(f"\nSession terminated: {audio_duration}s of audio")
-        except Exception as e:
-            print(f"Error handling message: {e}")
-
-    def on_error(ws, error):
-        print(f"\nWebSocket Error: {error}")
-        stop_event.set()
-
-    def on_close(ws, close_status_code, close_msg):
-        print(f"\nWebSocket Disconnected: Status={close_status_code}")
-        global stream, audio
-        stop_event.set()
-        if stream:
-            if stream.is_active():
-                stream.stop_stream()
-            stream.close()
-        if audio:
-            audio.terminate()
-
-    def run():
-        global audio, stream, ws_app
-
-        audio = pyaudio.PyAudio()
-        stream = audio.open(
-            input=True,
-            frames_per_buffer=FRAMES_PER_BUFFER,
-            channels=CHANNELS,
-            format=FORMAT,
-            rate=SAMPLE_RATE,
-        )
-        print("Speak into your microphone. Press Ctrl+C to stop.")
-
-        ws_app = websocket.WebSocketApp(
-            API_ENDPOINT,
-            header={"Authorization": YOUR_API_KEY},
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-        )
-
-        ws_thread = threading.Thread(target=ws_app.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
-
-        try:
-            while ws_thread.is_alive():
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nStopping...")
-            stop_event.set()
-            if ws_app and ws_app.sock and ws_app.sock.connected:
-                ws_app.send(json.dumps({"type": "Terminate"}))
-                time.sleep(2)
-            if ws_app:
-                ws_app.close()
-            ws_thread.join(timeout=2.0)
-
-    if __name__ == "__main__":
-        run()
-    ```
-    </Tab>
-
-    <Tab language="u3pro" title="Universal-3 Pro Streaming">
-
-    ```python
-    import pyaudio
-    import websocket
-    import json
-    import threading
-    import time
-    from urllib.parse import urlencode
-
-    YOUR_API_KEY = "YOUR-API-KEY"
-
-    CONNECTION_PARAMS = {
-        "sample_rate": 16000,
-        "speech_model": "u3-rt-pro",
-    }
-    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
-    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
-
-    FRAMES_PER_BUFFER = 800
-    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
-    CHANNELS = 1
-    FORMAT = pyaudio.paInt16
-
-    audio = None
-    stream = None
-    ws_app = None
-    audio_thread = None
-    stop_event = threading.Event()
-
-    def on_open(ws):
-        print("WebSocket connection opened.")
-        def stream_audio():
-            global stream
-            while not stop_event.is_set():
-                try:
-                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
-                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
-                except Exception as e:
-                    print(f"Error streaming audio: {e}")
-                    break
-
-        global audio_thread
-        audio_thread = threading.Thread(target=stream_audio)
-        audio_thread.daemon = True
-        audio_thread.start()
-
-    def on_message(ws, message):
-        try:
-            data = json.loads(message)
-            msg_type = data.get("type")
-
-            if msg_type == "Begin":
-                print(f"Session began: ID={data.get('id')}")
-            elif msg_type == "Turn":
-                transcript = data.get("transcript", "")
-                end_of_turn = data.get("end_of_turn", False)
-                if end_of_turn:
-                    print(f"\r{' ' * 80}\r{transcript}")
-                else:
-                    print(f"\r{transcript}", end="")
-            elif msg_type == "Termination":
-                print(f"\nSession terminated: {data.get('audio_duration_seconds', 0)}s of audio")
-        except Exception as e:
-            print(f"Error handling message: {e}")
-
-    def on_error(ws, error):
-        print(f"\nWebSocket Error: {error}")
-        stop_event.set()
-
-    def on_close(ws, close_status_code, close_msg):
-        print(f"\nWebSocket Disconnected: Status={close_status_code}")
-        global stream, audio
-        stop_event.set()
-        if stream:
-            if stream.is_active():
-                stream.stop_stream()
-            stream.close()
-        if audio:
-            audio.terminate()
-
-    def run():
-        global audio, stream, ws_app
-
-        audio = pyaudio.PyAudio()
-        stream = audio.open(
-            input=True,
-            frames_per_buffer=FRAMES_PER_BUFFER,
-            channels=CHANNELS,
-            format=FORMAT,
-            rate=SAMPLE_RATE,
-        )
-        print("Speak into your microphone. Press Ctrl+C to stop.")
-
-        ws_app = websocket.WebSocketApp(
-            API_ENDPOINT,
-            header={"Authorization": YOUR_API_KEY},
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-        )
-
-        ws_thread = threading.Thread(target=ws_app.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
-
-        try:
-            while ws_thread.is_alive():
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nStopping...")
-            stop_event.set()
-            if ws_app and ws_app.sock and ws_app.sock.connected:
-                ws_app.send(json.dumps({"type": "Terminate"}))
-                time.sleep(2)
-            if ws_app:
-                ws_app.close()
-            ws_thread.join(timeout=2.0)
-
-    if __name__ == "__main__":
-        run()
-    ```
-    </Tab>
-
-</Tabs>
+For a complete working example, see the [Universal-3 Pro Streaming quickstart](/docs/streaming/universal-3-pro#quickstart).
 
 ## Connection Parameters
 
@@ -436,21 +184,9 @@ Key differences in message handling:
 
 - **No `end_of_turn_confidence` to evaluate** — Universal Streaming Turn messages include an `end_of_turn_confidence` score. While this field may still be present in Universal-3 Pro, turn decisions are made by punctuation, not by this score.
 
-## Partials Behavior
+## Partials behavior
 
-Partials are `Turn` events where `end_of_turn` is `false`.
-
-**Universal Streaming** emits partials continuously as audio is processed, including updates for every subword. This produces a stream of incremental transcript updates.
-
-**Universal-3 Pro Streaming** emits partials only during periods of silence. When `min_turn_silence` is reached, the model checks for terminal punctuation. If no terminal punctuation is found, a partial is emitted and the turn continues. There is at most one partial per silence period.
-
-This means Universal-3 Pro produces fewer, more meaningful partials. If you were relying on frequent subword-level partials, note this behavioral change. For eager LLM inference on partials, we recommend setting `min_turn_silence` to `100` (the default).
-
-<Warning title="Entity splitting trade-off">
-  Setting `min_turn_silence` too low can split entities like phone numbers and
-  emails across partials. LLM steps typically fix this for voice agents, but
-  test carefully with your use case.
-</Warning>
+Universal-3 Pro emits partials only during silence periods instead of for every subword. See [Partials behavior](/docs/streaming/universal-3-pro#partials-behavior) for details.
 
 ## New Universal-3 Pro features
 
@@ -458,96 +194,23 @@ Universal-3 Pro Streaming introduces several features not available in Universal
 
 ### Prompting
 
-Universal-3 Pro supports custom prompts to improve transcription accuracy. A [default prompt](/docs/streaming/prompting#start-with-the-default-prompt) optimized for turn detection is automatically applied. You can provide your own prompt via the `prompt` connection parameter.
-
-```python
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "speech_model": "u3-rt-pro",
-    "prompt": "Transcribe a customer support call about software billing.",
-}
-```
-
-For detailed guidance on crafting effective prompts, see the [Prompting Guide (Streaming)](/docs/streaming/prompting).
+Provide custom prompts via the `prompt` connection parameter to improve transcription accuracy for your domain. See the [Prompting guide](/docs/streaming/prompting) for details.
 
 ### Keyterms prompting
 
-Boost recognition of specific terms using `keyterms_prompt`:
-
-```python
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "speech_model": "u3-rt-pro",
-    "keyterms_prompt": ["AssemblyAI", "Universal-3 Pro"],
-}
-```
-
-<Note>
-  Keyterms longer than 50 characters are ignored. Requests with more than 100
-  keyterms will result in an error. See [Keyterms
-  prompting](/docs/streaming/keyterms-prompting) for details.
-</Note>
+Boost recognition of up to 1,000 specific terms using the `keyterms_prompt` parameter. See [Keyterms prompting](/docs/streaming/keyterms-prompting) for details.
 
 ### `UpdateConfiguration`
 
-You can update configuration during an active session without reconnecting. This is especially useful for dynamically adjusting keyterms as your voice agent conversation progresses through different stages.
-
-```python
-# Update keyterms for a new conversation stage
-ws.send(json.dumps({
-    "type": "UpdateConfiguration",
-    "keyterms_prompt": ["account number", "routing number"],
-}))
-
-# Update multiple parameters at once
-ws.send(json.dumps({
-    "type": "UpdateConfiguration",
-    "keyterms_prompt": ["cardiology", "echocardiogram"],
-    "max_turn_silence": 5000,
-    "min_turn_silence": 200,
-}))
-
-# Clear keyterms
-ws.send(json.dumps({
-    "type": "UpdateConfiguration",
-    "keyterms_prompt": [],
-}))
-```
-
-You can update `keyterms_prompt`, `prompt`, `max_turn_silence`, and `min_turn_silence` mid-stream.
+Update `keyterms_prompt`, `prompt`, `min_turn_silence`, and `max_turn_silence` during an active session without reconnecting. See [Updating configuration mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) for details.
 
 ### `ForceEndpoint`
 
-Force the current turn to end immediately by sending a `ForceEndpoint` message:
-
-```python
-ws.send(json.dumps({"type": "ForceEndpoint"}))
-```
-
-This is useful when your application knows the user has finished speaking based on external signals (e.g., a button press or VAD).
+Force the current turn to end immediately by sending a `ForceEndpoint` message, useful when external signals indicate the user has finished speaking. See [Forcing a turn endpoint](/docs/streaming/universal-3-pro#forcing-a-turn-endpoint) for details.
 
 ## Language support
 
-**Universal Streaming** requires choosing between two separate models:
-
-- `universal-streaming-english` — English only (default)
-- `universal-streaming-multilingual` — English, Spanish, French, German, Italian, and Portuguese
-
-**Universal-3 Pro Streaming** uses a single model (`u3-rt-pro`) with native multilingual code switching. You no longer need to select a language-specific model. The model automatically handles multiple languages within the same session.
-
-To improve accuracy for a specific language, you can provide language information in the prompt:
-
-```python
-CONNECTION_PARAMS = {
-    "sample_rate": 16000,
-    "speech_model": "u3-rt-pro",
-    "prompt": "Transcribe Spanish. Transcribe verbatim. Rules:\n    Always include punctuation in output.\n    Use period/question mark ONLY for complete sentences.\n    Use comma for mid-sentence pauses.\n    Use no punctuation for incomplete trailing speech.\n    Filler words (um, uh, so, like) indicate speaker will continue.",
-}
-```
-
-For multilingual conversations, use: `"Transcribe multilingual conversation in English, Spanish, and German."`
-
-For the full language list and dialect reference, see [Supported languages](/docs/streaming/universal-3-pro/supported-languages).
+Universal-3 Pro uses a single model (`u3-rt-pro`) with native multilingual code-switching for English, Spanish, German, French, Portuguese, and Italian. See [Supported languages](/docs/streaming/universal-3-pro/supported-languages) for the full list.
 
 ## Resources
 
