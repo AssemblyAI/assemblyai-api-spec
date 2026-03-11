@@ -357,7 +357,6 @@ CONNECTION_PARAMS = {
     "min_turn_silence": 800,  # Wait much longer (vs ~100ms for voice agents, 560ms for meetings)
     "max_turn_silence": 2000,  # Longer for clinical thinking pauses
 
-    # Keyterms for accuracy - pass as list; use urlencode(params, doseq=True)
     "keyterms_prompt": MEDICAL_KEYTERMS,
 }
 
@@ -1474,6 +1473,74 @@ config = aai.TranscriptionConfig(
     keyterms_prompt=common_medical_terms,
 )
 ```
+
+## How Should I Handle Pre-recorded Transcription in Production?
+
+### Webhook Callbacks (Recommended)
+
+For high-volume clinical workflows, use webhooks instead of polling:
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    domain="medical",
+    webhook_url="https://your-app.com/webhooks/assemblyai",
+    webhook_auth_header_name="X-Webhook-Secret",
+    webhook_auth_header_value="your_secret_here",
+    speaker_labels=True,
+    speakers_expected=2,
+    entity_detection=True,
+    redact_pii=True,
+    redact_pii_policies=[
+        PIIRedactionPolicy.person_name,
+        PIIRedactionPolicy.date_of_birth,
+        PIIRedactionPolicy.healthcare_number,
+        PIIRedactionPolicy.us_social_security_number,
+    ],
+    redact_pii_sub=PIISubstitutionPolicy.hash,
+    redact_pii_audio=True,
+)
+
+# Submit job and return immediately (non-blocking)
+transcript = transcriber.submit(audio_url, config=config)
+print(f"Job submitted: {transcript.id}")
+# Your app continues processing other encounters
+```
+
+**Webhook handler example:**
+
+```python
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/webhooks/assemblyai", methods=["POST"])
+def assemblyai_webhook():
+    if request.headers.get("X-Webhook-Secret") != "your_secret_here":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json
+    transcript_id = data["transcript_id"]
+    status = data["status"]
+
+    if status == "completed":
+        # Generate SOAP note from transcript
+        generate_soap_note(data)
+        # Update EHR
+        update_patient_record(data)
+    elif status == "error":
+        log_transcription_error(transcript_id, data["error"])
+
+    return jsonify({"received": True}), 200
+```
+
+### Scaling Considerations
+
+- **Rate limits:** 20,000 POST requests per 5-minute window
+- **Concurrent transcriptions:** 200+ for paid accounts (queued beyond that)
+- **Ramp up gradually** - Start at 10-50 concurrent, double incrementally
+- **Use exponential backoff with jitter** for 429 errors
+- **Contact Sales** before large-scale rollouts
 
 ## How Can I Improve the Latency of My Medical Scribe?
 
