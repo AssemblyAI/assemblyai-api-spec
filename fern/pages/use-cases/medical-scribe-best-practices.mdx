@@ -17,13 +17,14 @@ AssemblyAI stands out as the premier choice for medical scribes with several key
 - **2.9% speaker diarization error rate** for precise attribution between provider and patient
 - Comprehensive LLM Gateway integration for intelligent post-processing into structured clinical notes
 
-### Real-Time Streaming Advantages
+### Streaming with Universal-3 Pro
 
-As medical scribes evolve toward real-time documentation, AssemblyAI's Universal-Streaming model offers significant benefits:
+As medical scribes evolve toward real-time documentation, AssemblyAI's Universal-3 Pro Streaming model (`u3-rt-pro`) offers significant benefits:
 
 - **Ultra-low latency (~300ms)** enables live transcription during patient encounters
 - **Format turns** feature provides structured, speaker-aware output in real-time
 - **Keyterms prompt** allows providing medical context and patient history to improve accuracy
+- **Medical mode** (`domain: "medical"`) for improved medical terminology accuracy
 
 ### End-to-End Voice AI Platform
 
@@ -33,12 +34,12 @@ Unlike fragmented solutions, AssemblyAI provides a unified API for:
 - Medical terminology recognition and contextual understanding
 - HIPAA-compliant PII redaction on both text and audio
 - Post-processing workflows with LLM Gateway - from SOAP notes to completely custom clinical documentation
-- Real-time and batch processing in a single platform
+- Streaming and pre-recorded transcription in a single platform
 - Compliance and Security built for medical workloads (BAA, HIPAA, DPA, etc.)
 
 ## When Should I Use Pre-recorded vs Streaming for Medical Scribes?
 
-Understanding when to use async (pre-recorded) versus streaming is critical for clinical workflows.
+Understanding when to use pre-recorded versus streaming is critical for clinical workflows.
 
 ### Use Pre-recorded (Universal-3-Pro) when:
 
@@ -54,7 +55,7 @@ Understanding when to use async (pre-recorded) versus streaming is critical for 
 
 **Best for:** Post-visit SOAP notes, specialist consultations, hospital discharge summaries, quality review
 
-### Use Streaming (Universal-Streaming) When:
+### Use Streaming (Universal-3 Pro Streaming) When:
 
 **Live encounter documentation** - Real-time transcription during patient visit
 
@@ -114,35 +115,28 @@ For post-visit documentation, Universal-3-Pro supports English for the highest a
 
 - PII redaction on text and audio for HIPAA compliance
 
-### Real-Time Streaming (Universal-Streaming)
+### Real-Time Streaming (Universal-3 Pro Streaming)
 
 **Languages**:
-For live encounter transcription, Universal-Streaming supports:
-
-- English model optimized for medical contexts
-- Multilingual model for visits in other languages or with code switching (English, Spanish, German, French, Portuguese, Italian)
-- Post-processing LLM Gateway tight integration for increasing medical accuracy
+For live encounter transcription, Universal-3 Pro Streaming (`u3-rt-pro`) supports English, optimized for medical contexts with the highest streaming accuracy. Use with `domain: "medical"` for improved medical terminology recognition.
 
 **Streaming-Specific Features**:
 
 - Partial and final transcripts for responsive documentation
 - Format turns for structured provider-patient dialogue
-- Keyterms Prompt for patient history and current medications
+- Keyterms Prompt for patient history and current medications (up to 1000 terms)
+- Natural language prompting (up to 1,500 words) for guiding transcription behavior
 - Turn detection with configurable silence thresholds for natural clinical conversation flow
-- Mid-session configuration updates via `UpdateConfiguration` messages
+- Mid-session configuration updates via `UpdateConfiguration` messages — dynamically update keyterms and prompt mid-session. Use keyterms for **known context** like prescription medications and disease names, and use the prompt for **unknown context** like "this is a doctor-patient visit in a cardiology clinic"
 - Post-processing LLM Gateway integration for increasing medical accuracy
 
 **Recommended approach:** Use streaming for real-time documentation, then run through Universal-3-Pro post-visit for accurate speaker-labeled final notes.
 
-**Streaming Models**:
-
-- **Universal-Streaming** — Default streaming model with low latency (~300ms), supports English and multilingual
-- **Universal-3 Pro Streaming** (`u3-rt-pro`) — Highest accuracy streaming model, supports prompting. Best for medical scribes that demand the highest quality
-- **Whisper-Streaming** (`whisper-rt`) — 99+ language support for broad multilingual coverage
+For full details, see the [Universal-3 Pro Streaming documentation](https://www.assemblyai.com/docs/speech-to-text/streaming).
 
 ## How Can I Get Started Building a Post-Visit Medical Scribe?
 
-Here's a complete example implementing async transcription with Universal-3-Pro:
+Here's a complete example implementing pre-recorded transcription with Universal-3-Pro:
 
 ```python
 import assemblyai as aai
@@ -166,6 +160,7 @@ async def transcribe_encounter_async(audio_source: str) -> Dict:
     # Configure comprehensive medical transcription
     config = aai.TranscriptionConfig(
         speech_models=["universal-3-pro", "universal-2"],
+        domain="medical",
         language_detection=True,
 
         # Diarize provider and patient
@@ -352,6 +347,8 @@ MEDICAL_KEYTERMS = [
 # WebSocket / STT parameters - CONSERVATIVE SETTINGS FOR MEDICAL
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "domain": "medical",
     "format_turns": True,  # Always true for readable clinical notes
 
     # MEDICAL SCRIBE CONFIGURATION - Conservative for clinical accuracy
@@ -877,13 +874,13 @@ Use these flags to transform raw medical conversations into structured clinical 
 
 **Notes:** Covers all 18 HIPAA identifiers when properly configured.
 
-`redact_pii_policies: [person_name, date_of_birth, medical_record_number, phone_number, email_address]`
+`redact_pii_policies: [person_name, date_of_birth, healthcare_number, phone_number, email_address]`
 
 Restricts redaction scope to key HIPAA identifiers:
 
 - **`person_name`** – patient and provider names
 - **`date_of_birth`** – full or partial DOB
-- **`medical_record_number`** – MRN, account numbers
+- **`healthcare_number`** – MRN, health plan numbers
 - **`phone_number`** – contact numbers
 - **`email_address`** – electronic addresses
 
@@ -1433,6 +1430,8 @@ medical_terms = [
 # Connect via WebSocket to the v3 streaming API with medical keyterms
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "domain": "medical",
     "format_turns": True,
     "keyterms_prompt": medical_terms,
 }
