@@ -1,0 +1,1030 @@
+---
+title: Best Practices for building Contact Center Applications
+description: Complete guide for building contact center applications with AssemblyAI
+---
+
+## Introduction
+
+Building a contact center application requires careful consideration of accuracy, speaker separation, compliance, and scalability. This guide addresses common questions and provides practical solutions for both post-call analytics and real-time agent assist scenarios.
+
+## Why AssemblyAI for contact centers?
+
+AssemblyAI stands out as the premier choice for contact center applications with several key advantages:
+
+### Industry-leading accuracy on telephony audio
+
+- **Universal-3-Pro model** delivers best-in-class accuracy on 8kHz telephony audio
+- **2.9% speaker diarization error rate** for precise agent vs. customer attribution
+- **Multichannel support** for stereo call recordings where agent and customer are on separate channels
+- **Keyterms prompt** allows providing call context to improve accuracy of company names, products, and compliance phrases
+
+### Streaming with Universal-3 Pro
+
+For real-time agent assist, AssemblyAI's Universal-3 Pro Streaming model (`u3-rt-pro`) offers:
+
+- **Low latency** enables live transcription during calls
+- **Format turns** feature provides structured, readable output
+- **Dynamic prompting** via `UpdateConfiguration` to update context mid-call
+- **Dual-channel streaming** for separate agent and customer audio streams
+
+### End-to-end voice AI platform
+
+Unlike fragmented solutions, AssemblyAI provides a unified API for:
+
+- Transcription with speaker diarization (agent vs. customer)
+- Multichannel audio support for stereo call recordings
+- PII redaction on both text and audio for HIPAA and PCI compliance
+- Post-processing workflows with custom prompting - from call summaries to QA scoring
+- Streaming and pre-recorded transcription in a single platform
+- Compliance and security built for enterprise workloads (BAA, SOC2, ISO)
+
+## When should I use pre-recorded vs streaming for contact centers?
+
+Understanding when to use pre-recorded versus streaming is critical for contact center workflows.
+
+### Pre-recorded Speech-to-text
+
+**Post-call analytics** - Call already happened, you have the full recording
+
+- **Highest accuracy needed** - Pre-recorded models have the highest accuracy
+- **Speaker diarization is critical** - Pre-recorded has 2.9% speaker error rate
+- **Multichannel recordings** - Most contact center recordings are stereo with agent and customer on separate channels
+- **Compliance workflows** - Full PII redaction with audio de-identification
+- **Post-call analytics** - Summarization, sentiment analysis, entity detection, QA scoring
+- **Batch processing** - Processing large volumes of call recordings
+
+**Best for:** QA scoring, compliance monitoring, coaching insights, post-call CRM updates, searchable call archives
+
+### Streaming Speech-to-text
+
+**Live calls** - Transcribing as the call happens
+
+You should use streaming when you need to display a live transcript to agents during calls. With Universal-3 Pro Streaming, accuracy is closer to pre-recorded, but pre-recorded will always be the most accurate option.
+
+- **Agent assist** - Live transcription visible to agents during calls
+- **Real-time coaching** - Prompt agents with suggested responses or compliance reminders
+- **Live compliance monitoring** - Detect compliance violations in real-time
+- **No recording available** - Processing live audio only
+
+**Best for:** Agent assist, real-time coaching, live compliance monitoring, live call transcription
+
+### Hybrid approach (recommended)
+
+Many contact center platforms use **both**:
+
+1. **Streaming during the call** - Provide live transcription for agent assist and real-time coaching
+2. **Pre-recorded after the call** - Generate high-quality transcript with speaker labels, summary, and analytics
+
+**Example workflow:**
+
+- Call begins → Start streaming for live agent assist
+- Call ends → Upload recording to pre-recorded API for final transcript with speaker names
+- Generate call summary, QA score, and compliance report from pre-recorded transcript
+- Push results to CRM (e.g., Salesforce)
+
+## What languages and features for a contact center application?
+
+### Pre-recorded calls (Universal-3-Pro)
+
+For post-call analytics, AssemblyAI supports:
+
+**Languages**:
+
+- 99 languages supported
+- Automatic Language Detection to route to the most spoken language
+- Code Switching to preserve changes in speech between languages
+
+**Core Features**:
+
+- Speaker diarization (agent-customer separation)
+- Multichannel audio support - when agent and customer are on separate audio channels, enables perfect speaker separation without diarization
+- Automatic formatting, punctuation, and capitalization
+- Keyterms prompting for boosting domain-specific terms (up to 1000 terms for Universal-3-Pro)
+- Natural language prompting (Universal-3-Pro) - up to 1,500 words to guide transcription behavior
+- Speaker options with configurable min/max expected speakers for call transfers
+
+**Speech Understanding**:
+
+- Summarization for call recaps
+- Sentiment analysis for customer satisfaction tracking
+- Entity detection for extracting names, account numbers, and products
+- Speaker identification to map generic labels to agent and customer names
+- Translation between 100+ languages
+
+**Guardrails**:
+
+- PII redaction on text and audio for HIPAA and PCI compliance
+
+### Streaming (Universal-3 Pro Streaming)
+
+For live call transcription, use **Universal-3 Pro Streaming** (`u3-rt-pro`) for the highest streaming accuracy:
+
+**Core Features**:
+
+- Speaker diarization for identifying agent vs. customer
+- Partial and final transcripts for responsive UI
+- Format turns for structured, readable output
+- Keyterms prompt for company names, products, and compliance phrases
+- Dual-channel streaming for separate agent and customer audio
+
+For more details, see the [Universal-3 Pro Streaming documentation](https://www.assemblyai.com/docs/streaming/universal-3-pro).
+
+## How can I get started building a post-call analytics pipeline?
+
+Here's a complete example implementing pre-recorded transcription for contact center call analysis:
+
+```python
+import assemblyai as aai
+import asyncio
+from typing import Dict, List
+from assemblyai.types import (
+    SpeakerOptions,
+    PIIRedactionPolicy,
+    PIISubstitutionPolicy,
+)
+
+# Configure API key
+aai.settings.api_key = "your_api_key_here"
+
+async def transcribe_call(audio_source: str, agent_name: str = None) -> Dict:
+    """
+    Transcribe a contact center call recording with full analytics
+
+    Args:
+        audio_source: Either a local file path or publicly accessible URL
+        agent_name: Optional agent name for speaker identification
+    """
+    # Configure comprehensive call analysis
+    config = aai.TranscriptionConfig(
+        # Model selection
+        speech_models=["universal-3-pro", "universal-2"],
+
+        # Speaker diarization
+        speaker_labels=True,
+        speaker_options=SpeakerOptions(
+            min_speakers_expected=2,  # Agent and customer
+            max_speakers_expected=5   # Allow for call transfers - safe to keep high
+        ),
+        multichannel=False,  # Set to True if audio has separate channel per speaker
+
+        # Language detection
+        language_detection=True,
+
+        # Boost accuracy of contact center vocabulary
+        keyterms_prompt=[
+            # Company-specific terms
+            "Acme Corp", "Premium Support Plan",
+
+            # Compliance phrases
+            "recorded line", "calls are monitored and recorded",
+
+            # Common contact center terms
+            "account number", "case number", "ticket number",
+            "escalation", "supervisor", "hold time",
+        ],
+
+        # Post-call analytics
+        summarization=True,
+        sentiment_analysis=True,
+        entity_detection=True,
+
+        # PII protection for compliance
+        redact_pii=True,
+        redact_pii_policies=[
+            PIIRedactionPolicy.person_name,
+            PIIRedactionPolicy.phone_number,
+            PIIRedactionPolicy.email_address,
+            PIIRedactionPolicy.account_number,
+            PIIRedactionPolicy.us_social_security_number,
+            PIIRedactionPolicy.credit_card_number,
+            PIIRedactionPolicy.credit_card_cvv,
+            PIIRedactionPolicy.credit_card_expiration,
+            PIIRedactionPolicy.date_of_birth,
+        ],
+        redact_pii_sub=PIISubstitutionPolicy.hash,
+        redact_pii_audio=True,
+    )
+
+    # Add speaker identification if agent name is known
+    if agent_name:
+        config.speech_understanding = {
+            "request": {
+                "speaker_identification": {
+                    "speaker_type": "role",
+                    "speakers": [
+                        {"role": "Agent", "name": agent_name},
+                        {"role": "Customer"}
+                    ]
+                }
+            }
+        }
+
+    # Create transcriber
+    transcriber = aai.Transcriber()
+
+    try:
+        # Submit transcription job
+        transcript = await asyncio.to_thread(
+            transcriber.transcribe,
+            audio_source,
+            config=config
+        )
+
+        # Check status
+        if transcript.status == aai.TranscriptStatus.error:
+            raise Exception(f"Transcription failed: {transcript.error}")
+
+        # Process speaker-labeled utterances
+        for utterance in transcript.utterances:
+            start_time = utterance.start / 1000  # Convert ms to seconds
+            end_time = utterance.end / 1000
+
+            print(f"[{start_time:.1f}s - {end_time:.1f}s] {utterance.speaker}:")
+            print(f"  {utterance.text}\n")
+
+        return {
+            "transcript": transcript,
+            "utterances": transcript.utterances,
+            "summary": transcript.summary,
+            "sentiment": transcript.sentiment_analysis_results,
+            "entities": transcript.entities,
+            "redacted_audio_url": transcript.redacted_audio_url,
+        }
+
+    except Exception as e:
+        print(f"Error during transcription: {e}")
+        raise
+
+async def main():
+    audio_source = "https://your-storage.com/calls/call_recording.mp3"
+
+    result = await transcribe_call(audio_source, agent_name="Sarah Johnson")
+
+    print(f"\nCall duration: {result['transcript'].audio_duration} seconds")
+    print(f"Summary: {result['summary']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## How Do I Handle Multichannel Contact Center Audio?
+
+Most contact center recordings are stereo with the agent on one channel and the customer on the other. Multichannel transcription gives you perfect speaker separation without diarization.
+
+### Pre-recorded Multichannel
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    multichannel=True,  # Enable when agent and customer are on separate channels
+    speaker_labels=False,  # Disable - channels already separate speakers
+
+    # Still enable analytics
+    summarization=True,
+    sentiment_analysis=True,
+    entity_detection=True,
+
+    # PII redaction
+    redact_pii=True,
+    redact_pii_policies=[
+        PIIRedactionPolicy.person_name,
+        PIIRedactionPolicy.credit_card_number,
+        PIIRedactionPolicy.us_social_security_number,
+        PIIRedactionPolicy.account_number,
+    ],
+    redact_pii_sub=PIISubstitutionPolicy.hash,
+)
+
+transcriber = aai.Transcriber()
+transcript = transcriber.transcribe(audio_file, config=config)
+
+# Channel 1 = Agent, Channel 2 = Customer (typical layout)
+for utterance in transcript.utterances:
+    role = "Agent" if utterance.channel == "1" else "Customer"
+    print(f"{role}: {utterance.text}")
+```
+
+**When to use multichannel:**
+
+- Call recordings from PBX systems with separate agent/customer channels
+- Recordings from platforms like Genesys, Twilio, Five9, NICE, or Talkdesk
+- Any stereo recording where each channel represents a different speaker
+
+**Benefits:**
+
+- **Perfect speaker separation** - No diarization errors
+- **No speaker confusion or overlap issues**
+- **Higher accuracy** - Model processes clean single-speaker audio per channel
+
+### Streaming Multichannel
+
+For real-time dual-channel transcription, create separate streaming sessions per channel:
+
+```python
+import asyncio
+import websockets
+import json
+from urllib.parse import urlencode
+
+API_KEY = "your_api_key"
+
+class ChannelTranscriber:
+    def __init__(self, channel_id: int, role: str):
+        self.channel_id = channel_id
+        self.role = role
+        self.connection_params = {
+            "sample_rate": 8000,  # Telephony standard
+            "speech_model": "u3-rt-pro",
+            "format_turns": True,
+            "encoding": "pcm_mulaw",  # Common telephony encoding
+        }
+
+    async def transcribe_channel(self, audio_stream):
+        url = f"wss://streaming.assemblyai.com/v3/ws?{urlencode(self.connection_params, doseq=True)}"
+
+        # If using websockets >= 13.0, use additional_headers. For < 13.0, use extra_headers.
+        async with websockets.connect(url, additional_headers={"Authorization": API_KEY}) as ws:
+            # Send and receive must run concurrently for real-time streaming
+            async def send_audio():
+                async for audio_chunk in audio_stream:
+                    await ws.send(audio_chunk)
+
+            async def receive_transcripts():
+                async for message in ws:
+                    data = json.loads(message)
+                    if data.get("type") == "Turn" and data.get("turn_is_formatted"):
+                        print(f"{self.role}: {data['transcript']}")
+
+            await asyncio.gather(send_audio(), receive_transcripts())
+
+# Create transcriber for each channel
+async def transcribe_live_call(agent_audio_stream, customer_audio_stream):
+    agent = ChannelTranscriber(0, "Agent")
+    customer = ChannelTranscriber(1, "Customer")
+
+    await asyncio.gather(
+        agent.transcribe_channel(agent_audio_stream),
+        customer.transcribe_channel(customer_audio_stream),
+    )
+```
+
+See our [multichannel streaming guide](https://www.assemblyai.com/docs/streaming/diarization-and-multichannel#multichannel-streaming-audio) for complete implementation details.
+
+## How Can I Build a Real-Time Agent Assist?
+
+Here's a complete example for real-time streaming transcription optimized for contact center agent assist:
+
+```python
+# pip install pyaudio websocket-client
+import pyaudio
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
+
+# --- Configuration ---
+YOUR_API_KEY = "your_api_key"
+
+# Contact center keyterms
+KEYTERMS = [
+    # Company and product terms
+    "Acme Corp",
+    "Premium Support Plan",
+    "Enterprise License",
+
+    # Compliance phrases
+    "recorded line",
+    "calls are monitored",
+
+    # Common contact center vocabulary
+    "account number",
+    "case number",
+    "escalation",
+    "supervisor",
+]
+
+# CONTACT CENTER CONFIGURATION
+CONNECTION_PARAMS = {
+    "sample_rate": 8000,  # Telephony standard (8kHz)
+    "speech_model": "u3-rt-pro",  # Universal-3 Pro Streaming for highest accuracy
+    "format_turns": True,
+
+    # Contact center turn detection
+    # u3-rt-pro defaults: min_turn_silence=100ms, max_turn_silence=1000ms
+    "min_turn_silence": 400,  # Longer than default for natural call pauses
+    "max_turn_silence": 1500,  # Longer for customers explaining issues
+
+    # Keyterms for accuracy
+    "keyterms_prompt": KEYTERMS,
+}
+
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS, doseq=True)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 400  # 50ms of audio at 8kHz
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()
+transcript_buffer = []
+
+
+def on_open(ws):
+    print("=" * 80)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Agent assist transcription started")
+    print(f"Connected to: {API_ENDPOINT_BASE_URL}")
+    print(f"Keyterms configured: {', '.join(KEYTERMS[:5])}...")
+    print("=" * 80)
+
+    def stream_audio():
+        global stream
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                if not stop_event.is_set():
+                    print(f"Error streaming audio: {e}")
+                break
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get("type")
+
+        if msg_type == "Begin":
+            session_id = data.get("id", "N/A")
+            print(f"[SESSION] Started - ID: {session_id}\n")
+
+        elif msg_type == "Turn":
+            end_of_turn = data.get("end_of_turn", False)
+            turn_is_formatted = data.get("turn_is_formatted", False)
+            transcript = data.get("transcript", "")
+            turn_order = data.get("turn_order", 0)
+
+            # Show partials for responsive agent UI
+            if not end_of_turn and transcript:
+                print(f"\r[LIVE] {transcript}", end="", flush=True)
+
+            # Use formatted finals for agent display
+            if end_of_turn and turn_is_formatted and transcript:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"\n[{timestamp}] {transcript}")
+
+                # Detect compliance keywords
+                transcript_lower = transcript.lower()
+                if any(term in transcript_lower for term in ["cancel", "refund", "complaint", "supervisor"]):
+                    print("           ** ESCALATION KEYWORD DETECTED **")
+
+                transcript_buffer.append({
+                    "timestamp": timestamp,
+                    "text": transcript,
+                    "turn_order": turn_order,
+                    "type": "final"
+                })
+                print()
+
+        elif msg_type == "Termination":
+            audio_duration = data.get("audio_duration_seconds", 0)
+            print(f"\n[SESSION] Terminated - Duration: {audio_duration}s")
+
+        elif msg_type == "Error":
+            error_msg = data.get("error", "Unknown error")
+            print(f"\n[ERROR] {error_msg}")
+
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+
+def on_error(ws, error):
+    print(f"\n[WEBSOCKET ERROR] {error}")
+    stop_event.set()
+
+
+def on_close(ws, close_status_code, close_msg):
+    print(f"\n[WEBSOCKET] Disconnected - Status: {close_status_code}, Message: {close_msg}")
+
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+    except Exception as e:
+        print(f"Error opening audio stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\n\nCtrl+C received. Stopping transcription...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(1)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+
+if __name__ == "__main__":
+    run()
+```
+
+## How Should I Handle Pre-recorded Transcription in Production?
+
+### Webhook Callbacks (Recommended)
+
+For high-volume contact center workloads, use webhooks instead of polling:
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    webhook_url="https://your-app.com/webhooks/assemblyai",
+    webhook_auth_header_name="X-Webhook-Secret",
+    webhook_auth_header_value="your_secret_here",
+    speaker_labels=True,
+    multichannel=True,
+    summarization=True,
+    sentiment_analysis=True,
+    entity_detection=True,
+    redact_pii=True,
+    redact_pii_policies=[
+        PIIRedactionPolicy.person_name,
+        PIIRedactionPolicy.credit_card_number,
+        PIIRedactionPolicy.us_social_security_number,
+        PIIRedactionPolicy.account_number,
+    ],
+    redact_pii_sub=PIISubstitutionPolicy.hash,
+)
+
+# Submit job and return immediately (non-blocking)
+transcript = transcriber.submit(audio_url, config=config)
+print(f"Job submitted: {transcript.id}")
+# Your app continues processing other calls
+```
+
+**Webhook handler example:**
+
+```python
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/webhooks/assemblyai", methods=["POST"])
+def assemblyai_webhook():
+    if request.headers.get("X-Webhook-Secret") != "your_secret_here":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    import requests as http_requests
+
+    data = request.json
+    transcript_id = data["transcript_id"]
+    status = data["status"]
+
+    if status == "completed":
+        # Fetch the full transcript (webhook only sends transcript_id and status)
+        transcript = http_requests.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers={"authorization": "your_api_key"}
+        ).json()
+        process_completed_call(transcript)
+    elif status == "error":
+        log_transcription_error(transcript_id)
+
+    return jsonify({"received": True}), 200
+
+def process_completed_call(transcript):
+    """Process completed call transcript and push to CRM"""
+    utterances = transcript["utterances"]
+    summary = transcript["summary"]
+
+    # Store in database
+    save_to_database(transcript)
+
+    # Push summary to CRM
+    push_to_crm(transcript["id"], summary)
+
+    # Run QA scoring
+    qa_score = score_call_quality(utterances)
+    save_qa_score(transcript["id"], qa_score)
+```
+
+### Scaling Considerations
+
+- **Rate limits:** 20,000 POST requests per 5-minute window
+- **Concurrent transcriptions:** 200+ for paid accounts (queued beyond that)
+- **Ramp up gradually** - Start at 10-50 concurrent, double incrementally
+- **Use exponential backoff with jitter** for 429 errors
+- **Contact Sales** before large-scale rollouts
+
+## How Do I Handle PII and Compliance?
+
+PII redaction is critical for contact center compliance (HIPAA, PCI-DSS, GDPR, CCPA).
+
+### Recommended PII Configuration
+
+```python
+config = aai.TranscriptionConfig(
+    redact_pii=True,
+    redact_pii_policies=[
+        # Customer identity
+        PIIRedactionPolicy.person_name,
+        PIIRedactionPolicy.date_of_birth,
+        PIIRedactionPolicy.us_social_security_number,
+
+        # Contact information
+        PIIRedactionPolicy.phone_number,
+        PIIRedactionPolicy.email_address,
+        PIIRedactionPolicy.location,
+
+        # Financial information (PCI-DSS)
+        PIIRedactionPolicy.credit_card_number,
+        PIIRedactionPolicy.credit_card_cvv,
+        PIIRedactionPolicy.credit_card_expiration,
+        PIIRedactionPolicy.account_number,
+        PIIRedactionPolicy.banking_information,
+    ],
+    redact_pii_sub=PIISubstitutionPolicy.hash,  # Stable hash tokens
+    redact_pii_audio=True,  # Create de-identified audio file
+)
+```
+
+**Why hash substitution?**
+
+- Stable across the file (same value = same token)
+- Maintains sentence structure for downstream LLM processing
+- Prevents reconstruction of original data
+
+### HIPAA Compliance
+
+- AssemblyAI provides a **Business Associate Agreement (BAA)** at no cost
+- [Contact us](https://www.assemblyai.com/contact/support) to execute a BAA before processing PHI
+- Use PII redaction with audio de-identification for full compliance
+
+## How Do I Improve the Accuracy of My Contact Center Transcription?
+
+### Prompting Best Practices
+
+The most impactful lever for contact center accuracy is **prompting**. Use a structured prompt with a `Context:` field:
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+
+    # Natural language prompt for transcription guidance
+    prompt=(
+        "Transcribe this audio with perfect punctuation and formatting. "
+        "Preserve linguistic speech patterns including disfluencies, filler words, "
+        "hesitations, repetitions, stutters, false starts, and colloquialisms. "
+        "Transcribe in the original language mix (code-switching), preserving the "
+        "words in the language they are spoken. Output plain transcript text only. "
+        "Use a new line when the voice changes; each line contains only one "
+        "person's words.\n\n"
+        "Context: Acme Corp customer service call, recorded line, "
+        "Agent: Sarah Johnson, calls are monitored and recorded"
+    ),
+
+    # Keyterms for proper nouns and domain vocabulary
+    keyterms_prompt=[
+        "Acme Corp",
+        "Sarah Johnson",
+        "Premium Support Plan",
+        "Enterprise License",
+        "recorded line",
+        "calls are monitored and recorded",
+    ],
+
+    speaker_labels=True,
+)
+```
+
+**Tips for effective prompting:**
+
+- Use **positive instructions** ("transcribe verbatim") not negative ("do NOT summarize")
+- Keep prompts to **3-6 instructions** maximum - conflicting instructions degrade output
+- **Layer instructions one by one** and test each to measure impact
+- Dynamize the `Context:` line per call with known info: company name, agent name, compliance phrases
+- Use **keyterms** for proper nouns and domain vocabulary (company names, product names, agent names)
+
+### Using Keyterms for Pre-recorded Transcription
+
+```python
+# Build keyterms dynamically per call
+call_keyterms = [
+    # Company terms (static)
+    "Acme Corp",
+    "Premium Support Plan",
+
+    # Agent name (from routing system)
+    agent_name,
+
+    # Customer name (from CRM lookup)
+    customer_name,
+
+    # Account-specific terms
+    "account ending in 4532",
+]
+
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    keyterms_prompt=call_keyterms,
+    speaker_labels=True,
+)
+```
+
+### Using Keyterms for Streaming
+
+```python
+# Streaming with contact center context
+keyterms = [
+    "Acme Corp",
+    "Premium Support Plan",
+    "Sarah Johnson",
+    "recorded line",
+]
+
+CONNECTION_PARAMS = {
+    "sample_rate": 8000,
+    "speech_model": "u3-rt-pro",
+    "format_turns": True,
+    "encoding": "pcm_mulaw",
+    "keyterms_prompt": keyterms,
+}
+```
+
+## What Workflows Can I Build for My Contact Center Application?
+
+Use these features to transform raw call transcripts into actionable insights.
+
+### Summarization
+
+`summarization: true`
+
+**What it does:** Generates an abstractive recap of the call.
+**Output:** `summary` string (bullets/paragraph format).
+**Great for:** Post-call CRM updates, call recaps, supervisor review.
+
+```python
+config = aai.TranscriptionConfig(
+    summarization=True,
+    summary_type="bullets",  # or "bullets_verbose", "gist", "headline", "paragraph"
+    summary_model="informative",  # or "conversational"
+)
+```
+
+### Sentiment Analysis
+
+`sentiment_analysis: true`
+
+**What it does:** Scores per-utterance sentiment (positive / neutral / negative).
+**Output:** Array of `{ text, sentiment, confidence, start, end }`.
+**Great for:** Customer satisfaction tracking, escalation detection, QA scoring.
+
+```python
+# Analyze customer sentiment across a call
+negative_count = 0
+for result in transcript.sentiment_analysis_results:
+    if result.sentiment == "NEGATIVE":
+        negative_count += 1
+        print(f"Negative at {result.start / 1000:.1f}s: {result.text}")
+
+# Flag calls with high negative sentiment
+if negative_count > 3:
+    flag_for_supervisor_review(transcript.id)
+```
+
+### Entity Detection
+
+`entity_detection: true`
+
+**What it does:** Extracts named entities (people, organizations, locations, products, etc.).
+**Output:** Array of `{ entity_type, text, start, end }`.
+**Great for:** CRM enrichment, auto-tagging topics, competitor tracking.
+
+```python
+# Extract key entities from a call
+organizations = [e.text for e in transcript.entities if e.entity_type == "organization"]
+print(f"Companies mentioned: {', '.join(organizations)}")
+```
+
+### Speaker Identification
+
+Map generic speaker labels to agent and customer names:
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    speaker_labels=True,
+    speech_understanding={
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "role",
+                "speakers": [
+                    {"role": "Agent", "name": "Sarah Johnson", "description": "Customer service representative"},
+                    {"role": "Customer"}
+                ]
+            }
+        }
+    }
+)
+```
+
+### Translation
+
+Translate call transcripts for international teams:
+
+```python
+config = aai.TranscriptionConfig(
+    speech_models=["universal-3-pro", "universal-2"],
+    language_detection=True,
+    speaker_labels=True,
+    speech_understanding={
+        "request": {
+            "translation": {
+                "target_languages": ["en"],  # Translate to English
+                "match_original_utterance": True,  # Per-utterance translations
+                "formal": True
+            }
+        }
+    }
+)
+```
+
+### Redact PII Text and Audio
+
+```python
+config = aai.TranscriptionConfig(
+    redact_pii=True,
+    redact_pii_policies=[
+        PIIRedactionPolicy.person_name,
+        PIIRedactionPolicy.credit_card_number,
+        PIIRedactionPolicy.us_social_security_number,
+        PIIRedactionPolicy.account_number,
+    ],
+    redact_pii_sub=PIISubstitutionPolicy.hash,
+    redact_pii_audio=True,  # Generate de-identified audio
+)
+
+# After transcription
+print(transcript.text)  # PII redacted in text
+print(transcript.redacted_audio_url)  # PII bleeped in audio
+```
+
+## How Do I Process the Response from the API?
+
+### Processing Pre-recorded Responses
+
+```python
+def process_call_transcript(transcript):
+    """
+    Extract and process all relevant data from a pre-recorded call transcript
+    """
+    call_data = {
+        "id": transcript.id,
+        "duration": transcript.audio_duration,  # Already in seconds
+        "confidence": transcript.confidence,
+        "full_text": transcript.text,
+    }
+
+    # Process speaker utterances
+    speakers = {}
+    for utterance in transcript.utterances:
+        speaker = utterance.speaker
+
+        if speaker not in speakers:
+            speakers[speaker] = {
+                "utterances": [],
+                "total_speaking_time": 0,
+                "word_count": 0
+            }
+
+        speakers[speaker]["utterances"].append({
+            "text": utterance.text,
+            "start": utterance.start,
+            "end": utterance.end,
+        })
+
+        speakers[speaker]["total_speaking_time"] += (utterance.end - utterance.start) / 1000
+        speakers[speaker]["word_count"] += len(utterance.text.split())
+
+    call_data["speakers"] = speakers
+
+    # Extract summary
+    if transcript.summary:
+        call_data["summary"] = transcript.summary
+
+    # Analyze sentiment
+    if transcript.sentiment_analysis_results:
+        sentiments = [r.sentiment for r in transcript.sentiment_analysis_results]
+        call_data["sentiment_breakdown"] = {
+            "positive": sentiments.count("POSITIVE"),
+            "neutral": sentiments.count("NEUTRAL"),
+            "negative": sentiments.count("NEGATIVE"),
+        }
+
+    # Calculate statistics
+    total_duration = transcript.audio_duration
+    call_data["statistics"] = {
+        "total_speakers": len(speakers),
+        "total_words": sum(s["word_count"] for s in speakers.values()),
+        "speaking_distribution": {
+            speaker: {
+                "percentage": (data["total_speaking_time"] / total_duration) * 100,
+                "minutes": data["total_speaking_time"] / 60,
+            }
+            for speaker, data in speakers.items()
+        },
+    }
+
+    return call_data
+
+result = process_call_transcript(transcript)
+print(f"Call had {result['statistics']['total_speakers']} speakers")
+print(f"Sentiment: {result.get('sentiment_breakdown', {})}")
+```
+
+## Additional Resources
+
+- [Universal-3 Pro Pre-recorded Documentation](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio)
+- [Universal-3 Pro Streaming Documentation](https://www.assemblyai.com/docs/streaming/universal-3-pro)
+- [Speaker Diarization Guide](https://www.assemblyai.com/docs/speech-to-text/speaker-diarization)
+- [Multichannel Streaming Guide](https://www.assemblyai.com/docs/streaming/diarization-and-multichannel)
+- [Speaker Identification Guide](https://www.assemblyai.com/docs/speech-understanding/speaker-identification)
+- [Translation Guide](https://www.assemblyai.com/docs/speech-understanding/translation)
+- [PII Redaction Guide](https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/pii-redaction)
+- [Getting Started Guide](https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file)
+- [API Playground](https://www.assemblyai.com/playground/streaming)
+- [Changelog](https://www.assemblyai.com/changelog)
+- [Support](https://www.assemblyai.com/contact/support)
