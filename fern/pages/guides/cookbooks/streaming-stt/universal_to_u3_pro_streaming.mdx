@@ -47,7 +47,7 @@ For full details, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pr
 
 ## What changes
 
-This single table covers every parameter, behavior, and response field difference. Use it as a migration checklist.
+This table covers the key parameter, behavior, and response field differences. Use it as a migration checklist.
 
 | What                                    | Universal Streaming                                                                                                                                             | Universal-3 Pro Streaming                                                     | Action Required                                                                                              |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -63,6 +63,8 @@ This single table covers every parameter, behavior, and response field differenc
 | **`UpdateConfiguration`**               | Turn detection params only (`end_of_turn_confidence_threshold`, `min_turn_silence`, `max_turn_silence`)                                                         | `prompt`, `keyterms_prompt`, `min_turn_silence`, `max_turn_silence`           | Update any mid-stream config logic to use new fields                                                         |
 | **`ForceEndpoint`**                     | Supported                                                                                                                                                       | Supported                                                                     | No change needed                                                                                             |
 | **`language`**                          | `"en"` or `"multi"` (**officially deprecated**)                                                                                                                 | Not a parameter (native code-switching)                                       | Remove `language` param; use `prompt` to guide language if needed                                            |
+| **`vad_threshold`**                     | `0.4` (default)                                                                                                                                                 | `0.3` (default)                                                               | Review and adjust if you tuned this value — lower default means higher noise sensitivity                    |
+| **`language_detection`**                | Supported (`true`/`false`, default `false`) with multilingual model                                                                                             | Supported — automatic with code-switching                                     | Remove if set; U3 Pro detects language automatically                                                        |
 | **Languages**                           | English default; multilingual requires `speech_model: "universal-streaming-multilingual"`                                                                       | Native multilingual code switching (6 languages) in a single model            | Remove multilingual model switching; optionally prepend language to prompt                                   |
 
 Sources: [U3 Pro docs](/docs/streaming/universal-3-pro), [Universal docs](/docs/streaming/universal-streaming), [Turn detection docs](/docs/streaming/universal-streaming/turn-detection), [API Reference](/docs/api-reference/streaming)
@@ -129,10 +131,7 @@ Full working Python examples side by side using raw `websocket-client`.
             elif msg_type == "Turn":
                 transcript = data.get("transcript", "")
                 turn_is_formatted = data.get("turn_is_formatted", False)
-                end_of_turn = data.get("end_of_turn", False)
                 if turn_is_formatted:
-                    print(f"\r{' ' * 80}\r{transcript}")
-                elif end_of_turn:
                     print(f"\r{' ' * 80}\r{transcript}")
                 else:
                     print(f"\r{transcript}", end="")
@@ -365,7 +364,7 @@ When silence reaches `min_turn_silence`, the model transcribes the audio and che
 
 ## New capabilities
 
-These features are new or significantly enhanced in Universal-3 Pro. For full details, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro).
+These features are new or enhanced in Universal-3 Pro. For full details, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro).
 
 ### Prompting
 
@@ -390,10 +389,12 @@ CONNECTION_PARAMS = {
 Boost recognition of specific names, brands, or domain terms. Maximum 100 keyterms, each 50 characters or less. See [Keyterms Prompting](/docs/streaming/keyterms-prompting) for details.
 
 ```python
+import json
+
 CONNECTION_PARAMS = {
     "sample_rate": 16000,
     "speech_model": "u3-rt-pro",
-    "keyterms_prompt": ["Keanu Reeves", "AssemblyAI", "Universal-3"],
+    "keyterms_prompt": json.dumps(["Keanu Reeves", "AssemblyAI", "Universal-3"]),
 }
 ```
 
@@ -415,9 +416,9 @@ ws.send(json.dumps({
 }))
 ```
 
-### Force turn end
+## Force turn end
 
-Force the current turn to end immediately based on external signals. See [Forcing a turn endpoint](/docs/streaming/universal-3-pro#forcing-a-turn-endpoint) for details.
+`ForceEndpoint` is supported on both Universal Streaming and Universal-3 Pro — no migration changes needed. Force the current turn to end immediately based on external signals. See [Forcing a turn endpoint](/docs/streaming/universal-3-pro#forcing-a-turn-endpoint) for details.
 
 ```python
 ws.send(json.dumps({"type": "ForceEndpoint"}))
