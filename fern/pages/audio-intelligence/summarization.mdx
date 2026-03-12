@@ -1,43 +1,16 @@
 ---
 title: "Summarization"
-description: "Generate a single summary of your entire audio file"
+description: "Generate summaries of your audio transcripts using LLM Gateway"
 ---
 
 {/* @api-info
 product: Pre-recorded STT (Speech Understanding)
 speech_models: ["universal-3-pro", "universal-2"]
-api-endpoint: POST https://api.assemblyai.com/v2/transcript
-parameter: summarization (boolean), summary_model (string), summary_type (string)
-description: Generate summaries of pre-recorded audio transcripts in different formats. Only available with pre-recorded (async) transcription.
+api-endpoint: POST https://llm-gateway.assemblyai.com/v1/chat/completions
+description: Generate summaries of pre-recorded audio transcripts using LLM Gateway. Transcribe your audio first, then send the transcript text to LLM Gateway with a summarization prompt.
 */}
 
-import { LanguageTable } from "../../assets/components/LanguagesTable";
-
 <AccordionGroup>
-
-<Accordion title="Supported languages">
-  <LanguageTable
-    languages={[
-      { name: "Global English", code: "en" },
-      { name: "Australian English", code: "en_au" },
-      { name: "British English", code: "en_uk" },
-      { name: "US English", code: "en_us" },
-    ]}
-    columns={2}
-  />
-  <br />
-</Accordion>
-
-<Accordion title="Supported models">
-  <LanguageTable
-    languages={[
-      { name: "Universal-3-Pro", code: "universal-3-pro" },
-      { name: "Universal-2", code: "universal-2" },
-    ]}
-    columns={2}
-  />
-  <br />
-</Accordion>
 
 <Accordion title="Supported regions">
   US & EU <br />
@@ -45,156 +18,102 @@ import { LanguageTable } from "../../assets/components/LanguagesTable";
 
 </AccordionGroup>
 
-Distill important information by summarizing your audio files.
+Generate summaries of your audio transcripts using [LLM Gateway](/docs/llm-gateway/overview). This approach gives you full control over the summary format, length, and style by customizing your prompt.
 
-The Summarization model generates a summary of the resulting transcript. You can control the style and format of the summary using [Summary models](#summary-models) and [Summary types](#summary-types).
-
-<Warning title="Summarization and Auto Chapters">
-  You can only enable one of the Summarization and [Auto
-  Chapters](/docs/audio-intelligence/auto-chapters) models in the same
-  transcription.
-</Warning>
+<Note>
+  The `summarization`, `summary_model`, and `summary_type` parameters on the transcription API are deprecated. Use LLM Gateway as shown below for more flexible and powerful summaries.
+</Note>
 
 ## Quickstart
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
-  
-  Enable Summarization by setting `summarization` to `True` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
 
-If you specify one of `summary_model` or `summary_type`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```python {19-21}
+```python
 import requests
 import time
 
 base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
 
-headers = {
-    "authorization": "<YOUR_API_KEY>"
-}
-
-with open("./my-audio.mp3", "rb") as f:
-  response = requests.post(base_url + "/v2/upload",
-                          headers=headers,
-                          data=f)
-
-upload_url = response.json()["upload_url"]
+# Step 1: Transcribe your audio file
+audio_url = "https://assembly.ai/wildfires.mp3"
 
 data = {
-    "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
+    "audio_url": audio_url,
     "speech_models": ["universal-3-pro", "universal-2"],
-    "language_detection": True,
-    "summarization": True,
-    "summary_model": "informative",
-    "summary_type": "bullets"
+    "language_detection": True
 }
 
-url = base_url + "/v2/transcript"
-response = requests.post(url, json=data, headers=headers)
-
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
 transcript_id = response.json()['id']
 polling_endpoint = base_url + "/v2/transcript/" + transcript_id
 
 while True:
-  transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
 
-  if transcription_result['status'] == 'completed':
-    print(f"Transcript ID: ", transcript_id)
-    print(transcription_result['summary'])
-    break
+# Step 2: Generate a summary using LLM Gateway
+prompt = "Provide a brief summary of the transcript in bullet point format."
 
-  elif transcription_result['status'] == 'error':
-    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+llm_gateway_data = {
+    "model": "claude-sonnet-4-5-20250929",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 1000
+}
 
-  else:
-    time.sleep(3)
-
-```
-
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-  
-  Enable Summarization by setting `summarization` to `True` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
-
-If you specify one of `summary_model` or `summary_type`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```python {9-11}
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# audio_file = "./local_file.mp3"
-audio_file = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig(
-  speech_models=["universal-3-pro", "universal-2"],
-  language_detection=True,
-  summarization=True,
-  summary_model=aai.SummarizationModel.informative,
-  summary_type=aai.SummarizationType.bullets
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
 )
 
-transcript = aai.Transcriber().transcribe(audio_file, config)
-
-print(f"Transcript ID: ", transcript.id)
-print(transcript.summary)
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
 ```
 
-  </Tab>
+</Tab>
 <Tab language="javascript" title="JavaScript">
-  
-  Enable Summarization by setting `summarization` to `true` in the JSON payload. Use `summary_model` and `summary_type` to change the summary format.
 
-If you specify one of `summary_model` or `summary_type`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```javascript {19-21}
-import axios from "axios";
-import fs from "fs-extra";
-
+```javascript
 const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
   authorization: "<YOUR_API_KEY>",
+  "content-type": "application/json",
 };
 
-const path = "./my-audio.mp3";
-const audioData = await fs.readFile(path);
-const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
-  headers,
-});
-const uploadUrl = uploadResponse.data.upload_url;
+// Step 1: Transcribe your audio file
+const audioUrl = "https://assembly.ai/wildfires.mp3";
 
 const data = {
-  audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
+  audio_url: audioUrl,
   speech_models: ["universal-3-pro", "universal-2"],
   language_detection: true,
-  summarization: true,
-  summary_model: "informative",
-  summary_type: "bullets",
 };
 
-const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
+const response = await fetch(`${baseUrl}/v2/transcript`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify(data),
+});
 
-const transcriptId = response.data.id;
+const { id: transcriptId } = await response.json();
 const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
+let transcriptionResult;
 while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers,
-  });
-  const transcriptionResult = pollingResponse.data;
+  const pollingResponse = await fetch(pollingEndpoint, { headers });
+  transcriptionResult = await pollingResponse.json();
 
   if (transcriptionResult.status === "completed") {
-    console.log("Transcript ID: ", transcriptionResult.id);
-    console.log(transcriptionResult.summary);
     break;
   } else if (transcriptionResult.status === "error") {
     throw new Error(`Transcription failed: ${transcriptionResult.error}`);
@@ -202,125 +121,143 @@ while (true) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
-```
 
-  </Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-  
-  Enable Summarization by setting `summarization` to `true` in the transcription config. Use `summary_model` and `summary_type` to change the summary format.
+// Step 2: Generate a summary using LLM Gateway
+const prompt =
+  "Provide a brief summary of the transcript in bullet point format.";
 
-If you specify one of `summary_model` or `summary_type`, then you must specify the other.
-
-The following example returns an informative summary in a bulleted list.
-
-```javascript {12-14}
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-// const audioFile = './local_file.mp3'
-const audioFile = "https://assembly.ai/wildfires.mp3";
-
-const params = {
-  audio: audioFile,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  summarization: true,
-  summary_model: "informative",
-  summary_type: "bullets",
+const llmGatewayData = {
+  model: "claude-sonnet-4-5-20250929",
+  messages: [
+    {
+      role: "user",
+      content: `${prompt}\n\nTranscript: ${transcriptionResult.text}`,
+    },
+  ],
+  max_tokens: 1000,
 };
 
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params);
+const result = await fetch(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  {
+    method: "POST",
+    headers,
+    body: JSON.stringify(llmGatewayData),
+  }
+);
 
-  console.log("Transcript ID: ", transcript.id);
-  console.log(transcript.summary);
-};
-
-run();
+const resultData = await result.json();
+console.log(resultData.choices[0].message.content);
 ```
 
-  </Tab>
+</Tab>
 </Tabs>
 
 ### Example output
 
 ```plain
-- Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US. Skylines from Maine to Maryland to Minnesota are gray and smoggy. In some places, the air quality warnings include the warning to stay inside.
-- Air pollution levels in Baltimore are considered unhealthy. Exposure to high levels can lead to a host of health problems. With climate change, we are seeing more wildfires. Will we be seeing more of these kinds of wide ranging air quality consequences?
+- Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US, with skylines from Maine to Maryland to Minnesota appearing gray and smoggy.
+- Air pollution levels in Baltimore are considered unhealthy, with exposure to high levels leading to various health problems.
+- With climate change driving more wildfires, experts warn that wide-ranging air quality consequences may become more frequent.
 ```
 
-<Tip title="Custom Summaries Using LLM Gateway">
-  If you want more control of the output format, see how to generate a [Custom
-  summary using LLM Gateway](/docs/llm-gateway/apply-llms-to-audio-files).
-</Tip>
+## Customize your summary
+
+You can control the summary output by adjusting the prompt. Here are some examples:
+
+### Bullet point summary
+
+```python
+prompt = """Provide a brief summary of the transcript in bullet point format.
+Focus on the key points and main takeaways."""
+```
+
+### Paragraph summary
+
+```python
+prompt = """Provide a concise paragraph summary of the transcript.
+Capture the main topics and conclusions."""
+```
+
+### Headline summary
+
+```python
+prompt = """Provide a single sentence headline that captures the main topic
+of the transcript."""
+```
+
+### Conversational summary
+
+```python
+prompt = """Summarize this conversation between multiple speakers.
+Include who said what and the key points each speaker made."""
+```
+
+### Custom format
+
+You can define any format you need:
+
+```python
+prompt = """Summarize the transcript using the following format:
+- Topic: [main topic]
+- Key Points: [list of 3-5 key points]
+- Action Items: [any action items mentioned]
+- Conclusion: [one sentence conclusion]"""
+```
 
 ## API reference
 
-### Request
+### Step 1: Transcribe audio
 
-```bash {6-8}
+```bash
 curl https://api.assemblyai.com/v2/transcript \
 --header "Authorization: <YOUR_API_KEY>" \
 --header "Content-Type: application/json" \
 --data '{
-  "audio_url": "YOUR_AUDIO_URL",
-  "summarization": true,
-  "summary_model": "informative",
-  "summary_type": "bullets"
+  "audio_url": "YOUR_AUDIO_URL"
 }'
 ```
 
-| Key             | Type    | Description                                                    |
-| --------------- | ------- | -------------------------------------------------------------- |
-| `summarization` | boolean | Enable Summarization.                                          |
-| `summary_type`  | string  | [Summary type](#summary-types) to use for the transcription.   |
-| `summary_model` | string  | [Summary model](#summary-models) to use for the transcription. |
+Poll for the transcript result until the status is `completed`, then extract the transcript text.
+
+### Step 2: Generate summary with LLM Gateway
+
+```bash
+curl https://llm-gateway.assemblyai.com/v1/chat/completions \
+--header "Authorization: <YOUR_API_KEY>" \
+--header "Content-Type: application/json" \
+--data '{
+  "model": "claude-sonnet-4-5-20250929",
+  "messages": [
+    {"role": "user", "content": "Provide a brief summary of the transcript.\n\nTranscript: YOUR_TRANSCRIPT_TEXT"}
+  ],
+  "max_tokens": 1000
+}'
+```
+
+| Key           | Type   | Description                                                                                |
+| ------------- | ------ | ------------------------------------------------------------------------------------------ |
+| `model`       | string | The LLM model to use. See [available models](/docs/llm-gateway/overview#available-models). |
+| `messages`    | array  | The messages to send to the model, including your summarization prompt and transcript text. |
+| `max_tokens`  | number | Maximum number of tokens in the response. Adjust based on desired summary length.          |
 
 ### Response
 
-<Markdown src="summarization-response.mdx" />
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "content": "Your generated summary text..."
+      }
+    }
+  ]
+}
+```
 
-| Key       | Type   | Description                  |
-| --------- | ------ | ---------------------------- |
-| `summary` | string | A summary of the audio file. |
+## Next steps
 
-The response also includes the request parameters used to generate the transcript.
-
-### Summary types
-
-The summary type determines both the length and the format of the summary, for example as a bulleted list or a paragraph.
-
-| Value               | Description                                                           | Example                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bullets` (default) | A bulleted summary with the most important points.                    | - The human brain has nearly tripled in mass in two million years. <br /> - One of the main reasons that our brain got so big is because it got a new part, called the frontal lobe.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `bullets_verbose`   | A longer bullet point list summarizing the entire transcription text. | Dan Gilbert is a psychologist and a happiness expert. His talk is recorded live at Ted conference. He explains why the human brain has nearly tripled in size in 2 million years. He also explains the difference between winning the lottery and becoming a paraplegic.\n- In 1994, Pete Best said he's happier than he would have been with the Beatles. In the free choice paradigm, monet prints are ranked from the one they like the most to the one that they don't. People prefer the third one over the fourth one because it's a little better.\n- People synthesize happiness when they change their affective. Hedonic aesthetic to make up your mind and change your mind is the friend of natural happiness. But it's the enemy of synthetic happiness. The psychological immune system works best when we are stuck. This is the difference between dating and marriage. People don't know this about themselves and it can work to their disadvantage.\n- In a photography course at Harvard, 66% of students choose not to take the course where they have the opportunity to change their mind. Adam Smith said that some things are better than others. Dan Gilbert recorded at Ted, 2004 in Monterey, California, 2004. |
-| `gist`              | A few words summarizing the entire transcription text.                | A big brain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `headline`          | A single sentence summarizing the entire transcription text.          | The human brain has nearly tripled in mass in two million years.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `paragraph`         | A single paragraph summarizing the entire transcription text.         | The human brain has nearly tripled in mass in two million years. It went from the one-and-a-quarter-pound brain of our ancestor, habilis, to the almost three-pound meatloaf everybody here has between their ears.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-
-### Summary models
-
-The summary model determines the style and tone of the summary.
-
-| Value                   | When to use                                                                                | Supported summary type                                   | Required parameters                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `informative` (default) | Best for files with a single speaker, such as presentations or lectures.                   | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate` and `format_text` set to `true`                                      |
-| `conversational`        | Best for any 2-person conversation, such as customer/agent or interview/interviewee calls. | `bullets`, `bullets_verbose`, `headline`, or `paragraph` | `punctuate`, `format_text`, and `speaker_labels` or `multichannel` set to `true` |
-| `catchy`                | Best for creating video, podcast, or media titles.                                         | `headline`, or `gist`                                    | `punctuate` and `format_text` set to `true`                                      |
-
-## Frequently asked questions
-
-<Accordion title="How long does it take to generate a summarization output?" theme="dark" iconColor="white" >
-  
-The inference speed of the Summary model depends on the desired output length. However, a single batch can be processed in less than 1 second.
-
-  </Accordion>
-
-<Accordion title="Can I extract individual words and their corresponding speaker labels with Summarization?" theme="dark" iconColor="white" >
-  
-No. Summarization only generates a single abstractive summary of the entire audio file, and doesn't provide word-level information or speaker labels. If you need word-level information, consider using [Word-level timestamps](/docs/speech-to-text/pre-recorded-audio/word-level-timestamps) and [Speaker Diarization](/docs/speech-to-text/speaker-diarization) instead.
-
-  </Accordion>
+- [LLM Gateway Overview](/docs/llm-gateway/overview) - Learn more about available models and features
+- [Apply LLM Gateway to pre-recorded audio](/docs/llm-gateway/apply-llms-to-audio-files) - General guide for using LLM Gateway with transcripts
+- [Basic Chat Completions](/docs/llm-gateway/chat-completions) - Learn more about the chat completions API
+- [Structured Outputs](/docs/llm-gateway/structured-outputs) - Constrain responses to a specific JSON schema
