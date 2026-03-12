@@ -449,7 +449,6 @@ Universal-3 Pro delivers great accuracy out of the box. To fine-tune transcripti
 The `prompt` and `keyterms_prompt` parameters cannot be used in the same request. Please choose either one or the other based on your use case. When you use `keyterms_prompt`, your boosted words are appended to the [default prompt](#default-prompt) automatically. See [How keyterms prompting works behind the scenes](#how-keyterms-prompting-works-behind-the-scenes) below.
 
 </Note>
-
 ### Default prompt
 
 When no `prompt` is provided, Universal-3 Pro automatically applies the following default prompt:
@@ -459,31 +458,6 @@ Always: Transcribe speech with your best guess based on context in all possible 
 ```
 
 You can override the default prompt by providing your own `prompt` value. See the sections below for examples.
-
-### Handling unclear audio with [masked]
-
-<Tip title="Recommended for reducing hallucinations">
-  This prompt is one of the most effective strategies for avoiding
-  hallucinations on unclear or difficult audio. Instead of forcing the model to
-  guess, it explicitly flags uncertain segments, giving you full visibility into
-  areas of uncertainty.
-</Tip>
-
-```text wordWrap
-Always: Transcribe speech exactly as heard. If uncertain or audio is unclear, mark as [masked]. After the first output, review the transcript again. Pay close attention to hallucinations, misspellings, or errors, and revise them like a computer performing spell and grammar checks. Ensure words and phrases make grammatical sense in sentences.
-```
-
-You can also use `[unclear]` instead of `[masked]`.
-
-<Note>
-  The `[masked]` tag may also be applied to profanity in the audio. If
-  preserving profanity is important for your use case, use `[unclear]` instead
-  to avoid profanity being tagged.
-</Note>
-
-The `[masked]` strategy materially reduces hallucinations while still preserving difficult but genuine speech. It also provides greater transparency in the transcript — sections where audio is unclear are explicitly flagged as `[masked]`, giving you visibility into areas of uncertainty rather than forcing potentially incorrect guesses.
-
-For more recommended prompts and detailed prompt capabilities, see the [Prompting guide](/docs/pre-recorded-audio/prompting#recommended-prompts).
 
 ### Verbatim transcription and disfluencies
 
@@ -517,7 +491,7 @@ data = {
     "audio_url": "https://assemblyaiassets.com/audios/verbatim.mp3",
     "language_detection": True,
     "speech_models": ["universal-3-pro", "universal-2"],
-    "prompt": "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)"
+    "prompt": "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio."
 }
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
@@ -554,7 +528,7 @@ audio_file = "https://assemblyaiassets.com/audios/verbatim.mp3"
 config = aai.TranscriptionConfig(
   speech_models=["universal-3-pro", "universal-2"],
   language_detection=True,
-  prompt="Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+  prompt="Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
 )
 
 transcript = aai.Transcriber().transcribe(audio_file, config)
@@ -578,7 +552,7 @@ const data = {
   language_detection: true,
   speech_models: ["universal-3-pro", "universal-2"],
   prompt:
-    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+    "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
 };
 
 const url = `${baseUrl}/v2/transcript`;
@@ -621,7 +595,7 @@ const params = {
   speech_models: ["universal-3-pro", "universal-2"],
   language_detection: true,
   prompt:
-    "Produce a transcript suitable for conversational analysis. Every disfluency is meaningful data. Include: fillers (um, uh, er, ah, hmm, mhm, like, you know, I mean), repetitions (I I, the the), restarts (I was- I went), stutters (th-that, b-but, no-not), and informal speech (gonna, wanna, gotta)",
+    "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
 };
 
 const run = async () => {
@@ -636,6 +610,18 @@ run();
 </Tabs>
 
 **Example prompts:**
+
+```text
+Required: Preserve the original language(s) and script as spoken,
+including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies,
+filler words, hesitations, repetitions, stutters, false starts, and
+colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all
+possible scenarios where speech is present in the audio.
+```
 
 ```text
 Include spoken filler words like "um," "uh," "you know," "like," plus repetitions
@@ -655,6 +641,210 @@ Transcribe verbatim:
 - False starts: yes (I was— I went)
 - Colloquial: yes (gonna, wanna, gotta)
 ```
+
+### Native code switching
+
+Handle audio where speakers switch between languages.
+
+<AudioPlayer src="https://assemblyaiassets.com/audios/code_switching_multilingual.mp3" />
+
+Without prompt:
+
+```txt wordWrap
+You literally lost your French? No, no, no. My French is there. Italian I've forgotten, but my French is still there and it will never leave. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. But for now, my French is there, fortunately.
+```
+
+With prompt, the model is able to preserve the speaker's natural code switching between English and French, transcribing each language as spoken.
+
+```txt wordWrap
+You literally lost your French? No, no, no. Mon français est là. L'italien, j'ai oublié, mais mon français est toujours là. Il partira jamais. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. Mais pour l'instant, le français est là, heureusement.
+```
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python {11}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio."
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```python {10}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {12}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url:
+    "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt:
+    "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {13}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile =
+  "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt:
+    "Required: Preserve the original language(s) and script as spoken, including code-switching and mixed-language phrases. Mandatory: Preserve linguistic speech patterns including disfluencies, filler words, hesitations, repetitions, stutters, false starts, and colloquialisms in the spoken language. Always: Transcribe speech with your best guess based on context in all possible scenarios where speech is present in the audio.",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+</Tabs>
+
+**Example prompts:**
+
+```text
+Required: Preserve the original language(s) and script as spoken,
+including code-switching and mixed-language phrases.
+
+Mandatory: Preserve linguistic speech patterns including disfluencies,
+filler words, hesitations, repetitions, stutters, false starts, and
+colloquialisms in the spoken language.
+
+Always: Transcribe speech with your best guess based on context in all
+possible scenarios where speech is present in the audio.
+```
+
+```text wordWrap
+Transcribe in the original language mix (code-switching), preserving words in the language they are spoken.
+```
+
+```text wordWrap
+Preserve natural code-switching between English and Spanish. Retain spoken language as-is (correct "I was hablando con mi manager").
+```
+
+<Note>
+  Requires `language_detection: true` on your request. If a single language code
+  is specified, the model will try to transcribe only that language.
+</Note>
+
+### Handling unclear audio with [masked]
+
+<Tip title="Recommended for reducing hallucinations">
+  This prompt is one of the most effective strategies for avoiding
+  hallucinations on unclear or difficult audio. Instead of forcing the model to
+  guess, it explicitly flags uncertain segments, giving you full visibility into
+  areas of uncertainty.
+</Tip>
+
+```text wordWrap
+Always: Transcribe speech exactly as heard. If uncertain or audio is unclear, mark as [masked]. After the first output, review the transcript again. Pay close attention to hallucinations, misspellings, or errors, and revise them like a computer performing spell and grammar checks. Ensure words and phrases make grammatical sense in sentences.
+```
+
+You can also use `[unclear]` instead of `[masked]`.
+
+<Note>
+  The `[masked]` tag may also be applied to profanity in the audio. If
+  preserving profanity is important for your use case, use `[unclear]` instead
+  to avoid profanity being tagged.
+</Note>
+
+The `[masked]` strategy materially reduces hallucinations while still preserving difficult but genuine speech. It also provides greater transparency in the transcript — sections where audio is unclear are explicitly flagged as `[masked]`, giving you visibility into areas of uncertainty rather than forcing potentially incorrect guesses.
+
+For more recommended prompts and detailed prompt capabilities, see the [Prompting guide](/docs/pre-recorded-audio/prompting#recommended-prompts).
 
 ### Audio event tags
 
@@ -1796,173 +1986,6 @@ Preserve acronyms and capitalization (EBITDA over ebitda, API over A.P.I.).
   Caution: Over-instructing the model to follow examples can cause
   hallucinations when these examples are encountered.
 </Warning>
-
-### Native code switching
-
-Handle audio where speakers switch between languages.
-
-<AudioPlayer src="https://assemblyaiassets.com/audios/code_switching_multilingual.mp3" />
-
-Without prompt:
-
-```txt wordWrap
-You literally lost your French? No, no, no. My French is there. Italian I've forgotten, but my French is still there and it will never leave. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. But for now, my French is there, fortunately.
-```
-
-With prompt, the model is able to preserve the speaker's natural code switching between English and French, transcribing each language as spoken.
-
-```txt wordWrap
-You literally lost your French? No, no, no. Mon français est là. L'italien, j'ai oublié, mais mon français est toujours là. Il partira jamais. Okay, but would you need a French coach? Could you consider having me? Oh yeah, yeah, absolutely, absolutely. Mais pour l'instant, le français est là, heureusement.
-```
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-
-```python {11}
-import requests
-import time
-
-base_url = "https://api.assemblyai.com"
-headers = {"authorization": "<YOUR_API_KEY>"}
-
-data = {
-    "audio_url": "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
-    "language_detection": True,
-    "speech_models": ["universal-3-pro", "universal-2"],
-    "prompt": "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken."
-}
-
-response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
-if response.status_code != 200:
-    print(f"Error: {response.status_code}, Response: {response.text}")
-    response.raise_for_status()
-
-transcript_response = response.json()
-transcript_id = transcript_response["id"]
-polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
-
-while True:
-    transcript = requests.get(polling_endpoint, headers=headers).json()
-    if transcript["status"] == "completed":
-        print(transcript["text"])
-        break
-    elif transcript["status"] == "error":
-        raise RuntimeError(f"Transcription failed: {transcript['error']}")
-    else:
-        time.sleep(3)
-```
-
-</Tab>
-<Tab language="python-sdk" title="Python SDK">
-
-```python {10}
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-audio_file = "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3"
-
-config = aai.TranscriptionConfig(
-  speech_models=["universal-3-pro", "universal-2"],
-  language_detection=True,
-  prompt="The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
-)
-
-transcript = aai.Transcriber().transcribe(audio_file, config)
-
-print(transcript.text)
-```
-
-</Tab>
-<Tab language="javascript" title="JavaScript">
-
-```javascript {12}
-import axios from "axios";
-
-const baseUrl = "https://api.assemblyai.com";
-const headers = {
-  authorization: "<YOUR_API_KEY>",
-};
-
-const data = {
-  audio_url:
-    "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3",
-  language_detection: true,
-  speech_models: ["universal-3-pro", "universal-2"],
-  prompt:
-    "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
-};
-
-const url = `${baseUrl}/v2/transcript`;
-const response = await axios.post(url, data, { headers: headers });
-
-const transcriptId = response.data.id;
-const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
-
-while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers,
-  });
-  const transcriptionResult = pollingResponse.data;
-
-  if (transcriptionResult.status === "completed") {
-    console.log(transcriptionResult.text);
-    break;
-  } else if (transcriptionResult.status === "error") {
-    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
-  } else {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-}
-```
-
-</Tab>
-<Tab language="javascript-sdk" title="JavaScript SDK">
-
-```javascript {13}
-import { AssemblyAI } from "assemblyai";
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>",
-});
-
-const audioFile =
-  "https://assemblyaiassets.com/audios/code_switching_multilingual.mp3";
-
-const params = {
-  audio: audioFile,
-  speech_models: ["universal-3-pro", "universal-2"],
-  language_detection: true,
-  prompt:
-    "The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.",
-};
-
-const run = async () => {
-  const transcript = await client.transcripts.transcribe(params);
-  console.log(transcript.text);
-};
-
-run();
-```
-
-</Tab>
-</Tabs>
-
-**Example prompts:**
-
-```text wordWrap
-Transcribe in the original language mix (code-switching), preserving words in the language they are spoken.
-```
-
-```text wordWrap
-Preserve natural code-switching between English and Spanish. Retain spoken language as-is (correct "I was hablando con mi manager").
-```
-
-<Note>
-  Requires `language_detection: true` on your request. If a single language code
-  is specified, the model will try to transcribe only that language.
-</Note>
 
 ## Temperature parameter
 
