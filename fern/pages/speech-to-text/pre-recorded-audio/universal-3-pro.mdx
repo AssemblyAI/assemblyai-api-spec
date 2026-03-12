@@ -808,6 +808,144 @@ run();
 </Tab>
 </Tabs>
 
+### Remove audio tags
+
+If you don't want audio event tags like `[music]`, `[laughter]`, or `[beep]` in your transcript, you can use the `remove_audio_tags` parameter to programmatically remove them. Set `remove_audio_tags` to `"all"` to remove all audio tags from the transcript text.
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+
+```python {12}
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+headers = {"authorization": "<YOUR_API_KEY>"}
+
+data = {
+    "audio_url": "YOUR_AUDIO_URL",
+    "language_detection": True,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "prompt": "Tag sounds: [beep]",
+    "remove_audio_tags": "all"
+}
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}, Response: {response.text}")
+    response.raise_for_status()
+
+transcript_response = response.json()
+transcript_id = transcript_response["id"]
+polling_endpoint = f"{base_url}/v2/transcript/{transcript_id}"
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+    if transcript["status"] == "completed":
+        print(transcript["text"])
+        break
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+    else:
+        time.sleep(3)
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```python {11}
+import assemblyai as aai
+
+aai.settings.api_key = "<YOUR_API_KEY>"
+
+audio_file = "YOUR_AUDIO_URL"
+
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  prompt="Tag sounds: [beep]",
+  remove_audio_tags="all",
+)
+
+transcript = aai.Transcriber().transcribe(audio_file, config)
+
+print(transcript.text)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+
+```javascript {13}
+import axios from "axios";
+
+const baseUrl = "https://api.assemblyai.com";
+const headers = {
+  authorization: "<YOUR_API_KEY>",
+};
+
+const data = {
+  audio_url: "YOUR_AUDIO_URL",
+  language_detection: true,
+  speech_models: ["universal-3-pro", "universal-2"],
+  prompt: "Tag sounds: [beep]",
+  remove_audio_tags: "all",
+};
+
+const url = `${baseUrl}/v2/transcript`;
+const response = await axios.post(url, data, { headers: headers });
+
+const transcriptId = response.data.id;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+while (true) {
+  const pollingResponse = await axios.get(pollingEndpoint, {
+    headers: headers,
+  });
+  const transcriptionResult = pollingResponse.data;
+
+  if (transcriptionResult.status === "completed") {
+    console.log(transcriptionResult.text);
+    break;
+  } else if (transcriptionResult.status === "error") {
+    throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {14}
+import { AssemblyAI } from "assemblyai";
+
+const client = new AssemblyAI({
+  apiKey: "<YOUR_API_KEY>",
+});
+
+const audioFile = "YOUR_AUDIO_URL";
+
+const params = {
+  audio: audioFile,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  prompt: "Tag sounds: [beep]",
+  remove_audio_tags: "all",
+};
+
+const run = async () => {
+  const transcript = await client.transcripts.transcribe(params);
+  console.log(transcript.text);
+};
+
+run();
+```
+
+</Tab>
+</Tabs>
+
 ### Labeling crosstalk
 
 Label overlapping speech, interruptions, and crosstalk segments in the transcript.
