@@ -157,7 +157,7 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
 
     CONNECTION_PARAMS = {
         "sample_rate": 16000,
-        "format_turns": True,  # Request formatted final transcripts
+        "speech_model": "u3-rt-pro",
     }
     API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
     API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
@@ -215,10 +215,10 @@ Below is a side-by-side comparison of a basic snippet to transcribe live audio b
                 print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
             elif msg_type == "Turn":
                 transcript = data.get('transcript', '')
-                formatted = data.get('turn_is_formatted', False)
+                end_of_turn = data.get('end_of_turn', False)
 
-                # Clear previous line for formatted messages
-                if formatted:
+                # Print final end-of-turn transcript
+                if end_of_turn:
                     print('\r' + ' ' * 80 + '\r', end='')
                     print(transcript)
                 else:
@@ -415,7 +415,7 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
         ```python
         CONNECTION_PARAMS = {
             "sample_rate": 16000,
-            "format_turns": True,  # Request formatted final transcripts
+            "speech_model": "u3-rt-pro",
         }
         API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
         API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
@@ -439,11 +439,11 @@ Get your API key from your [AssemblyAI dashboard](https://www.assemblyai.com/app
 
 Here are helpful things to know about connecting our streaming model:
 
-- **One universal model – no model param needed** - Just connect to `wss://streaming.assemblyai.com/v3/ws`. The live endpoint always uses our latest, best-performing model, so you can drop Deepgram’s `model="nova-3"` line entirely.
+- **Universal-3 Pro model** — Connect to `wss://streaming.assemblyai.com/v3/ws` with `speech_model=u3-rt-pro` to use our latest, highest-accuracy streaming model. Unlike Deepgram’s `model="nova-3"`, you use a single `speech_model` parameter.
 
-- **`format_turns=True` ≈ Deepgram’s `punctuate=true`** - When the flag is set to `True`, every Final message arrives with smart punctuation & casing. Set it to `False` (or omit it) to get raw, lowercase text — useful if you do your own formatting.
+- **Built-in formatting** — Universal-3 Pro always returns formatted transcripts with smart punctuation & casing, similar to Deepgram’s `punctuate=true`. No extra parameter is needed.
 
-- **Partials are always on - like Deepgram’s `interim_results=true`** - AssemblyAI streams immutable interim results automatically. There's no switch to toggle. Expect fast, token-level updates that refine until each Final is emitted.
+- **Partials are always on — like Deepgram’s `interim_results=true`** — AssemblyAI streams interim results automatically. Universal-3 Pro emits partials during periods of silence, with at most one partial per silence period.
 
 ## Opening the WebSocket
 
@@ -522,25 +522,25 @@ Here are helpful things to know about connecting our streaming model:
     def on_message(ws, message):
         try:
             data = json.loads(message)
-            msg_type = data.get('type')
+            msg_type = data.get(‘type’)
 
             if msg_type == "Begin":
-                session_id = data.get('id')
-                expires_at = data.get('expires_at')
+                session_id = data.get(‘id’)
+                expires_at = data.get(‘expires_at’)
                 print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
             elif msg_type == "Turn":
-                transcript = data.get('transcript', '')
-                formatted = data.get('turn_is_formatted', False)
+                transcript = data.get(‘transcript’, ‘’)
+                end_of_turn = data.get(‘end_of_turn’, False)
 
-                # Clear previous line for formatted messages
-                if formatted:
-                    print('\r' + ' ' * 80 + '\r', end='')
+                # Print final end-of-turn transcript
+                if end_of_turn:
+                    print(‘\r’ + ‘ ‘ * 80 + ‘\r’, end=’’)
                     print(transcript)
                 else:
-                    print(f"\r{transcript}", end='')
+                    print(f"\r{transcript}", end=’’)
             elif msg_type == "Termination":
-                audio_duration = data.get('audio_duration_seconds', 0)
-                session_duration = data.get('session_duration_seconds', 0)
+                audio_duration = data.get(‘audio_duration_seconds’, 0)
+                session_duration = data.get(‘session_duration_seconds’, 0)
                 print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
         except json.JSONDecodeError as e:
             print(f"Error decoding message: {e}")
@@ -557,7 +557,7 @@ Helpful things to know about AssemblyAI’s message payloads:
 
 - **Session metadata up-front** – The first `"Begin"` message delivers a `session_id` and expiry timestamp. You can log or surface these for tracing or billing.
 
-- **Formatted vs. raw finals** – Each `"Turn"` object includes a boolean `turn_is_formatted`. When you set `format_turns` to `True`, punctuation/casing appears in the `Final Transcript`, so you can toggle display styles on the fly.
+- **End-of-turn detection** – Each `"Turn"` object includes an `end_of_turn` boolean. When `end_of_turn` is `true`, the transcript is a final, formatted result. When `false`, it is a partial transcript. Universal-3 Pro always returns formatted transcripts with smart punctuation & casing built in.
 
 ## Handling Errors
 
@@ -800,4 +800,5 @@ Helpful things to know about AssemblyAI’s shutdown:
 
 For additional information about using AssemblyAI's Streaming Speech-To-Text API you can also refer to:
 
+- [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro)
 - [Streaming Guide](/docs/getting-started/transcribe-streaming-audio)
