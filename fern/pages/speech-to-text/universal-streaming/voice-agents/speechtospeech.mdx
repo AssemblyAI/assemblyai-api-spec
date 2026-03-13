@@ -11,12 +11,12 @@ AssemblyAI's Speech-to-Speech (S2S) API is a native real-time voice conversation
 - **Built-in VAD** — server-side voice activity detection, no client configuration needed
 - **Automatic turn detection** — the model decides when the user has finished speaking
 - **Native audio output** — streams PCM16 audio back directly, no separate TTS step
-- **Function calling** — register tools and handle `tool.call` / `tool.result` events
+- **Tool calling** — register tools and handle `tool.call` / `tool.result` events
 - **Barge-in / interruption** — users can interrupt the agent mid-response
 
 ## Quickstart
 
-Connect via WebSocket and start a conversation in under a minute.
+A complete working example — connects to the S2S endpoint, streams microphone audio, plays back the agent's voice, and handles two tools (`get_weather` and `get_time`).
 
 <Steps>
 
@@ -32,18 +32,14 @@ pip install websockets sounddevice numpy
 
 </Step>
 
-<Step title="Connect and run">
+<Step title="Run">
 
-The example below connects to the S2S endpoint, sends your microphone audio, plays back the agent's spoken responses, and handles a `get_weather` tool call end-to-end.
-
-<Tabs>
-<Tab title="Python">
 ```python
 import asyncio
 import base64
+import datetime
 import json
-import urllib.request
-import urllib.parse
+import random
 
 import sounddevice as sd
 import numpy as np
@@ -59,50 +55,41 @@ DTYPE = "int16"
 TOOLS = [
     {
         "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get the current weather for a city.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "City name, e.g. London"
-                    }
-                },
-                "required": ["location"]
-            }
+        "name": "get_weather",
+        "description": "Get the current weather for a city.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "City name"}
+            },
+            "required": ["location"]
         }
-    }
+    },
+    {
+        "type": "function",
+        "name": "get_time",
+        "description": "Get the current time and date.",
+        "parameters": {"type": "object", "properties": {}}
+    },
 ]
 
-def get_weather(location: str) -> dict:
-    url = f"https://wttr.in/{urllib.parse.quote(location)}?format=j1"
-    with urllib.request.urlopen(url, timeout=5) as resp:
-        data = json.loads(resp.read())
-    current = data["current_condition"][0]
-    return {
-        "location": location,
-        "temp_c": current["temp_C"],
-        "temp_f": current["temp_F"],
-        "description": current["weatherDesc"][0]["value"],
-    }
+async def execute_tool(event: dict) -> dict:
+    name = event.get("name", "")
+    args = event.get("args", {})
 
-async def handle_tool_call(ws, call_id: str, name: str, arguments: str) -> None:
-    args = json.loads(arguments)
-    try:
-        if name == "get_weather":
-            result = get_weather(args["location"])
-        else:
-            result = {"error": f"Unknown tool: {name}"}
-    except Exception as e:
-        result = {"error": str(e)}
+    if name == "get_weather":
+        result = {
+            "location": args.get("location", "Unknown"),
+            "temp_c": random.randint(5, 28),
+            "description": random.choice(["Sunny", "Partly cloudy", "Light rain"]),
+        }
+    elif name == "get_time":
+        now = datetime.datetime.now()
+        result = {"time": now.strftime("%I:%M %p"), "date": now.strftime("%A, %B %d")}
+    else:
+        result = {"error": f"Unknown tool: {name}"}
 
-    await ws.send(json.dumps({
-        "type": "tool.result",
-        "call_id": call_id,
-        "result": json.dumps(result),
-    }))
+    return {"call_id": event.get("call_id", ""), "result": result}
 
 async def main():
     headers = {"Authorization": f"Bearer {API_KEY}"}
@@ -112,8 +99,11 @@ async def main():
         await ws.send(json.dumps({
             "type": "session.update",
             "session": {
-                "system_prompt": "You are a helpful assistant. Use get_weather when asked about weather.",
-                "greeting": "Hey! Ask me anything — I can even check the weather for you.",
+                "system_prompt": (
+                    "You are a voice assistant. Keep responses to 1-2 short sentences. "
+                    "Use your tools for weather and time questions."
+                ),
+                "greeting": "Hi! How can I help?",
                 "tools": TOOLS,
             }
         }))
@@ -121,10 +111,10 @@ async def main():
         loop = asyncio.get_running_loop()
         mic_queue = asyncio.Queue()
         session_ready = asyncio.Event()
+        pending_tools: list[dict] = []
 
         def mic_callback(indata, *_):
-            # Gate audio behind session_ready — sending input.audio before
-            # session.ready will cause session.error with invalid_format
+            # Only send audio after session.ready fires
             if session_ready.is_set():
                 loop.call_soon_threadsafe(mic_queue.put_nowait, bytes(indata))
 
@@ -164,135 +154,32 @@ async def main():
                     print(f"Agent: {event['text']}")
 
                 elif t == "tool.call":
-                    await handle_tool_call(
-                        ws,
-                        call_id=event["call_id"],
-                        name=event["name"],
-                        arguments=event.get("arguments", "{}"),
-                    )
+                    # Accumulate tool results — send them after reply.done
+                    pending_tools.append(await execute_tool(event))
 
                 elif t == "reply.audio":
                     pcm = np.frombuffer(base64.b64decode(event["data"]), dtype=np.int16)
                     speaker.write(pcm)
 
-                elif t == "session.error":
+                elif t == "reply.done":
+                    if event.get("status") == "interrupted":
+                        pending_tools.clear()
+                    elif pending_tools:
+                        # Send all accumulated tool results
+                        for tool in pending_tools:
+                            await ws.send(json.dumps({
+                                "type": "tool.result",
+                                "call_id": tool["call_id"],
+                                "result": json.dumps(tool["result"]),
+                            }))
+                        pending_tools.clear()
+
+                elif t in ("error", "session.error"):
                     print(f"Error: {event.get('message')}")
-                    break
+                    if t == "error":
+                        break
 
 asyncio.run(main())
-```
-</Tab>
-<Tab title="JavaScript">
-```javascript
-import WebSocket from "ws";
-import mic from "mic";
-import Speaker from "speaker";
-
-const API_KEY = "YOUR_API_KEY";
-const URL = "wss://speech-to-speech.us.assemblyai.com/v1/realtime";
-
-const SAMPLE_RATE = 24000;
-
-const ws = new WebSocket(URL, {
-  headers: { Authorization: `Bearer ${API_KEY}` },
-});
-
-const speaker = new Speaker({
-  channels: 1,
-  bitDepth: 16,
-  sampleRate: SAMPLE_RATE,
-});
-
-const microphone = mic({
-  rate: SAMPLE_RATE,
-  channels: 1,
-  bitwidth: 16,
-  encoding: "signed-integer",
-});
-
-const micStream = microphone.getAudioStream();
-let sessionReady = false;
-
-ws.on("open", () => {
-  console.log("Connected");
-  // Send config immediately on connect — before session.ready
-  ws.send(JSON.stringify({
-    type: "session.update",
-    session: {
-      system_prompt: "You are a helpful assistant.",
-      tools: [],
-    },
-  }));
-});
-
-ws.on("message", (data) => {
-  const event = JSON.parse(data.toString());
-
-  switch (event.type) {
-    case "session.ready":
-      console.log(`Ready — start speaking (session_id=${event.session_id})`);
-      // Gate mic start behind session.ready
-      sessionReady = true;
-      microphone.start();
-      break;
-
-    case "input.speech.started":
-      console.log("Listening...");
-      break;
-
-    case "input.speech.stopped":
-      console.log("Processing...");
-      break;
-
-    case "transcript.user":
-      console.log(`You: ${event.text}`);
-      break;
-
-    case "reply.audio":
-      speaker.write(Buffer.from(event.data, "base64"));
-      break;
-
-    case "transcript.agent":
-      console.log(`Agent: ${event.text}`);
-      break;
-
-    case "session.error":
-      console.error(`Error: ${event.message}`);
-      ws.close();
-      break;
-  }
-});
-
-micStream.on("data", (chunk) => {
-  // Only send audio after session.ready
-  if (sessionReady && ws.readyState === WebSocket.OPEN) {
-    ws.send(
-      JSON.stringify({
-        type: "input.audio",
-        audio: chunk.toString("base64"),
-      })
-    );
-  }
-});
-```
-</Tab>
-</Tabs>
-
-</Step>
-
-<Step title="Configure the session (optional)">
-
-Send a `session.update` event immediately on WebSocket connect — before `session.ready` arrives — to set a system prompt, greeting, and/or tools:
-
-```json
-{
-  "type": "session.update",
-  "session": {
-    "system_prompt": "You are a helpful assistant. Keep responses brief and conversational.",
-    "greeting": "Hey! How can I help you today?",
-    "tools": []
-  }
-}
 ```
 
 </Step>
@@ -305,16 +192,16 @@ Send a `session.update` event immediately on WebSocket connect — before `sessi
 
 Both input and output audio use the same format:
 
-| Property      | Value                                    |
-| ------------- | ---------------------------------------- |
+| Property      | Value                                        |
+| ------------- | -------------------------------------------- |
 | Encoding      | PCM16 (16-bit signed integer, little-endian) |
-| Sample rate   | 24,000 Hz                                |
-| Channels      | Mono                                     |
+| Sample rate   | 24,000 Hz                                    |
+| Channels      | Mono                                         |
 
 Send audio as base64-encoded PCM16 chunks. Chunk size doesn't matter — the server buffers and processes continuously.
 
 <Warning>
-Do not send `input.audio` before the `session.ready` event fires. Sending audio before the session is established will produce a flood of `session.error` events with code `invalid_format`.
+Do not send `input.audio` before `session.ready` fires. Sending audio before the session is established causes a flood of `session.error` events with code `invalid_format`.
 </Warning>
 
 ---
@@ -336,7 +223,7 @@ Authorization: Bearer YOUR_API_KEY
 ```
 
 <Note>
-Browsers cannot set custom headers on WebSocket connections. For browser-based applications, use a server-side proxy that adds the `Authorization` header before forwarding audio to AssemblyAI. See the [browser integration section](#browser-integration) below.
+Browsers cannot set custom headers on WebSocket connections. For browser-based apps, use a server-side proxy. See [Browser integration](#browser-integration).
 </Note>
 
 ---
@@ -347,7 +234,7 @@ Browsers cannot set custom headers on WebSocket connections. For browser-based a
 
 #### `input.audio`
 
-Stream PCM16 audio to the agent. Send this continuously as the user speaks, but only after `session.ready` has been received.
+Stream PCM16 audio to the agent. Only send this after `session.ready` has fired.
 
 ```json
 {
@@ -356,15 +243,15 @@ Stream PCM16 audio to the agent. Send this continuously as the user speaks, but 
 }
 ```
 
-| Field   | Type   | Description                       |
-| ------- | ------ | --------------------------------- |
-| `audio` | string | Base64-encoded PCM16 mono 24kHz audio |
+| Field   | Type   | Description                            |
+| ------- | ------ | -------------------------------------- |
+| `audio` | string | Base64-encoded PCM16 mono 24kHz audio  |
 
 ---
 
 #### `session.update`
 
-Configure the session. Send this immediately on WebSocket connect — before `session.ready` arrives. Can also be sent multiple times mid-conversation to update the system prompt or tools.
+Configure the session. Send immediately on WebSocket connect — before `session.ready`. Can also be sent mid-conversation to update the prompt or tools.
 
 ```json
 {
@@ -377,17 +264,17 @@ Configure the session. Send this immediately on WebSocket connect — before `se
 }
 ```
 
-| Field                    | Type   | Description                              |
-| ------------------------ | ------ | ---------------------------------------- |
-| `session.system_prompt`  | string | Sets the agent's personality and context |
-| `session.greeting`       | string | What the agent says at the start of a conversation |
-| `session.tools`          | array  | Tool definitions (see [Function calling](#function-calling)) |
+| Field                   | Type   | Description                                                    |
+| ----------------------- | ------ | -------------------------------------------------------------- |
+| `session.system_prompt` | string | Sets the agent's personality and context                       |
+| `session.greeting`      | string | Spoken aloud at the start of the conversation                  |
+| `session.tools`         | array  | Tool definitions (see [Tool calling](#tool-calling))           |
 
 ---
 
 #### `reply.create`
 
-Manually trigger a response from the agent. Useful when VAD is disabled or you want to force a turn.
+Manually trigger a response. Useful when VAD is disabled or you want to force a turn.
 
 ```json
 { "type": "reply.create" }
@@ -397,7 +284,7 @@ Manually trigger a response from the agent. Useful when VAD is disabled or you w
 
 #### `reply.cancel`
 
-Cancel the agent's current response (stop it from speaking). Use this to implement barge-in.
+Cancel the agent's current response mid-speech.
 
 ```json
 {
@@ -406,15 +293,15 @@ Cancel the agent's current response (stop it from speaking). Use this to impleme
 }
 ```
 
-| Field      | Type   | Description                                  |
-| ---------- | ------ | -------------------------------------------- |
-| `reply_id` | string | The ID of the reply to cancel, from `reply.started` |
+| Field      | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `reply_id` | string | From the `reply.started` event                    |
 
 ---
 
 #### `session.resume`
 
-Reconnect to an existing session using the `session_id` from a previous `session.ready` event. Useful for handling dropped connections without losing conversation context.
+Reconnect to an existing session using the `session_id` from a previous `session.ready`. Preserves conversation context across dropped connections.
 
 ```json
 {
@@ -423,32 +310,28 @@ Reconnect to an existing session using the `session_id` from a previous `session
 }
 ```
 
-| Field        | Type   | Description                                      |
-| ------------ | ------ | ------------------------------------------------ |
-| `session_id` | string | The session ID returned in the previous `session.ready` |
-
 <Note>
-If the session has expired, the server returns a `session.error` with code `session_not_found` or `session_forbidden`. In this case, start a fresh connection without `session.resume`.
+If the session has expired, the server returns a `session.error` with code `session_not_found` or `session_forbidden`. Start a fresh connection without `session.resume`.
 </Note>
 
 ---
 
 #### `tool.result`
 
-Send the result of a tool call back to the agent.
+Send a tool result back to the agent. Send this in the `reply.done` handler — not immediately in `tool.call`. See [Tool calling](#tool-calling).
 
 ```json
 {
   "type": "tool.result",
   "call_id": "call_abc123",
-  "result": "{\"temp_c\": \"22\", \"description\": \"Sunny\"}"
+  "result": "{\"temp_c\": 22, \"description\": \"Sunny\"}"
 }
 ```
 
-| Field     | Type   | Description                                |
-| --------- | ------ | ------------------------------------------ |
-| `call_id` | string | The `call_id` from the `tool.call` event   |
-| `result`  | string | The result to return to the agent (JSON string recommended) |
+| Field     | Type   | Description                                          |
+| --------- | ------ | ---------------------------------------------------- |
+| `call_id` | string | The `call_id` from the `tool.call` event             |
+| `result`  | string | JSON string containing the tool result               |
 
 ---
 
@@ -456,7 +339,7 @@ Send the result of a tool call back to the agent.
 
 #### `session.ready`
 
-Sent once the WebSocket connection is established and the session is ready to receive audio. Save `session_id` to enable reconnection via `session.resume`. Begin sending `input.audio` only after this event fires.
+Session is established and ready to receive audio. Save `session_id` for reconnection. Start sending `input.audio` only after this event.
 
 ```json
 {
@@ -465,51 +348,41 @@ Sent once the WebSocket connection is established and the session is ready to re
 }
 ```
 
-| Field        | Type   | Description                                              |
-| ------------ | ------ | -------------------------------------------------------- |
-| `session_id` | string | Unique session identifier — use with `session.resume` to reconnect |
-
 ---
 
 #### `session.updated`
 
-Sent by the server after a `session.update` is successfully applied.
+Sent after `session.update` is applied successfully.
 
 ```json
-{
-  "type": "session.updated"
-}
+{ "type": "session.updated" }
 ```
 
 ---
 
 #### `input.speech.started`
 
-Sent when the server detects the user has started speaking.
+VAD detected the user has started speaking.
 
 ```json
-{
-  "type": "input.speech.started"
-}
+{ "type": "input.speech.started" }
 ```
 
 ---
 
 #### `input.speech.stopped`
 
-Sent when the server detects the user has stopped speaking.
+VAD detected the user has stopped speaking.
 
 ```json
-{
-  "type": "input.speech.stopped"
-}
+{ "type": "input.speech.stopped" }
 ```
 
 ---
 
 #### `transcript.user.delta`
 
-Partial (interim) transcript of what the user is currently saying. Updates as the user speaks.
+Partial transcript of what the user is saying, updating in real-time.
 
 ```json
 {
@@ -522,7 +395,7 @@ Partial (interim) transcript of what the user is currently saying. Updates as th
 
 #### `transcript.user`
 
-Final transcript of the user's utterance, sent after `input.speech.stopped`.
+Final transcript of the user's utterance.
 
 ```json
 {
@@ -536,7 +409,7 @@ Final transcript of the user's utterance, sent after `input.speech.stopped`.
 
 #### `reply.started`
 
-Sent when the agent begins generating a response.
+Agent has begun generating a response. Save `reply_id` to cancel if needed.
 
 ```json
 {
@@ -545,15 +418,11 @@ Sent when the agent begins generating a response.
 }
 ```
 
-| Field      | Type   | Description                                    |
-| ---------- | ------ | ---------------------------------------------- |
-| `reply_id` | string | Unique ID for this reply — use with `reply.cancel` |
-
 ---
 
 #### `reply.audio`
 
-A chunk of the agent's spoken response as base64 PCM16 audio. Arrives in real-time as the agent speaks — decode and play immediately for lowest latency.
+A chunk of the agent's spoken response as base64 PCM16. Decode and play immediately.
 
 ```json
 {
@@ -566,7 +435,7 @@ A chunk of the agent's spoken response as base64 PCM16 audio. Arrives in real-ti
 
 #### `transcript.agent`
 
-The full text of the agent's response, sent after the response completes.
+Full text of the agent's response, sent after the response completes.
 
 ```json
 {
@@ -579,84 +448,70 @@ The full text of the agent's response, sent after the response completes.
 
 #### `reply.done`
 
-Sent when the agent finishes speaking. If the agent was interrupted, the optional `status` field is set to `"interrupted"`.
+Agent has finished speaking. If `status` is `"interrupted"`, the user barged in — discard any pending tool results.
 
 ```json
-{
-  "type": "reply.done"
-}
+{ "type": "reply.done" }
 ```
 
 ```json
-{
-  "type": "reply.done",
-  "status": "interrupted"
-}
+{ "type": "reply.done", "status": "interrupted" }
 ```
-
-| Field    | Type   | Description                                              |
-| -------- | ------ | -------------------------------------------------------- |
-| `status` | string | Optional. Set to `"interrupted"` if the user barged in. |
 
 ---
 
 #### `reply.interrupted`
 
-Sent when the agent's response was interrupted (e.g. the user started speaking).
+Agent response was interrupted.
 
 ```json
-{
-  "type": "reply.interrupted"
-}
+{ "type": "reply.interrupted" }
 ```
 
 ---
 
 #### `tool.call`
 
-Sent when the agent wants to call a registered tool. The `arguments` field is a JSON string — parse it before use.
+Agent wants to call a registered tool. `args` is a dict — ready to use directly.
 
 ```json
 {
   "type": "tool.call",
   "call_id": "call_abc123",
   "name": "get_weather",
-  "arguments": "{\"location\": \"Tokyo\"}"
+  "args": { "location": "Tokyo" }
 }
 ```
 
-| Field       | Type   | Description                                        |
-| ----------- | ------ | -------------------------------------------------- |
-| `call_id`   | string | Unique ID — include this in `tool.result`          |
-| `name`      | string | Name of the tool to call                           |
-| `arguments` | string | JSON string of arguments — parse with `JSON.parse` |
+| Field     | Type   | Description                              |
+| --------- | ------ | ---------------------------------------- |
+| `call_id` | string | Include this in `tool.result`            |
+| `name`    | string | Tool name to call                        |
+| `args`    | object | Arguments as a dict — use directly       |
 
 ---
 
 #### `session.error`
 
-Sent on connection or session errors.
+Session or protocol error.
 
 ```json
 {
   "type": "session.error",
-  "code": "session_not_found",
-  "message": "Session not found or expired"
+  "code": "invalid_format",
+  "message": "Invalid message format"
 }
 ```
 
-| Field     | Type   | Description |
-| --------- | ------ | ----------- |
-| `message` | string | Human-readable error description |
-| `code`    | string | Machine-readable error code (see below) |
+Also handle `"error"` (without the `session.` prefix) for connection-level errors.
 
 **Error codes:**
 
-| Code | Description |
-| ---- | ----------- |
-| `session_not_found` | The `session_id` passed to `session.resume` does not exist |
-| `session_forbidden` | The `session_id` belongs to a different API key |
-| `invalid_format`    | The event sent by the client was malformed (e.g. audio sent before `session.ready`) |
+| Code                | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| `invalid_format`    | Malformed event (e.g. `input.audio` sent before `session.ready`)         |
+| `session_not_found` | The `session_id` in `session.resume` does not exist                      |
+| `session_forbidden` | The `session_id` belongs to a different API key                          |
 
 ---
 
@@ -664,27 +519,27 @@ Sent on connection or session errors.
 
 ### System prompt
 
-Set the agent's personality, role, and behaviour. Can be updated mid-session.
+Set the agent's personality and behaviour. Can be updated mid-session with another `session.update`.
 
 ```json
 {
   "type": "session.update",
   "session": {
-    "system_prompt": "You are a friendly customer support agent for Acme Corp. Keep responses under 2 sentences. Never make up information — if you don't know, say so."
+    "system_prompt": "You are a friendly support agent. Keep responses under 2 sentences. Never make up information."
   }
 }
 ```
 
 **Tips for voice-first prompts:**
 
-- Keep instructions concise — the model reads your prompt, not the user
-- Use "Never say X" to ban specific phrases (e.g. "Never say 'Certainly' or 'Absolutely'")
-- Instruct the agent to keep responses short: "Max 2 sentences per turn"
-- For tool-based agents, tell the agent when and how to use each tool
+- Keep instructions concise — the model reads this, not the user
+- Ban specific phrases: `"Never say 'Certainly' or 'Absolutely'"`
+- Enforce brevity: `"Max 2 sentences per turn"`
+- Tell the agent when to use each tool
 
 ### Greeting
 
-Set what the agent says at the start of every conversation. This is different from the system prompt — it's spoken aloud to the user.
+What the agent says at the start of the conversation, spoken aloud. If omitted, the agent waits silently for the user to speak first.
 
 ```json
 {
@@ -696,145 +551,99 @@ Set what the agent says at the start of every conversation. This is different fr
 }
 ```
 
-If no greeting is set, the agent waits silently for the user to speak first.
-
 ---
 
-## Function calling
+## Tool calling
 
-Register tools to let the agent take real-world actions. The agent decides when to call a tool based on the conversation.
-
-### Register tools
-
-Include tool definitions in `session.update`. Tools use an OpenAI-compatible format with a nested `"function"` key:
-
-```json
-{
-  "type": "session.update",
-  "session": {
-    "system_prompt": "You are a helpful assistant. Use get_weather to look up weather when asked.",
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "get_weather",
-          "description": "Get the current weather for a city.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "location": {
-                "type": "string",
-                "description": "City name, e.g. London"
-              }
-            },
-            "required": ["location"]
-          }
-        }
-      }
-    ]
-  }
-}
-```
-
-### Handle tool calls
-
-When the agent wants to call a tool, it emits a `tool.call` event. The `arguments` field is a JSON string — parse it before use. Execute the function and send back the result via `tool.result`:
-
-<Tabs>
-<Tab title="Python">
-```python
-elif t == "tool.call":
-    call_id = event["call_id"]
-    name = event["name"]
-    args = json.loads(event.get("arguments", "{}"))
-
-    # Execute the function
-    if name == "get_weather":
-        result = {"temp_c": "19", "description": f"Partly cloudy in {args['location']}."}
-    else:
-        result = {"error": "Unknown tool"}
-
-    # Send the result back
-    await ws.send(json.dumps({
-        "type": "tool.result",
-        "call_id": call_id,
-        "result": json.dumps(result),
-    }))
-```
-</Tab>
-<Tab title="JavaScript">
-```javascript
-case "tool.call": {
-  const { call_id, name } = event;
-  const args = JSON.parse(event.arguments ?? "{}");
-
-  let result;
-  if (name === "get_weather") {
-    result = { temp_c: "19", description: `Partly cloudy in ${args.location}.` };
-  } else {
-    result = { error: "Unknown tool" };
-  }
-
-  ws.send(JSON.stringify({
-    type: "tool.result",
-    call_id,
-    result: JSON.stringify(result),
-  }));
-  break;
-}
-```
-</Tab>
-</Tabs>
+Register tools to let the agent take real-world actions.
 
 ### Tool schema
 
-Tools use an OpenAI-compatible format with a nested `"function"` key. Supported parameter types: `string`, `number`, `boolean`, `array`, `object`.
+Tools use a flat format — `type`, `name`, `description`, and `parameters` at the top level:
 
 ```json
 {
   "type": "function",
-  "function": {
-    "name": "tool_name",
-    "description": "What this tool does — the model uses this to decide when to call it",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "param": {
-          "type": "string",
-          "description": "What this parameter is"
-        },
-        "category": {
-          "type": "string",
-          "enum": ["option_a", "option_b", "option_c"]
-        }
-      },
-      "required": ["param"]
-    }
+  "name": "get_weather",
+  "description": "Get the current weather for a city.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "string",
+        "description": "City name, e.g. London"
+      }
+    },
+    "required": ["location"]
   }
 }
+```
+
+### Handling tool calls
+
+The key pattern: **accumulate tool results, then send them all in `reply.done`** — not immediately in `tool.call`. The agent speaks a transition phrase while waiting; sending results too early can cause timing issues.
+
+```python
+pending_tools: list[dict] = []
+
+# In your event loop:
+
+elif t == "tool.call":
+    name = event["name"]
+    args = event.get("args", {})   # args is a plain dict
+
+    # Execute your tool
+    if name == "get_weather":
+        result = {"temp_c": 22, "description": "Sunny"}
+    else:
+        result = {"error": "Unknown tool"}
+
+    # Accumulate — don't send yet
+    pending_tools.append({
+        "call_id": event["call_id"],
+        "result": result,
+    })
+
+elif t == "reply.done":
+    if event.get("status") == "interrupted":
+        # User barged in — discard pending results
+        pending_tools.clear()
+    elif pending_tools:
+        # Now send all tool results
+        for tool in pending_tools:
+            await ws.send(json.dumps({
+                "type": "tool.result",
+                "call_id": tool["call_id"],
+                "result": json.dumps(tool["result"]),
+            }))
+        pending_tools.clear()
 ```
 
 ---
 
 ## Interruptions
 
-The server detects when the user starts speaking mid-response (`input.speech.started`) and will automatically cancel the current response. You can also cancel manually using the `reply_id` from `reply.started`:
+When the user speaks mid-response, the server sends `input.speech.started` and automatically stops the agent. The `reply.done` event follows with `status: "interrupted"`.
+
+When an interruption happens:
+1. Discard any `pending_tools` accumulated during the interrupted reply
+2. Clear the playback buffer if needed
+3. The agent is ready to listen again
+
+You can also cancel the current reply manually using the `reply_id` from `reply.started`:
 
 ```python
-# Cancel the current agent reply
 await ws.send(json.dumps({
     "type": "reply.cancel",
-    "reply_id": current_reply_id,  # from reply.started
+    "reply_id": current_reply_id,
 }))
 ```
-
-Track the current `reply_id` by saving it when `reply.started` arrives, and clearing it on `reply.done` or `reply.interrupted`. If `reply.done` arrives with `status == "interrupted"`, the agent was barged in on.
 
 ---
 
 ## Browser integration
 
-Browsers cannot set the `Authorization` header on WebSocket connections. The recommended pattern is a lightweight server-side proxy that adds the auth header before forwarding to AssemblyAI.
+Browsers cannot set the `Authorization` header on WebSocket connections. Use a server-side proxy:
 
 ```
 Browser ──── ws:// ──── Your proxy ──── wss://speech-to-speech.us.assemblyai.com
@@ -861,7 +670,6 @@ wss.on("connection", (clientWs) => {
   clientWs.on("message", (data) => {
     if (aaiWs.readyState === WebSocket.OPEN) aaiWs.send(data);
   });
-
   aaiWs.on("message", (data) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
   });
@@ -873,13 +681,9 @@ wss.on("connection", (clientWs) => {
 server.listen(8080);
 ```
 
-The browser then connects to `ws://localhost:8080` (or your deployed proxy URL) with no authentication needed.
-
 ---
 
 ## Framework integrations
-
-The S2S API works natively with popular voice agent frameworks.
 
 <CardGroup cols={2}>
   <Card
@@ -887,74 +691,16 @@ The S2S API works natively with popular voice agent frameworks.
     icon={<img src="/assets/img/pipecat.svg" alt="Pipecat" />}
     href="/docs/voice-agents/u3pro-pipecat"
   >
-    Drop-in `LLMService` for Pipecat pipelines. Handles all WebSocket lifecycle, audio forwarding, and tool call dispatch.
+    Drop-in `LLMService` for Pipecat pipelines.
   </Card>
   <Card
     title="LiveKit"
     icon={<img src="/assets/img/livekit.svg" alt="LiveKit" />}
     href="/docs/voice-agents/livekit-u3-rt-pro"
   >
-    Implements `llm.RealtimeModel` for LiveKit Agents. Includes audio resampling, event bridging, and tool call handling.
+    Implements `llm.RealtimeModel` for LiveKit Agents.
   </Card>
 </CardGroup>
-
-### Pipecat
-
-```python
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat_assemblyai_realtime import AssemblyAIRealtimeLLMService
-
-llm = AssemblyAIRealtimeLLMService(
-    url="wss://speech-to-speech.us.assemblyai.com/v1/realtime",
-    api_key="YOUR_API_KEY",
-    system_prompt="You are a helpful assistant.",
-)
-
-# Register tools
-async def get_weather(params):
-    location = params.arguments.get("location")
-    await params.result_callback(f"19°C and cloudy in {location}.")
-
-llm.register_function("get_weather", get_weather)
-
-# Set tools on connect (before session.ready)
-await llm.set_tools([{
-    "type": "function",
-    "function": {
-        "name": "get_weather",
-        "description": "Get the weather for a city.",
-        "parameters": {
-            "type": "object",
-            "properties": {"location": {"type": "string"}},
-            "required": ["location"],
-        },
-    },
-}])
-
-pipeline = Pipeline([transport.input(), llm, transport.output()])
-```
-
-### LiveKit
-
-```python
-from livekit.agents import AgentSession, Agent
-from assemblyai_realtime import RealtimeModel as AssemblyAIRealtimeModel
-
-class Assistant(Agent):
-    def __init__(self):
-        super().__init__(
-            instructions="You are a helpful voice assistant."
-        )
-
-session = AgentSession(
-    llm=AssemblyAIRealtimeModel(
-        url="wss://speech-to-speech.us.assemblyai.com/v1/realtime",
-        api_key=os.environ["ASSEMBLYAI_API_KEY"],
-    )
-)
-
-await session.start(agent=Assistant(), room=ctx.room)
-```
 
 ---
 
@@ -964,28 +710,26 @@ await session.start(agent=Assistant(), room=ctx.room)
 Client                              Server
   │                                   │
   │── WebSocket connect ──────────────►│
-  │── session.update ─────────────────►│  (set system prompt + tools — sent immediately)
+  │── session.update ─────────────────►│  (system prompt + tools + greeting)
   │                                   │
-  │◄─── session.ready ────────────────│  (save session_id for reconnection)
+  │◄─── session.ready ────────────────│  (save session_id)
   │                                   │
-  │── input.audio (stream) ──────────►│  (user speaks — only after session.ready)
+  │── input.audio (stream) ──────────►│  (only after session.ready)
   │── input.audio (stream) ──────────►│
-  │── input.audio (stream) ──────────►│
   │                                   │
-  │◄─── input.speech.started ─────────│  (VAD detected speech)
-  │◄─── transcript.user.delta ────────│  (partial transcript)
+  │◄─── input.speech.started ─────────│
   │◄─── transcript.user.delta ────────│
-  │◄─── input.speech.stopped ─────────│  (VAD detected end of speech)
-  │◄─── transcript.user ──────────────│  (final transcript)
+  │◄─── input.speech.stopped ─────────│
+  │◄─── transcript.user ──────────────│
   │                                   │
-  │◄─── reply.started ────────────────│  (save reply_id for cancel)
-  │◄─── reply.audio ──────────────────│  (agent speaks)
+  │◄─── reply.started ────────────────│  (save reply_id)
   │◄─── reply.audio ──────────────────│
-  │◄─── transcript.agent ─────────────│  (agent text)
+  │◄─── transcript.agent ─────────────│
   │◄─── reply.done ───────────────────│
   │                                   │
-  │  [tool call example]              │
-  │◄─── tool.call ────────────────────│  (arguments is a JSON string)
+  │  [tool call flow]                 │
+  │◄─── tool.call ────────────────────│  (args is a dict)
+  │◄─── reply.done ───────────────────│  ← send tool.result here
   │── tool.result ────────────────────►│
   │◄─── reply.started ────────────────│
   │◄─── reply.audio ──────────────────│
