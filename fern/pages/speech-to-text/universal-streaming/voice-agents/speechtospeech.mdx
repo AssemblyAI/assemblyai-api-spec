@@ -276,6 +276,7 @@ Configure the session. Send this immediately on WebSocket connect — before `se
   "type": "session.configure",
   "session": {
     "system_prompt": "You are a helpful assistant.",
+    "greeting": "Hi! How can I help you today?",
     "tools": []
   }
 }
@@ -284,6 +285,7 @@ Configure the session. Send this immediately on WebSocket connect — before `se
 | Field                    | Type   | Description                              |
 | ------------------------ | ------ | ---------------------------------------- |
 | `session.system_prompt`  | string | Sets the agent's personality and context |
+| `session.greeting`       | string | What the agent says at the start of a conversation |
 | `session.tools`          | array  | Tool definitions (see [Function calling](#function-calling)) |
 
 ---
@@ -315,6 +317,27 @@ Cancel the agent's current response (stop it from speaking). Use this to impleme
 
 ---
 
+#### `session.resume`
+
+Reconnect to an existing session using the `session_id` from a previous `session.ready` event. Useful for handling dropped connections without losing conversation context.
+
+```json
+{
+  "type": "session.resume",
+  "session_id": "sess_abc123"
+}
+```
+
+| Field        | Type   | Description                                      |
+| ------------ | ------ | ------------------------------------------------ |
+| `session_id` | string | The session ID returned in the previous `session.ready` |
+
+<Note>
+If the session has expired, the server returns a `session.error` with code `session_not_found` or `session_forbidden`. In this case, start a fresh connection without `session.resume`.
+</Note>
+
+---
+
 #### `function.result`
 
 Send the result of a function call back to the agent.
@@ -338,13 +361,18 @@ Send the result of a function call back to the agent.
 
 #### `session.ready`
 
-Sent once the WebSocket connection is established and the session is ready to receive audio.
+Sent once the WebSocket connection is established and the session is ready to receive audio. Save `session_id` to enable reconnection via `session.resume`.
 
 ```json
 {
-  "type": "session.ready"
+  "type": "session.ready",
+  "session_id": "sess_abc123"
 }
 ```
+
+| Field        | Type   | Description                                              |
+| ------------ | ------ | -------------------------------------------------------- |
+| `session_id` | string | Unique session identifier — use with `session.resume` to reconnect |
 
 ---
 
@@ -485,6 +513,18 @@ Sent when the agent wants to call a registered tool.
 
 ---
 
+#### `session.updated`
+
+Sent by the server after a `session.configure` is successfully applied.
+
+```json
+{
+  "type": "session.updated"
+}
+```
+
+---
+
 #### `error`
 
 Sent on connection or session errors.
@@ -492,9 +532,22 @@ Sent on connection or session errors.
 ```json
 {
   "type": "error",
-  "message": "Invalid API key"
+  "code": "session_not_found",
+  "message": "Session not found or expired"
 }
 ```
+
+| Field     | Type   | Description |
+| --------- | ------ | ----------- |
+| `message` | string | Human-readable error description |
+| `code`    | string | Machine-readable error code (see below) |
+
+**Error codes:**
+
+| Code | Description |
+| ---- | ----------- |
+| `session_not_found` | The `session_id` passed to `session.resume` does not exist |
+| `session_forbidden` | The `session_id` belongs to a different API key |
 
 ---
 
@@ -519,6 +572,22 @@ Set the agent's personality, role, and behaviour. Can be updated mid-session.
 - Use "Never say X" to ban specific phrases (e.g. "Never say 'Certainly' or 'Absolutely'")
 - Instruct the agent to keep responses short: "Max 2 sentences per turn"
 - For tool-based agents, tell the agent when and how to use each tool
+
+### Greeting
+
+Set what the agent says at the start of every conversation. This is different from the system prompt — it's spoken aloud to the user.
+
+```json
+{
+  "type": "session.configure",
+  "session": {
+    "system_prompt": "You are a helpful assistant.",
+    "greeting": "Hi there! How can I help you today?"
+  }
+}
+```
+
+If no greeting is set, the agent waits silently for the user to speak first.
 
 ---
 
