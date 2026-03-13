@@ -634,9 +634,270 @@ server.listen(8080);
 
 ## Framework integrations
 
+### Pipecat
+
+Copy `pipecat_assemblyai_realtime.py` into your project, then use `AssemblyAIRealtimeLLMService` as a drop-in `LLMService`.
+
 <CodeBlocks>
 
-```python title="Pipecat"
+```python title="pipecat_assemblyai_realtime.py"
+"""AssemblyAI Native Speech-to-Speech Plugin for PipeCat."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import json
+import logging
+from datetime import datetime, timezone
+
+import websockets
+import websockets.asyncio.client
+
+from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
+    CancelFrame,
+    EndFrame,
+    ErrorFrame,
+    Frame,
+    InputAudioRawFrame,
+    InterimTranscriptionFrame,
+    LLMContextFrame,
+    StartFrame,
+    TranscriptionFrame,
+    TTSAudioRawFrame,
+    TTSStartedFrame,
+    TTSStoppedFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.llm_service import LLMService
+
+logger = logging.getLogger(__name__)
+
+SAMPLE_RATE = 24000
+NUM_CHANNELS = 1
+
+
+class AssemblyAIRealtimeLLMService(LLMService):
+    def __init__(self, *, url: str, api_key: str, system_prompt: str = "", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._url = url
+        self._api_key = api_key
+        self._system_prompt = system_prompt
+        self._websocket = None
+        self._receive_task = None
+        self._session_ready = False
+        self._current_response_id = None
+        self._bot_speaking = False
+        self._user_transcript_buf = ""
+        self._pending_tools: list[dict] = []
+
+    async def start(self, frame: StartFrame) -> None:
+        await super().start(frame)
+        await self._connect()
+
+    async def stop(self, frame: EndFrame) -> None:
+        await super().stop(frame)
+        await self._disconnect()
+
+    async def cancel(self, frame: CancelFrame) -> None:
+        await super().cancel(frame)
+        await self._disconnect()
+
+    async def _connect(self) -> None:
+        headers = {"Authorization": self._api_key}
+        try:
+            self._websocket = await websockets.asyncio.client.connect(
+                self._url, additional_headers=headers,
+            )
+            self._receive_task = asyncio.create_task(
+                self._receive_task_handler(), name="AssemblyAIRealtime._recv",
+            )
+            logger.info(f"Connected to AssemblyAI S2S at {self._url}")
+            if self._system_prompt:
+                await self._send({"type": "session.update", "session": {"system_prompt": self._system_prompt}})
+        except Exception as e:
+            logger.error(f"Failed to connect: {e}")
+            await self.push_frame(ErrorFrame(str(e)))
+
+    async def _disconnect(self) -> None:
+        if self._receive_task:
+            self._receive_task.cancel()
+            try:
+                await self._receive_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._receive_task = None
+        if self._websocket:
+            await self._websocket.close()
+            self._websocket = None
+        self._session_ready = False
+        self._bot_speaking = False
+        self._current_response_id = None
+
+    async def _send(self, msg: dict) -> None:
+        if self._websocket:
+            try:
+                await self._websocket.send(json.dumps(msg))
+            except websockets.exceptions.ConnectionClosedOK:
+                pass
+            except Exception as e:
+                logger.error(f"WebSocket send error: {e}")
+                await self.push_frame(ErrorFrame(str(e)))
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if isinstance(frame, InputAudioRawFrame):
+            await self._send_user_audio(frame)
+        elif isinstance(frame, LLMContextFrame):
+            await self._handle_context(frame)
+        else:
+            await self.push_frame(frame, direction)
+
+    async def _send_user_audio(self, frame: InputAudioRawFrame) -> None:
+        if not self._session_ready:
+            return
+        await self._send({"type": "input.audio", "audio": base64.b64encode(frame.audio).decode()})
+
+    async def _handle_context(self, frame: LLMContextFrame) -> None:
+        for msg in frame.context.messages:
+            if msg.get("role") == "system":
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+                if content:
+                    await self._send({"type": "session.update", "session": {"system_prompt": content}})
+                break
+        await self.push_frame(frame, FrameDirection.DOWNSTREAM)
+
+    async def _receive_task_handler(self) -> None:
+        try:
+            async for raw in self._websocket:
+                try:
+                    await self._handle_event(json.loads(raw))
+                except Exception:
+                    logger.exception("Error handling event")
+        except websockets.exceptions.ConnectionClosed:
+            logger.info("AssemblyAI S2S connection closed")
+
+    async def _handle_event(self, event: dict) -> None:
+        t = event.get("type", "")
+        if t != "reply.audio":
+            logger.debug(f"← {t}  {event}")
+        dispatch = {
+            "session.ready": self._on_session_ready,
+            "input.speech.started": lambda _: self._on_speech_started(),
+            "input.speech.stopped": lambda _: self._on_speech_stopped(),
+            "transcript.user.delta": self._on_user_transcript_delta,
+            "transcript.user": self._on_user_transcript,
+            "reply.started": self._on_response_started,
+            "reply.audio": self._on_response_audio,
+            "transcript.agent": self._on_response_transcript,
+            "reply.done": lambda _: self._on_response_done(),
+            "tool.call": self._on_function_call,
+            "session.error": self._on_error,
+        }
+        if handler := dispatch.get(t):
+            await handler(event)
+
+    async def _on_session_ready(self, event: dict) -> None:
+        self._session_ready = True
+        logger.info(f"Session ready | session_id={event.get('session_id', 'unknown')}")
+        if self._pending_tools:
+            await self._send({"type": "session.update", "session": {"tools": self._pending_tools}})
+            self._pending_tools = []
+
+    @staticmethod
+    def _ts() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    async def _on_speech_started(self) -> None:
+        self._user_transcript_buf = ""
+        await self.push_frame(UserStartedSpeakingFrame(), FrameDirection.UPSTREAM)
+
+    async def _on_speech_stopped(self) -> None:
+        await self.push_frame(UserStoppedSpeakingFrame(), FrameDirection.UPSTREAM)
+
+    async def _on_user_transcript_delta(self, event: dict) -> None:
+        text = event.get("text", "")
+        if text and text != self._user_transcript_buf:
+            self._user_transcript_buf = text
+            await self.push_frame(InterimTranscriptionFrame(text=text, user_id="user", timestamp=self._ts()), FrameDirection.UPSTREAM)
+
+    async def _on_user_transcript(self, event: dict) -> None:
+        text = event.get("text", "")
+        self._user_transcript_buf = ""
+        if text:
+            logger.info(f"[User] {text}")
+            await self.push_frame(TranscriptionFrame(text=text, user_id="user", timestamp=self._ts()), FrameDirection.UPSTREAM)
+
+    async def _on_response_started(self, event: dict) -> None:
+        self._current_response_id = event.get("reply_id", "")
+        self._bot_speaking = True
+        await self.push_frame(TTSStartedFrame())
+        await self.push_frame(BotStartedSpeakingFrame())
+
+    async def _on_response_audio(self, event: dict) -> None:
+        data = base64.b64decode(event.get("data", ""))
+        if data:
+            await self.push_frame(TTSAudioRawFrame(audio=data, sample_rate=SAMPLE_RATE, num_channels=NUM_CHANNELS))
+
+    async def _on_response_transcript(self, event: dict) -> None:
+        if text := event.get("text", ""):
+            logger.info(f"[Agent] {text}")
+
+    async def _on_response_done(self) -> None:
+        self._current_response_id = None
+        self._bot_speaking = False
+        await self.push_frame(TTSStoppedFrame())
+        await self.push_frame(BotStoppedSpeakingFrame())
+
+    async def _on_function_call(self, event: dict) -> None:
+        call_id = event.get("call_id", "")
+        name = event.get("name", "")
+        raw = event.get("arguments", event.get("args", {}))
+        args = raw if isinstance(raw, str) else json.dumps(raw)
+        logger.info(f"Tool call: {name}({args})")
+        result = ""
+        if self.has_function(name):
+            try:
+                result = await self._execute_function(name, call_id, args)
+            except Exception as e:
+                result = f"Error: {e}"
+        await self._send({"type": "tool.result", "call_id": call_id, "result": result or ""})
+
+    async def _execute_function(self, name: str, call_id: str, arguments: str) -> str:
+        from pipecat.adapters.schemas.direct_function import DirectFunctionWrapper
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        from pipecat.services.llm_service import FunctionCallParams
+        args = json.loads(arguments) if isinstance(arguments, str) else arguments
+        result_holder: list = []
+        async def result_callback(result, **_kwargs):
+            result_holder.append(result)
+        params = FunctionCallParams(function_name=name, tool_call_id=call_id, arguments=args, llm=self, context=LLMContext(), result_callback=result_callback)
+        item = self._functions[name]
+        if isinstance(item.handler, DirectFunctionWrapper):
+            await item.handler.invoke(args=args, params=params)
+        else:
+            await item.handler(params)
+        return str(result_holder[0]) if result_holder else ""
+
+    async def _on_error(self, event: dict) -> None:
+        msg = event.get("message") or str(event)
+        logger.error(f"AssemblyAI S2S error: {msg}")
+        await self.push_frame(ErrorFrame(msg))
+
+    async def set_tools(self, tools: list[dict]) -> None:
+        if self._session_ready:
+            await self._send({"type": "session.update", "session": {"tools": tools}})
+        else:
+            self._pending_tools = tools
+```
+
+```python title="Usage"
 import os
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -688,7 +949,323 @@ async def run_bot(transport, runner_args):
     await runner.run(task)
 ```
 
-```python title="LiveKit"
+</CodeBlocks>
+
+### LiveKit
+
+Copy `assemblyai_realtime.py` into your project, then pass `RealtimeModel` to `AgentSession`.
+
+<CodeBlocks>
+
+```python title="assemblyai_realtime.py"
+"""AssemblyAI Native Realtime Plugin — livekit.agents RealtimeModel/RealtimeSession."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import json
+import logging
+import time
+from dataclasses import dataclass
+from typing import Literal
+
+import aiohttp
+from livekit import rtc
+from livekit.agents import APIConnectionError, llm, utils
+from livekit.agents.types import NOT_GIVEN, NotGivenOr
+from livekit.agents.utils import is_given
+
+logger = logging.getLogger(__name__)
+
+SAMPLE_RATE = 24000
+NUM_CHANNELS = 1
+_SAMPLES_PER_CHUNK = SAMPLE_RATE // 10
+
+
+@dataclass
+class _Generation:
+    response_id: str
+    msg_ch: utils.aio.Chan[llm.MessageGeneration]
+    fn_ch: utils.aio.Chan[llm.FunctionCall]
+    text_ch: utils.aio.Chan[str]
+    audio_ch: utils.aio.Chan[rtc.AudioFrame]
+    modalities_fut: asyncio.Future[list[Literal["text", "audio"]]]
+
+
+def _serialize_tool(tool: llm.Tool) -> dict | None:
+    if isinstance(tool, llm.FunctionTool):
+        return llm.utils.build_legacy_openai_schema(tool, internally_tagged=True)
+    elif isinstance(tool, llm.RawFunctionTool):
+        raw = dict(tool.info.raw_schema)
+        raw.pop("meta", None)
+        raw["type"] = "function"
+        return raw
+    return None
+
+
+class _SessionExpiredError(Exception):
+    pass
+
+
+class RealtimeModel(llm.RealtimeModel):
+    def __init__(self, *, url: str, api_key: str, sample_rate: int = SAMPLE_RATE, greeting: str | None = None) -> None:
+        super().__init__(
+            capabilities=llm.RealtimeCapabilities(
+                turn_detection=True, user_transcription=True, audio_output=True,
+                manual_function_calls=False, auto_tool_reply_generation=True, message_truncation=False,
+            )
+        )
+        self._url = url
+        self._api_key = api_key
+        self._sample_rate = sample_rate
+        self._greeting = greeting
+        self._http_session: aiohttp.ClientSession | None = None
+
+    def _ensure_http_session(self) -> aiohttp.ClientSession:
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession()
+        return self._http_session
+
+    def session(self) -> RealtimeSession:
+        return RealtimeSession(self)
+
+    async def aclose(self) -> None:
+        if self._http_session and not self._http_session.closed:
+            await self._http_session.close()
+
+
+class RealtimeSession(llm.RealtimeSession[Literal[()]]):
+    def __init__(self, realtime_model: RealtimeModel) -> None:
+        super().__init__(realtime_model)
+        self._model = realtime_model
+        self._tools = llm.ToolContext.empty()
+        self._chat_ctx = llm.ChatContext.empty()
+        self._msg_ch: utils.aio.Chan[dict] = utils.aio.Chan()
+        self._current_gen: _Generation | None = None
+        self._pending_reply_fut: asyncio.Future[llm.GenerationCreatedEvent] | None = None
+        self._current_response_id: str | None = None
+        self._pending_call_ids: set[str] = set()
+        self._session_ready: bool = False
+        self._session_id: str | None = None
+        self._bstream = utils.audio.AudioByteStream(SAMPLE_RATE, NUM_CHANNELS, samples_per_channel=_SAMPLES_PER_CHUNK)
+        self._input_resampler: rtc.AudioResampler | None = None
+        self._main_task = asyncio.create_task(self._run(), name="AssemblyAIRealtimeSession._run")
+
+    @property
+    def chat_ctx(self) -> llm.ChatContext:
+        return self._chat_ctx
+
+    @property
+    def tools(self) -> llm.ToolContext:
+        return self._tools.copy()
+
+    def _send(self, msg: dict) -> None:
+        try:
+            self._msg_ch.send_nowait(msg)
+        except Exception:
+            pass
+
+    def push_audio(self, frame: rtc.AudioFrame) -> None:
+        for f in self._resample_audio(frame):
+            for chunk in self._bstream.write(f.data.tobytes()):
+                self._send({"type": "input.audio", "audio": base64.b64encode(chunk.data).decode()})
+
+    def push_video(self, frame: rtc.VideoFrame) -> None:
+        pass
+
+    def generate_reply(self, *, instructions: NotGivenOr[str] = NOT_GIVEN) -> asyncio.Future[llm.GenerationCreatedEvent]:
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future[llm.GenerationCreatedEvent] = loop.create_future()
+        self._pending_reply_fut = fut
+        self._send({"type": "reply.create"})
+        handle = loop.call_later(5.0, lambda: fut.done() or fut.set_exception(llm.RealtimeError("generate_reply timed out.")))
+        fut.add_done_callback(lambda _: handle.cancel())
+        return fut
+
+    def interrupt(self) -> None:
+        if self._current_response_id:
+            self._send({"type": "reply.cancel", "reply_id": self._current_response_id})
+
+    def commit_audio(self) -> None:
+        pass
+
+    def clear_audio(self) -> None:
+        pass
+
+    def truncate(self, *, message_id: str, modalities: list[Literal["text", "audio"]], audio_end_ms: int, audio_transcript: NotGivenOr[str] = NOT_GIVEN) -> None:
+        pass
+
+    async def update_instructions(self, instructions: str) -> None:
+        payload: dict = {"system_prompt": instructions}
+        if self._model._greeting:
+            payload["greeting"] = self._model._greeting
+        self._send({"type": "session.update", "session": payload})
+
+    async def update_tools(self, tools: list[llm.Tool]) -> None:
+        serialized = [s for t in tools if (s := _serialize_tool(t)) is not None]
+        self._send({"type": "session.update", "session": {"tools": serialized}})
+        self._tools = llm.ToolContext([t for t in tools if isinstance(t, (llm.FunctionTool, llm.RawFunctionTool))])
+
+    def update_options(self, *, tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN) -> None:
+        if is_given(tool_choice):
+            self._send({"type": "session.update", "session": {"tool_choice": tool_choice}})
+
+    async def update_chat_ctx(self, chat_ctx: llm.ChatContext) -> None:
+        if self._session_ready:
+            existing_ids = {item.id for item in self._chat_ctx.items}
+            for item in chat_ctx.items:
+                if item.id in existing_ids:
+                    continue
+                if isinstance(item, llm.FunctionCallOutput) and item.call_id in self._pending_call_ids:
+                    self._send({"type": "tool.result", "call_id": item.call_id, "result": item.output})
+                    self._pending_call_ids.discard(item.call_id)
+                elif isinstance(item, llm.ChatMessage) and item.role in ("user", "system") and item.text_content:
+                    self._send({"type": "conversation.message", "role": item.role, "content": item.text_content})
+        self._chat_ctx = chat_ctx
+
+    async def aclose(self) -> None:
+        self._msg_ch.close()
+        await self._main_task
+
+    @utils.log_exceptions(logger=logger)
+    async def _run(self) -> None:
+        for attempt in range(4):
+            try:
+                headers = {"Authorization": f"Bearer {self._model._api_key}"}
+                ws = await self._model._ensure_http_session().ws_connect(self._model._url, headers=headers)
+                if self._session_id is not None:
+                    await ws.send_str(json.dumps({"type": "session.resume", "session_id": self._session_id}))
+                if self._model._greeting:
+                    await ws.send_str(json.dumps({"type": "session.update", "session": {"greeting": self._model._greeting}}))
+                self._session_ready = False
+                self._current_response_id = None
+                self._close_current_gen()
+                if self._pending_reply_fut:
+                    self._pending_reply_fut.cancel()
+                    self._pending_reply_fut = None
+                self._bstream = utils.audio.AudioByteStream(SAMPLE_RATE, NUM_CHANNELS, samples_per_channel=_SAMPLES_PER_CHUNK)
+                closing = False
+
+                @utils.log_exceptions(logger=logger)
+                async def _send_task() -> None:
+                    nonlocal closing
+                    async for msg in self._msg_ch:
+                        try:
+                            await ws.send_str(json.dumps(msg))
+                        except Exception:
+                            logger.exception("failed to send event")
+                    closing = True
+                    await ws.close()
+
+                @utils.log_exceptions(logger=logger)
+                async def _recv_task() -> None:
+                    while True:
+                        msg = await ws.receive()
+                        if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING):
+                            if closing:
+                                return
+                            raise APIConnectionError("AssemblyAI Realtime connection closed unexpectedly")
+                        if msg.type != aiohttp.WSMsgType.TEXT:
+                            continue
+                        try:
+                            self._handle_event(json.loads(msg.data))
+                        except _SessionExpiredError:
+                            self._session_id = None
+                            self._pending_call_ids.clear()
+                            raise APIConnectionError("Session expired; retrying as fresh session")
+                        except Exception:
+                            logger.exception("failed to handle event")
+
+                tasks = [asyncio.create_task(_recv_task()), asyncio.create_task(_send_task())]
+                try:
+                    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        task.result()
+                    return
+                finally:
+                    await utils.aio.cancel_and_wait(*tasks)
+                    await ws.close()
+            except APIConnectionError:
+                if attempt >= 3:
+                    raise
+                await asyncio.sleep([0.5, 1.0, 2.0][attempt])
+
+    def _handle_event(self, event: dict) -> None:
+        self.emit(f"aai.{event.get('type', '')}", event)
+        t = event.get("type", "")
+        if t == "session.ready":
+            self._session_ready = True
+            self._session_id = event.get("session_id")
+            if self._pending_reply_fut and not self._pending_reply_fut.done():
+                self._send({"type": "reply.create"})
+        elif t == "input.speech.started":
+            self.emit("input_speech_started", llm.InputSpeechStartedEvent())
+        elif t == "input.speech.stopped":
+            self.emit("input_speech_stopped", llm.InputSpeechStoppedEvent(user_transcription_enabled=True))
+        elif t == "transcript.user":
+            self.emit("input_audio_transcription_completed", llm.InputTranscriptionCompleted(item_id=event.get("item_id", ""), transcript=event.get("text", ""), is_final=True))
+        elif t == "reply.started":
+            self._close_current_gen()
+            response_id = event.get("reply_id", "")
+            self._current_response_id = response_id
+            text_ch: utils.aio.Chan[str] = utils.aio.Chan()
+            audio_ch: utils.aio.Chan[rtc.AudioFrame] = utils.aio.Chan()
+            modalities_fut = asyncio.get_event_loop().create_future()
+            modalities_fut.set_result(["audio"])
+            msg_gen = llm.MessageGeneration(message_id=response_id, text_stream=text_ch, audio_stream=audio_ch, modalities=modalities_fut)
+            msg_ch: utils.aio.Chan[llm.MessageGeneration] = utils.aio.Chan()
+            fn_ch: utils.aio.Chan[llm.FunctionCall] = utils.aio.Chan()
+            self._current_gen = _Generation(response_id=response_id, msg_ch=msg_ch, fn_ch=fn_ch, text_ch=text_ch, audio_ch=audio_ch, modalities_fut=modalities_fut)
+            msg_ch.send_nowait(msg_gen)
+            gen_ev = llm.GenerationCreatedEvent(message_stream=msg_ch, function_stream=fn_ch, user_initiated=False, response_id=response_id)
+            if self._pending_reply_fut and not self._pending_reply_fut.done():
+                gen_ev.user_initiated = True
+                self._pending_reply_fut.set_result(gen_ev)
+                self._pending_reply_fut = None
+            self.emit("generation_created", gen_ev)
+        elif t == "reply.audio":
+            if gen := self._current_gen:
+                if data := base64.b64decode(event.get("data", "")):
+                    gen.audio_ch.send_nowait(rtc.AudioFrame(data=data, sample_rate=SAMPLE_RATE, num_channels=NUM_CHANNELS, samples_per_channel=len(data) // 2))
+        elif t == "transcript.agent":
+            if gen := self._current_gen:
+                if text := event.get("text", ""):
+                    gen.text_ch.send_nowait(text)
+                gen.text_ch.close()
+        elif t == "reply.done":
+            self._close_current_gen()
+            self._current_response_id = None
+        elif t == "tool.call":
+            if gen := self._current_gen:
+                call_id = event.get("call_id", "")
+                if call_id not in self._pending_call_ids:
+                    self._pending_call_ids.add(call_id)
+                    gen.fn_ch.send_nowait(llm.FunctionCall(call_id=call_id, name=event.get("name", ""), arguments=json.dumps(event.get("args", {}))))
+        elif t == "session.error":
+            code = event.get("code", "")
+            if code in ("session_not_found", "session_forbidden"):
+                raise _SessionExpiredError(event.get("message", ""))
+            self.emit("error", llm.RealtimeModelError(timestamp=time.time(), label=self._model.label, error=Exception(event.get("message", "unknown error")), recoverable=False))
+
+    def _close_current_gen(self) -> None:
+        if gen := self._current_gen:
+            for ch in (gen.audio_ch, gen.text_ch, gen.fn_ch, gen.msg_ch):
+                ch.close()
+            self._current_gen = None
+
+    def _resample_audio(self, frame: rtc.AudioFrame):
+        if self._input_resampler is not None and frame.sample_rate != self._input_resampler._input_rate:
+            self._input_resampler = None
+        if self._input_resampler is None and (frame.sample_rate != SAMPLE_RATE or frame.num_channels != NUM_CHANNELS):
+            self._input_resampler = rtc.AudioResampler(input_rate=frame.sample_rate, output_rate=SAMPLE_RATE, num_channels=NUM_CHANNELS)
+        if self._input_resampler:
+            yield from self._input_resampler.push(frame)
+        else:
+            yield frame
+```
+
+```python title="Usage"
 import os
 from livekit.agents import Agent, AgentSession, JobContext, cli
 from assemblyai_realtime import RealtimeModel
@@ -711,7 +1288,6 @@ async def entrypoint(ctx: JobContext):
             greeting="Hi! How can I help?",
         )
     )
-
     await session.start(agent=Assistant(), room=ctx.room)
     await ctx.connect()
 
