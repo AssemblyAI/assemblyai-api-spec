@@ -1,292 +1,134 @@
 ---
 title: "Summarizing virtual meetings"
 hide-nav-links: true
-description: "Automatically summarize meetings with our Summarization model"
+description: "Summarize meetings using LLM Gateway"
 ---
 
-In this guide, we'll show you how to use the [Summarization model](/docs/audio-intelligence/summarization) to automatically generate summaries of your virtual meetings, so you can quickly review important information and take action based on the insights gathered from the conversations.
+In this guide, we'll show you how to use [LLM Gateway](/docs/llm-gateway/overview) to generate summaries of your virtual meetings. You'll transcribe your audio and then use LLM Gateway to produce a custom summary.
+
+<Note>
+  The `summarization`, `summary_model`, and `summary_type` parameters on the transcription API are deprecated. Use LLM Gateway as shown below for more flexible and powerful summaries.
+</Note>
 
 ## Get started
 
 Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your dashboard.
 
-The entire source code of this guide can be viewed [here](https://github.com/AssemblyAI-Community/docs-snippets/tree/main/summarizing).
-
 ## Step-by-step instructions
 
 <Steps>
 <Step>
-<Tabs>
-</Tabs>
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
-  Create a new file and
-request.
+  Create a new file and install the required packages.
+
+```bash
+pip install requests
+```
+
+Set up the API endpoint and headers.
 
 ```python
 import requests
 import time
-```
 
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-  Install the SDK.
-
-```python
-pip install -U assemblyai
-```
-
-  </Tab>
-<Tab language="javascript" title="JavaScript">
-  Create a new file and
-request.
-
-```javascript
-import axios from "axios";
-import fs from "fs-extra";
-```
-
-  </Tab>
-</Tabs>
-<Tabs>
-</Tabs>
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-  Set up the API endpoint and headers. The headers should include your API
-key.
-
-```python
-base_url = "https://api.assemblyai.com/v2"
+base_url = "https://api.assemblyai.com"
 
 headers = {
     "authorization": "<YOUR_API_KEY>"
 }
 ```
 
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-Import the `assemblyai` package and set the API key.
+</Tab>
+<Tab language="javascript" title="JavaScript">
+  Create a new file and install the required packages.
 
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
+```bash
+npm install axios
 ```
 
-  </Tab>
-<Tab language="javascript" title="JavaScript">
-  Set up the API endpoint and headers. The headers should include your API
-key.
+Set up the API endpoint and headers.
 
 ```javascript
-const baseUrl = "https://api.assemblyai.com/v2";
+import axios from "axios";
+import fs from "fs-extra";
+
+const baseUrl = "https://api.assemblyai.com";
 
 const headers = {
   authorization: "<YOUR_API_KEY>",
 };
 ```
 
-  </Tab>
+</Tab>
 </Tabs>
 
-<Tabs></Tabs>
+</Step>
+<Step>
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
-  Upload your local file to the AssemblyAI API.
-
-We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
+  Upload your local file to the AssemblyAI API and submit a transcription request.
 
 ```python
 with open("./my-audio.mp3", "rb") as f:
-  response = requests.post(base_url + "/upload",
+  response = requests.post(base_url + "/v2/upload",
                           headers=headers,
                           data=f)
 
 upload_url = response.json()["upload_url"]
+
+data = {
+    "audio_url": upload_url,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True
+}
+
+response = requests.post(base_url + "/v2/transcript", json=data, headers=headers)
+
+transcript_id = response.json()['id']
+polling_endpoint = base_url + "/v2/transcript/" + transcript_id
+
+while True:
+    transcription_result = requests.get(polling_endpoint, headers=headers).json()
+    if transcription_result['status'] == 'completed':
+        break
+    elif transcription_result['status'] == 'error':
+        raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
+    else:
+        time.sleep(3)
 ```
 
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-Create a `TranscriptionConfig` with `summarization=True`. By default, the `summary_model` model is `informative` and the `summary_type` is `bullets`.
-
-You can find all possible [summary models and types here](/docs/audio-intelligence/summarization#types-and-models). Note that if the `summary_model` is specified, `summary_type` is also a required parameter, and vice versa.
-
-Then create a `Transcriber` object and apply the config.
-
-```python
-config = aai.TranscriptionConfig(
-  summarization=True,
-  summary_model=aai.SummarizationModel.informative, # optional
-  summary_type=aai.SummarizationType.bullets # optional
-)
-
-transcriber = aai.Transcriber(config=config)
-```
-
-  </Tab>
+</Tab>
 <Tab language="javascript" title="JavaScript">
-  Upload your local file to the AssemblyAI API.
-
-We delete uploaded files from our servers either after the transcription has completed, or 24 hours after you uploaded the file. After the file has been deleted, the corresponding `upload_url` is no longer valid.
+  Upload your local file to the AssemblyAI API and submit a transcription request.
 
 ```javascript
 const path = "./my-audio.mp3";
 const audioData = await fs.readFile(path);
-const uploadResponse = await axios.post(`${baseUrl}/upload`, audioData, {
+const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioData, {
   headers,
 });
 const uploadUrl = uploadResponse.data.upload_url;
-```
 
-  </Tab>
-</Tabs>
-
-<Tabs></Tabs>
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
-containing the `audio_url` parameter.
-
-To use the Summarization model, set `summarization` to `True`. By default, the `summary_model` model is `informative` and the `summary_type` is `bullets`.
-
-You can find all possible [summary models and types here](/docs/audio-intelligence/summarization#types-and-models). Note that if the `summary_model` is specified, `summary_type` is also a required parameter, and vice versa.
-
-```python
-data = {
-    "audio_url": upload_url,
-    "summarization": True,
-    "summary_model": "informative",
-    "summary_type": "bullets"
-}
-```
-
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-Use the `Transcriber` object's `transcribe` method and pass in the audio file's
-path as a parameter.
-
-```python
-transcript = transcriber.transcribe("./my-audio.mp3")
-```
-
-  </Tab>
-<Tab language="javascript" title="JavaScript">
-  Use the `upload_url` returned by the AssemblyAI API to create a JSON payload
-containing the `audio_url` parameter.
-
-To use the Summarization model, set `summarization` to `True`. By default, the `summary_model` model is `informative` and the `summary_type` is `bullets`.
-
-You can find all possible [summary models and types here](/docs/audio-intelligence/summarization#types-and-models). Note that if the `summary_model` is specified, `summary_type` is also a required parameter, and vice versa.
-
-```javascript
 const data = {
   audio_url: uploadUrl,
-  summarization: true,
-  summary_model: "informative",
-  summary_type: "bullets",
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
 };
-```
 
-  </Tab>
-</Tabs>
+const response = await axios.post(`${baseUrl}/v2/transcript`, data, { headers });
 
-<Tabs></Tabs>
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-  Make a `POST` request to the AssemblyAI API endpoint with the payload and
-headers.
-
-```python
-url = base_url + "/transcript"
-response = requests.post(url, json=data, headers=headers)
-```
-
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-Alternatively, you can pass in the URL of a publicly accessible audio file on the internet.
-
-```python
-transcript = transcriber.transcribe("https://example.org/audio.mp3")
-```
-
-  </Tab>
-<Tab language="javascript" title="JavaScript">
-  Make a `POST` request to the AssemblyAI API endpoint with the payload and
-headers.
-
-```javascript
-const url = `${baseUrl}/transcript`;
-const response = await axios.post(url, data, { headers: headers });
-```
-
-  </Tab>
-</Tabs>
-
-<Tabs></Tabs>
-
-<Tabs groupId="language">
-<Tab language="python" title="Python" default>
-  After making the request, you'll receive an ID for the transcription. Use it
-to poll the API every few seconds to check the status of the transcript job.
-Once the status is `completed`, you can retrieve the transcript from the API
-response, using the `summary` key to view the result of the summarization.
-
-```python
-transcript_id = response.json()['id']
-polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
-
-while True:
-  transcription_result = requests.get(polling_endpoint, headers=headers).json()
-
-  if transcription_result['status'] == 'completed':
-    summary = transcription_result.get('summary', '')
-    print("Transcription completed!")
-    print(f"Transcription: {transcription_result['text']}")
-    print(f"Summary: {summary}")
-    break
-
-  elif transcription_result['status'] == 'error':
-    raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-
-  else:
-    time.sleep(3)
-```
-
-  </Tab>
-<Tab language="python-sdk" title="Python SDK">
-  You can access the summarization results through the `Transcriber` object's `summary` attribute.
-
-```python
-print(transcript.summary)
-```
-
-  </Tab>
-<Tab language="javascript" title="JavaScript">
-  After making the request, you'll receive an ID for the transcription. Use it
-to poll the API every few seconds to check the status of the transcript job.
-Once the status is `completed`, you can retrieve the transcript from the API
-response, using the `summary` key to view the result of the summarization.
-
-```javascript
 const transcriptId = response.data.id;
-const pollingEndpoint = `${baseUrl}/transcript/${transcriptId}`;
+const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
+let transcriptionResult;
 while (true) {
-  const pollingResponse = await axios.get(pollingEndpoint, {
-    headers: headers,
-  });
-  const transcriptionResult = pollingResponse.data;
+  const pollingResponse = await axios.get(pollingEndpoint, { headers });
+  transcriptionResult = pollingResponse.data;
 
   if (transcriptionResult.status === "completed") {
-    const summary = transcriptionResult.summary || "";
-    console.log("Transcription completed!");
-    console.log(`Transcription: ${transcriptionResult.text}`);
-    console.log(`Summary: ${summary}`);
     break;
   } else if (transcriptionResult.status === "error") {
     throw new Error(`Transcription failed: ${transcriptionResult.error}`);
@@ -296,7 +138,67 @@ while (true) {
 }
 ```
 
-  </Tab>
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
+  Send the transcript text to LLM Gateway with a summarization prompt.
+
+```python
+prompt = """Provide a summary of this meeting transcript in bullet point format.
+Focus on the key discussion points, decisions made, and any action items."""
+
+llm_gateway_data = {
+    "model": "claude-sonnet-4-6",
+    "messages": [
+        {"role": "user", "content": f"{prompt}\n\nTranscript: {transcription_result['text']}"}
+    ],
+    "max_tokens": 1500
+}
+
+response = requests.post(
+    "https://llm-gateway.assemblyai.com/v1/chat/completions",
+    headers=headers,
+    json=llm_gateway_data
+)
+
+result = response.json()["choices"][0]["message"]["content"]
+print(result)
+```
+
+</Tab>
+<Tab language="javascript" title="JavaScript">
+  Send the transcript text to LLM Gateway with a summarization prompt.
+
+```javascript
+const prompt = `Provide a summary of this meeting transcript in bullet point format.
+Focus on the key discussion points, decisions made, and any action items.`;
+
+const llmGatewayData = {
+  model: "claude-sonnet-4-6",
+  messages: [
+    {
+      role: "user",
+      content: `${prompt}\n\nTranscript: ${transcriptionResult.text}`,
+    },
+  ],
+  max_tokens: 1500,
+};
+
+const result = await axios.post(
+  "https://llm-gateway.assemblyai.com/v1/chat/completions",
+  llmGatewayData,
+  { headers }
+);
+
+console.log(result.data.choices[0].message.content);
+```
+
+</Tab>
 </Tabs>
 
 </Step>
@@ -304,50 +206,30 @@ while (true) {
 
 ## Understanding the response
 
-Your transcript summary is located in the `summary` key of the API response. In addition to standard transcript metadata, you'll also find other parameters containing the `summary_type`, which indicates the type of summary that was generated, and `summary_model`, which indicates the specific AI summarization model that was used to generate the summary. More information on these parameters and their possible values can be found below.
-
-<CodeBlock>
-  <JsonViewer
-    displayDataTypes={false}
-    quotesOnKeys={false}
-    displayObjectSize={false}
-    src={{
-      summary_type: "bullets",
-      summary_model: "informative",
-      summary:
-        "There is a proposal to break up this meeting into four department key reviews. Currently, this is engineering, development, quality, security, D and UX. To avoid adding three net new meetings to stakeholders calendars, I propose a two month rotation...",
-      speakers_expected: null,
-    }}
-  />
-</CodeBlock>
-
-Refer to the [API reference](https://assemblyai.com/docs/api-reference/transcripts/get#response) for a breakdown of every element in your transcript output.
+The LLM Gateway returns the summary in the `choices[0].message.content` field. You can customize the format and style of the summary by adjusting the prompt.
 
 ## Best practices
 
-Identify the most important information you want to include in the summary and choose the Summarization model and type that best suits your use case.
-
-When using the `conversational` model, make sure that the two speakers have distinct voices and that there's minimal background noise.
-For shorter recordings, the `gist` or `headline` options may provide the most effective summary, whereas for longer recordings, the `bullets_verbose` or `paragraph` options may be more appropriate.
-
-Consider the context in which the summary will be used, and whether additional context or explanation is necessary to understand the summary.
-
-Experiment with different summarization options to find the one that works best for your specific use case.
+- Customize the prompt to match your meeting type (e.g., standup, all-hands, client call).
+- For longer meetings, consider breaking the transcript into sections and summarizing each one separately.
+- Use [Structured Outputs](/docs/llm-gateway/structured-outputs) if you need the summary in a specific JSON format.
+- Try different [LLM models](/docs/llm-gateway/overview#available-models) to find the one that produces the best summaries for your use case.
 
 ## Advanced usage
 
-| Summary model options                                                                                         | Summary type options                                                                     |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `informative` (default): Best for files with a single speaker such as presentations or lectures.              | `bullets` (default): A bulleted summary with the most important points.                  |
-| `conversational`: Best for any two-person conversation such as customer/agent or interview/interviewee calls. | `bullets_verbose`: A longer bullet point list summarizing the entire transcription text. |
-| `catchy`: Best for creating video, podcast, or media titles.                                                  | `gist`: A few words summarizing the entire transcription text.                           |
-|                                                                                                               | `headline`: A single sentence summarizing the entire transcription text.                 |
-|                                                                                                               | `paragraph`: A single paragraph summarizing the entire transcription text.               |
+You can define custom summary formats by adjusting the prompt:
 
-[Learn more about Summarization](/audio-intelligence/summarization)
+```python
+prompt = """Summarize this meeting transcript using the following format:
+## Meeting Summary
+- **Key Discussion Points**: [list main topics discussed]
+- **Decisions Made**: [list any decisions]
+- **Action Items**: [list action items with owners if mentioned]
+- **Next Steps**: [list next steps]"""
+```
 
-## Conclusion
+## Next steps
 
-AssemblyAI maintains a number of different [summarization models](https://www.assemblyai.com/blog/new-ai-models-to-summarize-audio-and-video-for-any-use-case/) for different use cases, so you can choose between a more informative summary or a catchier tagline for your audio. Visit the [AssemblyAI blog](https://www.assemblyai.com/blog/automatically-summarize-audio-and-video-files-at-scale-with-ai/) for more examples of our summarization features in action.
-
-If you're experiencing issues with generating a summary, make sure that you've included the `summarization` parameter in your request and set it to `true`. In addition, note that the [Auto Chapters](/docs/audio-intelligence/auto-chapters) model and the Summarization model can't be active in the same request. If you try to enable both Auto Chapters and Summarization in a single request, you'll receive the following error message: `"Only one of the following models can be enabled at a time: auto_chapters, summarization."`
+- [Summarization](/docs/speech-understanding/summarization) - Learn more about summarizing audio with LLM Gateway
+- [LLM Gateway Overview](/docs/llm-gateway/overview) - Explore all available models and features
+- [Structured Outputs](/docs/llm-gateway/structured-outputs) - Constrain responses to a specific JSON schema
