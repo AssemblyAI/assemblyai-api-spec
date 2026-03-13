@@ -634,22 +634,93 @@ server.listen(8080);
 
 ## Framework integrations
 
-<CardGroup cols={2}>
-  <Card
-    title="Pipecat"
-    icon={<img src="/assets/img/pipecat.svg" alt="Pipecat" />}
-    href="/docs/voice-agents/u3pro-pipecat"
-  >
-    Drop-in `LLMService` for Pipecat pipelines.
-  </Card>
-  <Card
-    title="LiveKit"
-    icon={<img src="/assets/img/livekit.svg" alt="LiveKit" />}
-    href="/docs/voice-agents/livekit-u3-rt-pro"
-  >
-    Implements `llm.RealtimeModel` for LiveKit Agents.
-  </Card>
-</CardGroup>
+<CodeBlocks>
+
+```python title="Pipecat"
+import os
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.runner.utils import create_transport
+from pipecat.services.llm_service import FunctionCallParams
+from pipecat_assemblyai_realtime import AssemblyAIRealtimeLLMService
+
+URL = "wss://speech-to-speech.us.assemblyai.com/v1/realtime"
+
+TOOLS = [
+    {
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get the weather for a city.",
+        "parameters": {
+            "type": "object",
+            "properties": {"location": {"type": "string"}},
+            "required": ["location"],
+        },
+    }
+]
+
+async def run_bot(transport, runner_args):
+    llm = AssemblyAIRealtimeLLMService(
+        url=URL,
+        api_key=os.environ["ASSEMBLYAI_API_KEY"],
+        system_prompt="You are a helpful assistant.",
+    )
+
+    async def get_weather(params: FunctionCallParams) -> None:
+        location = params.arguments.get("location")
+        await params.result_callback(f"19°C and sunny in {location}.")
+
+    llm.register_function("get_weather", get_weather)
+
+    pipeline = Pipeline([transport.input(), llm, transport.output()])
+    task = PipelineTask(pipeline, params=PipelineParams())
+
+    @transport.event_handler("on_client_connected")
+    async def on_connected(_transport, _client):
+        await llm.set_tools(TOOLS)
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_disconnected(_transport, _client):
+        await task.cancel()
+
+    runner = PipelineRunner(handle_sigint=runner_args.handle_sigint)
+    await runner.run(task)
+```
+
+```python title="LiveKit"
+import os
+from livekit.agents import Agent, AgentSession, JobContext, cli
+from assemblyai_realtime import RealtimeModel
+
+URL = "wss://speech-to-speech.us.assemblyai.com/v1/realtime"
+
+
+class Assistant(Agent):
+    def __init__(self) -> None:
+        super().__init__(
+            instructions="You are a helpful voice assistant. Keep responses brief.",
+        )
+
+
+async def entrypoint(ctx: JobContext):
+    session = AgentSession(
+        llm=RealtimeModel(
+            url=URL,
+            api_key=os.environ["ASSEMBLYAI_API_KEY"],
+            greeting="Hi! How can I help?",
+        )
+    )
+
+    await session.start(agent=Assistant(), room=ctx.room)
+    await ctx.connect()
+
+
+if __name__ == "__main__":
+    cli.run_app(entrypoint)
+```
+
+</CodeBlocks>
 
 ---
 
