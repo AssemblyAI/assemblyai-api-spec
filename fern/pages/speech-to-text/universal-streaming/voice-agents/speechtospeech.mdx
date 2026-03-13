@@ -53,7 +53,15 @@ async def main():
     headers = {"Authorization": f"Bearer {API_KEY}"}
 
     async with websockets.connect(URL, additional_headers=headers) as ws:
-        print("Connected. Waiting for session...")
+        print("Connected")
+
+        # Send config immediately on connect — before session.ready
+        await ws.send(json.dumps({
+            "type": "session.configure",
+            "session": {
+                "system_prompt": "You are a helpful assistant.",
+            }
+        }))
 
         # Start mic capture in background
         loop = asyncio.get_running_loop()
@@ -130,7 +138,12 @@ const microphone = mic({
 const micStream = microphone.getAudioStream();
 
 ws.on("open", () => {
-  console.log("Connected. Waiting for session...");
+  console.log("Connected");
+  // Send config immediately on connect
+  ws.send(JSON.stringify({
+    type: "session.configure",
+    session: { system_prompt: SYSTEM_PROMPT, tools: TOOLS },
+  }));
 });
 
 ws.on("message", (data) => {
@@ -179,7 +192,7 @@ micStream.on("data", (chunk) => {
 
 <Step title="Configure the session (optional)">
 
-After receiving `session.ready`, send a `session.configure` event to set a system prompt and/or register tools:
+Send a `session.configure` event immediately on WebSocket connect — before `session.ready` arrives — to set a system prompt and/or register tools:
 
 ```json
 {
@@ -256,7 +269,7 @@ Stream PCM16 audio to the agent. Send this continuously as the user speaks.
 
 #### `session.configure`
 
-Configure the session after `session.ready`. Can be sent multiple times to update the system prompt or tools mid-conversation.
+Configure the session. Send this immediately on WebSocket connect — before `session.ready` arrives. Can also be sent multiple times mid-conversation to update the system prompt or tools.
 
 ```json
 {
@@ -721,7 +734,7 @@ async def get_weather(params):
 
 llm.register_function("get_weather", get_weather)
 
-# Set tools after session.ready
+# Set tools on connect (before session.ready)
 await llm.set_tools([{
     "type": "function",
     "name": "get_weather",
@@ -823,6 +836,12 @@ async def main():
     audio_queue = asyncio.Queue()
 
     async with websockets.connect(URL, additional_headers=headers) as ws:
+        # Send config immediately on connect
+        await ws.send(json.dumps({
+            "type": "session.configure",
+            "session": {"system_prompt": SYSTEM_PROMPT, "tools": TOOLS},
+        }))
+
         loop = asyncio.get_running_loop()
 
         def mic_callback(indata, frames, time, status):
@@ -846,13 +865,6 @@ async def main():
                 t = event.get("type")
 
                 if t == "session.ready":
-                    await ws.send(json.dumps({
-                        "type": "session.configure",
-                        "session": {
-                            "system_prompt": SYSTEM_PROMPT,
-                            "tools": TOOLS,
-                        }
-                    }))
                     print("Ready — start speaking")
 
                 elif t == "transcript.user":
@@ -925,10 +937,6 @@ ws.on("message", async (data) => {
 
   switch (event.type) {
     case "session.ready":
-      ws.send(JSON.stringify({
-        type: "session.configure",
-        session: { system_prompt: SYSTEM_PROMPT, tools: TOOLS },
-      }));
       console.log("Ready — start speaking");
       microphone.start();
       break;
@@ -994,10 +1002,9 @@ micStream.on("data", (chunk) => {
 Client                              Server
   │                                   │
   │── WebSocket connect ──────────────►│
+  │── session.configure ─────────────►│  (set system prompt + tools — sent immediately)
   │                                   │
   │◄─── session.ready ────────────────│
-  │                                   │
-  │── session.configure ─────────────►│  (set system prompt + tools)
   │                                   │
   │── audio.append (stream) ─────────►│  (user speaks)
   │── audio.append (stream) ─────────►│
