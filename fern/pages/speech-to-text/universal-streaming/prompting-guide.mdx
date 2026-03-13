@@ -26,7 +26,11 @@ Remember, prompts are primarily instructional, so adding a large amount of conte
 
 ## Start with the default prompt
 
-We recommend testing with **no prompt first**. When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt that is already optimized for turn detection and streaming accuracy:
+We recommend testing with **no prompt first**. When you omit the `prompt` parameter, Universal-3-Pro automatically applies a built-in default prompt that is already optimized for turn detection and streaming accuracy.
+
+### Current system prompt
+
+The following is the current built-in system prompt used by Universal-3-Pro when no `prompt` parameter is provided:
 
 ```
 Transcribe verbatim. Rules:
@@ -34,7 +38,7 @@ Always include punctuation in output.
 Use period/question mark ONLY for complete sentences.
 Use comma for mid-sentence pauses.
 Use no punctuation for incomplete trailing speech.
-Filler words (um, uh, so, like) indicate speaker will continue.
+Include spoken filler words, hesitations, repetitions and false starts when clearly spoken.
 ```
 
 This default prompt delivers **88% turn detection accuracy** out of the box. If you need to customize, **build off of this prompt** rather than starting from scratch. Append your additional instructions after the default rules to preserve the turn detection behavior while adding your own requirements.
@@ -45,6 +49,21 @@ This default prompt delivers **88% turn detection accuracy** out of the box. If 
   impact turn detection. The default prompt is optimized for this, so we
   recommend trying it first before any customization.
 </Note>
+
+<Accordion title="Prior system prompt (March 3, 2026 – March 12, 2026)">
+The previous built-in system prompt was:
+
+```
+Transcribe verbatim. Rules:
+Always include punctuation in output.
+Use period/question mark ONLY for complete sentences.
+Use comma for mid-sentence pauses.
+Use no punctuation for incomplete trailing speech.
+Filler words (um, uh, so, like) indicate speaker will continue.
+```
+
+The key change in the current prompt is the last rule: filler words, hesitations, repetitions, and false starts are now explicitly included in the transcription output when clearly spoken, rather than being treated solely as continuation signals.
+</Accordion>
 
 ## How prompting works
 
@@ -64,6 +83,15 @@ These improvements are under active development. In the meantime, use `keyterms_
 
 ## Prompting language
 
+<Warning>
+  Universal-3 Pro Streaming does not support the `language_code` connection
+  parameter — it is silently ignored. The `language_detection` parameter only
+  controls whether language metadata (such as `language_code` and
+  `language_confidence`) is returned on `Turn` events; it does not affect which
+  language the model transcribes. To specify the transcription language, use the
+  `prompt` parameter as described below.
+</Warning>
+
 Providing language information ahead of time in the prompt helps the model with transcription tasks. For example, if the model is told to transcribe Spanish, audio could be transcribed "si", but if told English, it could be transcribed "C".
 
 Although prompting is a beta feature, we've found good results when you build off of the [default prompt](#start-with-the-default-prompt) — which is exactly what we do here for adding language information by prepending `Transcribe <language>.` to the default prompt.
@@ -76,7 +104,7 @@ Transcribe Spanish. Transcribe verbatim. Rules:
     Use period/question mark ONLY for complete sentences.
     Use comma for mid-sentence pauses.
     Use no punctuation for incomplete trailing speech.
-    Filler words (um, uh, so, like) indicate speaker will continue.
+    Include spoken filler words, hesitations, repetitions and false starts when clearly spoken.
 ```
 
 If you have multiple languages, append all languages like `Transcribe multilingual conversation in English, Spanish, and German.`
@@ -123,7 +151,7 @@ You can also update the `prompt` parameter mid-stream to adjust formatting or be
 ```json
 {
   "type": "UpdateConfiguration",
-  "prompt": "Transcribe verbatim. Rules: Always include punctuation in output. Use period/question mark ONLY for complete sentences. Use comma for mid-sentence pauses. Use no punctuation for incomplete trailing speech. Filler words (um, uh, so, like) indicate speaker will continue. Additional: This is a cardiology appointment."
+  "prompt": "Transcribe verbatim. Rules: Always include punctuation in output. Use period/question mark ONLY for complete sentences. Use comma for mid-sentence pauses. Use no punctuation for incomplete trailing speech. Include spoken filler words, hesitations, repetitions and false starts when clearly spoken. Additional: This is a cardiology appointment."
 }
 ```
 
@@ -150,6 +178,13 @@ You can set `keyterms_prompt` at connection time or [update it mid-stream](/docs
 
 Many of the prompt capabilities available for [async (pre-recorded) transcription](/docs/pre-recorded-audio/prompting) — such as audio event tagging, speaker attribution, and labeling crosstalk — are designed for longer audio files and do not reliably work with streaming's shorter audio segments (typically under 10 seconds). For streaming, focus your prompts on punctuation rules, verbatim transcription, and formatting instructions. Use `keyterms_prompt` for domain-specific term boosting.
 
+<Note>
+  Prompting is not an alternative method for speaker separation. To identify
+  individual speakers in a streaming session, enable [Streaming
+  Diarization](/docs/streaming/streaming-diarization) by setting
+  `speaker_labels: true` in your connection parameters.
+</Note>
+
 ### Looking for async prompting?
 
 Prompting behavior differs between streaming and async (pre-recorded) use cases. This guide covers prompting for **streaming (real-time audio)**. If you're working with pre-recorded audio, see the [Prompting Guide (Async)](/docs/pre-recorded-audio/prompting).
@@ -171,5 +206,4 @@ The default prompt—used when no `prompt` is provided—dropped the false posit
 
 1. **The default prompt already optimizes for turn detection.** When the prompt is omitted entirely, Universal-3-Pro still achieves 83% accuracy thanks to its built-in punctuation behavior—but the built-in default prompt raises this to 88%. Try the default before customizing.
 2. **Concrete punctuation rules work best.** The model responds better to specific formatting instructions (like "use period only for complete sentences") than to abstract conversational framing. Keep custom prompts focused on punctuation behavior.
-3. **Explicitly mark filler words as continuation signals.** Words like "um", "uh", "so", and "like" commonly appear at the end of incomplete utterances. Instructing the model that these indicate the speaker will continue is a high-signal rule that reduces false turn ends.
-4. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
+3. **Recall is near-perfect across all approaches.** The punctuation-based system rarely misses a real turn end. The main optimization lever is reducing false positives—cases where the model signals a turn end on an incomplete utterance.
