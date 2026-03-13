@@ -200,10 +200,6 @@ Both input and output audio use the same format:
 
 Send audio as base64-encoded PCM16 chunks. Chunk size doesn't matter — the server buffers and processes continuously.
 
-<Warning>
-Do not send `input.audio` before `session.ready` fires. Sending audio before the session is established causes a flood of `session.error` events with code `invalid_format`.
-</Warning>
-
 ---
 
 ## Connection
@@ -234,7 +230,7 @@ Browsers cannot set custom headers on WebSocket connections. For browser-based a
 
 #### `input.audio`
 
-Stream PCM16 audio to the agent. Only send this after `session.ready` has fired.
+Stream PCM16 audio to the agent.
 
 ```json
 {
@@ -269,33 +265,6 @@ Configure the session. Send immediately on WebSocket connect — before `session
 | `session.system_prompt` | string | Sets the agent's personality and context                       |
 | `session.greeting`      | string | Spoken aloud at the start of the conversation                  |
 | `session.tools`         | array  | Tool definitions (see [Tool calling](#tool-calling))           |
-
----
-
-#### `reply.create`
-
-Manually trigger a response. Useful when VAD is disabled or you want to force a turn.
-
-```json
-{ "type": "reply.create" }
-```
-
----
-
-#### `reply.cancel`
-
-Cancel the agent's current response mid-speech.
-
-```json
-{
-  "type": "reply.cancel",
-  "reply_id": "reply_abc123"
-}
-```
-
-| Field      | Type   | Description                                       |
-| ---------- | ------ | ------------------------------------------------- |
-| `reply_id` | string | From the `reply.started` event                    |
 
 ---
 
@@ -409,7 +378,7 @@ Final transcript of the user's utterance.
 
 #### `reply.started`
 
-Agent has begun generating a response. Save `reply_id` to cancel if needed.
+Agent has begun generating a response.
 
 ```json
 {
@@ -448,7 +417,7 @@ Full text of the agent's response, sent after the response completes.
 
 #### `reply.done`
 
-Agent has finished speaking. If `status` is `"interrupted"`, the user barged in — discard any pending tool results.
+Agent has finished speaking. The optional `status` field indicates why the reply ended.
 
 ```json
 { "type": "reply.done" }
@@ -458,15 +427,9 @@ Agent has finished speaking. If `status` is `"interrupted"`, the user barged in 
 { "type": "reply.done", "status": "interrupted" }
 ```
 
----
-
-#### `reply.interrupted`
-
-Agent response was interrupted.
-
-```json
-{ "type": "reply.interrupted" }
-```
+| Field    | Type   | Description                                                      |
+| -------- | ------ | ---------------------------------------------------------------- |
+| `status` | string | `"interrupted"` if the user barged in, absent for normal completion |
 
 ---
 
@@ -623,21 +586,7 @@ elif t == "reply.done":
 
 ## Interruptions
 
-When the user speaks mid-response, the server sends `input.speech.started` and automatically stops the agent. The `reply.done` event follows with `status: "interrupted"`.
-
-When an interruption happens:
-1. Discard any `pending_tools` accumulated during the interrupted reply
-2. Clear the playback buffer if needed
-3. The agent is ready to listen again
-
-You can also cancel the current reply manually using the `reply_id` from `reply.started`:
-
-```python
-await ws.send(json.dumps({
-    "type": "reply.cancel",
-    "reply_id": current_reply_id,
-}))
-```
+When the user speaks mid-response, the server stops the agent and sends `reply.done` with `status: "interrupted"`. Discard any pending tool results — the agent is ready to listen again.
 
 ---
 
@@ -722,7 +671,7 @@ Client                              Server
   │◄─── input.speech.stopped ─────────│
   │◄─── transcript.user ──────────────│
   │                                   │
-  │◄─── reply.started ────────────────│  (save reply_id)
+  │◄─── reply.started ────────────────│
   │◄─── reply.audio ──────────────────│
   │◄─── transcript.agent ─────────────│
   │◄─── reply.done ───────────────────│
