@@ -238,7 +238,7 @@
         "x-fern-sdk-method-name": "list",
         "x-fern-request-name": "ListTranscriptParams",
         "operationId": "listTranscripts",
-        "description": "<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nRetrieve a list of transcripts you created.\nTranscripts are sorted from newest to oldest and can be retrieved for the last 90 days of usage. The previous URL always points to a page with older transcripts.\n\nIf you need to retrieve transcripts from more than 90 days ago please reach out to our Support team at support@assemblyai.com.\n",
+        "description": "<Note>To retrieve your transcriptions on our EU server, replace `api.assemblyai.com` with `api.eu.assemblyai.com`.</Note>\nRetrieve a list of transcripts you created.\nTranscripts are sorted from newest to oldest and can be retrieved for the last 90 days of usage. The previous URL always points to a page with older transcripts.\n\nIf you need to retrieve transcripts from more than 90 days ago please reach out to our Support team at support@assemblyai.com.\n\n**Pagination**\n\nThis endpoint returns paginated results. The response includes a `page_details` object with the following properties:\n- `page_details.limit` - Maximum number of transcripts per page.\n- `page_details.result_count` - Total number of transcripts returned on the current page.\n- `page_details.current_url` - URL to the current page.\n- `page_details.prev_url` - URL to the previous page of older transcripts.\n- `page_details.next_url` - URL to the next page of newer transcripts.\n",
         "parameters": [
           {
             "name": "limit",
@@ -1443,6 +1443,20 @@
             "default": "bullets",
             "$ref": "#/components/schemas/SummaryType"
           },
+          "remove_audio_tags": {
+            "x-label": "Remove audio tags",
+            "description": "Remove [audio event tags](https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-pro#audio-event-tags) from the transcript text. Set to `\"all\"` to remove all audio tags.\n\nNote: This parameter is only supported for the Universal-3-Pro model.\n",
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["all"]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "temperature": {
             "x-label": "Temperature",
             "description": "Control the amount of randomness injected into the model's response. See the [Prompting Guide](https://www.assemblyai.com/docs/pre-recorded-audio/prompting) for more details.\n\nNote: This parameter can only be used with the Universal-3-Pro model.\n",
@@ -1538,6 +1552,7 @@
           "summary_type": "bullets",
           "custom_topics": true,
           "topics": [],
+          "remove_audio_tags": null,
           "speech_understanding": {
             "request": {
               "translation": {
@@ -1612,6 +1627,7 @@
           "summary_type": "bullets",
           "custom_topics": true,
           "topics": [],
+          "remove_audio_tags": null,
           "speech_understanding": {
             "request": {
               "translation": {
@@ -3132,6 +3148,19 @@
             "description": "The type of summary generated, if [Summarization](https://www.assemblyai.com/docs/speech-understanding/summarization#summary-types) is enabled",
             "type": ["string", "null"]
           },
+          "remove_audio_tags": {
+            "x-label": "Remove audio tags",
+            "description": "Whether [audio event tags](https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-pro#audio-event-tags) were removed from the transcript text.\n\nNote: This parameter is only supported for the Universal-3-Pro model.\n",
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["all"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "temperature": {
             "x-label": "Temperature",
             "description": "The temperature that was used for the model's response. See the [Prompting Guide](https://www.assemblyai.com/docs/pre-recorded-audio/prompting) for more details.\n\nNote: This parameter can only be used with the Universal-3-Pro model.\n",
@@ -3845,6 +3874,7 @@
           "custom_topics": true,
           "topics": [],
           "speech_threshold": 0.5,
+          "remove_audio_tags": null,
           "disfluencies": false,
           "sentiment_analysis": true,
           "chapters": [
@@ -6567,6 +6597,28 @@
                   "type": "string"
                 },
                 "description": "Required if speaker_type is \"role\". Each value must be 35 characters or less."
+              },
+              "speakers": {
+                "type": "array",
+                "description": "An array of speaker objects with metadata to improve identification accuracy. Each object should include a `role` or `name` (depending on `speaker_type`) and an optional `description` to help the model identify the speaker. You can also include any additional custom properties (e.g., `company`, `title`) to provide more context. Use this as an alternative to `known_values` when you want to provide additional context about each speaker.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "description": "The role of the speaker. Required when `speaker_type` is \"role\"."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "The name of the speaker. Required when `speaker_type` is \"name\"."
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "A description of the speaker to help the model identify them based on conversational context."
+                    }
+                  },
+                  "additionalProperties": true
+                }
               }
             },
             "required": ["speaker_type"]
@@ -6617,6 +6669,13 @@
           "speaker_identification": {
             "type": "object",
             "properties": {
+              "mapping": {
+                "type": "object",
+                "description": "A mapping of the original generic speaker labels (e.g., \"A\", \"B\") to the identified speaker names or roles.",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
               "status": {
                 "type": "string"
               }
@@ -6703,6 +6762,7 @@
           "topics": null,
           "speech_threshold": null,
           "speech_model": null,
+          "remove_audio_tags": null,
           "chapters": null,
           "disfluencies": true,
           "entity_detection": false,

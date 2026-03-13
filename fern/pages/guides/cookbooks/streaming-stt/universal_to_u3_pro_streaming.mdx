@@ -1,0 +1,450 @@
+---
+title: "Streaming Migration Guide: Universal Streaming to Universal-3 Pro Streaming"
+---
+
+This guide walks through the process of upgrading from Universal Streaming to Universal-3 Pro Streaming for real-time audio transcription.
+
+### Get Started
+
+Before we begin, make sure you have an AssemblyAI account and an API key. You can [sign up](https://assemblyai.com/dashboard/signup) for a free account and get your API key from your [dashboard](https://www.assemblyai.com/app/api-keys).
+
+## Quick upgrade
+
+If you're already using Universal Streaming, you can quickly test Universal-3 Pro Streaming by switching the `speech_model` parameter to `"u3-rt-pro"` and removing `format_turns` (formatting is always on in U3 Pro). Just update the connection params and start streaming.
+
+```python
+# Before (Universal Streaming)
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "format_turns": True,
+}
+
+# After (Universal-3 Pro Streaming)
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+}
+```
+
+<Note>
+  **That's it for a quick test.** But there are important behavioral differences
+  in turn detection, partials, and formatting that may require updates to your
+  message handling logic. Read on for the full migration details.
+</Note>
+
+## Why upgrade
+
+Universal-3 Pro Streaming delivers:
+
+- **Exceptional entity accuracy** — credit card numbers, phone numbers, email addresses, physical addresses, and names captured correctly at streaming speed
+- **Promptable model** — custom transcription instructions via `prompt`, plus domain-term boosting via `keyterms_prompt` (up to 100 terms)
+- **Better turn detection** — punctuation-based system that waits when speakers pause mid-thought and responds when they're done
+- **Native multilingual code-switching** — English, Spanish, German, French, Portuguese, Italian in a single model
+- **Sub-300ms latency** — fast time to complete transcript
+- **Mid-stream configuration** — update keyterms, prompts, and silence parameters without dropping the connection
+
+For full details, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro).
+
+## What changes
+
+This table covers the key parameter, behavior, and response field differences. Use it as a migration checklist.
+
+| What                                    | Universal Streaming                                                                                                                                             | Universal-3 Pro Streaming                                                     | Action Required                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **`speech_model`**                      | Not required (defaults to English)                                                                                                                              | `"u3-rt-pro"`                                                                 | Add `speech_model: "u3-rt-pro"` to connection params                                                         |
+| **`format_turns`**                      | `false` by default; set `true` for formatted transcripts                                                                                                        | Always on (not a parameter)                                                   | Remove `format_turns` from connection params                                                                 |
+| **Turn detection**                      | Confidence-based (`end_of_turn_confidence_threshold`, default `0.4` — **officially deprecated**)                                                                | Punctuation-based (`min_turn_silence` + terminal punctuation)                 | Remove `end_of_turn_confidence_threshold` (deprecated); tune `min_turn_silence` / `max_turn_silence` instead |
+| **`min_turn_silence`**                  | `400` ms (minimum silence before checking confidence)                                                                                                           | `100` ms (silence before speculative EOT check)                               | Review and adjust if you tuned this value                                                                    |
+| **`max_turn_silence`**                  | `1280` ms                                                                                                                                                       | `1000` ms                                                                     | Review and adjust if you tuned this value                                                                    |
+| **`end_of_turn` / `turn_is_formatted`** | Can differ on English model — `turn_is_formatted` arrives as a separate message after `end_of_turn` (multilingual model has formatting built in, so they match) | Always the same value — one end-of-turn transcript per turn, always formatted | Simplify: just check `end_of_turn: true` for the final formatted transcript                                  |
+| **Partials**                            | Emitted frequently during speech (unformatted on English model, formatted on multilingual model)                                                                | Emitted only during silence periods (at most one partial per silence period)  | Expect fewer but more complete partials                                                                      |
+| **`prompt`**                            | Not supported                                                                                                                                                   | Supported — custom transcription instructions                                 | New capability (optional)                                                                                    |
+| **`keyterms_prompt`**                   | Supported (connection-time only; not updatable mid-stream)                                                                                                      | Supported; can be used together with `prompt`; updatable mid-stream           | No change needed; new: can combine with `prompt` and update via `UpdateConfiguration`                        |
+| **`UpdateConfiguration`**               | Turn detection params only (`end_of_turn_confidence_threshold`, `min_turn_silence`, `max_turn_silence`)                                                         | `prompt`, `keyterms_prompt`, `min_turn_silence`, `max_turn_silence`           | Update any mid-stream config logic to use new fields                                                         |
+| **`ForceEndpoint`**                     | Supported                                                                                                                                                       | Supported                                                                     | No change needed                                                                                             |
+| **`language`**                          | `"en"` or `"multi"` (**officially deprecated**)                                                                                                                 | Not a parameter (native code-switching)                                       | Remove `language` param; use `prompt` to guide language if needed                                            |
+| **`vad_threshold`**                     | `0.4` (default)                                                                                                                                                 | `0.3` (default)                                                               | Review and adjust if you tuned this value — lower default means higher noise sensitivity                    |
+| **`language_detection`**                | Supported (`true`/`false`, default `false`) with multilingual model                                                                                             | Supported — automatic with code-switching                                     | Remove if set; U3 Pro detects language automatically                                                        |
+| **Languages**                           | English default; multilingual requires `speech_model: "universal-streaming-multilingual"`                                                                       | Native multilingual code switching (6 languages) in a single model            | Remove multilingual model switching; optionally prepend language to prompt                                   |
+
+Sources: [U3 Pro docs](/docs/streaming/universal-3-pro), [Universal docs](/docs/streaming/universal-streaming), [Turn detection docs](/docs/streaming/universal-streaming/turn-detection), [API Reference](/docs/api-reference/streaming)
+
+## Side-by-side code
+
+Full working Python examples side by side using raw `websocket-client`.
+
+<Tabs groupId="language">
+    <Tab language="universal" title="Universal Streaming">
+
+    ```python
+    import pyaudio
+    import websocket
+    import json
+    import threading
+    import time
+    from urllib.parse import urlencode
+
+    YOUR_API_KEY = "<YOUR_API_KEY>"
+
+    CONNECTION_PARAMS = {
+        "sample_rate": 16000,
+        "format_turns": True,
+    }
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+    FRAMES_PER_BUFFER = 800
+    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+    CHANNELS = 1
+    FORMAT = pyaudio.paInt16
+
+    audio = None
+    stream = None
+    ws_app = None
+    audio_thread = None
+    stop_event = threading.Event()
+
+    def on_open(ws):
+        print("WebSocket connection opened.")
+        def stream_audio():
+            global stream
+            while not stop_event.is_set():
+                try:
+                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    print(f"Error streaming audio: {e}")
+                    break
+
+        global audio_thread
+        audio_thread = threading.Thread(target=stream_audio)
+        audio_thread.daemon = True
+        audio_thread.start()
+
+    def on_message(ws, message):
+        try:
+            data = json.loads(message)
+            msg_type = data.get("type")
+
+            if msg_type == "Begin":
+                print(f"Session began: ID={data.get('id')}")
+            elif msg_type == "Turn":
+                transcript = data.get("transcript", "")
+                turn_is_formatted = data.get("turn_is_formatted", False)
+                if turn_is_formatted:
+                    print(f"\r{' ' * 80}\r{transcript}")
+                else:
+                    print(f"\r{transcript}", end="")
+            elif msg_type == "Termination":
+                print(f"\nSession terminated: {data.get('audio_duration_seconds', 0)}s of audio")
+        except Exception as e:
+            print(f"Error handling message: {e}")
+
+    def on_error(ws, error):
+        print(f"\nWebSocket Error: {error}")
+        stop_event.set()
+
+    def on_close(ws, close_status_code, close_msg):
+        print(f"\nWebSocket Disconnected: Status={close_status_code}")
+        global stream, audio
+        stop_event.set()
+        if stream:
+            if stream.is_active():
+                stream.stop_stream()
+            stream.close()
+        if audio:
+            audio.terminate()
+
+    def run():
+        global audio, stream, ws_app
+
+        audio = pyaudio.PyAudio()
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+
+        ws_app = websocket.WebSocketApp(
+            API_ENDPOINT,
+            header={"Authorization": YOUR_API_KEY},
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+
+        ws_thread = threading.Thread(target=ws_app.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+
+        try:
+            while ws_thread.is_alive():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\nStopping...")
+            stop_event.set()
+            if ws_app and ws_app.sock and ws_app.sock.connected:
+                ws_app.send(json.dumps({"type": "Terminate"}))
+                time.sleep(2)
+            if ws_app:
+                ws_app.close()
+            ws_thread.join(timeout=2.0)
+
+    if __name__ == "__main__":
+        run()
+    ```
+    </Tab>
+
+    <Tab language="u3pro" title="Universal-3 Pro Streaming">
+
+    ```python
+    import pyaudio
+    import websocket
+    import json
+    import threading
+    import time
+    from urllib.parse import urlencode
+
+    YOUR_API_KEY = "<YOUR_API_KEY>"
+
+    CONNECTION_PARAMS = {
+        "sample_rate": 16000,
+        "speech_model": "u3-rt-pro",
+    }
+    API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+    API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+    FRAMES_PER_BUFFER = 800
+    SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+    CHANNELS = 1
+    FORMAT = pyaudio.paInt16
+
+    audio = None
+    stream = None
+    ws_app = None
+    audio_thread = None
+    stop_event = threading.Event()
+
+    def on_open(ws):
+        print("WebSocket connection opened.")
+        def stream_audio():
+            global stream
+            while not stop_event.is_set():
+                try:
+                    audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+                    ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    print(f"Error streaming audio: {e}")
+                    break
+
+        global audio_thread
+        audio_thread = threading.Thread(target=stream_audio)
+        audio_thread.daemon = True
+        audio_thread.start()
+
+    def on_message(ws, message):
+        try:
+            data = json.loads(message)
+            msg_type = data.get("type")
+
+            if msg_type == "Begin":
+                print(f"Session began: ID={data.get('id')}")
+            elif msg_type == "Turn":
+                transcript = data.get("transcript", "")
+                end_of_turn = data.get("end_of_turn", False)
+                if end_of_turn:
+                    print(f"\r{' ' * 80}\r{transcript}")
+                else:
+                    print(f"\r{transcript}", end="")
+            elif msg_type == "Termination":
+                print(f"\nSession terminated: {data.get('audio_duration_seconds', 0)}s of audio")
+        except Exception as e:
+            print(f"Error handling message: {e}")
+
+    def on_error(ws, error):
+        print(f"\nWebSocket Error: {error}")
+        stop_event.set()
+
+    def on_close(ws, close_status_code, close_msg):
+        print(f"\nWebSocket Disconnected: Status={close_status_code}")
+        global stream, audio
+        stop_event.set()
+        if stream:
+            if stream.is_active():
+                stream.stop_stream()
+            stream.close()
+        if audio:
+            audio.terminate()
+
+    def run():
+        global audio, stream, ws_app
+
+        audio = pyaudio.PyAudio()
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+
+        ws_app = websocket.WebSocketApp(
+            API_ENDPOINT,
+            header={"Authorization": YOUR_API_KEY},
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+
+        ws_thread = threading.Thread(target=ws_app.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+
+        try:
+            while ws_thread.is_alive():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\nStopping...")
+            stop_event.set()
+            if ws_app and ws_app.sock and ws_app.sock.connected:
+                ws_app.send(json.dumps({"type": "Terminate"}))
+                time.sleep(2)
+            if ws_app:
+                ws_app.close()
+            ws_thread.join(timeout=2.0)
+
+    if __name__ == "__main__":
+        run()
+    ```
+    </Tab>
+
+</Tabs>
+
+## Turn detection
+
+This is the most significant behavioral difference between the two models.
+
+**Universal Streaming** uses a **confidence-based** system combining semantic and acoustic detection ([source](/docs/streaming/universal-streaming/turn-detection)):
+
+| Parameter                          | Default   | Description                                                                       |
+| ---------------------------------- | --------- | --------------------------------------------------------------------------------- |
+| `end_of_turn_confidence_threshold` | `0.4`     | Confidence threshold (0.0-1.0) to trigger end of turn (**officially deprecated**) |
+| `min_turn_silence`                 | `400` ms  | Minimum silence before checking confidence                                        |
+| `max_turn_silence`                 | `1280` ms | Maximum silence before forcing end of turn                                        |
+
+The model evaluates `end_of_turn_confidence` during silence. If the score exceeds `end_of_turn_confidence_threshold` after `min_turn_silence`, the turn ends. Otherwise, the turn is forced to end after `max_turn_silence`.
+
+**Universal-3 Pro** uses a **punctuation-based** system ([source](/docs/streaming/universal-3-pro#configuring-turn-detection)):
+
+| Parameter          | Default   | Description                                          |
+| ------------------ | --------- | ---------------------------------------------------- |
+| `min_turn_silence` | `100` ms  | Silence before a speculative end-of-turn check fires |
+| `max_turn_silence` | `1000` ms | Maximum silence before a turn is forced to end       |
+
+When silence reaches `min_turn_silence`, the model transcribes the audio and checks for terminal punctuation (`.` `?` `!`):
+
+- **Terminal punctuation found** — the turn ends (`end_of_turn: true`)
+- **No terminal punctuation** — a partial is emitted (`end_of_turn: false`) and the turn continues
+- **Silence reaches `max_turn_silence`** — the turn is forced to end regardless of punctuation
+
+<Warning>
+  **`end_of_turn_confidence_threshold` does not exist on Universal-3 Pro** (it
+  was never part of the U3 Pro API — not deprecated, just absent). It is
+  officially deprecated on Universal Streaming. Remove this parameter and
+  configure `min_turn_silence` and `max_turn_silence` instead. For configuration
+  guidance, see [Configuring Turn
+  Detection](/docs/streaming/universal-3-pro#configuring-turn-detection).
+</Warning>
+
+## New capabilities
+
+These features are new or enhanced in Universal-3 Pro. For full details, see [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro).
+
+### Prompting
+
+Universal-3 Pro supports a `prompt` parameter for custom transcription instructions. When omitted, a default prompt optimized for turn detection (88% accuracy) is applied automatically. See the [Prompting Guide](/docs/streaming/prompting) for details.
+
+```python
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "prompt": "Transcribe verbatim. Rules:\n1) Always include punctuation in output.\n2) Use period/question mark ONLY for complete sentences.\n3) Use comma for mid-sentence pauses.\n4) Use no punctuation for incomplete trailing speech.\n5) Filler words (um, uh, so, like) indicate speaker will continue.",
+}
+```
+
+<Tip>
+  **Start with no prompt.** The default prompt delivers 88% turn detection
+  accuracy. Only customize if you have specific requirements, and build off the
+  default prompt rather than starting from scratch.
+</Tip>
+
+### Keyterms prompting
+
+Boost recognition of specific names, brands, or domain terms. Maximum 100 keyterms, each 50 characters or less. See [Keyterms Prompting](/docs/streaming/keyterms-prompting) for details.
+
+```python
+import json
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "keyterms_prompt": json.dumps(["Keanu Reeves", "AssemblyAI", "Universal-3"]),
+}
+```
+
+<Tip>
+  **`prompt` and `keyterms_prompt` can be used together.** When you use
+  `keyterms_prompt`, your boosted words are appended to the default prompt (or
+  your custom `prompt` if provided) automatically.
+</Tip>
+
+### Mid-stream configuration updates
+
+Update `prompt`, `keyterms_prompt`, `min_turn_silence`, and `max_turn_silence` during an active session without reconnecting. See [Updating configuration mid-stream](/docs/streaming/universal-3-pro#updating-configuration-mid-stream) for details.
+
+```python
+ws.send(json.dumps({
+    "type": "UpdateConfiguration",
+    "keyterms_prompt": ["cardiology", "echocardiogram", "Dr. Patel"],
+    "max_turn_silence": 5000
+}))
+```
+
+## Force turn end
+
+`ForceEndpoint` is supported on both Universal Streaming and Universal-3 Pro — no migration changes needed. Force the current turn to end immediately based on external signals. See [Forcing a turn endpoint](/docs/streaming/universal-3-pro#forcing-a-turn-endpoint) for details.
+
+```python
+ws.send(json.dumps({"type": "ForceEndpoint"}))
+```
+
+## Language support
+
+**Universal Streaming** transcribes English by default. For multilingual support, use `speech_model: "universal-streaming-multilingual"`. ([Source](/docs/streaming/universal-streaming))
+
+**Universal-3 Pro** natively code-switches between 6 languages in a single model — no separate multilingual model needed: English, Spanish, German, French, Portuguese, Italian. It also supports automatic language detection, returning `language_code` and `language_confidence` fields in Turn messages. To guide toward a specific language, prepend `Transcribe <language>.` to the default prompt. See [Supported languages](/docs/streaming/universal-3-pro/supported-languages) for the full list.
+
+**Language Detection:** Universal Streaming supports the `language_detection` connection parameter (`true`/`false`, default `false`) with the multilingual model. When enabled, Turn messages include `language_code` and `language_confidence` fields. Universal-3 Pro also supports language detection with code-switching — see [Supported languages](/docs/streaming/universal-3-pro/supported-languages) for details.
+
+<Tip>
+  **Need more than 6 languages?** Use the Whisper Streaming model
+  (`speech_model: "whisper-rt"`) for 99+ languages with automatic language
+  detection. See [Whisper Streaming](/docs/streaming/multilingual-transcription)
+  for details.
+</Tip>
+
+## Resources
+
+- [Universal-3 Pro Streaming](/docs/streaming/universal-3-pro)
+- [Universal Streaming](/docs/streaming/universal-streaming)
+- [Turn Detection (Universal)](/docs/streaming/universal-streaming/turn-detection)
+- [Prompting Guide (Streaming)](/docs/streaming/prompting)
+- [Keyterms Prompting](/docs/streaming/keyterms-prompting)
+- [Supported Languages](/docs/streaming/universal-3-pro/supported-languages)
+- [Streaming API Reference](/docs/api-reference/streaming)

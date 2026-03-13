@@ -8,6 +8,8 @@ hidden: true
 
 Tool calling allows you to define functions that the model can call to access external data or perform actions. This enables the model to interact with databases, APIs, and other external systems.
 
+Tool calls follow the OpenAI-compliant structure across all supported models (Claude, OpenAI, Gemini), so you can use the same code regardless of which model you choose.
+
 ## Defining tools
 
 Define functions the model can call to access external data or functionality:
@@ -74,12 +76,11 @@ choice = response.json()["choices"][0]
 if choice.get("tool_calls"):
     tool_call = choice["tool_calls"][0]
 
-    # Add function call to history
+    # Add assistant message with tool calls to history
     conversation_history.append({
-        "type": "function_call",
-        "tool_call_id": tool_call["id"],
-        "name": tool_call["function"]["name"],
-        "arguments": tool_call["function"]["arguments"]
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [tool_call]
     })
 
     # Execute your function
@@ -88,12 +89,11 @@ if choice.get("tool_calls"):
         json.loads(tool_call["function"]["arguments"])
     )
 
-    # Add function output to history
+    # Add tool result to history
     conversation_history.append({
-        "type": "function_call_output",
+        "role": "tool",
         "tool_call_id": tool_call["id"],
-        "name": tool_call["function"]["name"],
-        "output": json.dumps({"result": result})
+        "content": json.dumps({"result": result})
     })
 
     # Continue conversation with the result
@@ -118,7 +118,7 @@ The complete tool calling process:
 1. Send user message with `tools` array defining available functions
 2. Model responds with `tool_calls` if it needs to use a tool
 3. Execute the tool in your application code
-4. Add `function_call` and `function_call_output` to conversation history
+4. Add the assistant message (with `tool_calls`) and a `tool` message (with the result) to conversation history
 5. Send updated history back to the API
 6. Model incorporates results and either calls more tools or provides final answer
 
@@ -129,8 +129,7 @@ When using tools, structure your conversation history with these message types t
 - **user** - Messages from the user
 - **assistant** - Messages from the AI model
 - **system** - System instructions or context
-- **function_call** - Records a tool being called by the model
-- **function_call_output** - Records the result of executing a tool
+- **tool** - Results from executing a tool call
 
 ## API reference
 
