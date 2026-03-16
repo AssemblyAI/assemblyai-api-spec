@@ -4,7 +4,7 @@ import * as React from "react";
 const HELP_ARTICLE_URL =
   "https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering";
 
-const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3-Pro speech transcription model. Based on the user's transcript sample and their description of desired output, generate an optimized transcription prompt.
+const LLM_CONTEXT = `You are an expert at crafting prompts for AssemblyAI's Universal-3 Pro speech transcription model. Based on the user's transcript sample and their description of desired output, generate an optimized transcription prompt.
 
 Key principles for effective prompts:
 
@@ -33,7 +33,7 @@ What hurts:
 - Short, vague instructions (High impact): e.g., "Be accurate", "Best transcript ever", "Superhero human transcriptionist" - Model doesn't understand the instruction pattern to identify, pay attention to, and correct
 - Missing disfluency instructions (Medium impact): e.g., "Transcribe verbatim", "Transcribe this audio" - Not necessarily a failure but the model by default will not be expressive with disfluencies unless instructed
 
-Analyze the transcript sample and user's desired output to generate a prompt optimized for Universal-3-Pro and this audio sample. Detailed best practices can be found at https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering and this URL should be looked up live for all up to date best practices.`;
+Analyze the transcript sample and user's desired output to generate a prompt optimized for Universal-3 Pro and this audio sample. Detailed best practices can be found at https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio/prompt-engineering and this URL should be looked up live for all up to date best practices.`;
 
 // Limit transcript to approximately 1000 words (roughly 6000 characters)
 const MAX_TRANSCRIPT_CHARS = 6000;
