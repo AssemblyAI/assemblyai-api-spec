@@ -98,7 +98,7 @@ When you enable the PII Redaction model, your transcript will look like this:
 - With `hash` substitution: `Hi, my name is ####!`
 - With `entity_name` substitution: `Hi, my name is [PERSON_NAME]!`
 
-You can also [Create redacted audio files](#create-redacted-audio-files) to replace sensitive information with a beeping sound.
+You can also [Create redacted audio files](#create-redacted-audio-files) to replace sensitive information in the audio with a beeping sound or silence.
 
 <Warning title="Redacted Properties">
   PII only redacts words in the `text` property. Properties from other features
@@ -320,7 +320,7 @@ getting hit in the US. Is because there's a couple of weather systems that ...
 
 ## Create redacted audio files
 
-In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out.
+In addition to redacting sensitive information from the transcription text, you can also generate a version of the original audio file with the PII "beeped" out. You can optionally use silence instead of a beep by setting `override_audio_redaction_method` to `"silence"` within `redact_pii_audio_options`.
 
 <Tip title="Redacted Audio Endpoint">
 
@@ -339,14 +339,17 @@ Redacted audio files are only available for 24 hours. Make sure to download the 
 
 Use the transcript ID to poll the [GET redacted audio endpoint](/docs/api-reference/transcripts/get-redacted-audio) every few seconds to check the status of the redacted audio. Once the status is `redacted_audio_ready`, you can retrieve the audio URL from the API response.
 
-```python {6-7,11-22}
+```python {6-10,14-25}
 data = {
     "audio_url": upload_url, # You can also use a URL to an audio or video file on the web
     "redact_pii": True,
     "redact_pii_policies": ["person_name", "organization", "occupation"],
     "redact_pii_sub": "hash",
     "redact_pii_audio": True,
-    "redact_pii_audio_quality": "wav" # Optional. Defaults to "mp3"
+    "redact_pii_audio_quality": "wav", # Optional. Defaults to "mp3"
+    "redact_pii_audio_options": {
+        "override_audio_redaction_method": "silence" # Optional. Omit for default (beep)
+    }
 }
 
 # ...
@@ -370,14 +373,15 @@ while True:
 
 Use `get_redacted_audio_url()` on the transcript to get the URL to the redacted audio file.
 
-```python {7,12}
+```python {7-8,13}
 config = aai.TranscriptionConfig().set_redact_pii(
     policies=[
         aai.PIIRedactionPolicy.person_name,
         aai.PIIRedactionPolicy.organization,
         aai.PIIRedactionPolicy.occupation,
     ],
-    redact_audio=True
+    redact_audio=True,
+    redact_audio_options={"override_audio_redaction_method": "silence"}  # Optional. Omit for default (beep)
 )
 
 transcript = aai.Transcriber().transcribe(audio_url, config)
@@ -392,7 +396,7 @@ print(transcript.get_redacted_audio_url())
 
 Use the transcript ID to poll the [GET redacted audio endpoint](/docs/api-reference/transcripts/get-redacted-audio) every few seconds to check the status of the redacted audio. Once the status is `redacted_audio_ready`, you can retrieve the audio URL from the API response.
 
-```javascript {6-7,11,14-26}
+```javascript {6-10,14,17-29}
 const data = {
   audio_url: uploadUrl, // You can also use a URL to an audio or video file on the web
   redact_pii: true,
@@ -400,6 +404,9 @@ const data = {
   redact_pii_sub: "hash",
   redact_pii_audio: true,
   redact_pii_audio_quality: "wav", // Optional. Defaults to "mp3"
+  redact_pii_audio_options: {
+    override_audio_redaction_method: "silence", // Optional. Omit for default (beep)
+  },
 };
 
 // ...
@@ -434,13 +441,16 @@ the quality of the redacted audio file.
 
 Use redactedAudio() on the transcript to get the URL to the redacted audio file.
 
-```javascript {5-6, 12-14}
+```javascript {5-9, 15-17}
 const params: TranscribeParams = {
   audio: audioUrl,
   redact_pii: true,
   redact_pii_policies: ["person_name", "organization", "occupation"],
   redact_pii_audio: true,
   redact_pii_audio_quality: "wav", // Optional. Defaults to "mp3"
+  redact_pii_audio_options: {
+    override_audio_redaction_method: "silence", // Optional. Omit for default (beep)
+  },
 };
 
 const run = async () => {
@@ -505,7 +515,7 @@ https://s3.us-west-2.amazonaws.com/api.assembly.ai.usw2/redacted-audio/ac06721c-
 
 ### Request
 
-```bash {6-10}
+```bash {6-13}
 curl https://api.assemblyai.com/v2/transcript \
 --header "Authorization: <YOUR_API_KEY>" \
 --header "Content-Type: application/json" \
@@ -515,7 +525,10 @@ curl https://api.assemblyai.com/v2/transcript \
   "redact_pii_policies": ["us_social_security_number", "credit_card_number"],
   "redact_pii_sub": "hash",
   "redact_pii_audio": true,
-  "redact_pii_audio_quality": "mp3"
+  "redact_pii_audio_quality": "mp3",
+  "redact_pii_audio_options": {
+    "override_audio_redaction_method": "silence"
+  }
 }'
 ```
 
@@ -526,6 +539,8 @@ curl https://api.assemblyai.com/v2/transcript \
 | `redact_pii_sub`           | string  | Method used to substitute PII in the transcript. Can be `entity_name` or `hash`. |
 | `redact_pii_audio`         | boolean | Create a [redacted version of the audio file](#create-redacted-audio-files).     |
 | `redact_pii_audio_quality` | string  | Quality of the redacted PII audio file. Can be `mp3` or `wav`.                   |
+| `redact_pii_audio_options` | object  | Options for PII-redacted audio. See [Create redacted audio files](#create-redacted-audio-files). |
+| `redact_pii_audio_options.override_audio_redaction_method` | string | The method used to redact audio. Set to `silence` to replace PII with silence instead of the default beep. |
 
 ### Response
 
