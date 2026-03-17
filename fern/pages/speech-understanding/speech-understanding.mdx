@@ -379,54 +379,136 @@ for (const utterance of transcript.utterances) {
 </Tab> */}
 </Tabs>
 
-### Output format details
+### Identify by role
 
-Here is how the structure of the utterances in the `utterances` key differs when Speaker Diarization is used versus when Speaker Identification is used:
+To identify speakers by role instead of name, use `speaker_type: "role"` with role labels in `known_values`. This is useful for customer service calls, interviews, or any scenario where you know the roles but not the names.
 
-**Before (Speaker Diarization only):**
-
-```txt wordWrap
-Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Speaker B: Good morning.
-Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-**After (with Speaker Identification):**
-
-```txt wordWrap
-Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Peter DeCarlo: Good morning.
-Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-## Advanced usage
-
-### Identifying speakers by role
-
-Instead of identifying speakers by name as shown in the examples above, you can also identify speakers by role.
-
-This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
-
-To identify speakers by role, use the `speaker_type` parameter with a value of "role":
-
-#### Example
-
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
 ```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
+
+upload_url = "https://assembly.ai/wildfires.mp3"
+
+# Configure transcript with role-based speaker identification
+
 data = {
-  "audio_url": upload_url,
-  "speaker_labels": True,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
+    "audio_url": upload_url,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True,
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "role",
+                "known_values": ["Interviewer", "Interviewee"]  # Change these values to match the roles of the speakers in your file
+            }
+        }
+    }
+}
+
+# Submit the transcription request
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll for transcription results
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+        break
+
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+    else:
+        time.sleep(3)
+
+# Access the results and print utterances to the terminal
+
+for utterance in transcript["utterances"]:
+    print(f"{utterance['speaker']}: {utterance['text']}")
+
+````
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+```javascript
+const baseUrl = "https://api.assemblyai.com";
+
+const headers = {
+  "authorization": "<YOUR_API_KEY>",
+  "content-type": "application/json"
+};
+
+// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
+const uploadUrl = "https://assembly.ai/wildfires.mp3";
+
+// Configure transcript with role-based speaker identification
+const data = {
+  audio_url: uploadUrl,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speech_understanding: {
+    request: {
+      speaker_identification: {
+        speaker_type: "role",
+        known_values: ["Interviewer", "Interviewee"]  // Change these values to match the roles of the speakers in your file
       }
     }
   }
+};
+
+async function main() {
+  // Submit the transcription request
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(data)
+  });
+
+  const { id: transcriptId } = await response.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll for transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcript = await pollingResponse.json();
+
+    if (transcript.status === "completed") {
+      // Access the results and print utterances to the console
+      for (const utterance of transcript.utterances) {
+        console.log(`${utterance.speaker}: ${utterance.text}`);
+      }
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
 }
-```
+
+main().catch(console.error);
+
+````
+
+</Tab>
+</Tabs>
 
 #### Common role combinations
 
@@ -436,6 +518,8 @@ data = {
 - `["Interviewer", "Interviewee"]` - Interview recordings
 - `["Host", "Guest"]` - Podcast or show recordings
 - `["Moderator", "Panelist"]` - Panel discussions
+
+## Advanced usage
 
 ### Adding speaker metadata with `speakers`
 
@@ -544,7 +628,7 @@ data = {
 
 ### Request
 
-Include the `speech_understanding` parameter directly in your transcription request:
+Include the `speech_understanding` parameter directly in your transcription request (shown here with name-based identification):
 
 ```bash
 curl -X POST \

@@ -254,38 +254,182 @@ transcribeAndIdentifySpeakers();
 </Tab> */}
 </Tabs>
 
-## Advanced usage
+### Identify by role
 
-The advanced usage examples below show the `understanding_body` payload sent to the Speech Understanding API. For setup, transcription, and polling code, see the full examples above.
+To identify speakers by role instead of name, use `speaker_type: "role"` with role labels in `known_values`. This is useful for customer service calls, interviews, or any scenario where you know the roles but not the names.
 
-### Identifying speakers by role
-
-To identify speakers by role instead of name, use the `speaker_type` parameter with a value of "role":
-
+<Tabs groupId="language">
+<Tab language="python" title="Python" default>
 ```python
+import requests
+import time
+
+base_url = "https://api.assemblyai.com"
+
+headers = {
+    "authorization": "<YOUR_API_KEY>"
+}
+
+# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
+
+upload_url = "https://assembly.ai/wildfires.mp3"
+
+data = {
+    "audio_url": upload_url,
+    "speech_models": ["universal-3-pro", "universal-2"],
+    "language_detection": True,
+    "speaker_labels": True
+}
+
+# Transcribe file
+
+response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
+
+transcript_id = response.json()["id"]
+polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
+
+# Poll for transcription results
+
+while True:
+    transcript = requests.get(polling_endpoint, headers=headers).json()
+
+    if transcript["status"] == "completed":
+        break
+
+    elif transcript["status"] == "error":
+        raise RuntimeError(f"Transcription failed: {transcript['error']}")
+
+    else:
+        time.sleep(3)
+
+# Enable role-based speaker identification
+
 understanding_body = {
-  "transcript_id": transcript_id,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
-      }
+    "transcript_id": transcript_id,
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "role",
+                "known_values": ["Interviewer", "Interviewee"]  # Change these values to match the roles of the speakers in your file
+            }
+        }
     }
-  }
 }
 
 # Send the modified transcript to the Speech Understanding API
+
 result = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers = headers,
-  json = understanding_body
+    "https://llm-gateway.assemblyai.com/v1/understanding",
+    headers=headers,
+    json=understanding_body
 ).json()
-```
+
+# Access the results and print utterances to the terminal
+
+for utterance in result["utterances"]:
+    print(f"{utterance['speaker']}: {utterance['text']}")
+
+````
+
+</Tab>
+
+<Tab language="javascript" title="JavaScript">
+```javascript
+const baseUrl = "https://api.assemblyai.com";
+const apiKey = "<YOUR_API_KEY>";
+
+const headers = {
+  "authorization": apiKey,
+  "content-type": "application/json"
+};
+
+// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
+const uploadUrl = "https://assembly.ai/wildfires.mp3";
+
+async function transcribeAndIdentifySpeakers() {
+  // Transcribe file
+  const transcriptResponse = await fetch(`${baseUrl}/v2/transcript`, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify({
+      audio_url: uploadUrl,
+      speaker_labels: true
+    })
+  });
+
+  const { id: transcriptId } = await transcriptResponse.json();
+  const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+
+  // Poll for transcription results
+  while (true) {
+    const pollingResponse = await fetch(pollingEndpoint, { headers });
+    const transcript = await pollingResponse.json();
+
+    if (transcript.status === "completed") {
+      break;
+    } else if (transcript.status === "error") {
+      throw new Error(`Transcription failed: ${transcript.error}`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  // Enable role-based speaker identification
+  const understandingBody = {
+    transcript_id: transcriptId,
+    speech_understanding: {
+      request: {
+        speaker_identification: {
+          speaker_type: "role",
+          known_values: ["Interviewer", "Interviewee"]  // Change these values to match the roles of the speakers in your file
+        }
+      }
+    }
+  };
+
+  // Send the modified transcript to the Speech Understanding API
+  const understandingResponse = await fetch(
+    "https://llm-gateway.assemblyai.com/v1/understanding",
+    {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(understandingBody)
+    }
+  );
+
+  const result = await understandingResponse.json();
+
+  // Access the results and print utterances to the terminal
+  for (const utterance of result.utterances) {
+    console.log(`${utterance.speaker}: ${utterance.text}`);
+  }
+}
+
+transcribeAndIdentifySpeakers();
+
+````
+
+</Tab>
+</Tabs>
+
+#### Common role combinations
+
+- `["Agent", "Customer"]` - Customer service calls
+- `["AI Assistant", "User"]` - AI chatbot interactions
+- `["Support", "Customer"]` - Technical support calls
+- `["Interviewer", "Interviewee"]` - Interview recordings
+- `["Host", "Guest"]` - Podcast or show recordings
+- `["Moderator", "Panelist"]` - Panel discussions
+
+## Advanced usage
 
 ### Adding speaker metadata with `speakers`
 
-For more accurate identification, use the `speakers` parameter instead of `known_values` to provide descriptions and metadata:
+For more accurate identification, use the `speakers` parameter instead of `known_values` to provide descriptions and metadata. The examples below show the `understanding_body` payload sent to the Speech Understanding API. For setup, transcription, and polling code, see the full examples above.
+
+#### Simple usage
+
+At its simplest, you can provide a `description` alongside each speaker's name or role:
 
 ```python
 understanding_body = {
@@ -316,6 +460,44 @@ result = requests.post(
   json = understanding_body
 ).json()
 ```
+
+#### Advanced usage
+
+For even more fine-tuned identification, you can include any additional custom properties on each speaker object, such as `company`, `title`, `department`, or any other fields that help describe the speaker:
+
+```python
+understanding_body = {
+  "transcript_id": transcript_id,
+  "speech_understanding": {
+    "request": {
+      "speaker_identification": {
+        "speaker_type": "name",
+        "speakers": [
+          {
+            "name": "Michel Martin",
+            "description": "Hosts the program and interviews the guests",
+            "company": "NPR",
+            "title": "Host Morning Edition"
+          },
+          {
+            "name": "Peter DeCarlo",
+            "description": "Answers questions from the interview",
+            "company": "Johns Hopkins University",
+            "title": "Professor and Vice Chair of Environmental Health and Engineering"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+<Note>
+  The `speakers` parameter is an alternative to `known_values`. Use `speakers`
+  when you want to provide descriptions and additional metadata alongside names
+  or roles to improve identification accuracy. Use `known_values` when you only
+  need to provide a simple list of names or roles without additional context.
+</Note>
 
 ## API reference
 
