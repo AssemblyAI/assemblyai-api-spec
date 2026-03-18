@@ -141,7 +141,7 @@ import { LanguageTable } from "../../assets/components/LanguagesTable";
 
 ## Overview
 
-Speaker Identification allows you to identify speakers by their actual names or roles, transforming generic labels like "Speaker A" or "Speaker B" into meaningful identifiers that you provide. Speaker identities are inferred based on the conversation content.
+Replace generic "Speaker A" and "Speaker B" labels with real names or roles, no voice enrollment needed. Speaker Identification uses conversation content to infer who's speaking and applies the identifiers you provide.
 
 **Example transformation:**
 
@@ -153,7 +153,7 @@ Speaker B: Thanks for having me.
 Speaker A: Let's dive into today's topic...
 ```
 
-**After:**
+**After (by name):**
 
 ```txt
 Michel Martin: Good morning, and welcome to the show.
@@ -161,23 +161,41 @@ Peter DeCarlo: Thanks for having me.
 Michel Martin: Let's dive into today's topic...
 ```
 
+**After (by role):**
+
+```txt
+Interviewer: Good morning, and welcome to the show.
+Interviewee: Thanks for having me.
+Interviewer: Let's dive into today's topic...
+```
+
+<Warning>
+  Speaker Identification requires [Speaker Diarization](/docs/speech-to-text/speaker-diarization). You must set `speaker_labels: true` in your transcription request.
+</Warning>
+
 <Note>
-  Speaker Identification requires that a file be transcribed with Speaker Diarization enabled. See [this section](/docs/speech-to-text/speaker-diarization) of our documentation to learn more about the Speaker Diarization feature.
-
 To reliably identify speakers, your audio should contain clear, distinguishable voices and sufficient spoken audio from each speaker. The accuracy of Speaker Diarization depends on the quality of the audio and the distinctiveness of each speaker's voice, which will have a downstream effect on the quality of Speaker Identification.
-
 </Note>
+
+### Choosing how to identify speakers
+
+You can identify speakers by name or by role:
+
+- **Know the speakers' names?** Use `speaker_type: "name"` with the names in `known_values` or `speakers`. [Click here to learn more.](#identify-by-name)
+- **Know their roles but not names?** Use `speaker_type: "role"` with roles like `"Interviewer"` or `"Agent"` in `known_values` or `speakers`. [Click here to learn more.](#identify-by-role)
+- **Need better accuracy?** Use `speakers` with `description` fields that provide context about what each speaker typically discusses. [Click here to learn more.](#adding-speaker-metadata)
 
 ## How to use Speaker Identification
 
-There are two ways to use Speaker Identification:
+Include the `speech_understanding` parameter in your transcription request to identify speakers.
 
-1. **Transcribe and identify in one request** - Best when you're starting a new transcription and want speaker identification included automatically
-2. **Transcribe and identify in separate requests** - Best when you already have a completed transcript or for more complex workflows where you might want to perform other tasks between the transcription and speaker identification process
+<Note>
+Already have a completed transcript? You can [add Speaker Identification to an existing transcript](/docs/speech-understanding/speaker-identification/speaker-identification-existing-transcript) in a separate request.
+</Note>
 
-### Method 1: Transcribe and identify in one request
+### Identify by name
 
-This method is ideal when you're starting fresh and want both transcription and speaker identification in a single workflow.
+To identify speakers by name, use `speaker_type: "name"` with a list of speaker names in `known_values`. This is the most common approach when you know who is speaking in the audio.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -369,9 +387,9 @@ for (const utterance of transcript.utterances) {
 </Tab> */}
 </Tabs>
 
-### Method 2: Transcribe and identify in separate requests
+### Identify by role
 
-This method is useful when you already have a completed transcript or for more complex workflows where you need to separate transcription from speaker identification.
+To identify speakers by role instead of name, use `speaker_type: "role"` with role labels in `known_values`. This is useful for customer service calls, interviews, or any scenario where you know the roles but not the names.
 
 <Tabs groupId="language">
 <Tab language="python" title="Python" default>
@@ -389,17 +407,26 @@ headers = {
 
 upload_url = "https://assembly.ai/wildfires.mp3"
 
+# Configure transcript with role-based speaker identification
+
 data = {
     "audio_url": upload_url,
     "speech_models": ["universal-3-pro", "universal-2"],
     "language_detection": True,
-    "speaker_labels": True
+    "speaker_labels": True,
+    "speech_understanding": {
+        "request": {
+            "speaker_identification": {
+                "speaker_type": "role",
+                "known_values": ["Interviewer", "Interviewee"]  # Change these values to match the roles of the speakers in your file
+            }
+        }
+    }
 }
 
-# Transcribe file
+# Submit the transcription request
 
 response = requests.post(base_url + "/v2/transcript", headers=headers, json=data)
-
 transcript_id = response.json()["id"]
 polling_endpoint = base_url + f"/v2/transcript/{transcript_id}"
 
@@ -417,94 +444,52 @@ while True:
     else:
         time.sleep(3)
 
-# Enable speaker identification
-
-understanding_body = {
-    "transcript_id": transcript_id,
-    "speech_understanding": {
-        "request": {
-            "speaker_identification": {
-                "speaker_type": "name",
-                "known_values": ["Michel Martin", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
-            }
-        }
-    }
-}
-
-# Send the modified transcript to the Speech Understanding API
-
-result = requests.post(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    headers=headers,
-    json=understanding_body
-).json()
-
 # Access the results and print utterances to the terminal
 
-for utterance in result["utterances"]:
+for utterance in transcript["utterances"]:
     print(f"{utterance['speaker']}: {utterance['text']}")
 
 ````
 
 </Tab>
 
-{/* <Tab language="python-sdk" title="Python SDK">
-```python
-import assemblyai as aai
-
-aai.settings.api_key = "<YOUR_API_KEY>"
-
-# Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-audio_url = "https://assembly.ai/wildfires.mp3"
-
-config = aai.TranscriptionConfig(speaker_labels=True)
-transcript = aai.Transcriber().transcribe(audio_url, config)
-
-# Enable speaker identification
-understanding_config = aai.SpeechUnderstandingConfig(
-  speaker_identification=aai.SpeakerIdentificationConfig(
-    speaker_type="name",
-    known_values=["Michel Martin", "Peter DeCarlo"]  # Change these values to match the names of the speakers in your file
-  )
-)
-
-result = aai.SpeechUnderstanding().understand(
-  transcript.id,
-  understanding_config
-)
-
-# Access the results and print utterances to the terminal
-for utterance in result.utterances:
-  print(f"{utterance.speaker}: {utterance.text}")
-````
-
-</Tab> */}
-
 <Tab language="javascript" title="JavaScript">
 ```javascript
 const baseUrl = "https://api.assemblyai.com";
-const apiKey = "<YOUR_API_KEY>";
 
 const headers = {
-  "authorization": apiKey,
+  "authorization": "<YOUR_API_KEY>",
   "content-type": "application/json"
 };
 
 // Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
 const uploadUrl = "https://assembly.ai/wildfires.mp3";
 
-async function transcribeAndIdentifySpeakers() {
-  // Transcribe file
-  const transcriptResponse = await fetch(`${baseUrl}/v2/transcript`, {
-    method: 'POST',
+// Configure transcript with role-based speaker identification
+const data = {
+  audio_url: uploadUrl,
+  speech_models: ["universal-3-pro", "universal-2"],
+  language_detection: true,
+  speaker_labels: true,
+  speech_understanding: {
+    request: {
+      speaker_identification: {
+        speaker_type: "role",
+        known_values: ["Interviewer", "Interviewee"]  // Change these values to match the roles of the speakers in your file
+      }
+    }
+  }
+};
+
+async function main() {
+  // Submit the transcription request
+  const response = await fetch(`${baseUrl}/v2/transcript`, {
+    method: "POST",
     headers: headers,
-    body: JSON.stringify({
-      audio_url: uploadUrl,
-      speaker_labels: true
-    })
+    body: JSON.stringify(data)
   });
 
-  const { id: transcriptId } = await transcriptResponse.json();
+  const { id: transcriptId } = await response.json();
   const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
   // Poll for transcription results
@@ -513,6 +498,10 @@ async function transcribeAndIdentifySpeakers() {
     const transcript = await pollingResponse.json();
 
     if (transcript.status === "completed") {
+      // Access the results and print utterances to the console
+      for (const utterance of transcript.utterances) {
+        console.log(`${utterance.speaker}: ${utterance.text}`);
+      }
       break;
     } else if (transcript.status === "error") {
       throw new Error(`Transcription failed: ${transcript.error}`);
@@ -520,155 +509,14 @@ async function transcribeAndIdentifySpeakers() {
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
-
-  // Enable speaker identification
-  const understandingBody = {
-    transcript_id: transcriptId,
-    speech_understanding: {
-      request: {
-        speaker_identification: {
-          speaker_type: "name",
-          known_values: ["Michel Martin", "Peter DeCarlo"]  // Change these values to match the names of the speakers in your file
-        }
-      }
-    }
-  };
-
-  // Send the modified transcript to the Speech Understanding API
-  const understandingResponse = await fetch(
-    "https://llm-gateway.assemblyai.com/v1/understanding",
-    {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(understandingBody)
-    }
-  );
-
-  const result = await understandingResponse.json();
-
-  // Access the results and print utterances to the terminal
-  for (const utterance of result.utterances) {
-    console.log(`${utterance.speaker}: ${utterance.text}`);
-  }
 }
 
-transcribeAndIdentifySpeakers();
+main().catch(console.error);
 
 ````
 
 </Tab>
-
-{/* <Tab language="javascript-sdk" title="JavaScript SDK">
-```javascript
-const { AssemblyAI } = require('assemblyai');
-
-const client = new AssemblyAI({
-  apiKey: "<YOUR_API_KEY>"
-});
-
-// Need to transcribe a local file? Learn more here: https://www.assemblyai.com/docs/getting-started/transcribe-an-audio-file
-const audioUrl = "https://assembly.ai/wildfires.mp3";
-
-async function transcribeAndIdentifySpeakers() {
-  const transcript = await client.transcripts.transcribe({
-    audio_url: audioUrl,
-    speaker_labels: true
-  });
-
-  // Enable speaker identification
-  const result = await client.speechUnderstanding.understand({
-    transcript_id: transcript.id,
-    speech_understanding: {
-      request: {
-        speaker_identification: {
-          speaker_type: "name",
-          known_values: ["Michel Martin", "Peter DeCarlo"]  // Change these values to match the names of the speakers in your file
-        }
-      }
-    }
-  });
-
-  // Access the results and print utterances to the terminal
-  for (const utterance of result.utterances) {
-    console.log(`${utterance.speaker}: ${utterance.text}`);
-  }
-}
-
-transcribeAndIdentifySpeakers();
-````
-
-</Tab> */}
 </Tabs>
-
-### Output format details
-
-Here is how the structure of the utterances in the `utterances` key differs when Speaker Diarization is used versus when Speaker Identification is used:
-
-**Before (Speaker Diarization only):**
-
-```txt wordWrap
-Speaker A: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Speaker B: Good morning.
-Speaker A: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Speaker B: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-**After (with Speaker Identification):**
-
-```txt wordWrap
-Michel Martin: ... We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.
-Peter DeCarlo: Good morning.
-Michel Martin: So what is it about the conditions right now that have caused this round of wildfires to affect so many people so far away?
-Peter DeCarlo: Well, there's a couple of things. The season has been pretty dry already, and then the fact that we're getting hit in the US is because there's a couple weather systems that are essentially channeling the smoke from those Canadian wildfires through Pennsylvania into the mid Atlantic and the Northeast and kind of just dropping the smoke there.
-```
-
-## Advanced usage
-
-### Identifying speakers by role
-
-Instead of identifying speakers by name as shown in the examples above, you can also identify speakers by role.
-
-This can be useful in customer service calls, AI interactions, or any scenario where you may not know the specific names of the speakers but still want to identify them by something more than a generic identifier like A, B, or C.
-
-To identify speakers by role, use the `speaker_type` parameter with a value of "role":
-
-#### Example
-
-```python
-# For Method 1 (transcribe and identify in one request):
-data = {
-  "audio_url": upload_url,
-  "speaker_labels": True,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
-      }
-    }
-  }
-}
-
-# For Method 2 (add identification to existing transcript):
-understanding_body = {
-  "transcript_id": transcript_id,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "known_values": ["Interviewer", "Interviewee"]  # Roles instead of names
-      }
-    }
-  }
-}
-
-# Send the modified transcript to the Speech Understanding API
-result = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers = headers,
-  json = understanding_body
-).json()
-```
 
 #### Common role combinations
 
@@ -679,7 +527,7 @@ result = requests.post(
 - `["Host", "Guest"]` - Podcast or show recordings
 - `["Moderator", "Panelist"]` - Panel discussions
 
-### Adding speaker metadata with `speakers`
+## Adding speaker metadata
 
 For more accurate speaker identification, you can use the `speakers` parameter instead of `known_values`. The `speakers` parameter lets you provide additional metadata about each speaker to help the model identify speakers based on conversational context.
 
@@ -691,12 +539,13 @@ This is particularly useful when:
 
 Each speaker object must include either a `name` or `role` (depending on `speaker_type`). Beyond that, you can add any additional properties you want. The `name` and `role` fields are reserved as strings, but all other properties are flexible and can be any structure.
 
-#### Simple usage
+<Note>
+Examples in this section are shown in Python for brevity. The same `speaker_identification` configuration works in any language.
+</Note>
 
 At its simplest, you can provide a `description` alongside each speaker's name or role:
 
 ```python
-# For Method 1 (transcribe and identify in one request):
 data = {
   "audio_url": upload_url,
   "speaker_labels": True,
@@ -718,38 +567,7 @@ data = {
     }
   }
 }
-
-# For Method 2 (add identification to existing transcript):
-understanding_body = {
-  "transcript_id": transcript_id,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "speakers": [
-          {
-            "role": "interviewer",
-            "description": "Hosts the program and interviews the guests"
-          },
-          {
-            "role": "guest",
-            "description": "Answers questions from the interview"
-          }
-        ]
-      }
-    }
-  }
-}
-
-# Send the modified transcript to the Speech Understanding API
-result = requests.post(
-  "https://llm-gateway.assemblyai.com/v1/understanding",
-  headers = headers,
-  json = understanding_body
-).json()
 ```
-
-#### Advanced usage
 
 For even more fine-tuned identification, you can include any additional custom properties on each speaker object, such as `company`, `title`, `department`, or any other fields that help describe the speaker:
 
@@ -781,44 +599,13 @@ data = {
 }
 ```
 
-You can also use custom properties with role-based identification:
-
-```python
-data = {
-  "audio_url": upload_url,
-  "speaker_labels": True,
-  "speech_understanding": {
-    "request": {
-      "speaker_identification": {
-        "speaker_type": "role",
-        "speakers": [
-          {
-            "role": "sales",
-            "description": "Provides information about product to make a sale",
-            "company": "Acme Corp",
-            "title": "Sales manager"
-          }
-        ]
-      }
-    }
-  }
-}
-```
-
-<Note>
-  The `speakers` parameter is an alternative to `known_values`. Use `speakers`
-  when you want to provide descriptions and additional metadata alongside names
-  or roles to improve identification accuracy. Use `known_values` when you only
-  need to provide a simple list of names or roles without additional context.
-</Note>
+You can use the same custom properties with role-based identification by replacing `name` with `role` in each speaker object.
 
 ## API reference
 
 ### Request
 
-#### Method 1: Transcribe and identify in one request
-
-When creating a new transcription, include the `speech_understanding` parameter directly in your transcription request:
+Include the `speech_understanding` parameter directly in your transcription request (shown here with name-based identification):
 
 ```bash
 curl -X POST \
@@ -839,57 +626,19 @@ curl -X POST \
   }'
 ```
 
-#### Method 2: Add identification to existing transcripts
-
-For existing transcripts, retrieve the completed transcript and send it to the Speech Understanding API:
-
-```bash {6} maxLines=15
-# Step 1: Submit transcription job
-curl -X POST "https://api.assemblyai.com/v2/transcript" \
-  -H "authorization: <YOUR_API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "audio_url": "https://assembly.ai/wildfires.mp3",
-    "speaker_labels": true
-  }'
-
-# Save the transcript_id from the response above, then use it in the following commands
-
-# Step 2: Poll for transcription status (repeat until status is "completed")
-curl -X GET "https://api.assemblyai.com/v2/transcript/{transcript_id}" \
-  -H "authorization: <YOUR_API_KEY>"
-
-# Step 3: Once transcription is completed, enable speaker identification
-curl -X POST "https://llm-gateway.assemblyai.com/v1/understanding" \
-  -H "authorization: <YOUR_API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "transcript_id": "{transcript_id}",
-    "speech_understanding": {
-      "request": {
-        "speaker_identification": {
-          "speaker_type": "name",
-          "known_values": ["Michel Martin", "Peter DeCarlo"]
-        }
-      }
-    }
-  }'
-```
-
 #### Request parameters
 
-| Key                                                   | Type   | Required?   | Description                                                                                                                                                                                                                                                                             |
-| ----------------------------------------------------- | ------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `speech_understanding`                                | object | Yes         | Container for speech understanding requests.                                                                                                                                                                                                                                            |
-| `speech_understanding.request`                        | object | Yes         | The understanding request configuration.                                                                                                                                                                                                                                                |
-| `speech_understanding.request.speaker_identification` | object | Yes         | Speaker identification configuration.                                                                                                                                                                                                                                                   |
-| `speaker_identification.speaker_type`                 | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                                                                                                                                          |
-| `speaker_identification.known_values`                 | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role" and `speakers` is not provided. Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. Use `known_values` or `speakers`, not both.                                      |
-| `speaker_identification.speakers`                     | array  | Conditional | An array of speaker objects with metadata. Use as an alternative to `known_values` when you want to provide additional context about each speaker. You can include any additional custom properties beyond `name`/`role` and `description`. Use `speakers` or `known_values`, not both. |
-| `speaker_identification.speakers[].role`              | string | Conditional | The role of the speaker. Required when `speaker_type` is "role".                                                                                                                                                                                                                        |
-| `speaker_identification.speakers[].name`              | string | Conditional | The name of the speaker. Required when `speaker_type` is "name".                                                                                                                                                                                                                        |
-| `speaker_identification.speakers[].description`       | string | No          | A description of the speaker to help the model identify them based on conversational context.                                                                                                                                                                                           |
-| `speaker_identification.speakers[].<custom_property>` | any    | No          | Any additional custom properties (e.g., `company`, `title`, `department`) to provide more context about the speaker. The `name` and `role` fields are reserved as strings, but all other properties are flexible.                                                                       |
+The following parameters are nested under `speech_understanding.request.speaker_identification`:
+
+| Key                      | Type   | Required?   | Description                                                                                                                                                                                                     |
+| ------------------------ | ------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `speaker_type`           | string | Yes         | The type of speakers being identified, values accepted are "name" for actual names or "role" for roles/titles.                                                                                                  |
+| `known_values`           | array  | Conditional | List of speaker names or roles. Required when `speaker_type` is set to "role" and `speakers` is not provided. Optional when `speaker_type` is set to "name". Each value must be 35 characters or less. Use `known_values` or `speakers`, not both. |
+| `speakers`               | array  | Conditional | An array of speaker objects with metadata. Use as an alternative to `known_values` when you want to provide additional context about each speaker. You can include any additional custom properties beyond `name`/`role` and `description`. Use `speakers` or `known_values`, not both. |
+| `speakers[].role`        | string | Conditional | The role of the speaker. Required when `speaker_type` is "role".                                                                                                                                                |
+| `speakers[].name`        | string | Conditional | The name of the speaker. Required when `speaker_type` is "name".                                                                                                                                                |
+| `speakers[].description` | string | No          | A description of the speaker to help the model identify them based on conversational context.                                                                                                                   |
+| `speakers[].<custom>`    | any    | No          | Any additional custom properties (e.g., `company`, `title`, `department`) to provide more context about the speaker. The `name` and `role` fields are reserved as strings, but all other properties are flexible. |
 
 ### Response
 
@@ -917,7 +666,7 @@ The Speaker Identification API returns a modified version of your transcript wit
   "utterances": [
     {
       "speaker": "Michel Martin",
-      "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts throughout the US Skylines from Maine to Maryland to Minnesota are gray and smoggy. And in some places, the air quality warnings include the warning to stay inside. We wanted to better understand what's happening here and why, so we called Peter DeCarlo, an associate professor in the Department of Environmental Health and Engineering at Johns Hopkins University. Good morning, Professor.",
+      "text": "Smoke from hundreds of wildfires in Canada is triggering air quality alerts...",
       "start": 240,
       "end": 26560,
       "confidence": 0.9815734,
@@ -931,24 +680,8 @@ The Speaker Identification API returns a modified version of your transcript wit
         }
         // ... more words
       ]
-    },
-    {
-      "speaker": "Peter DeCarlo",
-      "text": "Good morning.",
-      "start": 28060,
-      "end": 28620,
-      "confidence": 0.98217773,
-      "words": [
-        {
-          "text": "Good",
-          "start": 28060,
-          "end": 28260,
-          "confidence": 0.96484375,
-          "speaker": "Peter DeCarlo"
-        }
-        // ... more words
-      ]
     }
+    // ... more utterances
   ]
 }
 ```
@@ -972,11 +705,4 @@ The Speaker Identification API returns a modified version of your transcript wit
 | `utterances[i].words[j].confidence`                            | number | The confidence score for the transcript of the j-th word in the i-th utterance.                                                                            |
 | `utterances[i].words[j].speaker`                               | string | The identified speaker name or role who uttered the j-th word in the i-th utterance.                                                                       |
 
-#### Key differences from standard transcription
-
-| Field                          | Standard Transcription               | With Speaker Identification                                                                |
-| ------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `utterances[].speaker`         | Generic labels (`"A"`, `"B"`, `"C"`) | Identified names (`"Michel Martin"`, `"Peter DeCarlo"`) or roles (`"Agent"`, `"Customer"`) |
-| `utterances[].words[].speaker` | Generic labels (`"A"`, `"B"`, `"C"`) | Identified names or roles matching the utterance speaker                                   |
-
-All other fields (`text`, `start`, `end`, `confidence`, `words`) remain unchanged from the original transcript.
+With Speaker Identification, the `speaker` field in `utterances` and `words` contains the identified name or role (e.g., `"Michel Martin"` or `"Agent"`) instead of generic labels like `"A"`, `"B"`, `"C"`. All other fields (`text`, `start`, `end`, `confidence`, `words`) remain unchanged from the standard transcription response.
