@@ -1,0 +1,690 @@
+{/* @api-info
+product: Streaming STT
+speech_model: "u3-rt-pro" | "universal-streaming-english" | "universal-streaming-multilingual"
+api-endpoint: wss://streaming.assemblyai.com/v3/ws
+parameter: domain (string, connection parameter)
+description: Enable Medical Mode to improve streaming transcription accuracy for medical terminology such as medications, procedures, conditions, and dosages.
+*/}
+
+# Streaming Medical Mode
+
+Medical Mode is an add-on that enhances streaming transcription accuracy for medical terminology — including medication names, procedures, conditions, and dosages. It applies LLM-powered post-processing on top of AssemblyAI's streaming speech models to correct terms that general-purpose models frequently get wrong.
+
+Enable Medical Mode by setting the `domain` connection parameter to `"medical"`. No other changes to your existing pipeline are required.
+
+<Warning>
+
+Medical Mode is billed as a separate add-on. See the [pricing page](https://www.assemblyai.com/pricing) for details.
+
+</Warning>
+
+## Quickstart
+
+<Tabs>
+<Tab language="python" title="Python" default>
+
+```bash
+pip install websocket-client pyaudio
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```bash
+pip install assemblyai
+```
+
+</Tab>
+<Tab language="javascript" title="Javascript">
+
+```bash
+npm install ws mic
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```bash
+npm install assemblyai node-record-lpcm16
+```
+
+<Note>
+  The module `node-record-lpcm16` requires [SoX](http://sox.sourceforge.net/) and it must be available in your `$PATH`.
+
+For Mac OS:
+
+```bash
+brew install sox
+```
+
+For most linux disto's:
+
+```bash
+sudo apt-get install sox libsox-fmt-all
+```
+
+For Windows:
+
+[download the binaries](http://sourceforge.net/projects/sox/files/latest/download)
+
+</Note>
+
+</Tab>
+</Tabs>
+
+<Tabs>
+<Tab language="python" title="Python" default>
+
+```python {14}
+import pyaudio
+import websocket
+import json
+import threading
+import time
+from urllib.parse import urlencode
+from datetime import datetime
+
+# --- Configuration ---
+YOUR_API_KEY = "YOUR-API-KEY"  # Replace with your actual API key
+
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "domain": "medical"
+}
+API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws"
+API_ENDPOINT = f"{API_ENDPOINT_BASE_URL}?{urlencode(CONNECTION_PARAMS)}"
+
+# Audio Configuration
+FRAMES_PER_BUFFER = 800  # 50ms of audio (0.05s * 16000Hz)
+SAMPLE_RATE = CONNECTION_PARAMS["sample_rate"]
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+# Global variables for audio stream and websocket
+audio = None
+stream = None
+ws_app = None
+audio_thread = None
+stop_event = threading.Event()  # To signal the audio thread to stop
+
+# --- WebSocket Event Handlers ---
+
+
+def on_open(ws):
+    """Called when the WebSocket connection is established."""
+    print("WebSocket connection opened.")
+    print(f"Connected to: {API_ENDPOINT}")
+
+    # Start sending audio data in a separate thread
+    def stream_audio():
+        global stream
+        print("Starting audio streaming...")
+        while not stop_event.is_set():
+            try:
+                audio_data = stream.read(FRAMES_PER_BUFFER, exception_on_overflow=False)
+
+                # Send audio data as binary message
+                ws.send(audio_data, websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                print(f"Error streaming audio: {e}")
+                break
+        print("Audio streaming stopped.")
+
+    global audio_thread
+    audio_thread = threading.Thread(target=stream_audio)
+    audio_thread.daemon = True
+    audio_thread.start()
+
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        msg_type = data.get('type')
+
+        if msg_type == "Begin":
+            session_id = data.get('id')
+            expires_at = data.get('expires_at')
+            print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
+        elif msg_type == "Turn":
+            transcript = data.get('transcript', '')
+            formatted = data.get('turn_is_formatted', False)
+
+            if formatted:
+                print('\r' + ' ' * 80 + '\r', end='')
+                print(transcript)
+            else:
+                print(f"\r{transcript}", end='')
+        elif msg_type == "Termination":
+            audio_duration = data.get('audio_duration_seconds', 0)
+            session_duration = data.get('session_duration_seconds', 0)
+            print(f"\nSession Terminated: Audio Duration={audio_duration}s, Session Duration={session_duration}s")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding message: {e}")
+    except Exception as e:
+        print(f"Error handling message: {e}")
+
+def on_error(ws, error):
+    """Called when a WebSocket error occurs."""
+    print(f"\nWebSocket Error: {error}")
+    stop_event.set()
+
+
+def on_close(ws, close_status_code, close_msg):
+    """Called when the WebSocket connection is closed."""
+    print(f"\nWebSocket Disconnected: Status={close_status_code}, Msg={close_msg}")
+
+    global stream, audio
+    stop_event.set()
+
+    if stream:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+        stream = None
+    if audio:
+        audio.terminate()
+        audio = None
+    if audio_thread and audio_thread.is_alive():
+        audio_thread.join(timeout=1.0)
+
+
+# --- Main Execution ---
+def run():
+    global audio, stream, ws_app
+
+    audio = pyaudio.PyAudio()
+
+    try:
+        stream = audio.open(
+            input=True,
+            frames_per_buffer=FRAMES_PER_BUFFER,
+            channels=CHANNELS,
+            format=FORMAT,
+            rate=SAMPLE_RATE,
+        )
+        print("Microphone stream opened successfully.")
+        print("Speak into your microphone. Press Ctrl+C to stop.")
+    except Exception as e:
+        print(f"Error opening microphone stream: {e}")
+        if audio:
+            audio.terminate()
+        return
+
+    ws_app = websocket.WebSocketApp(
+        API_ENDPOINT,
+        header={"Authorization": YOUR_API_KEY},
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+
+    ws_thread = threading.Thread(target=ws_app.run_forever)
+    ws_thread.daemon = True
+    ws_thread.start()
+
+    try:
+        while ws_thread.is_alive():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Stopping...")
+        stop_event.set()
+
+        if ws_app and ws_app.sock and ws_app.sock.connected:
+            try:
+                terminate_message = {"type": "Terminate"}
+                print(f"Sending termination message: {json.dumps(terminate_message)}")
+                ws_app.send(json.dumps(terminate_message))
+                time.sleep(5)
+            except Exception as e:
+                print(f"Error sending termination message: {e}")
+
+        if ws_app:
+            ws_app.close()
+
+        ws_thread.join(timeout=2.0)
+
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        stop_event.set()
+        if ws_app:
+            ws_app.close()
+        ws_thread.join(timeout=2.0)
+
+    finally:
+        if stream and stream.is_active():
+            stream.stop_stream()
+        if stream:
+            stream.close()
+        if audio:
+            audio.terminate()
+        print("Cleanup complete. Exiting.")
+
+
+if __name__ == "__main__":
+    run()
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```python {15}
+import logging
+from typing import Type
+
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    BeginEvent,
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingError,
+    StreamingEvents,
+    StreamingParameters,
+    TerminationEvent,
+    TurnEvent,
+)
+
+api_key = "<YOUR_API_KEY>"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def on_begin(self: Type[StreamingClient], event: BeginEvent):
+    print(f"Session started: {event.id}")
+
+
+def on_turn(self: Type[StreamingClient], event: TurnEvent):
+    if event.turn_is_formatted:
+        print(f"\r{' ' * 100}\r{event.transcript}")
+    else:
+        print(f"\r{event.transcript}", end='', flush=True)
+
+
+def on_terminated(self: Type[StreamingClient], event: TerminationEvent):
+    print(
+        f"Session terminated: {event.audio_duration_seconds} seconds of audio processed"
+    )
+
+
+def on_error(self: Type[StreamingClient], error: StreamingError):
+    print(f"Error occurred: {error}")
+
+
+def main():
+    client = StreamingClient(
+        StreamingClientOptions(
+            api_key=api_key,
+            api_host="streaming.assemblyai.com",
+        )
+    )
+
+    client.on(StreamingEvents.Begin, on_begin)
+    client.on(StreamingEvents.Turn, on_turn)
+    client.on(StreamingEvents.Termination, on_terminated)
+    client.on(StreamingEvents.Error, on_error)
+
+    client.connect(
+        StreamingParameters(
+            sample_rate=16000,
+            speech_model="u3-rt-pro",
+            domain="medical",
+        )
+    )
+
+    try:
+        client.stream(
+          aai.extras.MicrophoneStream(sample_rate=16000)
+        )
+    finally:
+        client.disconnect(terminate=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+</Tab>
+<Tab language="javascript" title="Javascript">
+
+```js {11}
+const WebSocket = require("ws");
+const mic = require("mic");
+const querystring = require("querystring");
+
+// --- Configuration ---
+const YOUR_API_KEY = "YOUR-API-KEY"; // Replace with your actual API key
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  speech_model: "u3-rt-pro",
+  domain: "medical",
+};
+const API_ENDPOINT_BASE_URL = "wss://streaming.assemblyai.com/v3/ws";
+const API_ENDPOINT = `${API_ENDPOINT_BASE_URL}?${querystring.stringify(CONNECTION_PARAMS)}`;
+
+// Audio Configuration
+const SAMPLE_RATE = CONNECTION_PARAMS.sample_rate;
+const CHANNELS = 1;
+
+// Global variables
+let micInstance = null;
+let micInputStream = null;
+let ws = null;
+let stopRequested = false;
+
+// --- Helper functions ---
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toISOString();
+}
+
+// --- Main function ---
+async function run() {
+  console.log("Starting AssemblyAI real-time transcription...");
+
+  ws = new WebSocket(API_ENDPOINT, {
+    headers: {
+      Authorization: YOUR_API_KEY,
+    },
+  });
+
+  ws.on("open", () => {
+    console.log("WebSocket connection opened.");
+    console.log(`Connected to: ${API_ENDPOINT}`);
+    startMicrophone();
+  });
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const msgType = data.type;
+
+      if (msgType === "Begin") {
+        const sessionId = data.id;
+        const expiresAt = data.expires_at;
+        console.log(
+          `\nSession began: ID=${sessionId}, ExpiresAt=${formatTimestamp(expiresAt)}`
+        );
+      } else if (msgType === "Turn") {
+        const transcript = data.transcript || "";
+        const formatted = data.turn_is_formatted;
+
+        if (formatted) {
+          process.stdout.write("\r" + " ".repeat(100) + "\r");
+          console.log(transcript);
+        } else {
+          process.stdout.write(`\r${transcript}`);
+        }
+      } else if (msgType === "Termination") {
+        const audioDuration = data.audio_duration_seconds;
+        const sessionDuration = data.session_duration_seconds;
+        console.log(
+          `\nSession Terminated: Audio Duration=${audioDuration}s, Session Duration=${sessionDuration}s`
+        );
+      }
+    } catch (error) {
+      console.error(`\nError handling message: ${error}`);
+      console.error(`Message data: ${message}`);
+    }
+  });
+
+  ws.on("error", (error) => {
+    console.error(`\nWebSocket Error: ${error}`);
+    cleanup();
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`\nWebSocket Disconnected: Status=${code}, Msg=${reason}`);
+    cleanup();
+  });
+
+  setupTerminationHandlers();
+}
+
+function startMicrophone() {
+  try {
+    micInstance = mic({
+      rate: SAMPLE_RATE.toString(),
+      channels: CHANNELS.toString(),
+      debug: false,
+      exitOnSilence: 6,
+    });
+
+    micInputStream = micInstance.getAudioStream();
+
+    micInputStream.on("data", (data) => {
+      if (ws && ws.readyState === WebSocket.OPEN && !stopRequested) {
+        ws.send(data);
+      }
+    });
+
+    micInputStream.on("error", (err) => {
+      console.error(`Microphone Error: ${err}`);
+      cleanup();
+    });
+
+    micInstance.start();
+    console.log("Microphone stream opened successfully.");
+    console.log("Speak into your microphone. Press Ctrl+C to stop.");
+  } catch (error) {
+    console.error(`Error opening microphone stream: ${error}`);
+    cleanup();
+  }
+}
+
+function cleanup() {
+  stopRequested = true;
+
+  if (micInstance) {
+    try {
+      micInstance.stop();
+    } catch (error) {
+      console.error(`Error stopping microphone: ${error}`);
+    }
+    micInstance = null;
+  }
+
+  if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) {
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        const terminateMessage = { type: "Terminate" };
+        console.log(
+          `Sending termination message: ${JSON.stringify(terminateMessage)}`
+        );
+        ws.send(JSON.stringify(terminateMessage));
+      }
+      ws.close();
+    } catch (error) {
+      console.error(`Error closing WebSocket: ${error}`);
+    }
+    ws = null;
+  }
+
+  console.log("Cleanup complete.");
+}
+
+function setupTerminationHandlers() {
+  process.on("SIGINT", () => {
+    console.log("\nCtrl+C received. Stopping...");
+    cleanup();
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("\nTermination signal received. Stopping...");
+    cleanup();
+    setTimeout(() => process.exit(0), 1000);
+  });
+
+  process.on("uncaughtException", (error) => {
+    console.error(`\nUncaught exception: ${error}`);
+    cleanup();
+    setTimeout(() => process.exit(1), 1000);
+  });
+}
+
+// Start the application
+run();
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript {10}
+import { Readable } from "stream";
+import { AssemblyAI } from "assemblyai";
+import recorder from "node-record-lpcm16";
+
+const run = async () => {
+  const client = new AssemblyAI({
+    apiKey: "<YOUR_API_KEY>",
+  });
+
+  const transcriber = client.streaming.transcriber({
+    sampleRate: 16_000,
+    speechModel: "u3-rt-pro",
+    domain: "medical",
+  });
+
+  transcriber.on("open", ({ id }) => {
+    console.log(`Session opened with ID: ${id}`);
+  });
+
+  transcriber.on("error", (error) => {
+    console.error("Error:", error);
+  });
+
+  transcriber.on("close", (code, reason) =>
+    console.log("Session closed:", code, reason)
+  );
+
+  transcriber.on("turn", (turn) => {
+    if (turn.turn_is_formatted) {
+      process.stdout.write("\r" + " ".repeat(100) + "\r");
+      console.log(turn.transcript);
+    } else {
+      process.stdout.write(`\r${turn.transcript}`);
+    }
+  });
+
+  try {
+    console.log("Connecting to streaming transcript service");
+
+    await transcriber.connect();
+
+    console.log("Starting recording");
+
+    const recording = recorder.record({
+      channels: 1,
+      sampleRate: 16_000,
+      audioType: "wav", // Linear PCM
+    });
+
+    Readable.toWeb(recording.stream()).pipeTo(transcriber.stream());
+
+    // Stop recording and close connection using Ctrl-C.
+
+    process.on("SIGINT", async function () {
+      console.log();
+      console.log("Stopping recording");
+      recording.stop();
+
+      console.log("Closing streaming transcript connection");
+      await transcriber.close();
+
+      process.exit();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+run();
+```
+
+</Tab>
+</Tabs>
+
+## How it works
+
+Medical Mode applies a correction pass after the streaming speech model produces a transcript. It specifically targets medical entity recognition — drug names, procedures, clinical terminology, and dosages — while preserving the underlying model's characteristics for noise handling, accent robustness, and general transcription quality.
+
+Because Medical Mode is a post-processing step, it works across all streaming speech models. Set `speech_model` to your preferred model and add `domain: "medical"` to your connection parameters to enable it.
+
+## Use cases
+
+Medical Mode is designed for healthcare AI applications where accurate medical terminology is critical:
+
+- **Ambient clinical documentation** — Capture medication names, dosages, and clinical terms correctly during live patient encounters.
+- **Real-time medical scribes** — Deliver accurate transcripts to clinicians during or immediately after a consult.
+- **Front-office voice agents** — Handle drug names, provider names, and clinic-specific terminology in scheduling calls and insurance verification.
+- **Medical contact centers** — Transcribe calls with correct medical vocabulary for downstream processing and quality assurance.
+
+## Combine with other features
+
+Medical Mode works alongside other streaming features. You can combine it with:
+
+- [Streaming Diarization](/docs/streaming/diarization-and-multichannel) to identify who said what in clinical conversations
+- [Keyterms Prompting](/docs/streaming/keyterms-prompting) to further boost accuracy for specific medical terms unique to your use case
+
+<Tabs>
+<Tab language="python" title="Python" default>
+
+```python
+CONNECTION_PARAMS = {
+    "sample_rate": 16000,
+    "speech_model": "u3-rt-pro",
+    "domain": "medical",
+    "speaker_labels": "true",
+    "keyterms_prompt": json.dumps(["Lisinopril", "Metformin", "Humalog"])
+}
+```
+
+</Tab>
+<Tab language="python-sdk" title="Python SDK">
+
+```python
+client.connect(
+    StreamingParameters(
+        sample_rate=16000,
+        speech_model="u3-rt-pro",
+        domain="medical",
+        speaker_labels=True,
+        keyterms_prompt=["Lisinopril", "Metformin", "Humalog"],
+    )
+)
+```
+
+</Tab>
+<Tab language="javascript" title="Javascript">
+
+```javascript
+const CONNECTION_PARAMS = {
+  sample_rate: 16000,
+  speech_model: "u3-rt-pro",
+  domain: "medical",
+  speaker_labels: true,
+  keyterms_prompt: JSON.stringify(["Lisinopril", "Metformin", "Humalog"]),
+};
+```
+
+</Tab>
+<Tab language="javascript-sdk" title="JavaScript SDK">
+
+```javascript
+const transcriber = client.streaming.transcriber({
+  sampleRate: 16_000,
+  speechModel: "u3-rt-pro",
+  domain: "medical",
+  speakerLabels: true,
+  keytermsPrompt: ["Lisinopril", "Metformin", "Humalog"],
+});
+```
+
+</Tab>
+</Tabs>
+
+## HIPAA compliance
+
+AssemblyAI offers a Business Associate Agreement (BAA) for customers who need to process Protected Health Information (PHI). AssemblyAI is SOC 2 Type 2, ISO 27001:2022, and PCI DSS v4.0 certified. Medical Mode does not change existing data handling or retention policies.
+
+For BAA setup or enterprise pricing, [contact our sales team](https://www.assemblyai.com/contact-sales).
