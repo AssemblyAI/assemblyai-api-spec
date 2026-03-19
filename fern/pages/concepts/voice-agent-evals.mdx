@@ -111,6 +111,43 @@ This is particularly important for voice agents because traditional WER penalize
 
 For implementations of Semantic WER, see [prompt-seeker](https://github.com/AssemblyAI-Solutions/prompt-seeker) and [aai-cli](https://github.com/alexkroman/aai-cli) in the [pre-recorded evaluation guide](/docs/evaluations/pre-recorded-audio#open-source-tools).
 
+### LASER score (LLM-based ASR Evaluation Rubric)
+
+LASER is a published LLM-based evaluation metric ([Parulekar & Jyothi, EMNLP 2025](https://aclanthology.org/2025.emnlp-main.1257/)) that uses an LLM prompt with detailed examples to classify ASR errors and compute a score:
+
+$$
+\text{LASER} = 1 - \frac{\text{Total Penalty}}{\text{Reference Word Count}}
+$$
+
+The LLM aligns each word in the ASR output against the reference transcription and assigns a penalty per word pair:
+
+- **No penalty (0)**: Acceptable variations including numerical format differences, abbreviations, compound word splits, transliterations, alternate spellings, proper noun variants, and colloquial terms
+- **Minor penalty (0.5)**: Small spelling errors (single character) or minor grammatical errors (gender, tense, number markers) that preserve sentence meaning
+- **Major penalty (1.0)**: Incorrect word substitutions, significant omissions or additions, and reordering that changes meaning
+
+Unlike Semantic WER which outputs a single number, LASER provides structured per-error feedback alongside the score. This makes it useful for understanding _why_ a transcript scored poorly, not just how much error there was. For an implementation of LASER scoring, see [aai-cli](https://github.com/alexkroman/aai-cli).
+
+<Note>
+  Accuracy metrics like WER, Semantic WER, and LASER work the same way for streaming as they do for pre-recorded audio. In both cases, you're comparing a final transcript against ground truth. The difference is only in how the transcript was generated (real-time vs batch), not in how you evaluate it. For detailed evaluation methodology and tooling, see the [pre-recorded evaluation guide](/docs/evaluations/pre-recorded-audio).
+</Note>
+
+### Ground truth quality
+
+The quality of your ground truth data directly affects the reliability of your evaluation. Modern STT models frequently outperform human transcribers, which means errors in your ground truth files will show up as false negatives in your metrics.
+
+Common issues with ground truth data:
+
+- **Missing filler words**: Human transcribers often omit `um`, `uh`, `like`, and other disfluencies
+- **Incorrect proper nouns**: Rare names, technical terms, and domain vocabulary are often misspelled
+- **Simplified speech patterns**: Human transcribers tend to "clean up" speech, missing repetitions, false starts, and self-corrections
+- **Code-switching errors**: Multilingual segments are frequently translated to English rather than transcribed as spoken
+
+Before running evaluations, audit a sample of your ground truth files by listening to the audio and comparing. To inspect and correct issues in your ground truth files, use the [Truth File Corrector](https://asr-eval-v2.lovable.app/) tool, which lets you listen back to audio and fix human transcription errors by clicking through differences.
+
+<Warning>
+  WER is only as good as your ground truth labels. Human transcriptions contain systematic errors — missed filler words, incorrect proper nouns, simplified speech patterns, and translated code-switching. When your STT model transcribes audio more accurately than the human label, those improvements show up as WER _errors_. Before reporting WER, manually audit at least 20 insertions to determine what percentage are true errors versus ground truth omissions.
+</Warning>
+
 ## The evaluation process
 
 This section will be the core of the documentation, providing a step-by-step guide on how to run an evaluation.
@@ -157,11 +194,11 @@ Another benefit of doing a vibe-evals is that truth files don't have to be sourc
 
 ### How to do a vibe-eval?
 
-To do a vibe-eval, set up your voice agent with different STT providers. This can be done quickly with integrations like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-u3-rt-pro) where you can swap out providers.
+**Side-by-side comparison:** Compare formatted transcription outputs from different STT providers. Tools like [Diffchecker](https://www.diffchecker.com/) or any side-by-side interface work well for this. Since you're comparing models against each other, ground truth files aren't required.
 
-Another option is to do A/B testing with your current voice agent in production and ask users to give the agent a score. We've also seen users in the past compare the number of support ticket complaints based on the voice agent served to the user.
+**LLM as a judge:** An LLM can automatically identify differences between two transcriptions and pick a winner. However, be cautious: an LLM judge can be misled by outputs that look correct but contain subtle errors (such as translated code-switching segments that read well in English but don't reflect what was actually spoken). Always pair LLM-based judgments with spot-checking against the actual audio. For a structured LLM-based scoring approach, see [LASER](#laser-score-llm-based-asr-evaluation-rubric) above and [aai-cli](https://github.com/alexkroman/aai-cli) for an implementation.
 
-Vibe-evals are a great way to see how our models perform in a production setting while also letting your users determine their preferred streaming Speech-to-text provider.
+**Live A/B testing:** Set up your voice agent with different STT providers using integrations like [LiveKit](https://www.assemblyai.com/docs/voice-agents/livekit-u3-rt-pro) where you can swap out providers. Serve transcripts from different providers and collect feedback — ask users to score agent interactions directly, or track indirect signals like support ticket complaints about the agent misunderstanding users.
 
 ## Conclusion
 
