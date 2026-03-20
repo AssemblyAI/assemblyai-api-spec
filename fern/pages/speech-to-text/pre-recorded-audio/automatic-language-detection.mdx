@@ -938,3 +938,37 @@ while (true) {
   an error message like `detected language 'bg', confidence 0.2949, is below the
   requested confidence threshold value of '0.4'`.
 </Note>
+
+## Troubleshooting
+
+### Accented speech detected as the wrong language
+
+Automatic Language Detection uses Whisper-based language identification, which can misidentify heavily accented speech as a different language. For example, English spoken with a strong accent may be detected as Finnish, Latvian, Latin, or Arabic.
+
+When this happens, the model doesn't just return a wrong language label -- it **transcribes the audio in the incorrectly detected language**. This effectively translates the speech rather than transcribing it, producing output in a language the speaker wasn't using.
+
+<Note>
+  This can occur even with high confidence scores. A misdetection at 93% confidence still results in transcription in the wrong language.
+</Note>
+
+### Recommended mitigations
+
+**Use `expected_languages` to constrain detection (most effective).** If you know which languages your audio may contain, set `expected_languages` to only those languages. This prevents the model from selecting an unexpected language entirely.
+
+For example, if your application processes interviews in English, Spanish, and French:
+
+```json
+{
+  "language_detection": true,
+  "language_detection_options": {
+    "expected_languages": ["en", "es", "fr"],
+    "fallback_language": "en"
+  }
+}
+```
+
+Setting `fallback_language` to your most common language (e.g., `"en"`) ensures that if the model can't confidently choose between the expected languages, it defaults to the language most likely to produce a useful transcript.
+
+**Use `language_confidence_threshold` to reject low-confidence detections.** Setting a threshold (e.g., `0.7`) causes the API to return an error instead of a transcript when confidence is low. This helps catch some misdetections, but not cases where the model is confidently wrong.
+
+**Monitor `language_confidence` in responses.** Log the `language_code` and `language_confidence` fields from your transcript responses. Unexpected language codes or unusual confidence patterns can help you identify misdetection issues early and decide whether to retry with `expected_languages` or flag the transcript for review.
