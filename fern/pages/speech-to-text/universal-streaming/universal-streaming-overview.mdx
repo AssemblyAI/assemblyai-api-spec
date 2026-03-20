@@ -231,10 +231,7 @@ def on_message(ws, message):
             print(f"\nSession began: ID={session_id}, ExpiresAt={datetime.fromtimestamp(expires_at)}")
         elif msg_type == "Turn":
             transcript = data.get('transcript', '')
-            formatted = data.get('turn_is_formatted', False)
-
-            # Clear previous line for formatted messages
-            if formatted:
+            if data.get('end_of_turn'):
                 print('\r' + ' ' * 80 + '\r', end='')
                 print(transcript)
             else:
@@ -592,9 +589,7 @@ async function run() {
         );
       } else if (msgType === "Turn") {
         const transcript = data.transcript || "";
-        const formatted = data.turn_is_formatted;
-
-        if (formatted) {
+        if (data.end_of_turn) {
           clearLine();
           console.log(transcript);
         } else {
@@ -820,7 +815,6 @@ A Turn object is intended to correspond to a speaking turn in the context of voi
 ```json
 {
   "turn_order": 1,
-  "turn_is_formatted": false,
   "end_of_turn": false,
   "transcript": "modern medicine is",
   "end_of_turn_confidence": 0.7,
@@ -834,7 +828,7 @@ A Turn object is intended to correspond to a speaking turn in the context of voi
 ```
 
 - `turn_order`: Integer that increments with each new turn
-- `turn_is_formatted`: Boolean indicating if the text in the transcript field is formatted. Text formatting is enabled when `format_turns` is set to `true`. It adds punctuation as well as performs casing and inverse text normalization to display various entities, such as dates, times, and phone numbers, in a human-friendly format
+- `turn_is_formatted`: Boolean indicating if the text in the `transcript` field has been formatted with punctuation, casing, and inverse text normalization (e.g. dates, times, phone numbers). When `format_turns=true` (the default), formatting is applied in-model and this field will be `true` on every Turn message — including partial results. When `format_turns=false`, this field will be `false` on all messages. Do not use `turn_is_formatted` to detect end of turn; use `end_of_turn` instead.
 - `end_of_turn`: Boolean indicating if this is the end of the current turn
 - `transcript`: String containing only finalized words
 - `end_of_turn_confidence`: Floating number (0-1) representing the confidence that the current turn has finished, i.e., the current speaker has completed their turn
@@ -848,24 +842,32 @@ Each Word object in the `words` array includes:
 - `end`: Timestamp for word end
 - `confidence`: Confidence score for the word
 
+<Warning>
+  **Do not use `turn_is_formatted` to detect end of turn.** With the
+  `universal-streaming-english` model, formatting is applied in-model to all
+  Turn messages — including partial results — so `turn_is_formatted` will be
+  `true` throughout a session, not only at turn boundaries. Use `end_of_turn`
+  to determine when a speaker's turn has completed.
+</Warning>
+
 ### Immutable transcription
 
 AssemblyAI's streaming system receives audio in a streaming fashion, it returns transcription responses in real-time using the format specified above. Unlike many other streaming speech-to-text models that implement the concept of partial/variable transcriptions to show transcripts in an ongoing manner, Universal-Streaming transcriptions are immutable. In other words, the text that has already been produced will not be overwritten in future transcription responses. Therefore, with Universal-Streaming, the transcriptions will be delivered in the following way:
 
 ```json
-→ hello my na
-→ hello my name
-→ hello my name
-→ hello my name is
-→ hello my name is zac
-→ hello my name is zack
+→ Hello my na
+→ Hello my name
+→ Hello my name
+→ Hello my name is
+→ Hello my name is Zac
+→ Hello my name is Zack
 ```
 
-When an end of the current turn is detected, you then receive a message with `end_of_turn` being `true`. Additionally, if you enable text formatting, you will also receive a transcription response with `turn_is_formatted` being `true`.
+When an end of the current turn is detected, you receive a message with `end_of_turn` set to `true`. When `format_turns=true` (the default), formatting is applied in-model to every Turn message, so both partial results and the final turn will have `turn_is_formatted: true`. There is no separate trailing formatting message — the `end_of_turn: true` message is itself formatted.
 
 ```json
-→ hello my name is zack (unformatted)
-→ Hello my name is Zack. (formatted)
+→ Hello my name is Zack
+→ Hello, my name is Zack. (end_of_turn: true)
 ```
 
-In this example, you may have noticed that the last word of each transcript may occasionally be a subword ("zac" in the example shown above). Each Word object has the `word_is_final` field to indicate whether the model is confident that the last word is a completed word. Note that, except for the last word, `word_is_final` is always true.
+In this example, you may have noticed that the last word of each transcript may occasionally be a subword ("Zac" in the example shown above). Each Word object has the `word_is_final` field to indicate whether the model is confident that the last word is a completed word. Note that, except for the last word, `word_is_final` is always true.
