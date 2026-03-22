@@ -566,7 +566,6 @@ def on_message(ws, message):
 
         elif msg_type == "Turn":
             end_of_turn = data.get("end_of_turn", False)
-            turn_is_formatted = data.get("turn_is_formatted", False)
             transcript = data.get("transcript", "")
             utterance = data.get("utterance", "")
             turn_order = data.get("turn_order", 0)
@@ -576,34 +575,30 @@ def on_message(ws, message):
             if not end_of_turn and transcript:
                 print(f"\r[PARTIAL] {transcript[:120]}...", end="", flush=True)
 
-            # If AssemblyAI has finalized a turn AND it's formatted, LLM-edit the transcript
+            # If AssemblyAI has finalized a turn, LLM-edit the transcript
             if end_of_turn and transcript:
-                if not turn_is_formatted:
-                    # Explicitly skip unformatted finals
-                    print("[DEBUG] EOT received (unformatted) – skipping LLM edit, waiting for formatted final…")
-                elif turn_is_formatted:
-                    if last_processed_turn == turn_order:
-                        return  # avoid duplicate processing
-                    last_processed_turn = turn_order
+                if last_processed_turn == turn_order:
+                    return  # avoid duplicate processing
+                last_processed_turn = turn_order
 
-                    ts = datetime.now().strftime('%H:%M:%S')
-                    print("\n[DEBUG] EOT received (formatted). Calling LLM…")
-                    edited = post_process_with_llm(transcript)
+                ts = datetime.now().strftime('%H:%M:%S')
+                print("\n[DEBUG] EOT received (formatted). Calling LLM…")
+                edited = post_process_with_llm(transcript)
 
-                    changed = "(edited)" if edited.strip() != transcript.strip() else "(no change)"
-                    print(f"\n[{ts}] [FINAL {changed}]")
-                    print(f"  ├─ Original STT : {transcript}")
-                    print(f"  └─ Edited by LLM: {edited}")
-                    print(f"Turn: {turn_order} | Confidence: {eot_conf:.2%}")
+                changed = "(edited)" if edited.strip() != transcript.strip() else "(no change)"
+                print(f"\n[{ts}] [FINAL {changed}]")
+                print(f"  ├─ Original STT : {transcript}")
+                print(f"  └─ Edited by LLM: {edited}")
+                print(f"Turn: {turn_order} | Confidence: {eot_conf:.2%}")
 
-                    encounter_buffer.append({
-                        "timestamp": ts,
-                        "text": edited,
-                        "original_text": transcript,
-                        "turn_order": turn_order,
-                        "confidence": eot_conf,
-                        "type": "final",
-                    })
+                encounter_buffer.append({
+                    "timestamp": ts,
+                    "text": edited,
+                    "original_text": transcript,
+                    "turn_order": turn_order,
+                    "confidence": eot_conf,
+                    "type": "final",
+                })
 
             # If we also get per-utterance chunks, just log them raw (no LLM) for timeline
             if utterance:

@@ -1,0 +1,82 @@
+---
+title: "Concurrency"
+---
+
+AssemblyAI's Streaming STT API features unlimited, automatic scaling concurrency limits for paid accounts. Unlike pre-recorded transcription, there is no hard cap on the total number of concurrent streaming sessions. Instead, the constraint is on the number of **new streaming sessions** that can be opened per minute.
+
+## Default limits
+
+| Account type | Starting rate limit (new sessions/min) |
+| ------------ | -------------------------------------- |
+| Free         | 5                                      |
+| Paid         | 100+                                   |
+
+<Note title="Need a higher concurrency?">
+
+Our services are infinitely scalable and we offer custom concurrency limits that scale to support any workload at no additional cost. If you need a higher concurrency limit, please either [contact our Sales team](https://www.assemblyai.com/contact) or send an email to [support@assemblyai.com](mailto:support@assemblyai.com).
+
+</Note>
+
+## Auto-scaling
+
+Anytime you are utilizing **70% or more of your current limit**, the number of new streams able to be opened over the next minute will automatically increase by 10%.
+
+For example, assuming you max out your available new sessions rate limit each minute for 5 minutes:
+
+| Minute | New sessions/min              | Total concurrent streams |
+| ------ | ----------------------------- | ------------------------ |
+| 1      | 100 (default)                 | 100                      |
+| 2      | 110 (100 x 1.10)             | 210                      |
+| 3      | 121 (110 x 1.10)             | 331                      |
+| 4      | 133 (121 x 1.10)             | 464                      |
+| 5      | 146 (133 x 1.10)             | 610                      |
+
+At the start of the 6th minute, there would be 610 total concurrent open streams. Over the next 60 seconds, a maximum of 161 (146 x 1.10) new streams would be able to be opened.
+
+This usage pattern has no ceiling and can continue to scale up indefinitely to whatever your application requires.
+
+## Scale-down behavior
+
+Based on the rate at which you are opening streams in comparison to your current limit, your new sessions per minute limit adjusts as follows:
+
+- **70% or more** -- Scale up by 10%.
+- **50-69%** -- Unchanged.
+- **Less than 50%** -- Begins to scale back down to your account's starting limit.
+
+<Note>
+
+If your usage has been low for a period of time, the scale-down may impact your ability to immediately open a large number of new streams, even if you have a high number of open concurrent sessions.
+
+</Note>
+
+## What happens when you hit the limit
+
+If you exceed your current new sessions per minute limit, you will receive a WebSocket closure with code `1008` and the message `Unauthorized connection: Too many concurrent sessions`.
+
+You can check your current limit on the [Rate Limits page](https://www.assemblyai.com/dashboard/rate-limits) of your dashboard.
+
+If you are receiving this error unexpectedly, verify that all of your sessions are being terminated properly. Sessions that are not properly closed continue to count against your concurrency.
+
+## Properly terminating sessions
+
+To ensure sessions are cleaned up correctly:
+
+- If you are using the [WebSocket API](/docs/api-reference/streaming-api/streaming-api) directly, send a `terminate_session` message to close the session.
+
+Failing to terminate sessions properly can cause your concurrency count to remain artificially high, leading to unexpected rate limit errors when opening new sessions.
+
+## Check your limit
+
+You can view your current streaming rate limit on the [Rate Limits page](https://www.assemblyai.com/dashboard/rate-limits) of your dashboard.
+
+<Note>
+
+With the current version of multi-project support, rate limiting is applied at the account level, not at the project level. This means that the rate limits for each API key mirror the rate limits for the account.
+
+</Note>
+
+## Related pages
+
+- [Pre-Recorded STT Concurrency](/docs/pre-recorded-audio/concurrency)
+- [Account Management](/docs/account-management)
+- [Common session errors and closures](/docs/streaming/common-session-errors-and-closures)

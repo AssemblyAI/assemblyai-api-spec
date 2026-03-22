@@ -8,8 +8,8 @@ AssemblyAI's Speech-to-Speech (S2S) API is a native real-time voice conversation
 
 **Key capabilities:**
 
-- **Built-in VAD** — server-side voice activity detection, no client configuration needed
-- **Automatic turn detection** — the model decides when the user has finished speaking
+- **Built-in VAD** — server-side voice activity detection with configurable sensitivity
+- **Customizable turn detection** — tune silence thresholds, barge-in behavior, and interruption sensitivity
 - **Native audio output** — streams PCM16 audio back directly, no separate TTS step
 - **Tool calling** — register tools and handle `tool.call` / `tool.result` events
 - **Barge-in / interruption** — users can interrupt the agent mid-response
@@ -197,8 +197,9 @@ Both input and output audio use the same format:
 | Encoding      | PCM16 (16-bit signed integer, little-endian) |
 | Sample rate   | 24,000 Hz                                    |
 | Channels      | Mono                                         |
+| Transport     | **Base64-encoded** (not raw binary)           |
 
-Send audio as base64-encoded PCM16 chunks. Chunk size doesn't matter — the server buffers and processes continuously.
+We recommend sending chunks of around 50ms (2,400 bytes at 24kHz). The server buffers and processes continuously, so exact chunk size isn't critical.
 
 ---
 
@@ -247,7 +248,7 @@ Stream PCM16 audio to the agent.
 
 #### `session.update`
 
-Configure the session. Send immediately on WebSocket connect — before `session.ready`. Can also be sent mid-conversation to update the prompt or tools.
+Configure the session. Send immediately on WebSocket connect — before `session.ready`. Can also be sent mid-conversation to update any field.
 
 ```json
 {
@@ -255,16 +256,18 @@ Configure the session. Send immediately on WebSocket connect — before `session
   "session": {
     "system_prompt": "You are a helpful assistant.",
     "greeting": "Hi! How can I help you today?",
-    "tools": []
+    "tools": [],
+    "turn_detection": { ... }
   }
 }
 ```
 
-| Field                   | Type   | Description                                                    |
-| ----------------------- | ------ | -------------------------------------------------------------- |
-| `session.system_prompt` | string | Sets the agent's personality and context                       |
-| `session.greeting`      | string | Spoken aloud at the start of the conversation                  |
-| `session.tools`         | array  | Tool definitions (see [Tool calling](#tool-calling))           |
+| Field                    | Type   | Description                                                    |
+| ------------------------ | ------ | -------------------------------------------------------------- |
+| `session.system_prompt`  | string | Sets the agent's personality and context                       |
+| `session.greeting`       | string | Spoken aloud at the start of the conversation                  |
+| `session.tools`          | array  | Tool definitions (see [Tool calling](#tool-calling))           |
+| `session.turn_detection` | object | VAD and turn detection configuration (see [Turn detection](#turn-detection)) |
 
 ---
 
@@ -404,14 +407,24 @@ A chunk of the agent's spoken response as base64 PCM16. Decode and play immediat
 
 #### `transcript.agent`
 
-Full text of the agent's response, sent after the response completes.
+Full text of the agent's response, sent after all audio for the response has been delivered. If the agent was interrupted, `interrupted` is `true` and `text` contains only what was actually spoken before the interruption.
 
 ```json
 {
   "type": "transcript.agent",
-  "text": "It's currently 22°C and sunny in Tokyo."
+  "text": "It's currently 22°C and sunny in Tokyo.",
+  "reply_id": "reply_abc123",
+  "item_id": "item_abc123",
+  "interrupted": false
 }
 ```
+
+| Field         | Type    | Description                                                     |
+| ------------- | ------- | --------------------------------------------------------------- |
+| `text`        | string  | What the agent said (trimmed to interruption point if interrupted) |
+| `reply_id`    | string  | ID of the reply                                                 |
+| `item_id`     | string  | Conversation item ID                                            |
+| `interrupted` | boolean | `true` if the user interrupted mid-response                     |
 
 ---
 
@@ -514,6 +527,41 @@ What the agent says at the start of the conversation, spoken aloud. If omitted, 
 }
 ```
 
+### Turn detection
+
+Customize VAD sensitivity, end-of-turn detection, and barge-in behavior. All fields are optional — only include the ones you want to change. Settings can be updated mid-session.
+
+```json
+{
+  "type": "session.update",
+  "session": {
+    "turn_detection": {
+      "speech_detection_threshold": 0.5,
+      "prefix_padding_ms": 300,
+      "min_end_of_turn_silence_ms": 100,
+      "max_turn_silence_ms": 1000,
+      "interrupt_response": true,
+      "min_interrupt_duration_ms": 600,
+      "min_interrupt_words": 0
+    }
+  }
+}
+```
+
+| Field                          | Type    | Default | Description                                                      |
+| ------------------------------ | ------- | ------- | ---------------------------------------------------------------- |
+| `speech_detection_threshold`   | float   | `0.5`   | VAD sensitivity (0.0–1.0). Lower = more sensitive to speech.     |
+| `prefix_padding_ms`            | integer | `300`   | Audio to include before detected speech starts (ms).             |
+| `min_end_of_turn_silence_ms`   | integer | `100`   | Minimum silence to consider a confident end-of-turn (ms).        |
+| `max_turn_silence_ms`          | integer | `1000`  | Maximum silence before forcing end-of-turn (ms).                 |
+| `interrupt_response`           | boolean | `true`  | Whether user speech interrupts the agent. Set `false` to disable barge-in. |
+| `min_interrupt_duration_ms`    | integer | `600`   | How long the user must speak before triggering an interruption (ms). |
+| `min_interrupt_words`          | integer | `0`     | Minimum words the user must say before interrupting.             |
+
+<Note>
+Use `min_end_of_turn_silence_ms` and `max_turn_silence_ms` together to control responsiveness. A lower `min_end_of_turn_silence_ms` makes the agent respond faster after the user pauses, while `max_turn_silence_ms` sets the hard cutoff.
+</Note>
+
 ---
 
 ## Tool calling
@@ -586,7 +634,13 @@ elif t == "reply.done":
 
 ## Interruptions
 
-When the user speaks mid-response, the server stops the agent and sends `reply.done` with `status: "interrupted"`. Discard any pending tool results — the agent is ready to listen again.
+When the user speaks mid-response, the server stops the agent and sends `reply.done` with `status: "interrupted"`. The `transcript.agent` event will also fire with `interrupted: true` and text trimmed to what was actually spoken before the interruption. Discard any pending tool results — the agent is ready to listen again.
+
+You can customize interruption behavior via `turn_detection` in `session.update`:
+
+- `interrupt_response` — set to `false` to disable barge-in entirely
+- `min_interrupt_duration_ms` — how long the user must speak before triggering an interruption (default: 600ms)
+- `min_interrupt_words` — minimum words the user must say before interrupting (default: 0)
 
 ---
 
